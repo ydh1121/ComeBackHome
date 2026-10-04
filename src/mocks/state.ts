@@ -20,7 +20,7 @@ function buildScheduleFixture(): ScheduleEntry[] {
     const dd = String(day).padStart(2, '0');
     const date = `2026-10-${dd}`;
     const weekday = new Date(date + 'T00:00:00Z').getUTCDay();
-    const enabled = weekday !== 2 && weekday !== 4 && day % 9 !== 1;
+    const enabled = day !== 4 && weekday !== 2 && weekday !== 4 && day % 9 !== 1;
     const startHour = day === 5 ? 14 : 12 + ((day - 1) % 4);
     const endHour = day === 5 ? 22 : 20 + ((day - 1) % 3);
     const startMinute = day === 5 ? '00' : day % 2 === 0 ? '30' : '00';
