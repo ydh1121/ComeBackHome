@@ -29,6 +29,7 @@ if (!back.includes('aria-label="뒤로 가기"')) failures.push('BackButton acce
 if (!css.includes('width: 44px;') || !css.includes('height: 44px;')) failures.push('44px touch target contract missing');
 if (!css.includes('padding: 16px 18px 8px;')) failures.push('TopUtility 18px horizontal padding contract missing');
 if (!css.includes('grid-template-columns: repeat(4, minmax(0, 1fr));')) failures.push('four-column bottom navigation contract missing');
+if (!css.includes('env(safe-area-inset-top)')) failures.push('top safe-area contract missing');
 if (!css.includes('env(safe-area-inset-bottom)')) failures.push('bottom safe-area contract missing');
 
 if (failures.length) {
