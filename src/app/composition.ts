@@ -147,7 +147,11 @@ export async function createHybridApiApplicationServices(): Promise<ApplicationS
     repositories,
     queries,
     actions: {
-      commitImportReview: new CommitImportReview(imports, schedules),
+      commitImportReview: {
+        async execute(): Promise<void> {
+          throw new Error('Import commit is disabled in hybrid API mode until a real import parser is connected.');
+        },
+      },
       transitAccess: new TransitAccessService(commute, () => changes.emit()),
       notifications: new NotificationService(
         notifications,
