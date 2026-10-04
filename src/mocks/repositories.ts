@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../domain/common';
-import type { ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../domain/models';
+import type { ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../domain/models';
 import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
@@ -41,9 +41,33 @@ export class MockTodayRepository implements TodayRepository {
 
 export class MockImportRepository implements ImportRepository {
   constructor(private readonly store: MockStateStore) {}
+  async getCurrentBatch() { return clone(this.store.read().importBatches.find((batch) => !batch.committed) ?? this.store.read().importBatches[0] ?? null); }
   async getBatch(batchId: EntityId) { return clone(this.store.read().importBatches.find((batch) => batch.id === batchId) ?? null); }
-  async setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> { this.store.mutate((state) => { const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId); if (item) item.resolution = resolution; }); }
-  async markCommitted(batchId: EntityId): Promise<void> { this.store.mutate((state) => { if (!state.committedImportBatchIds.includes(batchId)) state.committedImportBatchIds.push(batchId); }); }
+  async replaceFiles(batchId: EntityId, files: ImportFileRecord[]): Promise<void> {
+    this.store.mutate((state) => {
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      if (batch) batch.files = clone(files);
+    });
+  }
+  async setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void> {
+    this.store.mutate((state) => {
+      const person = state.importBatches.find((batch) => batch.id === batchId)?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
+      if (person) person.matchedPersonId = personId;
+    });
+  }
+  async setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {
+    this.store.mutate((state) => {
+      const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
+      if (item) item.resolution = resolution;
+    });
+  }
+  async markCommitted(batchId: EntityId): Promise<void> {
+    this.store.mutate((state) => {
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      if (batch) batch.committed = true;
+      if (!state.committedImportBatchIds.includes(batchId)) state.committedImportBatchIds.push(batchId);
+    });
+  }
 }
 
 export class MockNotificationRepository implements NotificationRepository {
