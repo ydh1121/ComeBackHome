@@ -14,7 +14,8 @@
     "verify:schedule": "node scripts/verify-phase4b-schedule.mjs",
     "verify:import": "node scripts/verify-phase4c-import.mjs",
     "verify:people": "node scripts/verify-phase4d-people.mjs",
-    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people"
+    "verify:commute": "node scripts/verify-phase4e-commute.mjs",
+    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute"
   },
   "dependencies": {
     "react": "19.3.0",
