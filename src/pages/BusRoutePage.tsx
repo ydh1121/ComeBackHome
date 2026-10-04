@@ -38,7 +38,7 @@ export function BusRoutePage() {
   };
 
   return (
-    <section className="commute-page" data-page="BusRouteSelector" data-state="ROUTE_SELECTING">
+    <section className="commute-page" data-page="BusRouteSelector" data-state={point.busRoutes?.length ? 'ROUTE_SELECTING' : 'NO_RESULT'}>
       <BackButton fallbackTo={back} />
       <h1 className="page-title">버스 선택</h1>
 
@@ -84,7 +84,7 @@ export function BusRoutePage() {
             </button>
           );
         })}
-        {!point.busRoutes?.length ? <div className="search-inline-status">버스 데이터 대기 중</div> : null}
+        {!point.busRoutes?.length ? <div className="search-inline-status" data-state="NO_RESULT">버스 데이터 대기 중</div> : null}
       </div>
     </section>
   );
