@@ -29,6 +29,11 @@ export interface ImportBatch {
   committed: boolean;
 }
 export interface NotificationRules { shiftEnd: boolean; etaChange: boolean; }
-export interface NotificationSettings { permission: PermissionState; rules: NotificationRules; }
+export interface WebPushSubscriptionRecord {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: { p256dh: string; auth: string };
+}
+export interface NotificationSettings { permission: PermissionState; rules: NotificationRules; subscription?: WebPushSubscriptionRecord | null; }
 export interface EtaSnapshot { personId: EntityId; status: 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
 export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; routeCandidateId?: EntityId; }
