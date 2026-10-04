@@ -120,7 +120,9 @@ export function TodayPage() {
         <button type="button" className="action-card" onClick={() => navigate('/schedule')}><Icon name="calendar" /><span>일정</span></button>
         <button type="button" className="action-card" disabled={!data.person} onClick={() => data.person && navigate(`/people/${encodeURIComponent(data.person.id)}`)}><Icon name="map" /><span>이동 경로</span></button>
       </div>
-      <div className="data-source-qa">source: MOCK_FIXTURE</div>
+      <div className="data-source-qa">
+        persistence: {services.runtime.persistence} · provider: {services.runtime.providerData}
+      </div>
     </section>
   );
 }
