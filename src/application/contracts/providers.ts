@@ -13,4 +13,5 @@ export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport
 export interface ImageScheduleRecognizer { parse(file: File): Promise<ParsedImport>; }
 export interface NotificationPermissionProvider { getPermission(): Promise<NotificationPermission>; requestPermissionFromUserGesture(): Promise<NotificationPermission>; }
 export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; }
+export interface PushSubscriptionTransport { upsert(subscription: WebPushSubscriptionRecord): Promise<void>; remove(endpoint: string): Promise<void>; }
 export interface NotificationTestGateway { sendTestNotification(): Promise<void>; }
