@@ -1,6 +1,6 @@
 import type { ApplicationServices, RepositoryBundle } from '../application/contracts/runtime';
 import { ComeBackHomeQueries } from '../application/queries/ComeBackHomeQueries';
-import { NotificationService, PersonSelectionService, TransitAccessService } from '../application/services/ApplicationActions';
+import { NotificationService, PersonSelectionService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
@@ -17,7 +17,10 @@ export function createMockApplicationServices(): ApplicationServices {
     notifications: new MockNotificationRepository(store),
     today: new MockTodayRepository(store),
   };
-  const personSelection = new PersonSelectionService(store.read().selectedPersonId ?? store.read().people[0]?.id ?? null, () => store.mutate(() => undefined));
+  const personSelection = new PersonSelectionService(
+    store.read().selectedPersonId ?? store.read().people[0]?.id ?? null,
+    () => store.mutate(() => undefined),
+  );
   const queries = new ComeBackHomeQueries(repositories, personSelection);
 
   return {
@@ -26,8 +29,13 @@ export function createMockApplicationServices(): ApplicationServices {
     actions: {
       commitImportReview: new CommitImportReview(repositories.imports, repositories.schedules),
       transitAccess: new TransitAccessService(repositories.commute, () => store.mutate(() => undefined)),
-      notifications: new NotificationService(repositories.notifications, new MockNotificationPermissionProvider(), new MockNotificationTestGateway()),
+      notifications: new NotificationService(
+        repositories.notifications,
+        new MockNotificationPermissionProvider(),
+        new MockNotificationTestGateway(),
+      ),
       personSelection,
+      schedule: new ScheduleService(repositories.schedules, personSelection),
     },
     changes: {
       subscribe: (listener) => store.subscribe(listener),
