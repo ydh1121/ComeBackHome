@@ -16,7 +16,14 @@ export interface ChangeSignal {
   subscribe(listener: () => void): () => void;
   getVersion(): number;
 }
+export interface ApplicationRuntimeInfo {
+  mode: 'mock' | 'hybrid-api';
+  persistence: 'mock' | 'worker-api';
+  providerData: 'mock';
+}
+
 export interface ApplicationServices {
+  runtime: ApplicationRuntimeInfo;
   repositories: RepositoryBundle;
   queries: ComeBackHomeQueries;
   actions: {
