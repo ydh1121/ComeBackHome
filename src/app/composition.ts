@@ -126,7 +126,8 @@ export async function createHybridApiApplicationServices(): Promise<ApplicationS
     ? storedPersonId
     : availablePeople[0]?.id ?? null;
 
-  const personSelection = new PersonSelectionService(initialPersonId, () => {
+  let personSelection!: PersonSelectionService;
+  personSelection = new PersonSelectionService(initialPersonId, () => {
     const selected = personSelection.getSelectedPersonId();
     if (selected) writeStoredPersonId(selected);
     changes.emit();
@@ -169,6 +170,6 @@ export async function createHybridApiApplicationServices(): Promise<ApplicationS
   };
 }
 
-export function createApplicationServices(mode: AppRuntimeMode): ApplicationServices | Promise<ApplicationServices> {
+export async function createApplicationServices(mode: AppRuntimeMode): Promise<ApplicationServices> {
   return mode === 'api' ? createHybridApiApplicationServices() : createMockApplicationServices();
 }
