@@ -52,3 +52,5 @@ jobs:
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
+
+# Phase 5G verification trigger
