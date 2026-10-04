@@ -4,6 +4,7 @@ import { useApplicationServices } from '../app/ApplicationServicesContext';
 import type { PlaceKind, TransitMode } from '../domain/models';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
+import { useOnlineStatus } from '../shared/runtime/useOnlineStatus';
 import './commute-page.css';
 
 type SearchResult = {
@@ -46,9 +47,10 @@ export function TransitSearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const online = useOnlineStatus();
 
   useEffect(() => {
-    if (composing.current || !query.trim()) {
+    if (!online || composing.current || !query.trim()) {
       if (!query.trim()) setResults([]);
       return;
     }
@@ -71,7 +73,7 @@ export function TransitSearchPage() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [services, personId, kind, query]);
+  }, [services, personId, kind, query, online]);
 
   const routeMode = routeEdit === 'insert' || routeEdit === 'replace';
   const placeLabel = kind === 'origin' ? '출발지' : '도착지';
@@ -92,7 +94,7 @@ export function TransitSearchPage() {
   };
 
   return (
-    <section className="commute-page" data-page="TransitSearchPage" data-state={query.trim() ? 'SEARCH_RESULT' : 'SEARCH_IDLE'}>
+    <section className="commute-page" data-page="TransitSearchPage" data-state={!online ? 'OFFLINE' : query.trim() ? 'SEARCH_RESULT' : 'SEARCH_IDLE'}>
       <BackButton fallbackTo={routeMode ? '/people/' + encodeURIComponent(personId) + '/commute/manual' : '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access'} />
       <h1 className="page-title">교통 추가</h1>
       <div className="transit-context">{context}</div>
@@ -120,7 +122,7 @@ export function TransitSearchPage() {
         </div>
       </div>
 
-      {query.trim() ? (
+      {!online ? <div className="search-inline-status" data-state="OFFLINE">오프라인에서는 교통 검색을 사용할 수 없습니다.</div> : query.trim() ? (
         <div className="transit-search-results">
           {searching ? <div className="search-inline-status">검색 중</div> : results.length ? results.map((result) => (
             <button
@@ -137,7 +139,7 @@ export function TransitSearchPage() {
         </div>
       ) : <div className="search-inline-status">역이나 정류장 이름을 검색하세요.</div>}
 
-      {selectedId ? <div className="transit-search-actions"><button type="button" className="cta" onClick={commit}>{routeMode ? '이 구간 사용' : '교통 추가'}</button></div> : null}
+      {online && selectedId ? <div className="transit-search-actions"><button type="button" className="cta" onClick={commit}>{routeMode ? '이 구간 사용' : '교통 추가'}</button></div> : null}
     </section>
   );
 }
