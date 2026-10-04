@@ -22,6 +22,7 @@ export class ComeBackHomeQueries {
   constructor(private readonly repositories: RepositoryBundle, private readonly selection: PersonSelectionActions) {}
   listPeople(): Promise<Person[]> { return this.repositories.people.list(); }
   listSchedule(personId: EntityId): Promise<ScheduleEntry[]> { return this.repositories.schedules.list(personId); }
+  getCurrentImportBatch(): Promise<ImportBatch | null> { return this.repositories.imports.getCurrentBatch(); }
   getImportReview(batchId: EntityId): Promise<ImportBatch | null> { return this.repositories.imports.getBatch(batchId); }
   getNotificationSettings(): Promise<NotificationSettings> { return this.repositories.notifications.getSettings(); }
   async getNextShift(personId: EntityId, after: ISODate): Promise<ScheduleEntry | null> { return selectNextShift(await this.repositories.schedules.list(personId), after); }
