@@ -19,7 +19,8 @@
     "verify:runtime": "node scripts/verify-phase4g-runtime.mjs",
     "verify:pwa": "node scripts/verify-phase5a-pwa.mjs",
     "verify:push": "node scripts/verify-phase5b-push.mjs",
-    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push"
+    "verify:push-client": "node scripts/verify-phase5c-push-client.mjs",
+    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client"
   },
   "dependencies": {
     "react": "19.3.0",
