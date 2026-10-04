@@ -5,6 +5,7 @@ import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { ScheduleRangePicker } from '../features/schedule/ScheduleRangePicker';
 import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { BackButton } from '../shared/components/BackButton';
+import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import './schedule-page.css';
 
 const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
@@ -35,21 +36,23 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
   const [weekdays, setWeekdays] = useState<number[]>([0,1,2,3,4,5,6]);
   const [start, setStart] = useState(first?.start ?? '');
   const [end, setEnd] = useState(first?.end ?? '');
+  const form = useFormRuntimeState();
 
   const toggleWeekday = (day: number) => {
     setWeekdays((current) => current.includes(day)
       ? current.length > 1 ? current.filter((value) => value !== day) : current
       : [...current, day].sort((a, b) => a - b));
+    form.markDirty();
   };
 
   return (
-    <section className="schedule-page" data-route="/schedule/edit" data-page="ScheduleBulkEditPage" data-state="EDITING_BULK">
+    <section className="schedule-page" data-route="/schedule/edit" data-page="ScheduleBulkEditPage" data-state={"EDITING_BULK " + form.state}>
       <BackButton fallbackTo="/schedule" />
       <h1 className="page-title">일정 일괄 입력</h1>
       <div className="form-stack">
         <div className="form-field">
           <div className="form-label">기간</div>
-          <ScheduleRangePicker entries={entries} from={from} to={to} onChange={(nextFrom, nextTo) => { setFrom(nextFrom); setTo(nextTo); }} />
+          <ScheduleRangePicker entries={entries} from={from} to={to} onChange={(nextFrom, nextTo) => { setFrom(nextFrom); setTo(nextTo); form.markDirty(); }} />
         </div>
         <div className="form-field">
           <div className="form-label">기간 내 적용 요일</div>
@@ -60,11 +63,11 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
           </div>
         </div>
         <div className="form-row-2">
-          <label className="form-field"><span className="form-label">출근</span><input className="input" type="time" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-          <label className="form-field"><span className="form-label">퇴근</span><input className="input" type="time" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+          <label className="form-field"><span className="form-label">출근</span><input className="input" type="time" value={start} onChange={(event) => { setStart(event.target.value); form.markDirty(); }} /></label>
+          <label className="form-field"><span className="form-label">퇴근</span><input className="input" type="time" value={end} onChange={(event) => { setEnd(event.target.value); form.markDirty(); }} /></label>
         </div>
       </div>
-      <button type="button" className="cta" onClick={() => onApply({ from, to, weekdays, start, end })}>적용</button>
+      <button type="button" className="cta" disabled={form.state === 'SAVING'} onClick={() => form.save(() => onApply({ from, to, weekdays, start, end }))}>{form.state === 'SAVING' ? '적용 중' : form.state === 'SAVED' ? '적용됨' : '적용'}</button>
     </section>
   );
 }
