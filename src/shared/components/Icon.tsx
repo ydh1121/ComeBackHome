@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk';
+export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip';
 
 interface IconProps {
   name: IconName;
@@ -37,5 +37,11 @@ export function Icon({ name, className }: IconProps) {
       return <svg {...common}><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/></svg>;
     case 'walk':
       return <svg {...common}><circle cx="13" cy="4.5" r="2"/><path d="m11.5 8-2.5 4 3 2 1.5 6M9 12l-4 5M12 14l4-1 3 4"/></svg>;
+    case 'plus':
+      return <svg {...common}><path d="M12 5v14M5 12h14"/></svg>;
+    case 'search':
+      return <svg {...common}><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>;
+    case 'grip':
+      return <svg {...common}><path d="M8 7h.01M8 12h.01M8 17h.01M16 7h.01M16 12h.01M16 17h.01"/></svg>;
   }
 }
