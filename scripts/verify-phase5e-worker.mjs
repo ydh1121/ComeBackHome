@@ -57,7 +57,7 @@ if (scheduler.includes('claimDue(') || scheduler.includes('markSent(')) failures
 
 for (const [name, source, required] of [
   ['person', person, ['class D1PersonRepository', 'INSERT INTO people', 'UPDATE people SET']],
-  ['schedule', schedule, ['class D1ScheduleRepository', 'db.batch', 'ON CONFLICT(person_id, schedule_date)']],
+  ['schedule', schedule, ['class D1ScheduleRepository', 'batchOrThrow(this.db, statements)', 'ON CONFLICT(person_id, schedule_date)']],
   ['place', place, ['class D1PlaceRepository', 'ON CONFLICT(person_id, kind)']],
   ['commute', commute, ['class D1CommuteRepository', 'transit_access_points', 'commute_preference_steps', 'return [];']],
   ['notification settings', notifications, ['class D1NotificationSettingsStore', 'notification_settings']],
