@@ -47,20 +47,15 @@ async function handleNavigation(request) {
 async function handleStaticAsset(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
-  const networkPromise = fetch(request)
-    .then(async (response) => {
-      if (response.ok) await cache.put(request, response.clone());
-      return response;
-    })
-    .catch(() => null);
+  if (cached) return cached;
 
-  if (cached) {
-    void networkPromise;
-    return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch {
+    return new Response('', { status: 504, statusText: 'Offline' });
   }
-
-  return (await networkPromise)
-    || new Response('', { status: 504, statusText: 'Offline' });
 }
 
 self.addEventListener('fetch', (event) => {
