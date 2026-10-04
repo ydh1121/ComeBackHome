@@ -1,4 +1,4 @@
-import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../../domain/models';
+import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../../domain/models';
 import type { EntityId, ISODate } from '../../domain/common';
 export interface PersonRepository { list(): Promise<Person[]>; get(id: EntityId): Promise<Person | null>; create(input: Omit<Person,'id'>): Promise<Person>; update(id: EntityId, patch: Partial<Omit<Person,'id'>>): Promise<Person>; }
 export interface ScheduleRepository { list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; transaction<T>(work: (repository: ScheduleRepository) => Promise<T>): Promise<T>; }
@@ -16,5 +16,5 @@ export interface CommuteRepository {
   setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void>;
 }
 export interface ImportRepository { getCurrentBatch(): Promise<ImportBatch | null>; getBatch(batchId: EntityId): Promise<ImportBatch | null>; replaceFiles(batchId: EntityId, files: ImportFileRecord[]): Promise<void>; setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>; setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>; markCommitted(batchId: EntityId): Promise<void>; }
-export interface NotificationRepository { getSettings(): Promise<NotificationSettings>; setRules(rules: NotificationRules): Promise<void>; setPermission(permission: NotificationSettings['permission']): Promise<void>; }
+export interface NotificationRepository { getSettings(): Promise<NotificationSettings>; setRules(rules: NotificationRules): Promise<void>; setPermission(permission: NotificationSettings['permission']): Promise<void>; setSubscription(subscription: WebPushSubscriptionRecord | null): Promise<void>; }
 export interface TodayRepository { get(personId: EntityId): Promise<TodaySnapshot | null>; }
