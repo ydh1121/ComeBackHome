@@ -16,7 +16,8 @@
     "verify:people": "node scripts/verify-phase4d-people.mjs",
     "verify:commute": "node scripts/verify-phase4e-commute.mjs",
     "verify:notifications": "node scripts/verify-phase4f-notifications.mjs",
-    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications"
+    "verify:runtime": "node scripts/verify-phase4g-runtime.mjs",
+    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime"
   },
   "dependencies": {
     "react": "19.3.0",
