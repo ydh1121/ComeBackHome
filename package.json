@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
+    "typecheck:worker": "tsc -p tsconfig.worker.json --pretty false",
     "verify:architecture": "node scripts/verify-architecture.mjs",
     "verify:ui-contracts": "node scripts/verify-phase3-ui.mjs",
     "verify:today": "node scripts/verify-phase4a-today.mjs",
@@ -21,7 +22,8 @@
     "verify:push": "node scripts/verify-phase5b-push.mjs",
     "verify:push-client": "node scripts/verify-phase5c-push-client.mjs",
     "verify:backend": "node scripts/verify-phase5d-backend.mjs",
-    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend"
+    "verify:worker": "node scripts/verify-phase5e-worker.mjs",
+    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker"
   },
   "dependencies": {
     "react": "19.3.0",
