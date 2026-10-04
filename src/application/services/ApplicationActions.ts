@@ -2,6 +2,8 @@ import type { EntityId } from '../../domain/common';
 import type { NotificationRules, PlaceKind } from '../../domain/models';
 import type {
   NotificationActions,
+  PersonActions,
+  PersonInput,
   PersonSelectionActions,
   ScheduleActions,
   ScheduleBulkRule,
@@ -10,7 +12,31 @@ import type {
   TransitAccessFilter,
 } from '../contracts/actions';
 import type { NotificationPermissionProvider, NotificationTestGateway } from '../contracts/providers';
-import type { CommuteRepository, NotificationRepository, ScheduleRepository } from '../contracts/repositories';
+import type { CommuteRepository, NotificationRepository, PersonRepository, ScheduleRepository } from '../contracts/repositories';
+
+export class PersonService implements PersonActions {
+  constructor(
+    private readonly people: PersonRepository,
+    private readonly selection: PersonSelectionActions,
+  ) {}
+
+  async create(input: PersonInput) {
+    const name = input.name.trim();
+    if (!name) throw new Error('Person name is required.');
+    const person = await this.people.create({ name, relation: input.relation.trim() });
+    this.selection.select(person.id);
+    return person;
+  }
+
+  async update(personId: EntityId, input: PersonInput) {
+    const current = await this.people.get(personId);
+    if (!current) throw new Error('Person was not found.');
+    return this.people.update(personId, {
+      name: input.name.trim() || current.name,
+      relation: input.relation.trim() || current.relation,
+    });
+  }
+}
 
 export class PersonSelectionService implements PersonSelectionActions {
   constructor(private selectedPersonId: EntityId | null, private readonly onChange: () => void) {}
