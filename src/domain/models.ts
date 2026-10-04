@@ -14,8 +14,20 @@ export interface BusRouteOption { providerRouteId: string; routeNo: string; dire
 export interface RoutePreference { id: EntityId; personId: EntityId; originPlaceKind: 'origin'; destinationPlaceKind: 'destination'; viaAccessPointIds: EntityId[]; preferredModes?: TransitMode[]; }
 export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; steps?: CommuteStep[]; }
 export type ImportResolution = 'KEEP' | 'NEW';
+export type ImportFileKind = 'XLSX' | 'IMAGE';
+export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
+export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; }
+export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; }
+export interface ImportStructure { sheet: string; headerRow: number; personColumn: string; dateColumn: string; shiftColumn: string; needsReview: boolean; }
 export interface ImportReviewItem { id: EntityId; personId: EntityId; date: ISODate; existing?: Pick<ScheduleEntry,'start'|'end'>; imported: Pick<ScheduleEntry,'start'|'end'>; resolution: ImportResolution; }
-export interface ImportBatch { id: EntityId; reviewItems: ImportReviewItem[]; }
+export interface ImportBatch {
+  id: EntityId;
+  files: ImportFileRecord[];
+  detectedPeople: DetectedImportPerson[];
+  structure: ImportStructure;
+  reviewItems: ImportReviewItem[];
+  committed: boolean;
+}
 export interface NotificationRules { shiftEnd: boolean; etaChange: boolean; }
 export interface NotificationSettings { permission: PermissionState; rules: NotificationRules; }
 export interface EtaSnapshot { personId: EntityId; status: 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
