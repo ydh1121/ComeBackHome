@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../domain/common';
-import type { ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../domain/models';
+import type { ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
 import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
@@ -108,4 +108,5 @@ export class MockNotificationRepository implements NotificationRepository {
   async getSettings(): Promise<NotificationSettings> { return clone(this.store.read().notifications); }
   async setRules(rules: NotificationRules): Promise<void> { this.store.mutate((state) => { state.notifications.rules = clone(rules); }); }
   async setPermission(permission: NotificationSettings['permission']): Promise<void> { this.store.mutate((state) => { state.notifications.permission = permission; }); }
+  async setSubscription(subscription: WebPushSubscriptionRecord | null): Promise<void> { this.store.mutate((state) => { state.notifications.subscription = clone(subscription); }); }
 }
