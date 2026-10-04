@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router/dom';
 import { ApplicationServicesProvider } from './app/ApplicationServicesContext';
 import { createMockApplicationServices } from './app/composition';
 import { router } from './app/router';
+import { registerPwaServiceWorker } from './pwa/registerServiceWorker';
 import './shared/styles/base.css';
 
 const root = document.getElementById('root');
@@ -18,3 +19,5 @@ createRoot(root).render(
     </ApplicationServicesProvider>
   </StrictMode>,
 );
+
+registerPwaServiceWorker();
