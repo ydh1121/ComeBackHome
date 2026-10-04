@@ -23,21 +23,14 @@ export class MockScheduleRepository implements ScheduleRepository {
       else state.schedules.push(clone(entry));
     });
   }
-  async transaction<T>(work: (repository: ScheduleRepository) => Promise<T>): Promise<T> {
+  async upsertMany(entries: ScheduleEntry[]): Promise<void> {
     const draft = clone(this.store.read().schedules);
-    const transactionRepository: ScheduleRepository = {
-      list: async (personId) => clone(draft.filter((entry) => entry.personId === personId)),
-      getByDate: async (personId, date) => clone(draft.find((entry) => entry.personId === personId && entry.date === date) ?? null),
-      upsert: async (entry) => {
-        const index = draft.findIndex((candidate) => candidate.id === entry.id || (candidate.personId === entry.personId && candidate.date === entry.date));
-        if (index >= 0) draft[index] = clone(entry);
-        else draft.push(clone(entry));
-      },
-      transaction: async (nested) => nested(transactionRepository),
-    };
-    const result = await work(transactionRepository);
+    for (const entry of entries) {
+      const index = draft.findIndex((candidate) => candidate.id === entry.id || (candidate.personId === entry.personId && candidate.date === entry.date));
+      if (index >= 0) draft[index] = clone(entry);
+      else draft.push(clone(entry));
+    }
     this.store.mutate((state) => { state.schedules = draft; });
-    return result;
   }
 }
 
