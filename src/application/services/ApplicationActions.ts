@@ -74,19 +74,21 @@ export class ScheduleService implements ScheduleActions {
     const entries = await this.schedules.list(personId);
     const weekdays = new Set(rule.weekdays);
 
-    for (const entry of entries) {
+    const updated = entries.flatMap((entry) => {
       const weekday = new Date(entry.date + 'T00:00:00Z').getUTCDay();
       const inRange = entry.date >= rule.from && entry.date <= rule.to;
       const daySelected = weekdays.size === 0 || weekdays.has(weekday);
-      if (!inRange || !daySelected) continue;
+      if (!inRange || !daySelected) return [];
 
-      await this.schedules.upsert({
+      return [{
         ...entry,
         enabled: true,
         start: rule.start || entry.start,
         end: rule.end || entry.end,
-      });
-    }
+      }];
+    });
+
+    await this.schedules.upsertMany(updated);
   }
 }
 
