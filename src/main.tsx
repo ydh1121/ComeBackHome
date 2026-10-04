@@ -8,8 +8,9 @@ import { router } from './app/router';
 import { registerPwaServiceWorker } from './pwa/registerServiceWorker';
 import './shared/styles/base.css';
 
-const root = document.getElementById('root');
-if (!root) throw new Error('ComeBackHome root element was not found.');
+const rootNode = document.getElementById('root');
+if (!rootNode) throw new Error('ComeBackHome root element was not found.');
+const root: HTMLElement = rootNode;
 
 async function start(): Promise<void> {
   const services = await createApplicationServices(resolveRuntimeMode());
