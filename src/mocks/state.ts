@@ -9,7 +9,6 @@ export interface MockState {
   routePreferences: RoutePreference[];
   routeCandidates: RouteCandidate[];
   preferredRouteCandidateIds: Record<string, string>;
-  preferredRouteCandidateIds: { 'mock-person-1': 'mock-route-fast' },
   todaySnapshots: TodaySnapshot[];
   importBatches: ImportBatch[];
   committedImportBatchIds: string[];
@@ -75,6 +74,7 @@ export const MOCK_FIXTURE: MockState = {
     { id: 'mock-route-walk', personId: 'mock-person-1', totalMinutes: 46, transferCount: 1, walkMinutes: 5, fare: 1550, policyLabels: ['도보 적음'], steps: [{ type: 'BUS', label: '샘플 정류장 A → 샘플 중앙역' }, { type: 'SUBWAY', label: '샘플 중앙역 → 샘플 도착역' }] },
     { id: 'mock-route-alt', personId: 'mock-person-1', totalMinutes: 51, transferCount: 2, walkMinutes: 9, fare: 1400, policyLabels: ['대안'], steps: [{ type: 'SUBWAY', label: '샘플 환승역 → 샘플 중앙역' }, { type: 'BUS', label: '샘플 중앙역 → 도착지' }] },
   ],
+  preferredRouteCandidateIds: { 'mock-person-1': 'mock-route-fast' },
   todaySnapshots: [{ personId: 'mock-person-1', eta: { personId: 'mock-person-1', status: 'LIVE', arrivalTime: '23:18', freshnessMinutes: 1 }, shiftEnd: '22:10', routeCandidateId: 'mock-route-fast' }],
   importBatches: [{
     id: 'mock-import-1',
