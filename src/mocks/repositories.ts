@@ -16,7 +16,29 @@ export class MockScheduleRepository implements ScheduleRepository {
   constructor(private readonly store: MockStateStore) {}
   async list(personId: EntityId): Promise<ScheduleEntry[]> { return clone(this.store.read().schedules.filter((entry) => entry.personId === personId)); }
   async getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null> { return clone(this.store.read().schedules.find((entry) => entry.personId === personId && entry.date === date) ?? null); }
-  async upsert(entry: ScheduleEntry): Promise<void> { this.store.mutate((state) => { const index = state.schedules.findIndex((candidate) => candidate.id === entry.id || (candidate.personId === entry.personId && candidate.date === entry.date)); if (index >= 0) state.schedules[index] = clone(entry); else state.schedules.push(clone(entry)); }); }
+  async upsert(entry: ScheduleEntry): Promise<void> {
+    this.store.mutate((state) => {
+      const index = state.schedules.findIndex((candidate) => candidate.id === entry.id || (candidate.personId === entry.personId && candidate.date === entry.date));
+      if (index >= 0) state.schedules[index] = clone(entry);
+      else state.schedules.push(clone(entry));
+    });
+  }
+  async transaction<T>(work: (repository: ScheduleRepository) => Promise<T>): Promise<T> {
+    const draft = clone(this.store.read().schedules);
+    const transactionRepository: ScheduleRepository = {
+      list: async (personId) => clone(draft.filter((entry) => entry.personId === personId)),
+      getByDate: async (personId, date) => clone(draft.find((entry) => entry.personId === personId && entry.date === date) ?? null),
+      upsert: async (entry) => {
+        const index = draft.findIndex((candidate) => candidate.id === entry.id || (candidate.personId === entry.personId && candidate.date === entry.date));
+        if (index >= 0) draft[index] = clone(entry);
+        else draft.push(clone(entry));
+      },
+      transaction: async (nested) => nested(transactionRepository),
+    };
+    const result = await work(transactionRepository);
+    this.store.mutate((state) => { state.schedules = draft; });
+    return result;
+  }
 }
 
 export class MockPlaceRepository implements PlaceRepository {
