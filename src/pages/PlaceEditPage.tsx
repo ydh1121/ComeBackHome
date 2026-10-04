@@ -5,6 +5,8 @@ import type { Coordinate, PlaceKind } from '../domain/models';
 import { usePlace } from '../features/commute/useCommuteWorkflow';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
+import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
+import { useOnlineStatus } from '../shared/runtime/useOnlineStatus';
 import './commute-page.css';
 
 type SearchResult = {
@@ -27,7 +29,8 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
   const [detail, setDetail] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selected, setSelected] = useState<SearchResult | null>(null);
-  const [saving, setSaving] = useState(false);
+  const form = useFormRuntimeState();
+  const online = useOnlineStatus();
 
   useEffect(() => {
     if (placeState.status !== 'ready') return;
@@ -46,7 +49,7 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
   }, [placeState.status, placeState.status === 'ready' ? placeState.place?.id : null]);
 
   useEffect(() => {
-    if (composing.current || selected || query.trim().length < 2) {
+    if (!online || composing.current || selected || query.trim().length < 2) {
       if (query.trim().length < 2) setResults([]);
       return;
     }
@@ -60,7 +63,7 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [services, query, selected]);
+  }, [services, query, selected, online]);
 
   if (placeState.status === 'loading') return <section className="commute-page"><div className="commute-message">장소 정보를 불러오는 중</div></section>;
   if (placeState.status === 'error') return <section className="commute-page"><div className="commute-message">장소 정보를 불러오지 못했습니다.</div></section>;
@@ -76,33 +79,28 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
   };
 
   const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      await services.actions.places.save(personId, kind, {
-        label,
-        address: {
-          road: query.trim(),
-          lot: selected?.lotAddress ?? current?.address.lot,
-          detail: detail.trim(),
-        },
-        coordinate: selected?.coordinate ?? current?.coordinate,
-        providerPlaceId: selected?.providerId ?? current?.providerPlaceId,
-      });
-      navigate('/people/' + encodeURIComponent(personId), { replace: true });
-    } finally {
-      setSaving(false);
-    }
+    if (form.state === 'SAVING') return;
+    await form.save(() => services.actions.places.save(personId, kind, {
+      label,
+      address: {
+        road: query.trim(),
+        lot: selected?.lotAddress ?? current?.address.lot,
+        detail: detail.trim(),
+      },
+      coordinate: selected?.coordinate ?? current?.coordinate,
+      providerPlaceId: selected?.providerId ?? current?.providerPlaceId,
+    }));
+    navigate('/people/' + encodeURIComponent(personId), { replace: true });
   };
 
   return (
-    <section className="commute-page" data-page="PlaceEditPage" data-state={'EDITING_' + kind.toUpperCase()}>
+    <section className="commute-page" data-page="PlaceEditPage" data-state={'EDITING_' + kind.toUpperCase() + ' ' + form.state + (online ? '' : ' OFFLINE')}>
       <BackButton fallbackTo={'/people/' + encodeURIComponent(personId)} />
       <h1 className="page-title">{title}</h1>
 
       <label className="form-field">
         <span className="form-label">장소 이름</span>
-        <input className="input" value={label} onChange={(event) => setLabel(event.target.value)} />
+        <input className="input" value={label} onChange={(event) => { setLabel(event.target.value); form.markDirty(); }} />
       </label>
 
       <div className="form-field address-search-field">
@@ -119,10 +117,12 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
               composing.current = false;
               setSelected(null);
               setQuery(event.currentTarget.value);
+              form.markDirty();
             }}
             onChange={(event) => {
               setSelected(null);
               setQuery(event.target.value);
+              form.markDirty();
             }}
           />
         </div>
@@ -130,7 +130,7 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
         {results.length ? (
           <div className="search-results">
             {results.map((result) => (
-              <button key={result.providerId} type="button" className="search-result-row" onClick={() => selectResult(result)}>
+              <button key={result.providerId} type="button" className="search-result-row" onClick={() => { selectResult(result); form.markDirty(); }}>
                 <span className="search-result-main">
                   <b>{result.placeName || result.roadAddress}</b>
                   {result.placeName ? <span className="search-result-sub">{result.roadAddress}</span> : null}
@@ -141,6 +141,7 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
             ))}
           </div>
         ) : null}
+        {!online ? <div className="search-inline-status" data-state="OFFLINE">오프라인에서는 주소 검색을 사용할 수 없습니다.</div> : null}
 
         {(selected || current?.address.road === query) && query ? (
           <div className="address-selected-summary">
@@ -152,10 +153,10 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
 
       <label className="form-field">
         <span className="form-label">상세주소</span>
-        <input className="input" value={detail} onChange={(event) => setDetail(event.target.value)} placeholder="층, 호수 등 (선택)" />
+        <input className="input" value={detail} onChange={(event) => { setDetail(event.target.value); form.markDirty(); }} placeholder="층, 호수 등 (선택)" />
       </label>
 
-      <button type="button" className="cta" disabled={saving || !query.trim()} onClick={save}>{saving ? '저장 중' : '저장'}</button>
+      <button type="button" className="cta" disabled={form.state === 'SAVING' || !query.trim()} onClick={save}>{form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}</button>
     </section>
   );
 }
