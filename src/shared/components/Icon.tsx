@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train';
+export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk';
 
 interface IconProps {
   name: IconName;
@@ -33,5 +33,9 @@ export function Icon({ name, className }: IconProps) {
       return <svg {...common}><rect x="5" y="3" width="14" height="16" rx="3"/><path d="M8 19v2M16 19v2M8 8h8M8 14h.01M16 14h.01"/></svg>;
     case 'train':
       return <svg {...common}><rect x="5" y="3" width="14" height="15" rx="4"/><path d="M8 21l2-3M16 18l2 3M8 8h8M8 13h.01M16 13h.01"/></svg>;
+    case 'edit':
+      return <svg {...common}><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/></svg>;
+    case 'walk':
+      return <svg {...common}><circle cx="13" cy="4.5" r="2"/><path d="m11.5 8-2.5 4 3 2 1.5 6M9 12l-4 5M12 14l4-1 3 4"/></svg>;
   }
 }
