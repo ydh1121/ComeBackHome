@@ -8,6 +8,8 @@ export interface MockState {
   accessPoints: TransitAccessPoint[];
   routePreferences: RoutePreference[];
   routeCandidates: RouteCandidate[];
+  preferredRouteCandidateIds: Record<string, string>;
+  preferredRouteCandidateIds: { 'mock-person-1': 'mock-route-fast' },
   todaySnapshots: TodaySnapshot[];
   importBatches: ImportBatch[];
   committedImportBatchIds: string[];
@@ -47,13 +49,29 @@ export const MOCK_FIXTURE: MockState = {
     { id: 'mock-place-destination', personId: 'mock-person-1', kind: 'destination', label: '샘플 집', address: { road: '테스트 도로 2' }, coordinate: { x: 126.9, y: 37.4 }, providerPlaceId: 'mock-provider-destination' },
   ],
   accessPoints: [
-    { id: 'mock-access-bus', personId: 'mock-person-1', providerId: 'mock-stop-id', placeKind: 'origin', mode: 'BUS', name: '샘플 정류장 A', displayCode: 'QA-1001', walkMinutes: 3, selected: true },
+    {
+      id: 'mock-access-bus',
+      personId: 'mock-person-1',
+      providerId: 'mock-stop-id',
+      placeKind: 'origin',
+      mode: 'BUS',
+      name: '샘플 정류장 A',
+      displayCode: 'QA-1001',
+      walkMinutes: 3,
+      selected: true,
+      busRoutes: [
+        { providerRouteId: 'mock-route-100', routeNo: 'QA-100', directionLabel: '샘플 중앙역 방면', terminalName: '샘플 종점 A', routeType: 'CITY_BUS' },
+        { providerRouteId: 'mock-route-101', routeNo: 'QA-101', directionLabel: '샘플 시청 방면', terminalName: '샘플 종점 B', routeType: 'CITY_BUS' },
+      ],
+      selectedBusRouteId: 'mock-route-100',
+    },
     { id: 'mock-access-subway', personId: 'mock-person-1', providerId: 'mock-station-id', placeKind: 'origin', mode: 'SUBWAY', name: '샘플 환승역', line: '샘플선 A', walkMinutes: 7, selected: true },
+    { id: 'mock-access-destination-subway', personId: 'mock-person-1', providerId: 'mock-station-dest', placeKind: 'destination', mode: 'SUBWAY', name: '샘플 도착역', line: '샘플선 B', walkMinutes: 4, selected: true },
   ],
   routePreferences: [{ id: 'mock-route-pref', personId: 'mock-person-1', originPlaceKind: 'origin', destinationPlaceKind: 'destination', viaAccessPointIds: ['mock-access-bus', 'mock-access-subway'] }],
   routeCandidates: [
-    { id: 'mock-route-fast', personId: 'mock-person-1', totalMinutes: 38, transferCount: 2, walkMinutes: 7, steps: [{ type: 'WALKING', label: '출발지 → 샘플 정류장 A' }, { type: 'BUS', label: '샘플 정류장 A → 샘플 환승역' }, { type: 'SUBWAY', label: '샘플 환승역 → 샘플 도착역' }, { type: 'WALKING', label: '샘플 도착역 → 도착지' }] },
-    { id: 'mock-route-simple', personId: 'mock-person-1', totalMinutes: 44, transferCount: 1, walkMinutes: 11, steps: [{ type: 'SUBWAY', label: '샘플 출발역 → 샘플 도착역' }] },
+    { id: 'mock-route-fast', personId: 'mock-person-1', totalMinutes: 38, transferCount: 2, walkMinutes: 7, fare: 1550, policyLabels: ['빠름'], matchesPreference: true, steps: [{ type: 'WALKING', label: '출발지 → 샘플 정류장 A' }, { type: 'BUS', label: '샘플 정류장 A → 샘플 환승역' }, { type: 'SUBWAY', label: '샘플 환승역 → 샘플 도착역' }, { type: 'WALKING', label: '샘플 도착역 → 도착지' }] },
+    { id: 'mock-route-simple', personId: 'mock-person-1', totalMinutes: 44, transferCount: 1, walkMinutes: 11, fare: 1450, policyLabels: ['환승 적음'], steps: [{ type: 'SUBWAY', label: '샘플 출발역 → 샘플 도착역' }] },
   ],
   todaySnapshots: [{ personId: 'mock-person-1', eta: { personId: 'mock-person-1', status: 'LIVE', arrivalTime: '23:18', freshnessMinutes: 1 }, shiftEnd: '22:10', routeCandidateId: 'mock-route-fast' }],
   importBatches: [{
