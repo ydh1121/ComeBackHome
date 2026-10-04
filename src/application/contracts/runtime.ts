@@ -1,6 +1,5 @@
-import type { BusRouteActions, CommuteActions, ImportFileSelectionAction, ImportMatchActions, ImportReviewActions, NotificationActions, PersonActions, PersonSelectionActions, PlaceActions, ScheduleActions, TransitAccessActions, TransitSearchActions } from './actions';
+import type { BusRouteActions, CommitImportReviewAction, CommuteActions, ImportFileSelectionAction, ImportMatchActions, ImportReviewActions, NotificationActions, PersonActions, PersonSelectionActions, PlaceActions, ScheduleActions, TransitAccessActions, TransitSearchActions } from './actions';
 import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from './repositories';
-import type { CommitImportReview } from '../use-cases/commitImportReview';
 import type { ComeBackHomeQueries } from '../queries/ComeBackHomeQueries';
 
 export interface RepositoryBundle {
@@ -27,7 +26,7 @@ export interface ApplicationServices {
   repositories: RepositoryBundle;
   queries: ComeBackHomeQueries;
   actions: {
-    commitImportReview: CommitImportReview;
+    commitImportReview: CommitImportReviewAction;
     transitAccess: TransitAccessActions;
     notifications: NotificationActions;
     personSelection: PersonSelectionActions;
