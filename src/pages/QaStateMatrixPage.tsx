@@ -108,7 +108,9 @@ export function QaStateMatrixPage() {
         <div><b>네트워크</b><span>{online ? 'ONLINE' : 'OFFLINE'}</span></div>
         <div><b>알림 권한</b><span>{state.notifications?.permission ?? 'unknown'}</span></div>
       </div>
-      <div className="data-source-qa">Application boundary: queries/actions · QA fixture only</div>
+      <div className="data-source-qa">
+        Application boundary: queries/actions · persistence: {services.runtime.persistence} · provider: {services.runtime.providerData}
+      </div>
     </section>
   );
 }
