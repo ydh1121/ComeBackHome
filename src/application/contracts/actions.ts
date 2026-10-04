@@ -14,3 +14,7 @@ export interface NotificationActions {
   updateRules(rules: NotificationRules): Promise<void>;
   sendTestNotification(): Promise<void>;
 }
+export interface PersonSelectionActions {
+  getSelectedPersonId(): EntityId | null;
+  select(personId: EntityId): void;
+}

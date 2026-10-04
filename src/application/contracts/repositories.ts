@@ -1,4 +1,4 @@
-import type { ImportBatch, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TransitAccessPoint } from '../../domain/models';
+import type { ImportBatch, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../../domain/models';
 import type { EntityId, ISODate } from '../../domain/common';
 export interface PersonRepository { list(): Promise<Person[]>; get(id: EntityId): Promise<Person | null>; create(input: Omit<Person,'id'>): Promise<Person>; update(id: EntityId, patch: Partial<Omit<Person,'id'>>): Promise<Person>; }
 export interface ScheduleRepository { list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; }
@@ -6,3 +6,4 @@ export interface PlaceRepository { get(personId: EntityId, kind: PlaceKind): Pro
 export interface CommuteRepository { listAccessPoints(personId: EntityId, kind: PlaceKind): Promise<TransitAccessPoint[]>; setAccessPointSelected(accessPointId: EntityId, selected: boolean): Promise<void>; getRoutePreference(personId: EntityId): Promise<RoutePreference | null>; saveRoutePreference(preference: RoutePreference): Promise<void>; listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]>; }
 export interface ImportRepository { getBatch(batchId: EntityId): Promise<ImportBatch | null>; setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>; markCommitted(batchId: EntityId): Promise<void>; }
 export interface NotificationRepository { getSettings(): Promise<NotificationSettings>; setRules(rules: NotificationRules): Promise<void>; setPermission(permission: NotificationSettings['permission']): Promise<void>; }
+export interface TodayRepository { get(personId: EntityId): Promise<TodaySnapshot | null>; }

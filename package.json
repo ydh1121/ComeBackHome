@@ -10,7 +10,8 @@
     "typecheck": "tsc -b --pretty false",
     "verify:architecture": "node scripts/verify-architecture.mjs",
     "verify:ui-contracts": "node scripts/verify-phase3-ui.mjs",
-    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts"
+    "verify:today": "node scripts/verify-phase4a-today.mjs",
+    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today"
   },
   "dependencies": {
     "react": "19.3.0",

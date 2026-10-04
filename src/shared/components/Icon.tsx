@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left';
+export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train';
 
 interface IconProps {
   name: IconName;
@@ -21,5 +21,17 @@ export function Icon({ name, className }: IconProps) {
       return <svg {...common}><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.8-1.8.9-1.9-2.2-2.1-1.8 1-1.9-.8L10.5 2h-3l-.7 2.2-1.8.8-1.9-1L1 6.1 2 8l-.8 1.8-2 .7v3l2 .7L2 16l-1 1.9L3.1 20 5 19l1.8.8.7 2.2h3l.7-2.2 1.9-.8 1.8 1 2.2-2.1-1-1.9.8-1.8z" transform="translate(3 -1) scale(.75)"/></svg>;
     case 'chevron-left':
       return <svg {...common}><path d="m15 18-6-6 6-6"/></svg>;
+    case 'chevron-right':
+      return <svg {...common}><path d="m9 5 7 7-7 7"/></svg>;
+    case 'chevron-down':
+      return <svg {...common}><path d="m5 9 7 7 7-7"/></svg>;
+    case 'check':
+      return <svg {...common}><path d="m5 12 4 4 10-10"/></svg>;
+    case 'map':
+      return <svg {...common}><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/></svg>;
+    case 'bus':
+      return <svg {...common}><rect x="5" y="3" width="14" height="16" rx="3"/><path d="M8 19v2M16 19v2M8 8h8M8 14h.01M16 14h.01"/></svg>;
+    case 'train':
+      return <svg {...common}><rect x="5" y="3" width="14" height="15" rx="4"/><path d="M8 21l2-3M16 18l2 3M8 8h8M8 13h.01M16 13h.01"/></svg>;
   }
 }

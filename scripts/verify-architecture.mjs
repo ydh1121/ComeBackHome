@@ -35,6 +35,7 @@ const required = [
   'src/mocks/providers.ts',
   'src/mocks/repositories.ts',
   'src/mocks/state.ts',
+  'src/pages/TodayPage.tsx',
   'src/providers/ports.ts',
   'src/shared/components/BackButton.tsx',
   'src/shared/components/Icon.tsx',
@@ -51,17 +52,20 @@ for (const [file, content] of texts) {
   if (content.includes('Store.get(')) failures.push(`direct Store read is forbidden: ${path}`);
   if (!path.includes('/mocks/') && content.includes("q.includes('샘플')")) failures.push(`demo search shortcut leaked: ${path}`);
   if (!path.includes('/mocks/') && content.includes('Date.now(')) failures.push(`Date.now id generation is forbidden outside mocks: ${path}`);
-  if (path.startsWith('src/pages/') && /from ['\"].*(mocks|providers)\//.test(content)) failures.push(`page imports infrastructure directly: ${path}`);
+  if (path.startsWith('src/pages/') && /from ['\"].*(mocks|providers)//.test(content)) failures.push(`page imports infrastructure directly: ${path}`);
   if (path.startsWith('src/pages/') && content.includes('contracts/repositories')) failures.push(`page imports repositories directly: ${path}`);
   if (path.startsWith('src/application/') && content.includes('/mocks/')) failures.push(`application layer imports mocks: ${path}`);
-  if (path.startsWith('src/shared/') && /from ['\"].*(mocks|providers)\//.test(content)) failures.push(`shared UI imports infrastructure directly: ${path}`);
+  if (path.startsWith('src/shared/') && /from ['\"].*(mocks|providers)//.test(content)) failures.push(`shared UI imports infrastructure directly: ${path}`);
   if (path.startsWith('src/shared/') && content.includes('contracts/repositories')) failures.push(`shared UI imports repositories directly: ${path}`);
-  if (path.startsWith('src/app/') && path !== 'src/app/composition.ts' && /from ['\"].*mocks\//.test(content)) failures.push(`only composition may import mocks: ${path}`);
+  if (path.startsWith('src/app/') && path !== 'src/app/composition.ts' && /from ['\"].*mocks//.test(content)) failures.push(`only composition may import mocks: ${path}`);
 }
 
 const providers = await readFile(new URL('../src/application/contracts/providers.ts', import.meta.url), 'utf8');
 if (!providers.includes('arrivals(providerStationId: string')) failures.push('RealtimeSubwayProvider must use providerStationId');
 if (providers.includes('arrivals(stationName: string')) failures.push('RealtimeSubwayProvider must not use stationName as canonical input');
+
+const repositories = await readFile(new URL('../src/application/contracts/repositories.ts', import.meta.url), 'utf8');
+if (!repositories.includes('export interface TodayRepository')) failures.push('TodayRepository application port missing');
 
 if (failures.length) {
   console.error(failures.join('\n'));
