@@ -48,6 +48,18 @@ export interface NotificationJob {
   lastError: string | null;
 }
 
+export interface NotificationSettingsRecord {
+  shiftEndEnabled: boolean;
+  etaChangeEnabled: boolean;
+  timezone: string;
+  updatedAt: string;
+}
+
+export interface NotificationSettingsStore {
+  get(): Promise<NotificationSettingsRecord>;
+  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled'>): Promise<NotificationSettingsRecord>;
+}
+
 export interface SubscriptionStore {
   upsert(subscription: WebPushSubscriptionRecord): Promise<StoredPushSubscription>;
   deactivateByEndpoint(endpoint: string): Promise<void>;
