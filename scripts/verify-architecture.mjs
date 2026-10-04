@@ -65,6 +65,8 @@ const required = [
   'src/pages/QaDesktopDropPage.tsx',
   'src/pages/TodayPage.tsx',
   'src/providers/ports.ts',
+  'src/providers/browser/BrowserPushSubscriptionProvider.ts',
+  'src/config/webPush.ts',
   'src/pwa/registerServiceWorker.ts',
   'src/shared/components/BackButton.tsx',
   'src/shared/components/Icon.tsx',
