@@ -1,0 +1,43 @@
+import type { EntityId, ISODate } from '../domain/common';
+import type { ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TransitAccessPoint } from '../domain/models';
+import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository } from '../application/contracts/repositories';
+import type { MockStateStore } from './state';
+function clone<T>(value: T): T { return structuredClone(value); }
+export class MockPersonRepository implements PersonRepository {
+  constructor(private readonly store: MockStateStore) {}
+  async list(): Promise<Person[]> { return clone(this.store.read().people); }
+  async get(id: EntityId): Promise<Person | null> { return clone(this.store.read().people.find((person) => person.id === id) ?? null); }
+  async create(input: Omit<Person, 'id'>): Promise<Person> { const person = { id: crypto.randomUUID(), ...input }; this.store.mutate((state) => state.people.push(person)); return clone(person); }
+  async update(id: EntityId, patch: Partial<Omit<Person, 'id'>>): Promise<Person> { let updated: Person | null = null; this.store.mutate((state) => { const person = state.people.find((candidate) => candidate.id === id); if (!person) return; Object.assign(person, patch); updated = clone(person); }); if (!updated) throw new Error('Person was not found.'); return updated; }
+}
+export class MockScheduleRepository implements ScheduleRepository {
+  constructor(private readonly store: MockStateStore) {}
+  async list(personId: EntityId): Promise<ScheduleEntry[]> { return clone(this.store.read().schedules.filter((entry) => entry.personId === personId)); }
+  async getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null> { return clone(this.store.read().schedules.find((entry) => entry.personId === personId && entry.date === date) ?? null); }
+  async upsert(entry: ScheduleEntry): Promise<void> { this.store.mutate((state) => { const index = state.schedules.findIndex((candidate) => candidate.id === entry.id || (candidate.personId === entry.personId && candidate.date === entry.date)); if (index >= 0) state.schedules[index] = clone(entry); else state.schedules.push(clone(entry)); }); }
+}
+export class MockPlaceRepository implements PlaceRepository {
+  constructor(private readonly store: MockStateStore) {}
+  async get(personId: EntityId, kind: PlaceKind): Promise<Place | null> { return clone(this.store.read().places.find((place) => place.personId === personId && place.kind === kind) ?? null); }
+  async save(place: Place): Promise<void> { this.store.mutate((state) => { const index = state.places.findIndex((candidate) => candidate.id === place.id || (candidate.personId === place.personId && candidate.kind === place.kind)); if (index >= 0) state.places[index] = clone(place); else state.places.push(clone(place)); }); }
+}
+export class MockCommuteRepository implements CommuteRepository {
+  constructor(private readonly store: MockStateStore) {}
+  async listAccessPoints(_personId: EntityId, kind: PlaceKind): Promise<TransitAccessPoint[]> { return clone(this.store.read().accessPoints.filter((point) => point.placeKind === kind)); }
+  async setAccessPointSelected(accessPointId: EntityId, selected: boolean): Promise<void> { this.store.mutate((state) => { const point = state.accessPoints.find((candidate) => candidate.id === accessPointId); if (point) point.selected = selected; }); }
+  async getRoutePreference(personId: EntityId): Promise<RoutePreference | null> { return clone(this.store.read().routePreferences.find((preference) => preference.personId === personId) ?? null); }
+  async saveRoutePreference(preference: RoutePreference): Promise<void> { this.store.mutate((state) => { const index = state.routePreferences.findIndex((candidate) => candidate.id === preference.id || candidate.personId === preference.personId); if (index >= 0) state.routePreferences[index] = clone(preference); else state.routePreferences.push(clone(preference)); }); }
+  async listRouteCandidates(_personId: EntityId): Promise<RouteCandidate[]> { return clone(this.store.read().routeCandidates); }
+}
+export class MockImportRepository implements ImportRepository {
+  constructor(private readonly store: MockStateStore) {}
+  async getBatch(batchId: EntityId) { return clone(this.store.read().importBatches.find((batch) => batch.id === batchId) ?? null); }
+  async setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> { this.store.mutate((state) => { const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId); if (item) item.resolution = resolution; }); }
+  async markCommitted(batchId: EntityId): Promise<void> { this.store.mutate((state) => { if (!state.committedImportBatchIds.includes(batchId)) state.committedImportBatchIds.push(batchId); }); }
+}
+export class MockNotificationRepository implements NotificationRepository {
+  constructor(private readonly store: MockStateStore) {}
+  async getSettings(): Promise<NotificationSettings> { return clone(this.store.read().notifications); }
+  async setRules(rules: NotificationRules): Promise<void> { this.store.mutate((state) => { state.notifications.rules = clone(rules); }); }
+  async setPermission(permission: NotificationSettings['permission']): Promise<void> { this.store.mutate((state) => { state.notifications.permission = permission; }); }
+}
