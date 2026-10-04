@@ -15,6 +15,8 @@ import { CommuteManualPage } from '../pages/CommuteManualPage';
 import { TransitAccessPage } from '../pages/TransitAccessPage';
 import { TransitSearchPage } from '../pages/TransitSearchPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
+import { NotificationPage } from '../pages/NotificationPage';
+import { SettingsPage } from '../pages/SettingsPage';
 import { ScheduleBulkEditPage } from '../pages/ScheduleBulkEditPage';
 import { ScheduleDayEditPage } from '../pages/ScheduleDayEditPage';
 import { SchedulePage } from '../pages/SchedulePage';
@@ -41,6 +43,8 @@ function componentFor(path: string) {
   if (path === '/people/:personId/commute/:placeKind/access') return TransitAccessPage;
   if (path === '/people/:personId/commute/:placeKind/access/search') return TransitSearchPage;
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;
+  if (path === '/notifications') return NotificationPage;
+  if (path === '/settings') return SettingsPage;
   return ImplementationBoundaryPage;
 }
 
