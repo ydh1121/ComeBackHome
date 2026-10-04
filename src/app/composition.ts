@@ -6,7 +6,7 @@ import { BusRouteService, CommuteService, PlaceService, TransitSearchService } f
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import { MockImportFileSelectionAction } from '../mocks/import-actions';
 import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
-import { MockNotificationPermissionProvider, MockNotificationTestGateway } from '../mocks/providers';
+import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPushSubscriptionProvider } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
 
@@ -39,6 +39,7 @@ export function createMockApplicationServices(): ApplicationServices {
       notifications: new NotificationService(
         repositories.notifications,
         new MockNotificationPermissionProvider(),
+        new MockPushSubscriptionProvider(),
         new MockNotificationTestGateway(),
       ),
       personSelection,
