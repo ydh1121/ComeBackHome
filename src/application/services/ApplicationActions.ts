@@ -101,8 +101,13 @@ export class TransitAccessService implements TransitAccessActions {
 export class NotificationService implements NotificationActions {
   constructor(private readonly repository: NotificationRepository, private readonly permissionProvider: NotificationPermissionProvider, private readonly testGateway: NotificationTestGateway) {}
   async requestPermissionFromUserGesture(): Promise<void> {
-    const permission = await this.permissionProvider.requestPermissionFromUserGesture();
-    await this.repository.setPermission(permission);
+    try {
+      const permission = await this.permissionProvider.requestPermissionFromUserGesture();
+      await this.repository.setPermission(permission);
+    } catch {
+      await this.repository.setPermission('error');
+      throw new Error('Notification permission request failed.');
+    }
   }
   updateRules(rules: NotificationRules): Promise<void> { return this.repository.setRules(rules); }
   sendTestNotification(): Promise<void> { return this.testGateway.sendTestNotification(); }
