@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ScheduleEntry } from '../../domain/models';
 import { Icon } from '../../shared/components/Icon';
 import { formatDateLabel, isIsoDate, normalizeRange } from './date-format';
@@ -18,6 +18,8 @@ export function ScheduleRangePicker({ entries, from, to, onChange }: Props) {
   const [step, setStep] = useState<'start' | 'end'>('start');
   const [fromText, setFromText] = useState(from);
   const [toText, setToText] = useState(to);
+  useEffect(() => setFromText(from), [from]);
+  useEffect(() => setToText(to), [to]);
   const dates = entries.map((entry) => entry.date);
 
   const setDate = (kind: 'from' | 'to', value: string) => {
