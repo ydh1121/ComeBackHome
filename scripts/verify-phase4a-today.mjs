@@ -30,14 +30,16 @@ for (const fragment of requiredPageFragments) {
 if (!router.includes("path === '/' ? TodayPage")) failures.push('root route is not wired to TodayPage');
 if (!query.includes('getTodayOverview(referenceDate: ISODate)')) failures.push('Today overview query missing');
 if (!query.includes('this.repositories.today.get(selectedId)')) failures.push('TodayPage data must cross TodayRepository boundary');
-if (!css.includes('padding: 0 18px 28px;')) failures.push('Today page 18px horizontal padding missing');
+if (!css.includes('.today-page { padding: 0 18px 28px; }')) failures.push('Today page 18px horizontal padding missing');
+if (!css.includes('.today-page .anti-ai-hero')) failures.push('Today hero must be page-scoped');
 if (!css.includes('background: #f3f7ff;')) failures.push('Today hero surface mismatch');
-if (!css.includes('font-size: 46px;')) failures.push('Today big-time size mismatch');
+if (!css.includes('.today-page .big-time { font-size: 46px;')) failures.push('Today big-time size mismatch');
 if (!css.includes('grid-template-columns: 1fr 1fr;')) failures.push('Today two-column metadata contract missing');
-if (!css.includes('min-height: 60px;')) failures.push('Today action touch/height contract missing');
+if (!css.includes('.today-page .action-card { min-height: 60px;')) failures.push('Today action touch/height contract missing');
 if (!css.includes('env(safe-area-inset-bottom)')) failures.push('Person picker bottom safe-area contract missing');
-if (/from ['\"].*(mocks|providers)//.test(page)) failures.push('TodayPage imports infrastructure directly');
+if (/from ['"].*(mocks|providers)\//.test(page)) failures.push('TodayPage imports infrastructure directly');
 if (page.includes('contracts/repositories')) failures.push('TodayPage imports repository contracts directly');
+if (/^\.action-card\s*\{/m.test(css)) failures.push('Today action styles leaked globally');
 
 if (failures.length) {
   console.error(failures.join('\n'));
