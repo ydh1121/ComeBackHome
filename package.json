@@ -23,7 +23,8 @@
     "verify:push-client": "node scripts/verify-phase5c-push-client.mjs",
     "verify:backend": "node scripts/verify-phase5d-backend.mjs",
     "verify:worker": "node scripts/verify-phase5e-worker.mjs",
-    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker"
+    "verify:http-runtime": "node scripts/verify-phase5f-http.mjs",
+    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker && npm run verify:http-runtime"
   },
   "dependencies": {
     "react": "19.3.0",
