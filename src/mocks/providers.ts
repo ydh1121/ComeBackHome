@@ -1,0 +1,3 @@
+import type { NotificationPermissionProvider, NotificationTestGateway } from '../application/contracts/providers';
+export class MockNotificationPermissionProvider implements NotificationPermissionProvider { private permission: NotificationPermission = 'default'; async getPermission(): Promise<NotificationPermission> { return this.permission; } async requestPermissionFromUserGesture(): Promise<NotificationPermission> { this.permission = 'granted'; return this.permission; } }
+export class MockNotificationTestGateway implements NotificationTestGateway { private sentCount = 0; async sendTestNotification(): Promise<void> { this.sentCount += 1; } getSentCount(): number { return this.sentCount; } }
