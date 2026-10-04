@@ -25,11 +25,13 @@ export function SchedulePage() {
   const rangeLabel = (items: typeof entries) => items.length ? formatDateLabel(items[0].date) + ' - ' + formatDateLabel(items[items.length - 1].date) : '—';
 
   return (
-    <section className="schedule-page" data-route="/schedule" data-page="SchedulePage" data-state={'VIEW_' + view.toUpperCase()}>
+    <section className="schedule-page" data-route="/schedule" data-page="SchedulePage" data-state={entries.length ? 'VIEW_' + view.toUpperCase() : 'EMPTY'}>
       <div className="page-head-inline">
         <h1 className="page-title">일정</h1>
         <button type="button" className="text-btn schedule-bulk-link" onClick={() => navigate('/schedule/edit')}>일괄 입력</button>
       </div>
+
+      {!entries.length ? <div className="schedule-message" data-state="EMPTY">등록된 일정이 없습니다.</div> : null}
 
       <div className="segment">
         {([['day','1일'],['week','1주'],['2week','2주'],['month','1개월']] as const).map(([value,label]) => (
