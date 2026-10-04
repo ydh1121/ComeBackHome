@@ -50,10 +50,21 @@ export class MockPlaceRepository implements PlaceRepository {
 export class MockCommuteRepository implements CommuteRepository {
   constructor(private readonly store: MockStateStore) {}
   async listAccessPoints(personId: EntityId, kind: PlaceKind): Promise<TransitAccessPoint[]> { return clone(this.store.read().accessPoints.filter((point) => point.personId === personId && point.placeKind === kind)); }
+  async upsertAccessPoint(point: TransitAccessPoint): Promise<void> {
+    this.store.mutate((state) => {
+      const index = state.accessPoints.findIndex((candidate) => candidate.id === point.id || (candidate.personId === point.personId && candidate.placeKind === point.placeKind && candidate.providerId === point.providerId));
+      if (index >= 0) state.accessPoints[index] = clone(point);
+      else state.accessPoints.push(clone(point));
+    });
+  }
   async setAccessPointSelected(accessPointId: EntityId, selected: boolean): Promise<void> { this.store.mutate((state) => { const point = state.accessPoints.find((candidate) => candidate.id === accessPointId); if (point) point.selected = selected; }); }
+  async setAccessPointAlias(accessPointId: EntityId, userLabel: string): Promise<void> { this.store.mutate((state) => { const point = state.accessPoints.find((candidate) => candidate.id === accessPointId); if (point) point.userLabel = userLabel || undefined; }); }
+  async setSelectedBusRoute(accessPointId: EntityId, providerRouteId: string): Promise<void> { this.store.mutate((state) => { const point = state.accessPoints.find((candidate) => candidate.id === accessPointId); if (point?.busRoutes?.some((route) => route.providerRouteId === providerRouteId)) point.selectedBusRouteId = providerRouteId; }); }
   async getRoutePreference(personId: EntityId): Promise<RoutePreference | null> { return clone(this.store.read().routePreferences.find((preference) => preference.personId === personId) ?? null); }
   async saveRoutePreference(preference: RoutePreference): Promise<void> { this.store.mutate((state) => { const index = state.routePreferences.findIndex((candidate) => candidate.id === preference.id || candidate.personId === preference.personId); if (index >= 0) state.routePreferences[index] = clone(preference); else state.routePreferences.push(clone(preference)); }); }
   async listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> { return clone(this.store.read().routeCandidates.filter((candidate) => candidate.personId === personId)); }
+  async getPreferredRouteCandidateId(personId: EntityId): Promise<EntityId | null> { return this.store.read().preferredRouteCandidateIds[personId] ?? null; }
+  async setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void> { this.store.mutate((state) => { state.preferredRouteCandidateIds[personId] = routeCandidateId; }); }
 }
 
 export class MockTodayRepository implements TodayRepository {
