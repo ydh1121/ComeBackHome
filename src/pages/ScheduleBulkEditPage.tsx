@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ScheduleEntry } from '../domain/models';
 import { useNavigate } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { ScheduleRangePicker } from '../features/schedule/ScheduleRangePicker';
@@ -23,7 +24,7 @@ export function ScheduleBulkEditPage() {
 }
 
 interface BulkFormProps {
-  entries: ReturnType<typeof useSelectedSchedule> extends { status: 'ready'; entries: infer T } ? T : never;
+  entries: ScheduleEntry[];
   onApply(rule: { from: string; to: string; weekdays: number[]; start: string; end: string }): Promise<void>;
 }
 
