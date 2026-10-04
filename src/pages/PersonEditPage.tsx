@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { usePerson } from '../features/people/usePeople';
 import { BackButton } from '../shared/components/BackButton';
+import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import './people-page.css';
 
 export function PersonEditPage() {
@@ -12,7 +13,7 @@ export function PersonEditPage() {
   const state = usePerson(personId);
   const [name, setName] = useState('');
   const [relation, setRelation] = useState('');
-  const [saving, setSaving] = useState(false);
+  const form = useFormRuntimeState();
 
   useEffect(() => {
     if (state.status !== 'ready' || !state.person) return;
@@ -28,34 +29,29 @@ export function PersonEditPage() {
   }
 
   const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      await services.actions.people.update(personId, { name, relation });
-      navigate('/people/' + encodeURIComponent(personId), { replace: true });
-    } finally {
-      setSaving(false);
-    }
+    if (form.state === 'SAVING') return;
+    await form.save(() => services.actions.people.update(personId, { name, relation }));
+    navigate('/people/' + encodeURIComponent(personId), { replace: true });
   };
 
   return (
-    <section className="people-page" data-route={'/people/' + personId + '/edit'} data-page="PersonFormPage" data-state="EDIT">
+    <section className="people-page" data-route={'/people/' + personId + '/edit'} data-page="PersonFormPage" data-state={"EDIT " + form.state}>
       <BackButton fallbackTo={'/people/' + encodeURIComponent(personId)} />
       <h1 className="page-title">사람 수정</h1>
 
       <div className="person-form">
         <label className="form-field">
           <span className="form-label">이름</span>
-          <input className="input" value={name} onChange={(event) => setName(event.target.value)} />
+          <input className="input" value={name} onChange={(event) => { setName(event.target.value); form.markDirty(); }} />
         </label>
         <label className="form-field">
           <span className="form-label">관계</span>
-          <input className="input" value={relation} onChange={(event) => setRelation(event.target.value)} />
+          <input className="input" value={relation} onChange={(event) => { setRelation(event.target.value); form.markDirty(); }} />
         </label>
       </div>
 
-      <button type="button" className="cta" disabled={saving} onClick={save}>
-        {saving ? '저장 중' : '저장'}
+      <button type="button" className="cta" disabled={form.state === 'SAVING'} onClick={save}>
+        {form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}
       </button>
     </section>
   );
