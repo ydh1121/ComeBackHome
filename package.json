@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "verify:architecture": "node scripts/verify-architecture.mjs",
-    "check": "npm run typecheck && npm run verify:architecture"
+    "verify:ui-contracts": "node scripts/verify-phase3-ui.mjs",
+    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts"
   },
   "dependencies": {
     "react": "19.3.0",

@@ -1,5 +1,21 @@
-:root { font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #ffffff; font-synthesis: none; text-rendering: optimizeLegibility; }
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", Pretendard, "Segoe UI", sans-serif;
+  color: #171717;
+  background: #f4f4f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+html, body, #root { margin: 0; min-width: 320px; min-height: 100%; }
+body { min-height: 100dvh; }
 button, input, textarea, select { font: inherit; }
-.implementation-boundary { width: min(100% - 40px, 430px); margin: 0 auto; padding: 48px 0; }
+button { color: inherit; cursor: pointer; }
+
+.implementation-boundary {
+  width: min(100% - 36px, 394px);
+  margin: 0 auto;
+  padding: 48px 0;
+}

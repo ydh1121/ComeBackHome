@@ -1,0 +1,173 @@
+:root {
+  --cbh-bg: #f4f4f2;
+  --cbh-paper: #fff;
+  --cbh-ink: #171717;
+  --cbh-muted: #667085;
+  --cbh-line: #e4e7ec;
+  --cbh-blue: #255cff;
+  --cbh-shell: 430px;
+  --cbh-nav-height: 86px;
+}
+
+.app-shell {
+  width: min(100%, var(--cbh-shell));
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: var(--cbh-paper);
+  color: var(--cbh-ink);
+  position: relative;
+}
+
+.app-shell__app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.top-utility {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 8px;
+}
+
+.brand {
+  font-size: 16px;
+  font-weight: 780;
+  letter-spacing: -.02em;
+  color: #1d2939;
+}
+
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+}
+
+.svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.icon-btn .svg {
+  width: 20px;
+  height: 20px;
+}
+
+.bottomnav {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  width: 100%;
+  min-height: var(--cbh-nav-height);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  padding: 6px 6px max(10px, env(safe-area-inset-bottom));
+  border: 0;
+  background: rgba(255,255,255,.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 -10px 30px rgba(16,24,40,.07);
+}
+
+.nav-btn {
+  min-width: 0;
+  min-height: 60px;
+  display: grid;
+  grid-template-rows: 24px auto;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: #98a2b3;
+  font-size: 12px;
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  text-align: center;
+  text-decoration: none;
+}
+
+.nav-btn .svg { width: 22px; height: 22px; stroke-width: 1.5; }
+.nav-btn.active { color: var(--cbh-blue); font-weight: 700; }
+.nav-btn.active .svg { stroke-width: 2.2; }
+
+.back,
+.icon-btn,
+.nav-btn {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms cubic-bezier(.2,0,0,1), background-color 120ms cubic-bezier(.2,0,0,1), color 120ms cubic-bezier(.2,0,0,1), box-shadow 120ms cubic-bezier(.2,0,0,1), opacity 120ms cubic-bezier(.2,0,0,1);
+}
+
+.back:active,
+.icon-btn:active,
+.nav-btn:active { transform: scale(.96); }
+
+.back:focus-visible,
+.icon-btn:focus-visible,
+.nav-btn:focus-visible { outline: 2px solid var(--cbh-blue); outline-offset: 2px; }
+
+.subpage-header { padding: 0 18px; }
+
+.back {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0 0 2px -10px;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #475467;
+}
+
+.back .svg { width: 20px; height: 20px; }
+
+.page-title {
+  margin: 10px 0 18px;
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  color: #101828;
+  text-wrap: balance;
+  scroll-margin-top: 16px;
+}
+
+@media (min-width: 601px) {
+  body { background: var(--cbh-bg); }
+  .app-shell { margin-top: 10px; margin-bottom: 24px; min-height: 860px; border-radius: 30px; box-shadow: 0 16px 45px rgba(16,24,40,.10); overflow: clip; }
+  .app-shell__app { min-height: 860px; }
+}
+
+@media (max-width: 600px) {
+  body { background: #fff; }
+  .app-shell { width: 100%; max-width: var(--cbh-shell); min-height: 100dvh; border-radius: 0; box-shadow: none; }
+}
+
+@media (max-width: 390px) { .nav-btn { font-size: 11px; } }
+@media (hover: hover) { .back:hover, .icon-btn:hover, .nav-btn:hover { filter: brightness(.985); } }
+@media (prefers-reduced-motion: reduce) { .back, .icon-btn, .nav-btn { transition: background-color 120ms, color 120ms, box-shadow 120ms, opacity 120ms; } .back:active, .icon-btn:active, .nav-btn:active { transform: none; } }
