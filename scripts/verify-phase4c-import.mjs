@@ -31,6 +31,7 @@ if (!runtime.includes('importFiles: ImportFileSelectionAction')) failures.push('
 if (!runtime.includes('importMatch: ImportMatchActions')) failures.push('match action missing');
 if (!runtime.includes('importReview: ImportReviewActions')) failures.push('review action missing');
 if (!composition.includes('new MockImportFileSelectionAction')) failures.push('mock file action not composed');
+if (!commit.includes('schedules.transaction')) failures.push('schedule transaction boundary missing');
 if (!commit.includes("item.resolution === 'KEEP'")) failures.push('KEEP commit rule missing');
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
 if (!css.includes('.import-page .upload')) failures.push('upload style missing');
