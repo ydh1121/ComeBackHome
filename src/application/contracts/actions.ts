@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../../domain/common';
-import type { ImportResolution, NotificationRules, PlaceKind, TransitMode } from '../../domain/models';
+import type { ImportResolution, NotificationRules, Person, PlaceKind, TransitMode } from '../../domain/models';
 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
@@ -19,6 +19,11 @@ export interface NotificationActions {
 export interface PersonSelectionActions {
   getSelectedPersonId(): EntityId | null;
   select(personId: EntityId): void;
+}
+export interface PersonInput { name: string; relation: string; }
+export interface PersonActions {
+  create(input: PersonInput): Promise<Person>;
+  update(personId: EntityId, input: PersonInput): Promise<Person>;
 }
 export interface ScheduleDayInput {
   enabled: boolean;
