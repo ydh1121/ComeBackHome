@@ -1,7 +1,7 @@
-import type { Coordinate, RouteCandidate, TransitMode } from '../../domain/models';
+import type { BusRouteOption, Coordinate, RouteCandidate, TransitMode } from '../../domain/models';
 
 export interface PlaceSearchResult { providerId: string; placeName?: string; roadAddress: string; lotAddress?: string; coordinate: Coordinate; category?: string; }
-export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; }
+export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; busRoutes?: BusRouteOption[]; }
 export interface Arrival { providerVehicleId?: string; minutes: number; observedAt: string; }
 export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearchResult[]>; }
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<RouteCandidate[]>; }
