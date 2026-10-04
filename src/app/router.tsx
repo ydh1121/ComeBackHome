@@ -5,6 +5,10 @@ import { ImportPage } from '../pages/ImportPage';
 import { ImportPersonMatchPage } from '../pages/ImportPersonMatchPage';
 import { ImportReviewPage } from '../pages/ImportReviewPage';
 import { ImportStructurePage } from '../pages/ImportStructurePage';
+import { PeoplePage } from '../pages/PeoplePage';
+import { PersonCreatePage } from '../pages/PersonCreatePage';
+import { PersonDetailPage } from '../pages/PersonDetailPage';
+import { PersonEditPage } from '../pages/PersonEditPage';
 import { ScheduleBulkEditPage } from '../pages/ScheduleBulkEditPage';
 import { ScheduleDayEditPage } from '../pages/ScheduleDayEditPage';
 import { SchedulePage } from '../pages/SchedulePage';
@@ -20,6 +24,10 @@ function componentFor(path: string) {
   if (path === '/import/:batchId/people') return ImportPersonMatchPage;
   if (path === '/import/:batchId/structure') return ImportStructurePage;
   if (path === '/import/:batchId/review') return ImportReviewPage;
+  if (path === '/people') return PeoplePage;
+  if (path === '/people/new') return PersonCreatePage;
+  if (path === '/people/:personId/edit') return PersonEditPage;
+  if (path === '/people/:personId') return PersonDetailPage;
   return ImplementationBoundaryPage;
 }
 
