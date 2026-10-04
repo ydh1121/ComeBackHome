@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { useApplicationServices } from '../app/ApplicationServicesContext';
 import type { Place, TransitAccessPoint } from '../domain/models';
 import { usePersonDetail } from '../features/people/usePeople';
 import { BackButton } from '../shared/components/BackButton';
@@ -70,7 +72,12 @@ function LocationGroup({ personId, kind, place, accessPoints, onNavigate }: Loca
 export function PersonDetailPage() {
   const { personId = '' } = useParams();
   const navigate = useNavigate();
+  const services = useApplicationServices();
   const state = usePersonDetail(personId);
+
+  useEffect(() => {
+    if (personId) services.actions.personSelection.select(personId);
+  }, [services, personId]);
 
   if (state.status === 'loading') {
     return <section className="people-page"><div className="people-message">사람 상세를 불러오는 중</div></section>;
@@ -103,7 +110,7 @@ export function PersonDetailPage() {
 
       <div className="section-title">이동 경로</div>
       <div className="location-stack">
-        <LocationGroup personId={person.id} kind="origin" place={origin} accessPoints={originAccessPoints} onNavigate={navigate} />
+        <LocationGroup personId={person.id} kind="origin" place={origin} accessPoints={originAccessPoints} onNavigate={(path) => navigate(path)} />
         <LocationGroup personId={person.id} kind="destination" place={destination} accessPoints={destinationAccessPoints} onNavigate={navigate} />
       </div>
 
