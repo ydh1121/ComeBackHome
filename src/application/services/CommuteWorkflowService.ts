@@ -123,7 +123,8 @@ export class BusRouteService implements BusRouteActions {
   setAlias(accessPointId: EntityId, userLabel: string) {
     return this.commute.setAccessPointAlias(accessPointId, userLabel.trim());
   }
-  selectRoute(accessPointId: EntityId, providerRouteId: string) {
-    return this.commute.setSelectedBusRoute(accessPointId, providerRouteId);
+  async selectRoute(accessPointId: EntityId, providerRouteId: string) {
+    await this.commute.setSelectedBusRoute(accessPointId, providerRouteId);
+    await this.commute.setAccessPointSelected(accessPointId, true);
   }
 }
