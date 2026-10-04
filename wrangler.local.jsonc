@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "come-back-home",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-04",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api", "/api/*"],
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "come-back-home-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "preview_database_id": "comebackhome-local",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "vars": {
+    "PUSH_DELIVERY_ENABLED": "0"
+  }
+}
