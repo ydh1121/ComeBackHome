@@ -1,6 +1,6 @@
 import type { ApplicationServices, RepositoryBundle } from '../application/contracts/runtime';
 import { ComeBackHomeQueries } from '../application/queries/ComeBackHomeQueries';
-import { NotificationService, PersonSelectionService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
+import { NotificationService, PersonSelectionService, PersonService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
 import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import { MockImportFileSelectionAction } from '../mocks/import-actions';
@@ -38,6 +38,7 @@ export function createMockApplicationServices(): ApplicationServices {
         new MockNotificationTestGateway(),
       ),
       personSelection,
+      people: new PersonService(repositories.people, personSelection),
       schedule: new ScheduleService(repositories.schedules, personSelection),
       importFiles: new MockImportFileSelectionAction(repositories.imports),
       importMatch: importWorkflow,
