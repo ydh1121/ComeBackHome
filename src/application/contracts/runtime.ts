@@ -1,4 +1,4 @@
-import type { NotificationActions, PersonSelectionActions, ScheduleActions, TransitAccessActions } from './actions';
+import type { ImportFileSelectionAction, ImportMatchActions, ImportReviewActions, NotificationActions, PersonSelectionActions, ScheduleActions, TransitAccessActions } from './actions';
 import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from './repositories';
 import type { CommitImportReview } from '../use-cases/commitImportReview';
 import type { ComeBackHomeQueries } from '../queries/ComeBackHomeQueries';
@@ -25,6 +25,9 @@ export interface ApplicationServices {
     notifications: NotificationActions;
     personSelection: PersonSelectionActions;
     schedule: ScheduleActions;
+    importFiles: ImportFileSelectionAction;
+    importMatch: ImportMatchActions;
+    importReview: ImportReviewActions;
   };
   changes: ChangeSignal;
 }
