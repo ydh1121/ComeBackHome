@@ -1,4 +1,4 @@
-import type { BusRouteOption, Coordinate, RouteCandidate, TransitMode } from '../../domain/models';
+import type { BusRouteOption, Coordinate, RouteCandidate, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
 
 export interface PlaceSearchResult { providerId: string; placeName?: string; roadAddress: string; lotAddress?: string; coordinate: Coordinate; category?: string; }
 export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; busRoutes?: BusRouteOption[]; }
@@ -12,5 +12,5 @@ export interface ParsedImport { detectedPeople: unknown[]; scheduleCandidates: u
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageScheduleRecognizer { parse(file: File): Promise<ParsedImport>; }
 export interface NotificationPermissionProvider { getPermission(): Promise<NotificationPermission>; requestPermissionFromUserGesture(): Promise<NotificationPermission>; }
-export interface PushSubscriptionProvider { getCurrent(): Promise<PushSubscription | null>; subscribe(): Promise<PushSubscription>; unsubscribe(): Promise<void>; }
+export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; }
 export interface NotificationTestGateway { sendTestNotification(): Promise<void>; }
