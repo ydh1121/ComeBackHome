@@ -114,20 +114,45 @@ export async function handleApiRequest(request: Request, env: WorkerEnv): Promis
           return json({ schedules: await schedules.list(personId) });
         }
 
-        if (segments[4] && segments.length === 5 && request.method === 'PUT') {
-          const date = decodeURIComponent(segments[4]);
+        if (segments.length === 4 && request.method === 'PUT') {
           const body = await readObject(request);
-          const current = await schedules.getByDate(personId, date);
-          const entry = {
-            id: current?.id ?? crypto.randomUUID(),
-            personId,
-            date,
-            enabled: asBoolean(body.enabled, 'enabled'),
-            start: asString(body.start, 'start'),
-            end: asString(body.end, 'end'),
-          };
-          await schedules.upsert(entry);
-          return json({ schedule: entry });
+          const rawSchedules = Array.isArray(body.schedules) ? body.schedules : [];
+          const entries = rawSchedules.map((value) => {
+            if (!isObject(value)) throw new Error('Each schedule must be an object.');
+            return {
+              id: asString(value.id, 'schedule.id'),
+              personId,
+              date: asString(value.date, 'schedule.date'),
+              enabled: asBoolean(value.enabled, 'schedule.enabled'),
+              start: asString(value.start, 'schedule.start'),
+              end: asString(value.end, 'schedule.end'),
+            };
+          });
+          await schedules.upsertMany(entries);
+          return json({ schedules: entries });
+        }
+
+        if (segments[4] && segments.length === 5) {
+          const date = decodeURIComponent(segments[4]);
+
+          if (request.method === 'GET') {
+            return json({ schedule: await schedules.getByDate(personId, date) });
+          }
+
+          if (request.method === 'PUT') {
+            const body = await readObject(request);
+            const current = await schedules.getByDate(personId, date);
+            const entry = {
+              id: typeof body.id === 'string' ? body.id : current?.id ?? crypto.randomUUID(),
+              personId,
+              date,
+              enabled: asBoolean(body.enabled, 'enabled'),
+              start: asString(body.start, 'start'),
+              end: asString(body.end, 'end'),
+            };
+            await schedules.upsert(entry);
+            return json({ schedule: entry });
+          }
         }
       }
 
@@ -214,7 +239,32 @@ export async function handleApiRequest(request: Request, env: WorkerEnv): Promis
           await commute.upsertAccessPoint(point);
           return json({ accessPoint: point });
         }
+
+        if (segments[4] === 'preferred-route' && segments.length === 5 && request.method === 'PUT') {
+          const body = await readObject(request);
+          const routeCandidateId = asString(body.routeCandidateId, 'routeCandidateId');
+          await commute.setPreferredRouteCandidateId(personId, routeCandidateId);
+          return json({ preferredRouteCandidateId: routeCandidateId });
+        }
       }
+    }
+
+    if (segments[1] === 'commute' && segments[2] === 'access' && segments[3] && segments.length === 4 && request.method === 'PATCH') {
+      const accessPointId = decodeURIComponent(segments[3]);
+      const body = await readObject(request);
+      const commute = new D1CommuteRepository(env.DB);
+
+      if (typeof body.selected === 'boolean') {
+        await commute.setAccessPointSelected(accessPointId, body.selected);
+      }
+      if (typeof body.userLabel === 'string') {
+        await commute.setAccessPointAlias(accessPointId, body.userLabel);
+      }
+      if (typeof body.selectedBusRouteId === 'string' && body.selectedBusRouteId.trim()) {
+        await commute.setSelectedBusRoute(accessPointId, body.selectedBusRouteId.trim());
+      }
+
+      return json({ updated: true });
     }
 
     if (segments.length === 3 && segments[1] === 'notifications' && segments[2] === 'settings') {
