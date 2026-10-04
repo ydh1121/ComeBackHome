@@ -74,3 +74,70 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(handleStaticAsset(request));
   }
 });
+
+
+function safeNotificationPath(value) {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/';
+  try {
+    const url = new URL(value, self.location.origin);
+    return url.origin === self.location.origin ? url.pathname + url.search : '/';
+  } catch {
+    return '/';
+  }
+}
+
+function parsePushPayload(event) {
+  const fallback = {
+    title: 'ComeBackHome',
+    body: '새로운 알림이 있습니다.',
+    tag: 'comebackhome',
+    path: '/',
+  };
+
+  if (!event.data) return fallback;
+
+  try {
+    const raw = event.data.json();
+    return {
+      title: typeof raw?.title === 'string' && raw.title.trim() ? raw.title.trim() : fallback.title,
+      body: typeof raw?.body === 'string' ? raw.body : fallback.body,
+      tag: typeof raw?.tag === 'string' && raw.tag.trim() ? raw.tag.trim() : fallback.tag,
+      path: safeNotificationPath(raw?.path),
+    };
+  } catch {
+    const body = event.data.text();
+    return { ...fallback, body: body || fallback.body };
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const payload = parsePushPayload(event);
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      tag: payload.tag,
+      icon: '/icons/icon-192.png',
+      data: { path: payload.path },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const path = safeNotificationPath(event.notification.data?.path);
+  const targetUrl = new URL(path, self.location.origin).href;
+
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const exact = windows.find((client) => client.url === targetUrl);
+    if (exact) return exact.focus();
+
+    const existing = windows[0];
+    if (existing) {
+      if ('navigate' in existing) await existing.navigate(targetUrl);
+      return existing.focus();
+    }
+
+    return self.clients.openWindow(path);
+  })());
+});
