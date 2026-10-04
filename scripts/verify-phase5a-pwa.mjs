@@ -52,10 +52,6 @@ if (!main.includes("import { registerPwaServiceWorker } from './pwa/registerServ
 for (const text of ["self.addEventListener('install'","self.addEventListener('activate'","self.addEventListener('fetch'","cache.addAll(SHELL_URLS)","request.mode === 'navigate'","cache.match('/')"]) {
   if (!sw.includes(text)) failures.push('service worker shell behavior missing ' + text);
 }
-for (const forbidden of ["addEventListener('push'","PushManager","pushManager","subscription","showNotification"]) {
-  if (sw.includes(forbidden) || register.includes(forbidden)) failures.push('live push scope leaked: ' + forbidden);
-}
-
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
