@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router';
+import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { usePeopleList } from '../features/people/usePeople';
 import { Icon } from '../shared/components/Icon';
 import './people-page.css';
 
 export function PeoplePage() {
   const navigate = useNavigate();
+  const services = useApplicationServices();
   const state = usePeopleList();
 
   if (state.status === 'loading') {
@@ -25,7 +27,7 @@ export function PeoplePage() {
               key={person.id}
               type="button"
               className="person-row"
-              onClick={() => navigate('/people/' + encodeURIComponent(person.id))}
+              onClick={() => { services.actions.personSelection.select(person.id); navigate('/people/' + encodeURIComponent(person.id)); }}
             >
               <span className="person-chip">
                 <span className="avatar avatar-icon"><Icon name="people" /></span>
