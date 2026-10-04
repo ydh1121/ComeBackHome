@@ -17,6 +17,9 @@ import { TransitSearchPage } from '../pages/TransitSearchPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
 import { NotificationPage } from '../pages/NotificationPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { QaStateMatrixPage } from '../pages/QaStateMatrixPage';
+import { QaFlowMapPage } from '../pages/QaFlowMapPage';
+import { QaDesktopDropPage } from '../pages/QaDesktopDropPage';
 import { ScheduleBulkEditPage } from '../pages/ScheduleBulkEditPage';
 import { ScheduleDayEditPage } from '../pages/ScheduleDayEditPage';
 import { SchedulePage } from '../pages/SchedulePage';
@@ -48,8 +51,15 @@ function componentFor(path: string) {
   return ImplementationBoundaryPage;
 }
 
+function qaComponentFor(path: string) {
+  if (path === '/__qa/states') return QaStateMatrixPage;
+  if (path === '/__qa/flow') return QaFlowMapPage;
+  if (path === '/__qa/desktop-drop') return QaDesktopDropPage;
+  return ImplementationBoundaryPage;
+}
+
 const productRouteEntries = productRoutes.map((path) => ({ path, Component: componentFor(path) }));
-const qaRouteEntries = import.meta.env.DEV ? qaRoutes.map((path) => ({ path, Component: ImplementationBoundaryPage })) : [];
+const qaRouteEntries = import.meta.env.DEV ? qaRoutes.map((path) => ({ path, Component: qaComponentFor(path) })) : [];
 
 export const router = createBrowserRouter([
   {
