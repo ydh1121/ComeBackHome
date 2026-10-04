@@ -6,6 +6,7 @@ import { rankRouteCandidates, selectNextShift, selectVisibleAccessPoints } from 
 
 export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; }
 export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
+export interface CommuteOverviewQueryResult extends PersonDetailQueryResult { preferredRouteCandidateId: EntityId | null; }
 
 function formatNextShiftLabel(referenceDate: ISODate, shift: ScheduleEntry | null): string | null {
   if (!shift) return null;
@@ -22,6 +23,7 @@ export class ComeBackHomeQueries {
   constructor(private readonly repositories: RepositoryBundle, private readonly selection: PersonSelectionActions) {}
   listPeople(): Promise<Person[]> { return this.repositories.people.list(); }
   getPerson(personId: EntityId): Promise<Person | null> { return this.repositories.people.get(personId); }
+  getPlace(personId: EntityId, kind: PlaceKind): Promise<Place | null> { return this.repositories.places.get(personId, kind); }
   listSchedule(personId: EntityId): Promise<ScheduleEntry[]> { return this.repositories.schedules.list(personId); }
   getCurrentImportBatch(): Promise<ImportBatch | null> { return this.repositories.imports.getCurrentBatch(); }
   getImportReview(batchId: EntityId): Promise<ImportBatch | null> { return this.repositories.imports.getBatch(batchId); }
@@ -54,6 +56,21 @@ export class ComeBackHomeQueries {
       nextShiftLabel: formatNextShiftLabel(referenceDate, nextShift),
       route,
     };
+  }
+
+  async getCommuteOverview(personId: EntityId): Promise<CommuteOverviewQueryResult> {
+    const detail = await this.getPersonDetail(personId);
+    const preferredRouteCandidateId = await this.repositories.commute.getPreferredRouteCandidateId(personId);
+    const preferred = detail.routeCandidates.find((candidate) => candidate.id === preferredRouteCandidateId);
+    const routeCandidates = preferred
+      ? [preferred, ...detail.routeCandidates.filter((candidate) => candidate.id !== preferred.id)]
+      : detail.routeCandidates;
+    return { ...detail, routeCandidates, preferredRouteCandidateId };
+  }
+
+  async getAccessPoint(personId: EntityId, kind: PlaceKind, accessPointId: EntityId): Promise<TransitAccessPoint | null> {
+    const points = await this.repositories.commute.listAccessPoints(personId, kind);
+    return points.find((point) => point.id === accessPointId) ?? null;
   }
 
   async getPersonDetail(personId: EntityId): Promise<PersonDetailQueryResult> {
