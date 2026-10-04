@@ -11,7 +11,7 @@ import type {
   TransitAccessActions,
   TransitAccessFilter,
 } from '../contracts/actions';
-import type { NotificationPermissionProvider, NotificationTestGateway } from '../contracts/providers';
+import type { NotificationPermissionProvider, NotificationTestGateway, PushSubscriptionProvider } from '../contracts/providers';
 import type { CommuteRepository, NotificationRepository, PersonRepository, ScheduleRepository } from '../contracts/repositories';
 
 export class PersonService implements PersonActions {
@@ -99,16 +99,38 @@ export class TransitAccessService implements TransitAccessActions {
 }
 
 export class NotificationService implements NotificationActions {
-  constructor(private readonly repository: NotificationRepository, private readonly permissionProvider: NotificationPermissionProvider, private readonly testGateway: NotificationTestGateway) {}
+  constructor(
+    private readonly repository: NotificationRepository,
+    private readonly permissionProvider: NotificationPermissionProvider,
+    private readonly subscriptionProvider: PushSubscriptionProvider,
+    private readonly testGateway: NotificationTestGateway,
+  ) {}
+
   async requestPermissionFromUserGesture(): Promise<void> {
     try {
       const permission = await this.permissionProvider.requestPermissionFromUserGesture();
       await this.repository.setPermission(permission);
+      if (permission !== 'granted') {
+        await this.repository.setSubscription(null);
+        return;
+      }
+      const subscription = await this.subscriptionProvider.subscribe();
+      await this.repository.setSubscription(subscription);
+      await this.repository.setPermission('subscribed');
     } catch {
+      await this.repository.setSubscription(null);
       await this.repository.setPermission('error');
-      throw new Error('Notification permission request failed.');
+      throw new Error('Notification permission or push subscription failed.');
     }
   }
+
+  async disablePushSubscription(): Promise<void> {
+    await this.subscriptionProvider.unsubscribe();
+    await this.repository.setSubscription(null);
+    const permission = await this.permissionProvider.getPermission();
+    await this.repository.setPermission(permission === 'granted' ? 'granted' : permission);
+  }
+
   updateRules(rules: NotificationRules): Promise<void> { return this.repository.setRules(rules); }
   sendTestNotification(): Promise<void> { return this.testGateway.sendTestNotification(); }
 }
