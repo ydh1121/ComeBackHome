@@ -23,7 +23,7 @@ export class MockPlaceRepository implements PlaceRepository {
 }
 export class MockCommuteRepository implements CommuteRepository {
   constructor(private readonly store: MockStateStore) {}
-  async listAccessPoints(_personId: EntityId, kind: PlaceKind): Promise<TransitAccessPoint[]> { return clone(this.store.read().accessPoints.filter((point) => point.placeKind === kind)); }
+  async listAccessPoints(personId: EntityId, kind: PlaceKind): Promise<TransitAccessPoint[]> { return clone(this.store.read().accessPoints.filter((point) => point.personId === personId && point.placeKind === kind)); }
   async setAccessPointSelected(accessPointId: EntityId, selected: boolean): Promise<void> { this.store.mutate((state) => { const point = state.accessPoints.find((candidate) => candidate.id === accessPointId); if (point) point.selected = selected; }); }
   async getRoutePreference(personId: EntityId): Promise<RoutePreference | null> { return clone(this.store.read().routePreferences.find((preference) => preference.personId === personId) ?? null); }
   async saveRoutePreference(preference: RoutePreference): Promise<void> { this.store.mutate((state) => { const index = state.routePreferences.findIndex((candidate) => candidate.id === preference.id || candidate.personId === preference.personId); if (index >= 0) state.routePreferences[index] = clone(preference); else state.routePreferences.push(clone(preference)); }); }

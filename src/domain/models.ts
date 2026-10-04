@@ -7,7 +7,7 @@ export interface Place { id: EntityId; personId: EntityId; kind: PlaceKind; labe
 export interface ScheduleEntry { id: EntityId; personId: EntityId; date: ISODate; enabled: boolean; start: string; end: string; }
 export type TransitMode = 'BUS' | 'SUBWAY';
 export type CommuteLegMode = 'WALK' | 'BUS' | 'SUBWAY' | 'TRANSFER';
-export interface TransitAccessPoint { id: EntityId; providerId: string; placeKind: PlaceKind; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; selected: boolean; userLabel?: string; }
+export interface TransitAccessPoint { id: EntityId; personId: EntityId; providerId: string; placeKind: PlaceKind; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; selected: boolean; userLabel?: string; }
 export interface BusRouteOption { providerRouteId: string; routeNo: string; directionLabel: string; terminalName?: string; routeType?: string; }
 export interface RoutePreference { id: EntityId; personId: EntityId; originPlaceKind: 'origin'; destinationPlaceKind: 'destination'; viaAccessPointIds: EntityId[]; preferredModes?: TransitMode[]; }
 export interface RouteCandidate { id: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; }
