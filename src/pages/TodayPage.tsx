@@ -4,6 +4,7 @@ import { useApplicationServices, useApplicationVersion } from '../app/Applicatio
 import type { TodayOverviewQueryResult } from '../application/queries/ComeBackHomeQueries';
 import type { CommuteStepType } from '../domain/models';
 import { Icon, type IconName } from '../shared/components/Icon';
+import { useOnlineStatus } from '../shared/runtime/useOnlineStatus';
 import './today-page.css';
 
 type LoadState =
@@ -37,6 +38,7 @@ export function TodayPage() {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
+  const online = useOnlineStatus();
 
   useEffect(() => {
     let active = true;
@@ -60,7 +62,7 @@ export function TodayPage() {
   const nonWalkingSteps = data.route?.steps?.filter((step) => step.type !== 'WALKING') ?? [];
 
   return (
-    <section className="today-page" data-route="/" data-page="TodayPage" data-state="WORKING ARRIVAL_ESTIMATED NEXT_SHIFT_KNOWN">
+    <section className="today-page" data-route="/" data-page="TodayPage" data-state={(online ? 'WORKING ARRIVAL_ESTIMATED NEXT_SHIFT_KNOWN' : 'OFFLINE ARRIVAL_ESTIMATED NEXT_SHIFT_KNOWN')}>
       <div className="person-switch">
         <button type="button" className="person-select" onClick={() => setPickerOpen((open) => !open)} aria-expanded={pickerOpen}>
           {data.person?.name ?? '사람 선택'}
@@ -97,7 +99,7 @@ export function TodayPage() {
       </div>
 
       <div className="hero anti-ai-hero" data-component="TodayStatus">
-        <div className="today-statusline">{freshnessLabel(data)}</div>
+        <div className="today-statusline">{online ? freshnessLabel(data) : '오프라인 · 마지막 정보'}</div>
         <div className="time-label">집 도착 예정</div>
         <div className="big-time">{data.eta?.arrivalTime ?? '—'}</div>
         <div className="commute-simple">
