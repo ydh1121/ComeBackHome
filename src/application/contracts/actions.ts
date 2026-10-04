@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../../domain/common';
-import type { ImportResolution, NotificationRules, Person, PlaceKind, TransitMode } from '../../domain/models';
+import type { Address, Coordinate, ImportResolution, NotificationRules, Person, Place, PlaceKind, RouteCandidate, TransitAccessPoint, TransitMode } from '../../domain/models';
 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
@@ -40,4 +40,29 @@ export interface ScheduleBulkRule {
 export interface ScheduleActions {
   saveDay(date: ISODate, input: ScheduleDayInput): Promise<void>;
   applyBulk(rule: ScheduleBulkRule): Promise<void>;
+}
+
+export interface PlaceInput {
+  label: string;
+  address: Address;
+  coordinate?: Coordinate;
+  providerPlaceId?: string;
+}
+export interface PlaceActions {
+  search(query: string): Promise<Array<{ providerId: string; placeName?: string; roadAddress: string; lotAddress?: string; coordinate: Coordinate; category?: string }>>;
+  save(personId: EntityId, kind: PlaceKind, input: PlaceInput): Promise<Place>;
+}
+export interface CommuteActions {
+  selectRouteCandidate(personId: EntityId, routeCandidateId: EntityId): Promise<void>;
+  movePreferenceStep(personId: EntityId, fromIndex: number, toIndex: number): Promise<void>;
+  addPreferenceStep(personId: EntityId, accessPointId: EntityId, index?: number): Promise<void>;
+  replacePreferenceStep(personId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
+}
+export interface TransitSearchActions {
+  search(personId: EntityId, kind: PlaceKind, query: string): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number }>>;
+  addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint>;
+}
+export interface BusRouteActions {
+  setAlias(accessPointId: EntityId, userLabel: string): Promise<void>;
+  selectRoute(accessPointId: EntityId, providerRouteId: string): Promise<void>;
 }
