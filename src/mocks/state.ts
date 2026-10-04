@@ -56,7 +56,34 @@ export const MOCK_FIXTURE: MockState = {
     { id: 'mock-route-simple', personId: 'mock-person-1', totalMinutes: 44, transferCount: 1, walkMinutes: 11, steps: [{ type: 'SUBWAY', label: '샘플 출발역 → 샘플 도착역' }] },
   ],
   todaySnapshots: [{ personId: 'mock-person-1', eta: { personId: 'mock-person-1', status: 'LIVE', arrivalTime: '23:18', freshnessMinutes: 1 }, shiftEnd: '22:10', routeCandidateId: 'mock-route-fast' }],
-  importBatches: [{ id: 'mock-import-1', reviewItems: [{ id: 'mock-review-1', personId: 'mock-person-1', date: '2026-10-06', existing: { start: '10:00', end: '19:00' }, imported: { start: '11:00', end: '20:00' }, resolution: 'NEW' }] }],
+  importBatches: [{
+    id: 'mock-import-1',
+    files: [
+      { id: 'mock-file-1', name: '샘플 근무표.xlsx', kind: 'XLSX', progress: 64, status: 'PARSING' },
+      { id: 'mock-file-2', name: '샘플 스케줄.png', kind: 'IMAGE', progress: 0, status: 'WAITING' },
+    ],
+    detectedPeople: [
+      { id: 'mock-detected-1', sourceName: '홍길동', matchedPersonId: 'mock-person-1', confidence: 0.93 },
+      { id: 'mock-detected-2', sourceName: '김하나', matchedPersonId: null, confidence: 0.71 },
+    ],
+    structure: {
+      sheet: '근무표',
+      headerRow: 2,
+      personColumn: 'B',
+      dateColumn: 'C',
+      shiftColumn: 'D:E',
+      needsReview: true,
+    },
+    reviewItems: [{
+      id: 'mock-review-1',
+      personId: 'mock-person-1',
+      date: '2026-10-04',
+      existing: { start: '14:00', end: '22:00' },
+      imported: { start: '13:00', end: '21:30' },
+      resolution: 'NEW',
+    }],
+    committed: false,
+  }],
   committedImportBatchIds: [],
   notifications: { permission: 'default', rules: { shiftEnd: true, etaChange: false } },
 };
