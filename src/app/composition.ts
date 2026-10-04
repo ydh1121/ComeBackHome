@@ -4,11 +4,40 @@ import { NotificationService, PersonSelectionService, PersonService, ScheduleSer
 import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
 import { BusRouteService, CommuteService, PlaceService, TransitSearchService } from '../application/services/CommuteWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
+import type { AppRuntimeMode } from '../config/runtime';
 import { MockImportFileSelectionAction } from '../mocks/import-actions';
 import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPushSubscriptionProvider } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
+import { HttpJsonClient } from '../providers/http/HttpJsonClient';
+import {
+  HttpCommuteRepository,
+  HttpNotificationRepository,
+  HttpPersonRepository,
+  HttpPlaceRepository,
+  HttpScheduleRepository,
+  HybridCommuteRepository,
+} from '../providers/http/HttpRepositories';
+import { createChangeSignalController } from './changeSignal';
+
+const SELECTED_PERSON_STORAGE_KEY = 'cbh:selected-person-id';
+
+function readStoredPersonId(): string | null {
+  try {
+    return localStorage.getItem(SELECTED_PERSON_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPersonId(personId: string): void {
+  try {
+    localStorage.setItem(SELECTED_PERSON_STORAGE_KEY, personId);
+  } catch {
+    // Selection persistence is best-effort only.
+  }
+}
 
 export function createMockApplicationServices(): ApplicationServices {
   const store = new MockStateStore(structuredClone(MOCK_FIXTURE));
@@ -31,6 +60,11 @@ export function createMockApplicationServices(): ApplicationServices {
   const transitSearchProvider = new MockTransitAccessSearchProvider();
 
   return {
+    runtime: {
+      mode: 'mock',
+      persistence: 'mock',
+      providerData: 'mock',
+    },
     repositories,
     queries,
     actions: {
@@ -58,4 +92,83 @@ export function createMockApplicationServices(): ApplicationServices {
       getVersion: () => store.getVersion(),
     },
   };
+}
+
+export async function createHybridApiApplicationServices(): Promise<ApplicationServices> {
+  const runtimeStore = new MockStateStore(structuredClone(MOCK_FIXTURE));
+  const changes = createChangeSignalController();
+  runtimeStore.subscribe(() => changes.emit());
+
+  const client = new HttpJsonClient('/api', () => changes.emit());
+  const people = new HttpPersonRepository(client);
+  const schedules = new HttpScheduleRepository(client);
+  const places = new HttpPlaceRepository(client);
+  const persistedCommute = new HttpCommuteRepository(client);
+  const runtimeCommute = new MockCommuteRepository(runtimeStore);
+  const commute = new HybridCommuteRepository(persistedCommute, runtimeCommute);
+  const imports = new MockImportRepository(runtimeStore);
+  const notifications = new HttpNotificationRepository(client, () => changes.emit());
+  const today = new MockTodayRepository(runtimeStore);
+
+  const repositories: RepositoryBundle = {
+    people,
+    schedules,
+    places,
+    commute,
+    imports,
+    notifications,
+    today,
+  };
+
+  const availablePeople = await people.list();
+  const storedPersonId = readStoredPersonId();
+  const initialPersonId = storedPersonId && availablePeople.some((person) => person.id === storedPersonId)
+    ? storedPersonId
+    : availablePeople[0]?.id ?? null;
+
+  const personSelection = new PersonSelectionService(initialPersonId, () => {
+    const selected = personSelection.getSelectedPersonId();
+    if (selected) writeStoredPersonId(selected);
+    changes.emit();
+  });
+
+  const queries = new ComeBackHomeQueries(repositories, personSelection);
+  const importWorkflow = new ImportWorkflowService(imports, people);
+  const placeSearchProvider = new MockPlaceSearchProvider();
+  const transitSearchProvider = new MockTransitAccessSearchProvider();
+
+  return {
+    runtime: {
+      mode: 'hybrid-api',
+      persistence: 'worker-api',
+      providerData: 'mock',
+    },
+    repositories,
+    queries,
+    actions: {
+      commitImportReview: new CommitImportReview(imports, schedules),
+      transitAccess: new TransitAccessService(commute, () => changes.emit()),
+      notifications: new NotificationService(
+        notifications,
+        new MockNotificationPermissionProvider(),
+        new MockPushSubscriptionProvider(),
+        new MockNotificationTestGateway(),
+      ),
+      personSelection,
+      people: new PersonService(people, personSelection),
+      places: new PlaceService(places, placeSearchProvider),
+      commute: new CommuteService(commute),
+      transitSearch: new TransitSearchService(places, commute, transitSearchProvider),
+      busRoutes: new BusRouteService(commute),
+      schedule: new ScheduleService(schedules, personSelection),
+      importFiles: new MockImportFileSelectionAction(imports),
+      importMatch: importWorkflow,
+      importReview: importWorkflow,
+    },
+    changes,
+  };
+}
+
+export function createApplicationServices(mode: AppRuntimeMode): ApplicationServices | Promise<ApplicationServices> {
+  return mode === 'api' ? createHybridApiApplicationServices() : createMockApplicationServices();
 }
