@@ -13,6 +13,7 @@ export interface TransitAccessActions {
 }
 export interface NotificationActions {
   requestPermissionFromUserGesture(): Promise<void>;
+  disablePushSubscription(): Promise<void>;
   updateRules(rules: NotificationRules): Promise<void>;
   sendTestNotification(): Promise<void>;
 }
