@@ -74,9 +74,19 @@ export class ComeBackHomeQueries {
   }
 
   async getPersonDetail(personId: EntityId): Promise<PersonDetailQueryResult> {
-    const [person, origin, destination, routePreference, originAccessPoints, destinationAccessPoints, routeCandidates] = await Promise.all([
-      this.repositories.people.get(personId), this.repositories.places.get(personId, 'origin'), this.repositories.places.get(personId, 'destination'), this.repositories.commute.getRoutePreference(personId), this.repositories.commute.listAccessPoints(personId, 'origin'), this.repositories.commute.listAccessPoints(personId, 'destination'), this.repositories.commute.listRouteCandidates(personId),
+    const [person, origin, destination, routePreference, originAccessPoints, destinationAccessPoints, routeCandidates, preferredRouteCandidateId] = await Promise.all([
+      this.repositories.people.get(personId),
+      this.repositories.places.get(personId, 'origin'),
+      this.repositories.places.get(personId, 'destination'),
+      this.repositories.commute.getRoutePreference(personId),
+      this.repositories.commute.listAccessPoints(personId, 'origin'),
+      this.repositories.commute.listAccessPoints(personId, 'destination'),
+      this.repositories.commute.listRouteCandidates(personId),
+      this.repositories.commute.getPreferredRouteCandidateId(personId),
     ]);
-    return { person, origin, destination, routePreference, originAccessPoints, destinationAccessPoints, routeCandidates: rankRouteCandidates(routeCandidates) };
+    const ranked = rankRouteCandidates(routeCandidates);
+    const preferred = ranked.find((candidate) => candidate.id === preferredRouteCandidateId);
+    const ordered = preferred ? [preferred, ...ranked.filter((candidate) => candidate.id !== preferred.id)] : ranked;
+    return { person, origin, destination, routePreference, originAccessPoints, destinationAccessPoints, routeCandidates: ordered };
   }
 }
