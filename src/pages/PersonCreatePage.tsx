@@ -26,11 +26,11 @@ export function PersonCreatePage() {
       <div className="person-form">
         <label className="form-field">
           <span className="form-label">이름</span>
-          <input className="input" value={name} onChange={(event) => setName(event.target.value); form.markDirty()} placeholder="이름 입력" />
+          <input className="input" value={name} onChange={(event) => { setName(event.target.value); form.markDirty(); }} placeholder="이름 입력" />
         </label>
         <label className="form-field">
           <span className="form-label">관계</span>
-          <input className="input" value={relation} onChange={(event) => setRelation(event.target.value); form.markDirty()} placeholder="예: 연인, 가족" />
+          <input className="input" value={relation} onChange={(event) => { setRelation(event.target.value); form.markDirty(); }} placeholder="예: 연인, 가족" />
         </label>
       </div>
 
