@@ -21,6 +21,7 @@ function formatNextShiftLabel(referenceDate: ISODate, shift: ScheduleEntry | nul
 export class ComeBackHomeQueries {
   constructor(private readonly repositories: RepositoryBundle, private readonly selection: PersonSelectionActions) {}
   listPeople(): Promise<Person[]> { return this.repositories.people.list(); }
+  getPerson(personId: EntityId): Promise<Person | null> { return this.repositories.people.get(personId); }
   listSchedule(personId: EntityId): Promise<ScheduleEntry[]> { return this.repositories.schedules.list(personId); }
   getCurrentImportBatch(): Promise<ImportBatch | null> { return this.repositories.imports.getCurrentBatch(); }
   getImportReview(batchId: EntityId): Promise<ImportBatch | null> { return this.repositories.imports.getBatch(batchId); }
