@@ -34,6 +34,15 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
     setLabel(placeState.place?.label ?? '');
     setQuery(placeState.place?.address.road ?? '');
     setDetail(placeState.place?.address.detail ?? '');
+    if (placeState.place?.providerPlaceId && placeState.place.coordinate) {
+      setSelected({
+        providerId: placeState.place.providerPlaceId,
+        roadAddress: placeState.place.address.road,
+        lotAddress: placeState.place.address.lot,
+        coordinate: placeState.place.coordinate,
+        placeName: placeState.place.label,
+      });
+    }
   }, [placeState.status, placeState.status === 'ready' ? placeState.place?.id : null]);
 
   useEffect(() => {
