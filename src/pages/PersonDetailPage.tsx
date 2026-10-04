@@ -29,6 +29,7 @@ function LocationGroup({ personId, kind, place, accessPoints, onNavigate }: Loca
   const selected = accessPoints.filter((point) => point.selected);
   const label = kind === 'origin' ? '출발' : '도착';
   const editLabel = kind === 'origin' ? '출발지' : '도착지';
+  const transportActionLabel = kind === 'origin' ? '출발지 교통 수정' : '도착지 교통 수정';
 
   return (
     <div className="location-group">
@@ -62,7 +63,7 @@ function LocationGroup({ personId, kind, place, accessPoints, onNavigate }: Loca
         className="location-transport-action"
         onClick={() => onNavigate('/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access')}
       >
-        <span>{editLabel} 교통 수정</span>
+        <span>{transportActionLabel}</span>
         <Icon name="chevron-right" />
       </button>
     </div>
