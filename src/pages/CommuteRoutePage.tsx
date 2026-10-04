@@ -45,7 +45,7 @@ export function CommuteRoutePage() {
   const remain = Math.max(0, candidates.length - visible.length);
 
   return (
-    <section className="commute-page" data-route={'/people/' + personId + '/commute'} data-page="CommuteRouteEditPage" data-state="ROUTE_SELECTING">
+    <section className="commute-page" data-route={'/people/' + personId + '/commute'} data-page="CommuteRouteEditPage" data-state={candidates.length ? 'ROUTE_SELECTING' : 'NO_RESULT'}>
       <BackButton fallbackTo={'/people/' + encodeURIComponent(personId)} />
       <h1 className="page-title">경로 설정</h1>
 
@@ -70,6 +70,7 @@ export function CommuteRoutePage() {
       </div>
 
       <div className="route-section-head"><h2>자동 경로</h2></div>
+      {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 자동 경로가 없습니다.</div> : null}
       <div className="route-policy-list">
         {visible.map((route) => {
           const selected = route.id === overview.preferredRouteCandidateId;
