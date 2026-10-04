@@ -2,8 +2,10 @@ import type { ApplicationServices, RepositoryBundle } from '../application/contr
 import { ComeBackHomeQueries } from '../application/queries/ComeBackHomeQueries';
 import { NotificationService, PersonSelectionService, PersonService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
 import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
+import { BusRouteService, CommuteService, PlaceService, TransitSearchService } from '../application/services/CommuteWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import { MockImportFileSelectionAction } from '../mocks/import-actions';
+import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
@@ -25,6 +27,8 @@ export function createMockApplicationServices(): ApplicationServices {
   );
   const queries = new ComeBackHomeQueries(repositories, personSelection);
   const importWorkflow = new ImportWorkflowService(repositories.imports, repositories.people);
+  const placeSearchProvider = new MockPlaceSearchProvider();
+  const transitSearchProvider = new MockTransitAccessSearchProvider();
 
   return {
     repositories,
@@ -39,6 +43,10 @@ export function createMockApplicationServices(): ApplicationServices {
       ),
       personSelection,
       people: new PersonService(repositories.people, personSelection),
+      places: new PlaceService(repositories.places, placeSearchProvider),
+      commute: new CommuteService(repositories.commute),
+      transitSearch: new TransitSearchService(repositories.places, repositories.commute, transitSearchProvider),
+      busRoutes: new BusRouteService(repositories.commute),
       schedule: new ScheduleService(repositories.schedules, personSelection),
       importFiles: new MockImportFileSelectionAction(repositories.imports),
       importMatch: importWorkflow,
