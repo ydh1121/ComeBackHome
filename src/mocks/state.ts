@@ -72,6 +72,8 @@ export const MOCK_FIXTURE: MockState = {
   routeCandidates: [
     { id: 'mock-route-fast', personId: 'mock-person-1', totalMinutes: 38, transferCount: 2, walkMinutes: 7, fare: 1550, policyLabels: ['빠름'], matchesPreference: true, steps: [{ type: 'WALKING', label: '출발지 → 샘플 정류장 A' }, { type: 'BUS', label: '샘플 정류장 A → 샘플 환승역' }, { type: 'SUBWAY', label: '샘플 환승역 → 샘플 도착역' }, { type: 'WALKING', label: '샘플 도착역 → 도착지' }] },
     { id: 'mock-route-simple', personId: 'mock-person-1', totalMinutes: 44, transferCount: 1, walkMinutes: 11, fare: 1450, policyLabels: ['환승 적음'], steps: [{ type: 'SUBWAY', label: '샘플 출발역 → 샘플 도착역' }] },
+    { id: 'mock-route-walk', personId: 'mock-person-1', totalMinutes: 46, transferCount: 1, walkMinutes: 5, fare: 1550, policyLabels: ['도보 적음'], steps: [{ type: 'BUS', label: '샘플 정류장 A → 샘플 중앙역' }, { type: 'SUBWAY', label: '샘플 중앙역 → 샘플 도착역' }] },
+    { id: 'mock-route-alt', personId: 'mock-person-1', totalMinutes: 51, transferCount: 2, walkMinutes: 9, fare: 1400, policyLabels: ['대안'], steps: [{ type: 'SUBWAY', label: '샘플 환승역 → 샘플 중앙역' }, { type: 'BUS', label: '샘플 중앙역 → 도착지' }] },
   ],
   todaySnapshots: [{ personId: 'mock-person-1', eta: { personId: 'mock-person-1', status: 'LIVE', arrivalTime: '23:18', freshnessMinutes: 1 }, shiftEnd: '22:10', routeCandidateId: 'mock-route-fast' }],
   importBatches: [{
