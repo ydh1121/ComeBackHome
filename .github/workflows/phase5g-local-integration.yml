@@ -1,0 +1,54 @@
+name: Phase 5G Local Integration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase5g-local-integration.yml"
+      - "wrangler.local.jsonc"
+      - "package.json"
+      - "db/migrations/**"
+      - "worker/**"
+      - "src/app/**"
+      - "src/config/runtime.ts"
+      - "src/providers/http/**"
+      - "scripts/verify-phase5g-local*.mjs"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase5g-local-integration.yml"
+      - "wrangler.local.jsonc"
+      - "package.json"
+      - "db/migrations/**"
+      - "worker/**"
+      - "src/app/**"
+      - "src/config/runtime.ts"
+      - "src/providers/http/**"
+      - "scripts/verify-phase5g-local*.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  phase5g-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify local-only contract
+        run: npm run verify:local-contract
+
+      - name: Run Phase 5G local integration
+        run: npm run verify:local-integration
