@@ -12,7 +12,8 @@
     "verify:ui-contracts": "node scripts/verify-phase3-ui.mjs",
     "verify:today": "node scripts/verify-phase4a-today.mjs",
     "verify:schedule": "node scripts/verify-phase4b-schedule.mjs",
-    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule"
+    "verify:import": "node scripts/verify-phase4c-import.mjs",
+    "check": "npm run typecheck && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import"
   },
   "dependencies": {
     "react": "19.3.0",
