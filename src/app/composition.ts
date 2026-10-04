@@ -1,7 +1,9 @@
 import type { ApplicationServices, RepositoryBundle } from '../application/contracts/runtime';
 import { ComeBackHomeQueries } from '../application/queries/ComeBackHomeQueries';
 import { NotificationService, PersonSelectionService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
+import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
+import { MockImportFileSelectionAction } from '../mocks/import-actions';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
@@ -22,6 +24,7 @@ export function createMockApplicationServices(): ApplicationServices {
     () => store.mutate(() => undefined),
   );
   const queries = new ComeBackHomeQueries(repositories, personSelection);
+  const importWorkflow = new ImportWorkflowService(repositories.imports, repositories.people);
 
   return {
     repositories,
@@ -36,6 +39,9 @@ export function createMockApplicationServices(): ApplicationServices {
       ),
       personSelection,
       schedule: new ScheduleService(repositories.schedules, personSelection),
+      importFiles: new MockImportFileSelectionAction(repositories.imports),
+      importMatch: importWorkflow,
+      importReview: importWorkflow,
     },
     changes: {
       subscribe: (listener) => store.subscribe(listener),
