@@ -17,6 +17,7 @@ const commute = await read('../worker/repositories/D1CommuteRepository.ts');
 const notifications = await read('../worker/repositories/D1NotificationSettingsStore.ts');
 const subscriptions = await read('../worker/repositories/D1SubscriptionStore.ts');
 const jobs = await read('../worker/repositories/D1NotificationJobStore.ts');
+const plannerState = await read('../worker/repositories/D1NotificationPlannerStateStore.ts');
 const workerTsconfig = await read('../tsconfig.worker.json');
 
 if (!repositories.includes('upsertMany(entries: ScheduleEntry[]): Promise<void>')) failures.push('ScheduleRepository upsertMany contract missing');
@@ -70,6 +71,7 @@ for (const [name, source, required] of [
   ['notification settings', notifications, ['class D1NotificationSettingsStore', 'notification_settings']],
   ['subscription', subscriptions, ['class D1SubscriptionStore', 'push_subscriptions', 'ON CONFLICT(endpoint)']],
   ['jobs', jobs, ['class D1NotificationJobStore', 'ON CONFLICT(dedupe_key) DO NOTHING', "status = 'processing'", 'RETURNING']],
+  ['planner state', plannerState, ['class D1NotificationPlannerStateStore', 'notification_planner_state', 'eta_baseline_work_date', 'ON CONFLICT(person_id)']],
 ]) {
   for (const text of required) if (!source.includes(text)) failures.push(name + ' adapter missing ' + text);
 }
