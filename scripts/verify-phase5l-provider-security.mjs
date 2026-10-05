@@ -112,3 +112,5 @@ if (failures.length) {
 }
 
 console.log('phase 5L secure provider transport verification passed');
+
+// Phase 5L dependency-backed verification trigger.
