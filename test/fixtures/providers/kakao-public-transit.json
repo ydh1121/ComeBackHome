@@ -1,0 +1,73 @@
+{
+  "status": "OK",
+  "properties": {
+    "total": 1,
+    "bus": 1,
+    "subway": 0,
+    "busAndSubway": 0,
+    "landingURL": "https://map.kakao.com/example"
+  },
+  "routes": [
+    {
+      "properties": {
+        "type": "BUS",
+        "totalDistance": 5013,
+        "totalTime": 900,
+        "transfers": 1,
+        "fare": {
+          "value": 1500
+        }
+      },
+      "steps": [
+        {
+          "properties": {
+            "guidance": "출발지에서 정류장까지 도보",
+            "type": "WALKING",
+            "distance": 120,
+            "time": 120,
+            "stops": [],
+            "vehicles": []
+          },
+          "path": {
+            "points": []
+          }
+        },
+        {
+          "properties": {
+            "guidance": "마을 76 (판교역동편 > 성남시청전면)",
+            "type": "BUS",
+            "distance": 4127,
+            "time": 600,
+            "stops": [
+              {
+                "name": "판교역동편"
+              }
+            ],
+            "vehicles": [
+              {
+                "name": "76",
+                "type": "마을"
+              }
+            ]
+          },
+          "path": {
+            "points": []
+          }
+        },
+        {
+          "properties": {
+            "guidance": "도착지까지 도보",
+            "type": "WALKING",
+            "distance": 200,
+            "time": 180,
+            "stops": [],
+            "vehicles": []
+          },
+          "path": {
+            "points": []
+          }
+        }
+      ]
+    }
+  ]
+}
