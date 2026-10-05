@@ -42,7 +42,7 @@ for (const text of [
   'handleApiRequest(request, env, providerRuntime)',
   'env.ASSETS.fetch(request)',
   'async scheduled(',
-  'ctx.waitUntil(runScheduledTick',
+  'ctx.waitUntil(runScheduledNotificationCycle',
 ]) {
   if (!workerEntry.includes(text)) failures.push('Worker entrypoint missing ' + text);
 }
@@ -61,7 +61,7 @@ for (const text of [
 ]) {
   if (!scheduler.includes(text)) failures.push('safe scheduler/outbox contract missing ' + text);
 }
-if (!workerEntry.includes('runScheduledTick(env, controller.scheduledTime)')) failures.push('production scheduled entry must not inject a live gateway yet');
+if (!workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime)')) failures.push('production scheduled entry must use fail-closed composite cycle without live dependencies');
 
 for (const [name, source, required] of [
   ['person', person, ['class D1PersonRepository', 'INSERT INTO people', 'UPDATE people SET']],
