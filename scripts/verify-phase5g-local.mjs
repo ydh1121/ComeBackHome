@@ -178,12 +178,18 @@ try {
   assert(providerStatus.enabled === false, 'local provider runtime must remain disabled');
   assert(providerStatus.source === 'unconfigured', 'disabled provider status source mismatch');
 
-  const disabledProviderResponse = await originalFetch(
-    origin + '/api/providers/place-search?q=' + encodeURIComponent('phase5h'),
-  );
-  const disabledProviderPayload = await disabledProviderResponse.json();
-  assert(disabledProviderResponse.status === 503, 'disabled provider endpoint must fail with HTTP 503');
-  assert(disabledProviderPayload?.error === 'Provider runtime is disabled.', 'disabled provider error contract mismatch');
+  for (const path of [
+    '/api/providers/place-search?q=phase5h',
+    '/api/providers/transit-search?q=phase5h&x=127&y=37.5',
+    '/api/providers/routes?originX=127&originY=37.5&destinationX=126.9&destinationY=37.4',
+    '/api/providers/bus-arrivals?stopProviderId=stop&routeProviderId=route',
+    '/api/providers/subway-arrivals?providerStationId=station&line=2',
+  ]) {
+    const disabledProviderResponse = await originalFetch(origin + path);
+    const disabledProviderPayload = await disabledProviderResponse.json();
+    assert(disabledProviderResponse.status === 503, 'disabled provider endpoint must fail with HTTP 503: ' + path);
+    assert(disabledProviderPayload?.error === 'Provider runtime is disabled.', 'disabled provider error contract mismatch: ' + path);
+  }
 
   const created = await requestJson('/api/people', {
     method: 'POST',
@@ -353,6 +359,7 @@ try {
       'provider runtime status disabled by default',
       'provider API mode requires API persistence runtime',
       'same-origin provider transport fail-closed boundary',
+      'route and realtime provider endpoints fail closed by default',
     ],
   }, null, 2));
 } finally {
