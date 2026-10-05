@@ -33,6 +33,9 @@ export interface WorkerEnv {
   ASSETS?: StaticAssetFetcher;
   PUSH_DELIVERY_ENABLED?: string;
   PROVIDER_RUNTIME_ENABLED?: string;
+  KAKAO_REST_API_KEY?: string;
+  SEOUL_SUBWAY_API_KEY?: string;
+  SEOUL_BUS_SERVICE_KEY?: string;
 }
 
 export interface ScheduledControllerLike {
