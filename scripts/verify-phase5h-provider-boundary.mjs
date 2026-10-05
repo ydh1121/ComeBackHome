@@ -26,12 +26,21 @@ for (const text of [
   expect(runtimeConfig.includes(text), 'provider runtime gate missing ' + text);
 }
 
-for (const name of ['HttpPlaceSearchProvider', 'HttpTransitAccessSearchProvider']) {
+for (const name of [
+  'HttpPlaceSearchProvider',
+  'HttpTransitAccessSearchProvider',
+  'HttpTransitRouteProvider',
+  'HttpRealtimeBusProvider',
+  'HttpRealtimeSubwayProvider',
+]) {
   expect(httpProviders.includes('class ' + name), 'HTTP provider adapter missing ' + name);
 }
 for (const text of [
   "'/providers/place-search?'",
   "'/providers/transit-search?'",
+  "'/providers/routes?'",
+  "'/providers/bus-arrivals?'",
+  "'/providers/subway-arrivals?'",
   'new URLSearchParams',
 ]) {
   expect(httpProviders.includes(text), 'HTTP provider contract missing ' + text);
@@ -69,6 +78,9 @@ for (const text of [
   "segments[2] === 'status'",
   "segments[2] === 'place-search'",
   "segments[2] === 'transit-search'",
+  "segments[2] === 'routes'",
+  "segments[2] === 'bus-arrivals'",
+  "segments[2] === 'subway-arrivals'",
   "env.PROVIDER_RUNTIME_ENABLED === '1'",
   "Provider runtime is disabled.",
   "Provider adapter is not configured yet.",
