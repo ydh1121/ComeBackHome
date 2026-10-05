@@ -109,6 +109,7 @@ export interface NotificationEtaSource {
 export interface NotificationPlannerState {
   personId: string;
   etaBaselineAt: string | null;
+  etaBaselineWorkDate: string | null;
   lastEtaNotificationAt: string | null;
   updatedAt: string;
 }
