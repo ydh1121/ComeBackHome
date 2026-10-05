@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "come-back-home-phase5u-local",
+  "main": "./worker/testing/phase5u-local.ts",
+  "compatibility_date": "2026-10-04",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "come-back-home-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "preview_database_id": "comebackhome-phase5u-local",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "vars": {
+    "PUSH_DELIVERY_ENABLED": "1",
+    "PROVIDER_RUNTIME_ENABLED": "0"
+  }
+}
