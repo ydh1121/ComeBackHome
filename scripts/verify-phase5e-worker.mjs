@@ -49,11 +49,18 @@ for (const text of [
 for (const text of [
   "env.PUSH_DELIVERY_ENABLED !== '1'",
   "status: 'disabled'",
-  "throw new Error('Push delivery gateway is not configured yet.')",
+  "status: 'not-configured'",
+  'processNotificationOutbox',
+  'dependencies.jobs.claimDue(',
+  'dependencies.jobs.markSent(',
+  'dependencies.jobs.markRetry(',
+  'dependencies.jobs.markFailed(',
+  'dependencies.subscriptions.deactivateByEndpoint(',
+  'if (!dependencies)',
 ]) {
-  if (!scheduler.includes(text)) failures.push('safe scheduler gate missing ' + text);
+  if (!scheduler.includes(text)) failures.push('safe scheduler/outbox contract missing ' + text);
 }
-if (scheduler.includes('claimDue(') || scheduler.includes('markSent(')) failures.push('scheduler claims/sends jobs before delivery gateway exists');
+if (!workerEntry.includes('runScheduledTick(env, controller.scheduledTime)')) failures.push('production scheduled entry must not inject a live gateway yet');
 
 for (const [name, source, required] of [
   ['person', person, ['class D1PersonRepository', 'INSERT INTO people', 'UPDATE people SET']],
