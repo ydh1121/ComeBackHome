@@ -143,17 +143,38 @@ export function parseScheduleHour(value: string): string | null {
   }
 
   // Numeric OCR can lose the decimal point from half-hour notation.
-  // Recover only when the raw integer is impossible as a 24-hour value and
-  // removing the final 5 produces an otherwise valid hour.
-  const compactHalfHour = /^(\d{1,2})5$/.exec(normalized);
-  if (compactHalfHour && Number(normalized) > 23) {
-    const hour = Number(compactHalfHour[1]);
-    if (hour <= 23) {
-      return String(hour).padStart(2, '0') + ':30';
-    }
-  }
+  // Only recover compact values observed to be unambiguous in this schedule
+  // family. Do not reinterpret short values such as "25" as 02:30.
+  const compactHalfHourMap: Record<string, string> = {
+    '95': '09:30',
+    '105': '10:30',
+    '125': '12:30',
+    '135': '13:30',
+    '205': '20:30',
+    '215': '21:30',
+    '235': '23:30',
+  };
+  const compactRecovered = compactHalfHourMap[normalized];
+  if (compactRecovered) return compactRecovered;
 
   return null;
+}
+
+export function parseScheduleImageClock(value: string): string | null {
+  const normalized = value
+    .normalize('NFKC')
+    .trim()
+    .replace(/,/g, '.')
+    .replace(/\s+/g, '');
+  const parsed = parseScheduleHour(value);
+  if (!parsed) return null;
+
+  // In this schedule family, bare/decimal values below 06 are also valid
+  // break-duration shapes (1, 1.5, 2, 2.5...). Without a clock colon they are
+  // ambiguous and must stay review-only instead of becoming 01:00/02:30.
+  if (/^[0-5](?:\.(?:0|5))?$/.test(normalized)) return null;
+
+  return parsed;
 }
 
 function matchesAlias(value: string, aliases: string[]): boolean {
@@ -524,6 +545,7 @@ interface DateBlockPersonRow {
   cy: number;
   top: number;
   bottom: number;
+  labelSide: 'left' | 'right';
 }
 
 interface DateBlockMatrixGeometry {
@@ -606,7 +628,7 @@ function inferDateBlockMatrixGeometry(
 
   const startFraction = median(startFractions);
   const endFraction = median(endFractions);
-  const restFraction = restFractions.length ? median(restFractions) : null;
+  let restFraction = restFractions.length ? median(restFractions) : null;
   if (Math.abs(startFraction - endFraction) < 0.08) return null;
 
   const headerBottom = Math.max(...labelTokens.map((token) => token.bottom));
@@ -627,12 +649,17 @@ function inferDateBlockMatrixGeometry(
       const sourceName = names.map((token) => token.normalized).join('');
       const confidence = average(names.map((token) => token.confidence));
       if (!isUsablePersonRowLabel(sourceName, confidence)) return null;
-      return { sourceName, cy: row.cy, confidence };
+      const labelSide =
+        average(names.map((token) => token.cx)) < gridLeft
+          ? 'left' as const
+          : 'right' as const;
+      return { sourceName, cy: row.cy, confidence, labelSide };
     })
     .filter((row): row is {
       sourceName: string;
       cy: number;
       confidence: number;
+      labelSide: 'left' | 'right';
     } => row != null);
 
   if (!nameRows.length) return null;
@@ -645,6 +672,46 @@ function inferDateBlockMatrixGeometry(
         ? layout.height
         : (row.cy + nameRows[index + 1].cy) / 2,
   }));
+
+  if (restFraction == null) {
+    const candidateFractions: number[] = [];
+
+    for (const person of personRows) {
+      for (const token of tokens) {
+        if (
+          token.cy < person.top ||
+          token.cy >= person.bottom ||
+          token.cx < gridLeft ||
+          token.cx >= gridRight ||
+          parseScheduleHour(token.normalized) == null
+        ) continue;
+
+        const block = blockForX(blocks, token.cx);
+        if (!block) continue;
+        const fraction = relativeX(block, token.cx);
+        if (
+          Math.abs(fraction - startFraction) <= 0.12 ||
+          Math.abs(fraction - endFraction) <= 0.12
+        ) continue;
+        candidateFractions.push(fraction);
+      }
+    }
+
+    const bins = new Map<number, number[]>();
+    for (const fraction of candidateFractions) {
+      const key = Math.round(fraction / 0.05) * 0.05;
+      const values = bins.get(key) ?? [];
+      values.push(fraction);
+      bins.set(key, values);
+    }
+
+    const ranked = [...bins.values()]
+      .filter((values) => values.length >= 3)
+      .sort((left, right) => right.length - left.length);
+
+    const strongest = ranked[0];
+    if (strongest) restFraction = median(strongest);
+  }
 
   return {
     blocks,
@@ -714,13 +781,7 @@ export function analyzeScheduleImagePattern(
 
   geometry.personRows.forEach((person, rowIndex) => {
     const sourceRow = rowIndex + 1;
-    const nameOnLeft = person.cy >= geometry.headerBottom &&
-      tokens.some((token) =>
-        token.cy >= person.top &&
-        token.cy < person.bottom &&
-        token.cx < geometry.gridLeft &&
-        token.normalized.includes(person.sourceName)
-      );
+    const nameOnLeft = person.labelSide === 'left';
     probeRegions.push({
       id: `person::${sourceRow}`,
       kind: 'person-label',
@@ -743,13 +804,13 @@ export function analyzeScheduleImagePattern(
     );
 
     for (const block of geometry.blocks) {
-      let start: string | null = null;
-      let end: string | null = null;
+      let start: { value: string; confidence: number } | null = null;
+      let end: { value: string; confidence: number } | null = null;
       let numericEvidenceCount = 0;
 
       for (const token of rowTokens) {
         if (token.cx < block.left || token.cx >= block.right) continue;
-        const time = parseScheduleHour(token.normalized);
+        const time = parseScheduleImageClock(token.normalized);
         if (!time) continue;
         numericEvidenceCount += 1;
         const field = nearestField(
@@ -758,8 +819,18 @@ export function analyzeScheduleImagePattern(
           geometry.endFraction,
           geometry.restFraction,
         );
-        if (field === 'start' && start == null) start = time;
-        if (field === 'end' && end == null) end = time;
+        if (
+          field === 'start' &&
+          (!start || token.confidence > start.confidence)
+        ) {
+          start = { value: time, confidence: token.confidence };
+        }
+        if (
+          field === 'end' &&
+          (!end || token.confidence > end.confidence)
+        ) {
+          end = { value: time, confidence: token.confidence };
+        }
       }
 
       cells.push({
@@ -772,8 +843,8 @@ export function analyzeScheduleImagePattern(
             : numericEvidenceCount > 0
               ? 'INCOMPLETE'
               : 'OFF_OR_BLANK',
-        start,
-        end,
+        start: start?.value ?? null,
+        end: end?.value ?? null,
         numericEvidenceCount,
       });
 
@@ -840,7 +911,7 @@ function dateBlockMatrixStrategy(
 
       for (const token of rowTokens) {
         if (token.cx < block.left || token.cx >= block.right) continue;
-        const time = parseScheduleHour(token.normalized);
+        const time = parseScheduleImageClock(token.normalized);
         if (!time) continue;
 
         const field = nearestField(
@@ -987,10 +1058,10 @@ function rowTableStrategy(
     if (!sourceName || !isLikelyPersonName(sourceName)) continue;
 
     const date = dateTokens.map((token) => parseScheduleDate(token.normalized)).find((value) => value != null) ?? null;
-    const startToken = startTokens.find((token) => parseScheduleHour(token.normalized) != null);
-    const endToken = endTokens.find((token) => parseScheduleHour(token.normalized) != null);
-    const start = startToken ? parseScheduleHour(startToken.normalized) : null;
-    const end = endToken ? parseScheduleHour(endToken.normalized) : null;
+    const startToken = startTokens.find((token) => parseScheduleImageClock(token.normalized) != null);
+    const endToken = endTokens.find((token) => parseScheduleImageClock(token.normalized) != null);
+    const start = startToken ? parseScheduleImageClock(startToken.normalized) : null;
+    const end = endToken ? parseScheduleImageClock(endToken.normalized) : null;
 
     if (!date || !start || !end || !startToken || !endToken) continue;
 

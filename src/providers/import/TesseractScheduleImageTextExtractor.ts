@@ -9,7 +9,7 @@ import type {
 import { classifyScheduleShiftLabel } from './ScheduleImportSemantics';
 import {
   analyzeScheduleImagePattern,
-  parseScheduleHour,
+  parseScheduleImageClock,
   type SchedulePatternProbeRegion,
 } from './StructuredTableImageScheduleRecognizer';
 
@@ -385,7 +385,7 @@ function bestNumericCandidate(words: OcrWord[]): {
       text: String(word.text ?? '').normalize('NFKC').trim(),
       confidence: normalizeConfidence(word.confidence),
     }))
-    .filter((item) => numericShape(item.text) && parseScheduleHour(item.text) != null)
+    .filter((item) => numericShape(item.text) && parseScheduleImageClock(item.text) != null)
     .sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 

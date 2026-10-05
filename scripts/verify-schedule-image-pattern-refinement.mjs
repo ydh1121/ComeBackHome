@@ -151,6 +151,21 @@ try {
     type: 'image/png',
   });
 
+  expect(
+    imageModule.parseScheduleHour('25') === null,
+    'ambiguous compact 25 must not be reinterpreted as 02:30',
+  );
+  expect(
+    imageModule.parseScheduleImageClock('2') === null &&
+      imageModule.parseScheduleImageClock('2.5') === null,
+    'duration-shaped low values must not become schedule clock evidence',
+  );
+  expect(
+    imageModule.parseScheduleImageClock('9') === '09:00' &&
+      imageModule.parseScheduleImageClock('23.5') === '23:30',
+    'normal schedule-family clock values must remain accepted',
+  );
+
   const parsed = imageModule.parseScheduleImageLayout(refined);
   expect(
     parsed.detectedPeople.some((person) => person.sourceName === '신입가나다'),
@@ -192,6 +207,13 @@ try {
   const personRegionCalls = recognizeCalls.filter(
     (call) => call.mode === 'person' && call.options.rectangle,
   );
+  expect(
+    personRegionCalls.every((call) =>
+      call.options.rectangle.left === 0 &&
+      call.options.rectangle.width > 20
+    ),
+    'left-side person labels must receive a real left-column ROI, not a 1px right-edge probe',
+  );
   const targetedNumericCalls = recognizeCalls.filter(
     (call) => call.mode === 'numeric' && call.options.rectangle,
   );
@@ -202,6 +224,32 @@ try {
   expect(
     targetedNumericCalls.length > 0,
     'unresolved work/off cells must receive structured start/end reads',
+  );
+
+  const strongestFixture = buildScheduleImageLayoutFixture({ targetRow: 3 });
+  strongestFixture.tokens.push({
+    text: '2',
+    x: 421,
+    y: 194,
+    width: 18,
+    height: 14,
+    confidence: 0.55,
+  });
+  strongestFixture.tokens.push({
+    text: '22',
+    x: 421,
+    y: 194,
+    width: 18,
+    height: 14,
+    confidence: 0.96,
+  });
+  const strongestPattern = imageModule.analyzeScheduleImagePattern(strongestFixture);
+  const strongestCell = strongestPattern?.cells.find(
+    (cell) => cell.sourcePersonName === '테스트직원',
+  );
+  expect(
+    strongestCell == null || strongestCell.end !== '02:00',
+    'pattern analysis must not let an earlier weaker OCR token override stronger clock evidence',
   );
 
   const makePattern = (sourceName, cells) => ({
