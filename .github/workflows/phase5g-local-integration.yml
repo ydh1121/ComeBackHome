@@ -26,6 +26,9 @@ on:
       - "scripts/verify-phase5p-*.mjs"
       - "scripts/verify-phase5q-*.mjs"
       - "scripts/verify-phase5r-*.mjs"
+      - "scripts/verify-phase5s-*.mjs"
+      - "worker/notification-planner.ts"
+      - "worker/repositories/D1NotificationPlannerStateStore.ts"
       - "worker/scheduler.ts"
       - "worker/contracts.ts"
       - "src/pages/ImportReviewPage.tsx"
@@ -62,6 +65,9 @@ on:
       - "scripts/verify-phase5p-*.mjs"
       - "scripts/verify-phase5q-*.mjs"
       - "scripts/verify-phase5r-*.mjs"
+      - "scripts/verify-phase5s-*.mjs"
+      - "worker/notification-planner.ts"
+      - "worker/repositories/D1NotificationPlannerStateStore.ts"
       - "worker/scheduler.ts"
       - "worker/contracts.ts"
       - "src/pages/ImportReviewPage.tsx"
@@ -150,6 +156,9 @@ jobs:
 
       - name: Verify notification outbox
         run: npm run verify:notification-outbox
+
+      - name: Verify notification planner
+        run: npm run verify:notification-planner
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
