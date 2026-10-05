@@ -84,3 +84,5 @@ if (failures.length) {
 }
 
 console.log('phase 5J fixture-backed provider mapper verification passed');
+
+// Phase 5J dependency-backed verification trigger.
