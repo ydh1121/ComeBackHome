@@ -146,3 +146,22 @@ Scribe.js is not the default candidate because its current package is AGPL-3.0 a
 PaddleOCR remains a deferred candidate because its current official deployment path is substantially heavier for an iPhone PWA.
 
 A single whole-image OCR pass is not sufficient evidence for dense schedule screenshots. Use multiple evidence passes and retain bbox/confidence. OCR output must still pass adaptive layout parsing and explicit human review.
+
+## Same-origin runtime asset rule
+
+When Tesseract.js is activated, runtime assets must be version-pinned and same-origin.
+
+Current runtime ID:
+- tesseract-7.0.0-data-1.0.0
+
+Required package sources:
+- tesseract.js 7.0.0
+- tesseract.js-core 7.0.0
+- @tesseract.js-data/kor 1.0.0
+- @tesseract.js-data/eng 1.0.0
+
+Use scripts/prepare-ocr-assets.mjs to stage runtime files from installed npm packages. Do not download runtime assets from CDN during recognition.
+
+The staging output must include a SHA-256 manifest. A package-version mismatch, missing runtime file, or non-root-relative public path is a hard failure.
+
+Do not silently add OCR staging to the normal production build while OCR remains disabled. Production asset activation is a separate reviewed step.
