@@ -53,7 +53,10 @@ for (const token of [
   "VITE_CBH_RUNTIME: 'api'",
   "ssrLoadModule('/src/app/composition.ts')",
   'createHybridApiApplicationServices',
-  'Import commit is disabled in hybrid API mode until a real import parser is connected.',
+  'SAMPLE_IMPORT_WORKBOOK_BASE64',
+  'services.actions.importFiles.accept',
+  'services.actions.commitImportReview.execute(importBatchId)',
+  'real XLSX parser to hybrid D1 schedule commit',
   '/api/health',
   '/api/bootstrap',
 ]) {
