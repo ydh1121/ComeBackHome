@@ -231,3 +231,22 @@ Preserving a row boundary and trusting the row's person text are separate decisi
 A weak OCR fragment may remain as a geometric row anchor so neighboring schedules do not shift rows, while being excluded from detectedPeople and from schedule-candidate emission.
 
 Current conservative trust thresholds are implementation guards, not identity truth. Every image-derived identity still requires review/matching before commit.
+
+## Missing decimal half-hour recovery rule
+
+When schedule notation uses .5 for 30 minutes, OCR may drop the decimal point.
+
+A compact numeric token may be recovered as a half-hour only when:
+- it ends in 5;
+- its raw integer value is greater than 23 and therefore invalid as a 24-hour hour;
+- removing the final 5 yields an hour from 0 through 23.
+
+Examples:
+- 95 -> 09:30
+- 105 -> 10:30
+- 205 -> 20:30
+- 235 -> 23:30
+
+Do not reinterpret valid integer hours such as 15 or 23.
+Do not guess malformed/merged values such as 285, 211 or 2395.
+This normalization remains review-only and must not be used to invent a value when OCR emitted no usable numeric evidence.
