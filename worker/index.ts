@@ -1,5 +1,5 @@
 import { handleApiRequest } from './api';
-import { runScheduledTick } from './scheduler';
+import { runScheduledNotificationCycle } from './scheduler';
 import { createProviderRuntime } from './providers/runtime';
 import type { ExecutionContextLike, ScheduledControllerLike, WorkerEnv } from './runtime-types';
 
@@ -27,6 +27,6 @@ export default {
     env: WorkerEnv,
     ctx: ExecutionContextLike,
   ): Promise<void> {
-    ctx.waitUntil(runScheduledTick(env, controller.scheduledTime).then(() => undefined));
+    ctx.waitUntil(runScheduledNotificationCycle(env, controller.scheduledTime).then(() => undefined));
   },
 };
