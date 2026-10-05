@@ -210,10 +210,11 @@ export async function planNotificationJobs(
     if (!Number.isFinite(currentEtaMs)) continue;
 
     const state = await dependencies.plannerState.get(person.id);
+    const baselineAt = state?.etaBaselineAt ?? null;
     const requiresBaseline =
-      !state?.etaBaselineAt ||
-      state.etaBaselineWorkDate !== currentDate ||
-      !Number.isFinite(Date.parse(state.etaBaselineAt));
+      !baselineAt ||
+      state?.etaBaselineWorkDate !== currentDate ||
+      !Number.isFinite(Date.parse(baselineAt));
 
     if (requiresBaseline) {
       await dependencies.plannerState.upsert({
@@ -227,10 +228,10 @@ export async function planNotificationJobs(
       continue;
     }
 
-    const diffMinutes = minuteDifference(eta.arrivalAt, state.etaBaselineAt);
+    const diffMinutes = minuteDifference(eta.arrivalAt, baselineAt);
     if (
       Math.abs(diffMinutes) < ETA_CHANGE_THRESHOLD_MINUTES ||
-      !cooldownSatisfied(state.lastEtaNotificationAt, now)
+      !cooldownSatisfied(state?.lastEtaNotificationAt ?? null, now)
     ) {
       continue;
     }
