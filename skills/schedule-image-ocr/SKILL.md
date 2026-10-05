@@ -127,3 +127,22 @@ At minimum, image-import tests must cover:
 - ambiguous/unrecognized layout fail-closed behavior.
 
 A test fixture modeled after one employer must be labeled as a sample profile, never as the general parser contract.
+
+## OCR engine selection rule
+
+Current Phase 5W primary browser candidate is Tesseract.js 7.0.0.
+
+Reasons:
+- Apache-2.0;
+- browser WebWorker/WebAssembly runtime;
+- bbox/confidence-capable blocks output;
+- Korean traineddata exists;
+- runtime worker/core/lang paths are configurable for same-origin hosting.
+
+Do not use Tesseract.js default CDN runtime paths in production. The ComeBackHome adapter requires same-origin root-relative worker/core/lang paths.
+
+Scribe.js is not the default candidate because its current package is AGPL-3.0 and upstream documentation describes AGPL-compatible source obligations or proprietary licensing for application use.
+
+PaddleOCR remains a deferred candidate because its current official deployment path is substantially heavier for an iPhone PWA.
+
+A single whole-image OCR pass is not sufficient evidence for dense schedule screenshots. Use multiple evidence passes and retain bbox/confidence. OCR output must still pass adaptive layout parsing and explicit human review.
