@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../domain/common';
-import type { ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
+import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
 import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
