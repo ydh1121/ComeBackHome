@@ -18,7 +18,10 @@ const notifications = await read('../worker/repositories/D1NotificationSettingsS
 const subscriptions = await read('../worker/repositories/D1SubscriptionStore.ts');
 const jobs = await read('../worker/repositories/D1NotificationJobStore.ts');
 const plannerState = await read('../worker/repositories/D1NotificationPlannerStateStore.ts');
+const notificationRuntime = await read('../worker/notification-runtime.ts');
+const phase5uHarness = await read('../worker/testing/phase5u-local.ts');
 const workerTsconfig = await read('../tsconfig.worker.json');
+const phase5uConfig = JSON.parse(await read('../wrangler.phase5u.jsonc'));
 
 if (!repositories.includes('upsertMany(entries: ScheduleEntry[]): Promise<void>')) failures.push('ScheduleRepository upsertMany contract missing');
 if (repositories.includes('transaction<T>(work:')) failures.push('interactive schedule transaction contract remains');
@@ -62,6 +65,22 @@ for (const text of [
   if (!scheduler.includes(text)) failures.push('safe scheduler/outbox contract missing ' + text);
 }
 if (!workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime)')) failures.push('production scheduled entry must use fail-closed composite cycle without live dependencies');
+if (workerEntry.includes('phase5u-local')) failures.push('production Worker imports Phase5U test harness');
+
+for (const text of [
+  'createD1ScheduledNotificationDependencies',
+  'new D1NotificationJobStore(env.DB)',
+  'new D1NotificationSettingsStore(env.DB)',
+  'new D1NotificationPlannerStateStore(env.DB)',
+  'new D1PersonRepository(env.DB)',
+  'new D1ScheduleRepository(env.DB)',
+  'new D1SubscriptionStore(env.DB)',
+]) {
+  if (!notificationRuntime.includes(text)) failures.push('D1 notification runtime missing ' + text);
+}
+if (!phase5uHarness.includes('createD1ScheduledNotificationDependencies')) failures.push('Phase5U harness does not use D1 notification runtime factory');
+if (phase5uConfig.main !== './worker/testing/phase5u-local.ts') failures.push('Phase5U Wrangler config does not target test harness');
+if (phase5uConfig.d1_databases?.[0]?.database_id !== '00000000-0000-0000-0000-000000000000') failures.push('Phase5U Wrangler config must keep zero remote database placeholder');
 
 for (const [name, source, required] of [
   ['person', person, ['class D1PersonRepository', 'INSERT INTO people', 'UPDATE people SET']],
