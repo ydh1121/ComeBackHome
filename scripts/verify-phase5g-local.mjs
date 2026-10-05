@@ -1,9 +1,11 @@
+import { Buffer } from 'node:buffer';
 import { spawn } from 'node:child_process';
 import { access, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
+import { SAMPLE_IMPORT_WORKBOOK_BASE64 } from '../test/fixtures/import/sample-workbook-base64.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const configPath = resolve(root, 'wrangler.local.jsonc');
@@ -194,7 +196,7 @@ try {
   const created = await requestJson('/api/people', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Phase 5G Local', relation: 'QA' }),
+    body: JSON.stringify({ name: '여자친구', relation: '연인' }),
   });
   const personId = created?.person?.id;
   assert(typeof personId === 'string' && personId.length > 0, 'person creation did not return an id');
@@ -320,14 +322,37 @@ try {
   assert(notificationSettings.rules.etaChange === true, 'notification ETA rule round-trip failed');
   assert(notificationSettings.permission === 'granted', 'browser notification permission must remain local runtime state');
 
-  let importBlocked = false;
-  try {
-    await services.actions.commitImportReview.execute();
-  } catch (error) {
-    importBlocked = error instanceof Error &&
-      error.message === 'Import commit is disabled in hybrid API mode until a real import parser is connected.';
-  }
-  assert(importBlocked, 'hybrid API import safety gate did not block mock-backed import commit');
+  const workbookBytes = Buffer.from(SAMPLE_IMPORT_WORKBOOK_BASE64, 'base64');
+  const workbookBuffer = workbookBytes.buffer.slice(
+    workbookBytes.byteOffset,
+    workbookBytes.byteOffset + workbookBytes.byteLength,
+  );
+  const importBatchId = await services.actions.importFiles.accept([{
+    kind: 'WORKBOOK',
+    file: {
+      name: 'phase5p-real-import.xlsx',
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      arrayBuffer: async () => workbookBuffer,
+    },
+  }]);
+  const parsedImportBatch = await services.repositories.imports.getBatch(importBatchId);
+  assert(parsedImportBatch?.files[0]?.status === 'READY', 'real workbook import file did not become READY');
+  assert(parsedImportBatch?.detectedPeople[0]?.matchedPersonId === personId, 'real workbook person did not match persisted person');
+  assert(parsedImportBatch?.reviewItems.length === 2, 'real workbook did not produce two review items');
+  assert(parsedImportBatch?.reviewItems.every((item) => item.personId === personId), 'real workbook review ownership mismatch');
+
+  await services.actions.commitImportReview.execute(importBatchId);
+  const importedScheduleOne = await services.repositories.schedules.getByDate(personId, '2099-01-04');
+  const importedScheduleTwo = await services.repositories.schedules.getByDate(personId, '2099-01-05');
+  assert(
+    importedScheduleOne?.start === '09:00' && importedScheduleOne?.end === '18:00',
+    'hybrid real workbook first schedule commit failed',
+  );
+  assert(
+    importedScheduleTwo?.start === '10:30' && importedScheduleTwo?.end === '19:30',
+    'hybrid real workbook second schedule commit failed',
+  );
+  assert((await services.repositories.imports.getBatch(importBatchId))?.committed === true, 'real workbook import batch was not committed');
 
   const finalBootstrap = await requestJson('/api/bootstrap');
   assert(finalBootstrap.people.some((person) => person.id === personId), 'bootstrap did not expose persisted person after mutations');
@@ -354,7 +379,7 @@ try {
       'place round-trip',
       'commute persistence/runtime split',
       'notification persisted/local split',
-      'hybrid import commit safety gate',
+      'real XLSX parser to hybrid D1 schedule commit',
       'Workers Static Assets SPA shell',
       'provider runtime status disabled by default',
       'provider API mode requires API persistence runtime',
