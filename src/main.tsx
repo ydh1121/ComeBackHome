@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 import { ApplicationServicesProvider } from './app/ApplicationServicesContext';
 import { createApplicationServices } from './app/composition';
-import { resolveRuntimeMode } from './config/runtime';
+import { resolveProviderRuntimeMode, resolveRuntimeMode } from './config/runtime';
 import { router } from './app/router';
 import { registerPwaServiceWorker } from './pwa/registerServiceWorker';
 import './shared/styles/base.css';
@@ -13,7 +13,7 @@ if (!rootNode) throw new Error('ComeBackHome root element was not found.');
 const root: HTMLElement = rootNode;
 
 async function start(): Promise<void> {
-  const services = await createApplicationServices(resolveRuntimeMode());
+  const services = await createApplicationServices(resolveRuntimeMode(), resolveProviderRuntimeMode());
 
   createRoot(root).render(
     <StrictMode>
