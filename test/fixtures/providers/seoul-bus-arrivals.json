@@ -1,0 +1,19 @@
+{
+  "msgHeader": {
+    "headerCd": "0",
+    "headerMsg": "정상 처리되었습니다."
+  },
+  "msgBody": {
+    "itemList": [
+      {
+        "busRouteId": "100100118",
+        "rtNm": "146",
+        "mkTm": "2026-10-05 09:45:00",
+        "exps1": "90",
+        "plainNo1": "서울74사1234",
+        "exps2": "280",
+        "plainNo2": "서울74사5678"
+      }
+    ]
+  }
+}
