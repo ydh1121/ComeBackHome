@@ -340,7 +340,11 @@ try {
   assert(parsedImportBatch?.detectedPeople[0]?.matchedPersonId === personId, 'real workbook person did not match persisted person');
   assert(parsedImportBatch?.reviewItems.length === 2, 'real workbook did not produce two review items');
   assert(parsedImportBatch?.reviewItems.every((item) => item.personId === personId), 'real workbook review ownership mismatch');
+  assert(parsedImportBatch?.reviewItems.every((item) => item.resolution == null), 'real workbook review must start unconfirmed');
 
+  for (const item of parsedImportBatch?.reviewItems ?? []) {
+    await services.actions.importReview.setResolution(importBatchId, item.id, 'NEW');
+  }
   await services.actions.commitImportReview.execute(importBatchId);
   const importedScheduleOne = await services.repositories.schedules.getByDate(personId, '2099-01-04');
   const importedScheduleTwo = await services.repositories.schedules.getByDate(personId, '2099-01-05');
