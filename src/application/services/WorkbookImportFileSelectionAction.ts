@@ -133,7 +133,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         date: candidate.date,
         ...(existing ? { existing: { start: existing.start, end: existing.end } } : {}),
         imported: { start: candidate.start, end: candidate.end },
-        resolution: existing ? 'KEEP' : 'NEW',
+        resolution: null,
       });
     }
 
