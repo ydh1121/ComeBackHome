@@ -21,6 +21,7 @@ on:
       - "scripts/verify-phase5k-*.mjs"
       - "scripts/verify-phase5l-*.mjs"
       - "scripts/verify-phase5m-*.mjs"
+      - "scripts/verify-phase5n-*.mjs"
       - "test/fixtures/providers/**"
   pull_request:
     branches:
@@ -41,6 +42,7 @@ on:
       - "scripts/verify-phase5k-*.mjs"
       - "scripts/verify-phase5l-*.mjs"
       - "scripts/verify-phase5m-*.mjs"
+      - "scripts/verify-phase5n-*.mjs"
       - "test/fixtures/providers/**"
 
 permissions:
@@ -85,6 +87,9 @@ jobs:
 
       - name: Verify Kakao transport
         run: npm run verify:kakao-transport
+
+      - name: Verify provider runtime
+        run: npm run verify:provider-runtime
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
