@@ -183,3 +183,5 @@ if (failures.length) {
 }
 
 console.log('phase 5S notification job planner verification passed');
+
+// Phase 5S dependency-backed verification trigger.
