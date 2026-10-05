@@ -11,6 +11,7 @@ Phase 5H establishes the application and Worker boundary required for future rea
 - provider API mode requires `VITE_CBH_RUNTIME=api`
 - unsupported provider runtime values fail startup
 - provider HTTP adapters use only same-origin `/api/providers/*`
+- normalized client boundaries cover place search, transit access search, route candidates, realtime bus arrivals and realtime subway arrivals
 - no provider base URL is configurable in client code
 
 ## Worker runtime
