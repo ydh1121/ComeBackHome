@@ -94,6 +94,30 @@ export interface NotificationRetryPolicy {
   nextAttempt(job: NotificationJob, error: Error, now: Date): string | null;
 }
 
+export type NotificationEtaConfidence = 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN';
+
+export interface NotificationEtaState {
+  personId: string;
+  arrivalAt: string | null;
+  confidence: NotificationEtaConfidence;
+}
+
+export interface NotificationEtaSource {
+  get(personId: string, now: Date): Promise<NotificationEtaState | null>;
+}
+
+export interface NotificationPlannerState {
+  personId: string;
+  etaBaselineAt: string | null;
+  lastEtaNotificationAt: string | null;
+  updatedAt: string;
+}
+
+export interface NotificationPlannerStateStore {
+  get(personId: string): Promise<NotificationPlannerState | null>;
+  upsert(state: NotificationPlannerState): Promise<void>;
+}
+
 export interface SchedulerClock {
   now(): Date;
 }
