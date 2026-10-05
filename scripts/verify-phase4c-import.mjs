@@ -30,8 +30,10 @@ for (const path of ['/import', '/import/:batchId/people', '/import/:batchId/stru
 if (!runtime.includes('importFiles: ImportFileSelectionAction')) failures.push('file action missing');
 if (!runtime.includes('importMatch: ImportMatchActions')) failures.push('match action missing');
 if (!runtime.includes('importReview: ImportReviewActions')) failures.push('review action missing');
-if (!composition.includes('new MockImportFileSelectionAction')) failures.push('mock file action not composed');
-if (!commit.includes('schedules.transaction')) failures.push('schedule transaction boundary missing');
+if (!composition.includes('new WorkbookImportFileSelectionAction')) failures.push('real workbook file action not composed');
+if (!composition.includes('new ReadExcelWorkbookParser')) failures.push('real workbook parser not composed');
+if (!commit.includes('schedules.upsertMany(entries)')) failures.push('schedule batch boundary missing');
+if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
 if (!commit.includes("item.resolution === 'KEEP'")) failures.push('KEEP commit rule missing');
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
 if (!css.includes('.import-page .upload')) failures.push('upload style missing');
