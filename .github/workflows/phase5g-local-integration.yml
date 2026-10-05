@@ -108,6 +108,12 @@ jobs:
       - name: Verify provider E2E
         run: npm run verify:provider-e2e
 
+      - name: Verify import workflow
+        run: npm run verify:import
+
+      - name: Verify hybrid HTTP runtime
+        run: npm run verify:http-runtime
+
       - name: Verify workbook import parser
         run: npm run verify:import-parser
 
