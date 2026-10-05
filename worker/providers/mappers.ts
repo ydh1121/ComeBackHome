@@ -202,7 +202,11 @@ export function mapSeoulBusStops(payload: unknown): TransitSearchResult[] {
   });
 }
 
-export function mapSeoulBusArrivals(payload: unknown, routeProviderId?: string): Arrival[] {
+export function mapSeoulBusArrivals(
+  payload: unknown,
+  routeProviderId?: string,
+  stopProviderId?: string,
+): Arrival[] {
   const root = asRecord(payload);
   if (!root) return [];
   const items = nestedRecords(root, ['msgBody', 'itemList']);
@@ -210,7 +214,9 @@ export function mapSeoulBusArrivals(payload: unknown, routeProviderId?: string):
 
   for (const item of items) {
     const routeId = text(item.busRouteId);
+    const stopId = text(item.stId);
     if (routeProviderId && routeId && routeId !== routeProviderId) continue;
+    if (stopProviderId && stopId && stopId !== stopProviderId) continue;
     const observedAt = seoulTimestamp(item.mkTm);
     if (!observedAt) continue;
 
