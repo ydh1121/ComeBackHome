@@ -1,0 +1,25 @@
+{
+  "errorMessage": {
+    "status": 200,
+    "code": "INFO-000",
+    "message": "정상 처리되었습니다.",
+    "link": "",
+    "developerMessage": "",
+    "total": 1
+  },
+  "realtimeArrivalList": [
+    {
+      "subwayId": "1002",
+      "updnLine": "상행",
+      "trainLineNm": "성수행 - 역삼방면",
+      "statnId": "1002000222",
+      "statnNm": "강남",
+      "barvlDt": "125",
+      "btrainNo": "2258",
+      "bstatnNm": "성수",
+      "recptnDt": "2026-10-05 09:45:30",
+      "arvlMsg2": "전역 출발",
+      "arvlCd": "3"
+    }
+  ]
+}
