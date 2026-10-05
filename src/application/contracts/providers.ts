@@ -1,4 +1,5 @@
-import type { BusRouteOption, CommuteStep, Coordinate, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
+import type { ISODate } from '../../domain/common';
+import type { BusRouteOption, CommuteStep, Coordinate, ImportStructure, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
 
 export interface PlaceSearchResult { providerId: string; placeName?: string; roadAddress: string; lotAddress?: string; coordinate: Coordinate; category?: string; }
 export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; busRoutes?: BusRouteOption[]; }
@@ -9,7 +10,9 @@ export interface TransitRouteProvider { search(origin: Coordinate, destination: 
 export interface TransitAccessSearchProvider { search(query: string, near: Coordinate): Promise<TransitSearchResult[]>; }
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
 export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
-export interface ParsedImport { detectedPeople: unknown[]; scheduleCandidates: unknown[]; confidence: number; }
+export interface ParsedImportPerson { sourceName: string; confidence: number; }
+export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
+export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageScheduleRecognizer { parse(file: File): Promise<ParsedImport>; }
 export interface NotificationPermissionProvider { getPermission(): Promise<NotificationPermission>; requestPermissionFromUserGesture(): Promise<NotificationPermission>; }
