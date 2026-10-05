@@ -15,13 +15,13 @@ const commit = await read('../src/application/use-cases/commitImportReview.ts');
 for (const text of ['type="file"','엑셀 또는 이미지','인식 결과 보기','services.actions.importFiles.accept']) {
   if (!root.includes(text)) failures.push('root missing ' + text);
 }
-for (const text of ['사람 연결','인식 신뢰도','새 사람','services.actions.importMatch.cyclePersonMatch']) {
+for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','services.actions.importMatch.cyclePersonMatch']) {
   if (!people.includes(text)) failures.push('people missing ' + text);
 }
 for (const text of ['표 구조 확인','머리글 행','근무시간 열','자동 인식이 확실하지 않을 때만']) {
   if (!structure.includes(text)) failures.push('structure missing ' + text);
 }
-for (const text of ['일정 확인','기존 일정','가져온 일정','services.actions.importReview.setResolution','commitImportReview.execute']) {
+for (const text of ['일정 확인','기존 일정','가져온 일정','batch.reviewItems.map','allReviewed','services.actions.importReview.setResolution','commitImportReview.execute']) {
   if (!review.includes(text)) failures.push('review missing ' + text);
 }
 for (const path of ['/import', '/import/:batchId/people', '/import/:batchId/structure', '/import/:batchId/review']) {
