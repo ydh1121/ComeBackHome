@@ -190,3 +190,20 @@ export function buildSparseCalendarDateScheduleLayoutFixture({ targetRow = 3 } =
     tokens,
   };
 }
+
+
+export function buildPunctuationLostHalfHourScheduleLayoutFixture({ targetRow = 3 } = {}) {
+  const base = buildSparseCalendarDateScheduleLayoutFixture({ targetRow });
+
+  return {
+    ...base,
+    tokens: base.tokens.map((item) => {
+      const match = /^(\d{1,2})\.5$/.exec(item.text);
+      if (!match) return item;
+      return {
+        ...item,
+        text: match[1] + '5',
+      };
+    }),
+  };
+}
