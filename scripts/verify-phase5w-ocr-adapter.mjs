@@ -93,14 +93,14 @@ try {
     word('테스트직원', 95, 20, 150, 150, 190),
     word('12', 92, 190, 150, 240, 190),
     word('235', 92, 350, 150, 420, 190),
-    word('노트', 82, 500, 60, 580, 100),
+    word('실습11/17.5', 82, 500, 60, 620, 100),
   ];
 
   const numericWords = [
     word('2026-08-18', 88, 200, 30, 400, 70),
     word('12', 90, 190, 150, 240, 190),
     word('23.5', 84, 350, 150, 420, 190),
-    word('17.5', 75, 510, 60, 580, 100),
+    word('11/17.5', 75, 510, 60, 620, 100),
   ];
 
   const worker = {
@@ -167,12 +167,12 @@ try {
   expect(end?.x === 175 && end?.width === 35, 'numeric token coordinate mapping mismatch');
 
   expect(
-    result.tokens.some((token) => token.text === '노트'),
-    'general semantic/non-numeric OCR token must be preserved',
+    result.tokens.some((token) => token.text === '실습11/17.5'),
+    'general semantic/note OCR token must be preserved',
   );
   expect(
-    result.tokens.some((token) => token.text === '17.5'),
-    'non-overlapping numeric evidence must remain available to layout strategy',
+    !result.tokens.some((token) => token.text === '11/17.5'),
+    'numeric-only pass must not replace overlapping semantic note text',
   );
 
   const failingWorker = {
