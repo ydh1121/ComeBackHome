@@ -198,6 +198,15 @@
   color: #667085;
 }
 
+.import-page .import-review-list {
+  display: grid;
+  gap: 24px;
+}
+
+.import-page .import-review-item {
+  min-width: 0;
+}
+
 .import-page .import-review-head {
   margin: 2px 0 18px;
 }
@@ -272,6 +281,15 @@
 .import-page .review-choice.selected .review-choice-time,
 .import-page .review-choice.selected .review-choice-check {
   color: var(--cbh-blue, #255cff);
+}
+
+.import-page .review-choice:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.import-page .review-person.unresolved {
+  color: #b42318;
 }
 
 .import-page .empty-product {
