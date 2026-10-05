@@ -74,8 +74,24 @@ export interface NotificationJobStore {
   markFailed(jobId: string, error: string): Promise<void>;
 }
 
+export type PushDeliveryErrorKind = 'transient' | 'terminal-subscription' | 'permanent';
+
+export class PushDeliveryError extends Error {
+  constructor(
+    message: string,
+    readonly kind: PushDeliveryErrorKind,
+  ) {
+    super(message);
+    this.name = 'PushDeliveryError';
+  }
+}
+
 export interface PushDeliveryGateway {
   send(subscription: StoredPushSubscription, payload: NotificationPayload): Promise<void>;
+}
+
+export interface NotificationRetryPolicy {
+  nextAttempt(job: NotificationJob, error: Error, now: Date): string | null;
 }
 
 export interface SchedulerClock {
