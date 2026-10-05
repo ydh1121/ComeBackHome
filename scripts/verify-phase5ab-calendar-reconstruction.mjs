@@ -85,3 +85,5 @@ if (failures.length) {
 }
 
 console.log('phase 5AB calendar strip reconstruction verification passed');
+
+// Phase 5AB dependency-backed verification trigger.
