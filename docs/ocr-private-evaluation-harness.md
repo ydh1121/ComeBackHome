@@ -24,9 +24,9 @@ http://127.0.0.1:4191/
 
 ## What the harness does
 
-The user selects an image file manually.
+The user may select one or multiple image files at once.
 
-The page runs:
+For every selected image, the page runs:
 
 1. BrowserScheduleOcrPreprocessor
 2. TesseractScheduleImageTextExtractor
@@ -125,3 +125,21 @@ Actual acceptance requires the user to run the local harness against private rep
 - latency/memory on target devices.
 
 Those screenshots must not be committed to Git.
+
+
+## One-step QA handoff
+
+The harness aggregates every selected image into one in-memory QA bundle:
+
+- schema = comebackhome-private-ocr-eval/v2
+- per-file source metadata
+- OCR/image summary
+- parser result or fail-closed error
+- full OCR token evidence
+
+After the batch finishes, the user has two equivalent handoff options:
+
+- 전체 QA 결과 복사: copies the complete JSON bundle once so it can be pasted to ChatGPT in one action;
+- 결과 JSON 저장: downloads one derived-evidence JSON file that can be attached once.
+
+The JSON export contains OCR-derived text/geometry and may contain employee names or work hours. Export is therefore user-triggered only. It does not contain the source image bytes and does not change sourceImagePersistence=0.
