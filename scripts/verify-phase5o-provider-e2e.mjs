@@ -206,3 +206,5 @@ if (failures.length) {
 }
 
 console.log('phase 5O provider API in-process E2E verification passed');
+
+// Phase 5O dependency-backed verification trigger.
