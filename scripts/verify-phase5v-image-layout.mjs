@@ -140,3 +140,5 @@ if (failures.length) {
 }
 
 console.log('phase 5V structured schedule image layout verification passed');
+
+// Phase 5V dependency-backed verification trigger.
