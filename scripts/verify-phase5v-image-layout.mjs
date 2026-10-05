@@ -1,10 +1,39 @@
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
-import { buildScheduleImageLayoutFixture } from '../test/fixtures/import/sample-image-layout.mjs';
+import {
+  buildRowOrientedScheduleLayoutFixture,
+  buildScheduleImageLayoutFixture,
+  transformImageLayout,
+} from '../test/fixtures/import/sample-image-layout.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
+
+function targetSchedules(parsed, name = '테스트직원') {
+  return parsed.scheduleCandidates.filter((item) => item.sourcePersonName === name);
+}
+
+function expectReferenceTarget(parsed, prefix) {
+  const target = targetSchedules(parsed);
+  expect(target.length === 5, prefix + ' target candidate count mismatch');
+
+  const expected = [
+    ['2026-08-18', '12:00', '23:30'],
+    ['2026-08-20', '12:00', '23:30'],
+    ['2026-08-21', '11:00', '23:30'],
+    ['2026-08-22', '10:30', '20:30'],
+    ['2026-08-23', '10:30', '20:00'],
+  ];
+
+  expected.forEach(([date, start, end]) => {
+    const item = target.find((candidate) => candidate.date === date);
+    expect(item?.start === start && item?.end === end, prefix + ' schedule mismatch for ' + date);
+  });
+
+  expect(!target.some((item) => item.date === '2026-08-17'), prefix + ' blank/off Monday created schedule');
+  expect(!target.some((item) => item.date === '2026-08-19'), prefix + ' blank/off Wednesday created schedule');
+}
 
 const vite = await createViteServer({
   root,
@@ -26,38 +55,69 @@ try {
   expect(imageModule.parseScheduleHour('23.25') === null, 'unsupported decimal fraction must be rejected');
   expect(imageModule.parseScheduleHour('24') === null, 'hour 24 must be rejected');
 
-  const layout = buildScheduleImageLayoutFixture();
-  const parsed = imageModule.parseScheduleImageLayout(layout);
+  const sampleProfile = buildScheduleImageLayoutFixture({ targetRow: 3 });
+  const parsedSample = imageModule.parseScheduleImageLayout(sampleProfile);
 
-  expect(parsed.structure.sheet === '이미지 근무표', 'image structure label mismatch');
-  expect(parsed.structure.needsReview === true, 'image recognition must always require review');
-  expect(parsed.structure.personColumn === '좌측 이름열', 'image person-band structure mismatch');
-  expect(parsed.detectedPeople.length === 6, 'image person row count mismatch');
-  expect(parsed.detectedPeople.some((person) => person.sourceName === '테스트직원'), 'synthetic target person not detected');
+  expect(parsedSample.structure.sheet.includes('date-block-matrix'), 'sample profile must use date-block strategy');
+  expect(parsedSample.structure.needsReview === true, 'image recognition must always require review');
+  expect(parsedSample.detectedPeople.length === 6, 'sample profile person row count mismatch');
+  expect(parsedSample.detectedPeople.some((person) => person.sourceName === '테스트직원'), 'sample profile target person not detected');
+  expectReferenceTarget(parsedSample, 'sample profile');
+  expect(
+    !parsedSample.scheduleCandidates.some((item) => item.start === '17:30' || item.end === '17:30'),
+    'sample profile note-row number leaked into schedule data',
+  );
 
-  const target = parsed.scheduleCandidates.filter((item) => item.sourcePersonName === '테스트직원');
-  expect(target.length === 5, 'target image schedule candidate count mismatch');
+  const movedTarget = buildScheduleImageLayoutFixture({ targetRow: 1 });
+  const movedParsed = imageModule.parseScheduleImageLayout(movedTarget);
+  expectReferenceTarget(movedParsed, 'moved target row');
+  expect(
+    movedParsed.scheduleCandidates.some((item) => item.sourcePersonName === '테스트직원'),
+    'target person must not depend on original row index',
+  );
 
-  const expected = [
-    ['2026-08-18', '12:00', '23:30'],
-    ['2026-08-20', '12:00', '23:30'],
-    ['2026-08-21', '11:00', '23:30'],
-    ['2026-08-22', '10:30', '20:30'],
-    ['2026-08-23', '10:30', '20:00'],
-  ];
+  const transformed = transformImageLayout(
+    buildScheduleImageLayoutFixture({ targetRow: 5 }),
+    { scaleX: 1.37, scaleY: 1.22, offsetX: 83, offsetY: 41 },
+  );
+  const transformedParsed = imageModule.parseScheduleImageLayout(transformed);
+  expectReferenceTarget(transformedParsed, 'translated/scaled profile');
+  expect(
+    transformedParsed.structure.sheet.includes('date-block-matrix'),
+    'translated/scaled profile changed strategy unexpectedly',
+  );
 
-  expected.forEach(([date, start, end]) => {
-    const item = target.find((candidate) => candidate.date === date);
-    expect(item?.start === start && item?.end === end, 'target image schedule mismatch for ' + date);
-  });
+  const rowTable = buildRowOrientedScheduleLayoutFixture();
+  const rowParsed = imageModule.parseScheduleImageLayout(rowTable);
+  expect(rowParsed.structure.sheet.includes('row-table'), 'row-oriented fixture must use row-table strategy');
+  expect(rowParsed.structure.needsReview === true, 'row-table image must require review');
 
-  expect(!target.some((item) => item.date === '2026-08-17'), 'blank/off Monday must not create schedule');
-  expect(!target.some((item) => item.date === '2026-08-19'), 'blank/off Wednesday must not create schedule');
-  expect(!parsed.scheduleCandidates.some((item) => item.start === '17:30' || item.end === '17:30'), 'red note time leaked into schedule data');
+  const rowTarget = targetSchedules(rowParsed);
+  expect(rowTarget.length === 1, 'row-table target candidate count mismatch');
+  expect(rowTarget[0]?.date === '2026-09-02', 'row-table target date mismatch');
+  expect(rowTarget[0]?.start === '10:30', 'row-table target start mismatch');
+  expect(rowTarget[0]?.end === '20:00', 'row-table target end mismatch');
 
-  const recognizer = new imageModule.StructuredTableImageScheduleRecognizer({
+  let unknownBlocked = false;
+  try {
+    imageModule.parseScheduleImageLayout({
+      width: 900,
+      height: 400,
+      tokens: [
+        { text: '알림', x: 100, y: 60, width: 80, height: 20, confidence: 0.99 },
+        { text: '테스트직원', x: 100, y: 140, width: 100, height: 20, confidence: 0.99 },
+        { text: '23.5', x: 400, y: 140, width: 50, height: 20, confidence: 0.99 },
+      ],
+    });
+  } catch (error) {
+    unknownBlocked = error instanceof Error &&
+      error.message === 'Image schedule layout was not recognized confidently.';
+  }
+  expect(unknownBlocked, 'unrecognized layout must fail closed instead of guessing');
+
+  const recognizer = new imageModule.AdaptiveScheduleImageRecognizer({
     async extract() {
-      return buildScheduleImageLayoutFixture();
+      return buildScheduleImageLayoutFixture({ targetRow: 2 });
     },
   });
 
@@ -65,7 +125,7 @@ try {
     name: 'synthetic-schedule.png',
     type: 'image/png',
   });
-  expect(direct.scheduleCandidates.length === parsed.scheduleCandidates.length, 'recognizer/extractor composition changed parsed output');
+  expectReferenceTarget(direct, 'recognizer/extractor composition');
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   store.mutate((state) => {
@@ -139,4 +199,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('phase 5V structured schedule image layout verification passed');
+console.log('phase 5V adaptive schedule image layout verification passed');
