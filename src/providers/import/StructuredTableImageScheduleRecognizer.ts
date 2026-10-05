@@ -539,16 +539,21 @@ function signature(parsed: ParsedImport): string {
     .join('\n');
 }
 
-interface DateBlockPersonRow {
+interface DateBlockLabelRow {
+  sourceRow: number;
   sourceName: string;
   confidence: number;
+  labelHeight: number;
   cy: number;
   top: number;
   bottom: number;
   labelSide: 'left' | 'right';
 }
 
+interface DateBlockPersonRow extends DateBlockLabelRow {}
+
 interface DateBlockMatrixGeometry {
+  imageWidth: number;
   blocks: DateBlock[];
   usedCalendarStrip: boolean;
   labelTokens: BoxToken[];
@@ -558,6 +563,7 @@ interface DateBlockMatrixGeometry {
   headerBottom: number;
   gridLeft: number;
   gridRight: number;
+  labelProbeRows: DateBlockLabelRow[];
   personRows: DateBlockPersonRow[];
 }
 
@@ -642,36 +648,67 @@ function inferDateBlockMatrixGeometry(
   );
   if (!outsideGridTokens.length) return null;
 
-  const nameRows = groupRows(outsideGridTokens)
+  const rawLabelRows = groupRows(outsideGridTokens)
     .map((row) => {
       const names = row.tokens.filter((token) => isLikelyPersonName(token.normalized));
       if (!names.length) return null;
       const sourceName = names.map((token) => token.normalized).join('');
       const confidence = average(names.map((token) => token.confidence));
-      if (!isUsablePersonRowLabel(sourceName, confidence)) return null;
+      const labelHeight = median(
+        names.map((token) => token.height).filter((height) => height > 0),
+      );
       const labelSide =
         average(names.map((token) => token.cx)) < gridLeft
           ? 'left' as const
           : 'right' as const;
-      return { sourceName, cy: row.cy, confidence, labelSide };
+      return {
+        sourceName,
+        cy: row.cy,
+        confidence,
+        labelHeight,
+        labelSide,
+      };
     })
     .filter((row): row is {
       sourceName: string;
       cy: number;
       confidence: number;
+      labelHeight: number;
       labelSide: 'left' | 'right';
-    } => row != null);
+    } => row != null)
+    .sort((left, right) => left.cy - right.cy);
 
-  if (!nameRows.length) return null;
+  if (!rawLabelRows.length) return null;
 
-  const personRows: DateBlockPersonRow[] = nameRows.map((row, index) => ({
+  const structuralRows: DateBlockLabelRow[] = rawLabelRows.map((row, index) => ({
     ...row,
-    top: index === 0 ? headerBottom : (nameRows[index - 1].cy + row.cy) / 2,
+    sourceRow: index + 1,
+    top:
+      index === 0
+        ? headerBottom
+        : (rawLabelRows[index - 1].cy + row.cy) / 2,
     bottom:
-      index === nameRows.length - 1
+      index === rawLabelRows.length - 1
         ? layout.height
-        : (row.cy + nameRows[index + 1].cy) / 2,
+        : (row.cy + rawLabelRows[index + 1].cy) / 2,
   }));
+
+  const typicalLabelHeight = median(
+    structuralRows
+      .map((row) => row.labelHeight)
+      .filter((height) => height > 0),
+  );
+  const minimumPersonLabelHeight = Math.max(1, typicalLabelHeight * 0.75);
+
+  // Keep small auxiliary/header-like rows as structural boundaries so they do
+  // not contaminate the first employee row, but do not treat them as people.
+  const labelProbeRows = structuralRows.filter(
+    (row) => row.labelHeight >= minimumPersonLabelHeight,
+  );
+
+  const personRows: DateBlockPersonRow[] = labelProbeRows.filter((row) =>
+    isUsablePersonRowLabel(row.sourceName, row.confidence)
+  );
 
   if (restFraction == null) {
     const candidateFractions: number[] = [];
@@ -714,6 +751,7 @@ function inferDateBlockMatrixGeometry(
   }
 
   return {
+    imageWidth: layout.width,
     blocks,
     usedCalendarStrip,
     labelTokens,
@@ -723,8 +761,38 @@ function inferDateBlockMatrixGeometry(
     headerBottom,
     gridLeft,
     gridRight,
+    labelProbeRows,
     personRows,
   };
+}
+
+function personLabelRegion(
+  geometry: DateBlockMatrixGeometry,
+  row: DateBlockLabelRow,
+): SchedulePatternProbeRegion {
+  const nameOnLeft = row.labelSide === 'left';
+  return {
+    id: `person::${row.sourceRow}`,
+    kind: 'person-label',
+    sourceRow: row.sourceRow,
+    sourcePersonName: row.sourceName,
+    date: null,
+    x: nameOnLeft ? 0 : geometry.gridRight,
+    y: row.top,
+    width: nameOnLeft
+      ? Math.max(1, geometry.gridLeft)
+      : Math.max(1, geometry.imageWidth - geometry.gridRight),
+    height: Math.max(1, row.bottom - row.top),
+  };
+}
+
+export function inferSchedulePersonLabelProbeRegions(
+  layout: ImageTextLayout,
+): SchedulePatternProbeRegion[] {
+  const tokens = assertLayout(layout);
+  const geometry = inferDateBlockMatrixGeometry(layout, tokens);
+  if (!geometry) return [];
+  return geometry.labelProbeRows.map((row) => personLabelRegion(geometry, row));
 }
 
 function fieldRegion(
@@ -779,22 +847,9 @@ export function analyzeScheduleImagePattern(
   const probeRegions: SchedulePatternProbeRegion[] = [];
   const cells: ScheduleCellPattern[] = [];
 
-  geometry.personRows.forEach((person, rowIndex) => {
-    const sourceRow = rowIndex + 1;
-    const nameOnLeft = person.labelSide === 'left';
-    probeRegions.push({
-      id: `person::${sourceRow}`,
-      kind: 'person-label',
-      sourceRow,
-      sourcePersonName: person.sourceName,
-      date: null,
-      x: nameOnLeft ? 0 : geometry.gridRight,
-      y: person.top,
-      width: nameOnLeft
-        ? Math.max(1, geometry.gridLeft)
-        : Math.max(1, layout.width - geometry.gridRight),
-      height: Math.max(1, person.bottom - person.top),
-    });
+  geometry.personRows.forEach((person) => {
+    const sourceRow = person.sourceRow;
+    probeRegions.push(personLabelRegion(geometry, person));
 
     const rowTokens = tokens.filter((token) =>
       token.cy >= person.top &&
@@ -859,8 +914,8 @@ export function analyzeScheduleImagePattern(
 
   return {
     strategy: 'date-block-matrix',
-    people: geometry.personRows.map((person, index) => ({
-      sourceRow: index + 1,
+    people: geometry.personRows.map((person) => ({
+      sourceRow: person.sourceRow,
       sourceName: person.sourceName,
       confidence: person.confidence,
     })),
@@ -896,8 +951,7 @@ function dateBlockMatrixStrategy(
 
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
 
-  for (let rowIndex = 0; rowIndex < personRows.length; rowIndex += 1) {
-    const person = personRows[rowIndex];
+  for (const person of personRows) {
     const rowTokens = tokens.filter((token) =>
       token.cy >= person.top &&
       token.cy < person.bottom &&
@@ -936,7 +990,7 @@ function dateBlockMatrixStrategy(
         date: block.date,
         start: start.value,
         end: end.value,
-        sourceRow: rowIndex + 1,
+        sourceRow: person.sourceRow,
         confidence: Math.min(
           person.confidence,
           block.confidence,

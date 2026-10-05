@@ -1,6 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
-import { buildScheduleImageLayoutFixture } from '../test/fixtures/import/sample-image-layout.mjs';
+import {
+  buildScheduleImageLayoutFixture,
+  buildSparseCalendarDateScheduleLayoutFixture,
+} from '../test/fixtures/import/sample-image-layout.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
@@ -56,12 +59,17 @@ try {
     .map((item) => {
       const cy = item.y + item.height / 2;
       const text =
-        item.text === '테스트직원' && Math.abs(cy - targetRowCenter) < 2
-          ? '소소담'
-          : item.text;
+        item.text === '직원A'
+          ? 'wana'
+          : item.text === '테스트직원' && Math.abs(cy - targetRowCenter) < 2
+            ? '소소담'
+            : item.text;
+      const confidence = item.text === '직원A'
+        ? 46
+        : item.confidence * 100;
       return word(
         text,
-        item.confidence * 100,
+        confidence,
         item.x,
         item.y,
         item.x + item.width,
@@ -146,6 +154,30 @@ try {
     { minimumConfidence: 0.18 },
   );
 
+  const corruptedLayout = {
+    ...base,
+    tokens: base.tokens.map((item) =>
+      item.text === '직원A'
+        ? { ...item, text: 'wana', confidence: 0.46 }
+        : item
+    ),
+  };
+  const corruptedProbes =
+    imageModule.inferSchedulePersonLabelProbeRegions(corruptedLayout);
+  expect(
+    corruptedProbes.length === 6,
+    'normal-height structural row must still receive a focused name probe when its OCR label is unusable',
+  );
+
+  const unsafeAnchorLayout =
+    buildSparseCalendarDateScheduleLayoutFixture({ targetRow: 3 });
+  const unsafeAnchorProbes =
+    imageModule.inferSchedulePersonLabelProbeRegions(unsafeAnchorLayout);
+  expect(
+    unsafeAnchorProbes.length === 5,
+    'small auxiliary/unsafe first-row label must remain a structural boundary without becoming a person probe',
+  );
+
   const refined = await extractor.extract({
     name: 'same-layout-family.png',
     type: 'image/png',
@@ -167,6 +199,10 @@ try {
   );
 
   const parsed = imageModule.parseScheduleImageLayout(refined);
+  expect(
+    parsed.detectedPeople.some((person) => person.sourceName === '직원a'),
+    'focused OCR must recover a normal-height person row even when the preliminary label is unusable',
+  );
   expect(
     parsed.detectedPeople.some((person) => person.sourceName === '신입가나다'),
     'row-focused OCR must replace the preliminary misread label with a source label candidate',
@@ -292,6 +328,12 @@ try {
         { date: '2026-08-17', state: 'WORK', start: '14:00', end: '23:30' },
       ]),
     },
+    {
+      sourceName: 'week-e.png',
+      pattern: makePattern('강성배', [
+        { date: '2026-08-24', state: 'INCOMPLETE', start: '09:00', end: null },
+      ]),
+    },
   ]);
 
   expect(
@@ -313,6 +355,20 @@ try {
     batchSummary.people.find((item) => item.sourceName === '소소담')
       ?.classification === 'SINGLE_OR_UNSEEN_LABEL',
     'single unseen labels must remain preserved as possible new employees',
+  );
+  expect(
+    batchSummary.incompleteTimeSuggestions.some(
+      (item) =>
+        item.sourcePersonName === '강성배' &&
+        item.date === '2026-08-24' &&
+        item.knownField === 'start' &&
+        item.knownTime === '09:00' &&
+        item.suggestedField === 'end' &&
+        item.suggestedTime === '21:00' &&
+        item.supportFileCount === 2 &&
+        item.reviewOnly === true,
+    ),
+    'repeated same-person time-pair evidence must produce a review-only incomplete-time suggestion',
   );
 } finally {
   await vite.close();

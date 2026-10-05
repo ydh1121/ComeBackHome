@@ -27,11 +27,26 @@ export interface SchedulePersonPatternSummary {
   endTimes: Array<{ time: string; count: number }>;
 }
 
+export interface ScheduleIncompleteTimeSuggestion {
+  sourceFile: string;
+  sourcePersonName: string;
+  date: string;
+  knownField: 'start' | 'end';
+  knownTime: string;
+  suggestedField: 'start' | 'end';
+  suggestedTime: string;
+  supportCount: number;
+  supportFileCount: number;
+  supportRatio: number;
+  reviewOnly: true;
+}
+
 export interface ScheduleBatchPatternSummary {
   schema: 'comebackhome-schedule-batch-pattern/v1';
   sourceCount: number;
   people: SchedulePersonPatternSummary[];
   labelVariantSuggestions: ScheduleLabelVariantSuggestion[];
+  incompleteTimeSuggestions: ScheduleIncompleteTimeSuggestion[];
 }
 
 function editDistance(left: string, right: string): number {
@@ -72,11 +87,104 @@ function rankedTimes(
     .sort((a, b) => b.count - a.count || a.time.localeCompare(b.time));
 }
 
+interface SourcedScheduleCell {
+  sourceFile: string;
+  cell: ScheduleCellPattern;
+}
+
+function buildIncompleteTimeSuggestions(
+  sourcedCells: SourcedScheduleCell[],
+): ScheduleIncompleteTimeSuggestion[] {
+  const completeByPerson = new Map<string, SourcedScheduleCell[]>();
+
+  for (const item of sourcedCells) {
+    if (
+      item.cell.state !== 'WORK' ||
+      !item.cell.start ||
+      !item.cell.end
+    ) continue;
+    const list = completeByPerson.get(item.cell.sourcePersonName) ?? [];
+    list.push(item);
+    completeByPerson.set(item.cell.sourcePersonName, list);
+  }
+
+  const suggestions: ScheduleIncompleteTimeSuggestion[] = [];
+
+  for (const item of sourcedCells) {
+    const cell = item.cell;
+    if (cell.state !== 'INCOMPLETE') continue;
+
+    const knownField =
+      cell.start && !cell.end
+        ? 'start' as const
+        : cell.end && !cell.start
+          ? 'end' as const
+          : null;
+    if (!knownField) continue;
+
+    const knownTime = knownField === 'start' ? cell.start! : cell.end!;
+    const counterpartField = knownField === 'start' ? 'end' as const : 'start' as const;
+
+    const candidates = (completeByPerson.get(cell.sourcePersonName) ?? [])
+      .filter((candidate) => candidate.cell[knownField] === knownTime);
+
+    if (!candidates.length) continue;
+
+    const counts = new Map<string, {
+      count: number;
+      files: Set<string>;
+    }>();
+
+    for (const candidate of candidates) {
+      const counterpart = candidate.cell[counterpartField];
+      if (!counterpart) continue;
+      const current = counts.get(counterpart) ?? {
+        count: 0,
+        files: new Set<string>(),
+      };
+      current.count += 1;
+      current.files.add(candidate.sourceFile);
+      counts.set(counterpart, current);
+    }
+
+    const ranked = [...counts.entries()]
+      .sort((left, right) => right[1].count - left[1].count);
+    const [suggestedTime, support] = ranked[0] ?? [];
+    if (!suggestedTime || !support) continue;
+
+    const total = ranked.reduce((sum, [, value]) => sum + value.count, 0);
+    const supportRatio = total ? support.count / total : 0;
+
+    if (
+      support.count < 2 ||
+      support.files.size < 2 ||
+      supportRatio < 0.75
+    ) continue;
+
+    suggestions.push({
+      sourceFile: item.sourceFile,
+      sourcePersonName: cell.sourcePersonName,
+      date: cell.date,
+      knownField,
+      knownTime,
+      suggestedField: counterpartField,
+      suggestedTime,
+      supportCount: support.count,
+      supportFileCount: support.files.size,
+      supportRatio: Number(supportRatio.toFixed(4)),
+      reviewOnly: true,
+    });
+  }
+
+  return suggestions;
+}
+
 export function buildScheduleBatchPatternSummary(
   inputs: ScheduleBatchPatternInput[],
 ): ScheduleBatchPatternSummary {
   const filesByLabel = new Map<string, Set<string>>();
   const cellsByLabel = new Map<string, ScheduleCellPattern[]>();
+  const sourcedCells: SourcedScheduleCell[] = [];
 
   for (const input of inputs) {
     if (!input.pattern) continue;
@@ -91,6 +199,10 @@ export function buildScheduleBatchPatternSummary(
       const cells = cellsByLabel.get(cell.sourcePersonName) ?? [];
       cells.push(cell);
       cellsByLabel.set(cell.sourcePersonName, cells);
+      sourcedCells.push({
+        sourceFile: input.sourceName,
+        cell,
+      });
     }
   }
 
@@ -160,5 +272,6 @@ export function buildScheduleBatchPatternSummary(
     sourceCount: inputs.length,
     people,
     labelVariantSuggestions,
+    incompleteTimeSuggestions: buildIncompleteTimeSuggestions(sourcedCells),
   };
 }

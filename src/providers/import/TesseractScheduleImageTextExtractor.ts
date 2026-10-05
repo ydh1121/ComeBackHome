@@ -9,6 +9,7 @@ import type {
 import { classifyScheduleShiftLabel } from './ScheduleImportSemantics';
 import {
   analyzeScheduleImagePattern,
+  inferSchedulePersonLabelProbeRegions,
   parseScheduleImageClock,
   type SchedulePatternProbeRegion,
 } from './StructuredTableImageScheduleRecognizer';
@@ -354,7 +355,10 @@ function regionToken(
   };
 }
 
-function personLabelCandidate(words: OcrWord[]): {
+function personLabelCandidate(
+  words: OcrWord[],
+  regionHeight: number,
+): {
   text: string;
   confidence: number;
 } | null {
@@ -362,6 +366,7 @@ function personLabelCandidate(words: OcrWord[]): {
     .map((word) => ({
       text: String(word.text ?? '').normalize('NFKC').trim(),
       confidence: normalizeConfidence(word.confidence),
+      height: Math.max(0, Math.abs(word.bbox.y1 - word.bbox.y0)),
     }))
     .filter((item) =>
       item.text.length > 0 &&
@@ -370,6 +375,20 @@ function personLabelCandidate(words: OcrWord[]): {
     );
 
   if (!usable.length) return null;
+
+  const heights = usable
+    .map((item) => item.height)
+    .filter((height) => height > 0)
+    .sort((left, right) => left - right);
+  const typicalHeight = heights.length
+    ? heights[Math.floor(heights.length / 2)]
+    : 0;
+
+  // Auxiliary labels in this schedule family use materially smaller text than
+  // employee names. Do not promote those rows into people merely because OCR
+  // returned Korean text with high confidence.
+  if (regionHeight > 0 && typicalHeight / regionHeight < 0.38) return null;
+
   const text = usable.map((item) => item.text.replace(/\s+/g, '')).join('');
   const confidence = usable.reduce((sum, item) => sum + item.confidence, 0) / usable.length;
   if (!/[가-힣a-z]/i.test(text)) return null;
@@ -498,13 +517,8 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
         tokens: mergeTokens(semanticMerged, numeric),
       };
 
-      const initialPattern = analyzeScheduleImagePattern(refinedLayout);
-      if (initialPattern) {
-        const personRegions = initialPattern.probeRegions.filter(
-          (region) => region.kind === 'person-label',
-        );
-
-        if (personRegions.length) {
+      const personRegions = inferSchedulePersonLabelProbeRegions(refinedLayout);
+      if (personRegions.length) {
           await worker.setParameters({
             tessedit_pageseg_mode: String(PSM.SINGLE_LINE),
             tessedit_char_whitelist: '',
@@ -512,15 +526,19 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
           });
 
           for (const region of personRegions) {
+            const rectangle = sourceRegionToRasterRectangle(region, raster);
             const result = await worker.recognize(
               raster.image,
               {
                 rotateAuto: false,
-                rectangle: sourceRegionToRasterRectangle(region, raster),
+                rectangle,
               },
               { text: true, blocks: true },
             );
-            const candidate = personLabelCandidate(flattenWords(result.data));
+            const candidate = personLabelCandidate(
+              flattenWords(result.data),
+              rectangle.height,
+            );
             if (!candidate || candidate.confidence < this.minimumConfidence) continue;
             refinedLayout = {
               ...refinedLayout,
@@ -533,7 +551,7 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
           }
         }
 
-        const renamedPattern = analyzeScheduleImagePattern(refinedLayout);
+      const renamedPattern = analyzeScheduleImagePattern(refinedLayout);
         const numericRegions = (renamedPattern?.probeRegions ?? []).filter(
           (region) => region.kind === 'start' || region.kind === 'end',
         );
@@ -569,7 +587,6 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
             };
           }
         }
-      }
 
       return refinedLayout;
     } finally {
