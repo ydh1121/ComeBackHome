@@ -133,3 +133,5 @@ if (failures.length) {
 }
 
 console.log('phase 5P real workbook import parser verification passed');
+
+// Phase 5P dependency-backed verification trigger.
