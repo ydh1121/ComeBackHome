@@ -24,7 +24,26 @@ function rowCenter(index) {
   return 121.5 + index * 27;
 }
 
-export function buildScheduleImageLayoutFixture() {
+export function transformImageLayout(layout, {
+  scaleX = 1,
+  scaleY = 1,
+  offsetX = 0,
+  offsetY = 0,
+} = {}) {
+  return {
+    width: layout.width * scaleX + Math.max(0, offsetX),
+    height: layout.height * scaleY + Math.max(0, offsetY),
+    tokens: layout.tokens.map((item) => ({
+      ...item,
+      x: item.x * scaleX + offsetX,
+      y: item.y * scaleY + offsetY,
+      width: item.width * scaleX,
+      height: item.height * scaleY,
+    })),
+  };
+}
+
+export function buildScheduleImageLayoutFixture({ targetRow = 3 } = {}) {
   const tokens = [];
   const dates = [
     '2026-08-17',
@@ -43,20 +62,18 @@ export function buildScheduleImageLayoutFixture() {
     tokens.push(centeredToken('쉬는시간', subCenter(day, 2), 94, 58, 18));
   }
 
-  // Real source format may contain red notes between date and column labels.
-  // These are intentionally synthetic and must never become schedule data.
   tokens.push(centeredToken('대체공휴일', dayCenter(0), 67, 86, 18, 0.99));
   tokens.push(centeredToken('실습11/17.5', dayCenter(1), 67, 100, 18, 0.99));
   tokens.push(centeredToken('스케줄확정', dayCenter(5), 67, 90, 18, 0.99));
 
-  const people = ['직원A', '직원B', '직원C', '테스트직원', '직원D', '직원E'];
+  const basePeople = ['직원A', '직원B', '직원C', '직원D', '직원E', '직원F'];
+  const people = [...basePeople];
+  people[targetRow] = '테스트직원';
+
   people.forEach((name, row) => {
-    tokens.push(centeredToken(name, 43, rowCenter(row), 62, 18, row === 3 ? 0.97 : 0.95));
+    tokens.push(centeredToken(name, 43, rowCenter(row), 62, 18, row === targetRow ? 0.97 : 0.95));
   });
 
-  // Target synthetic row mirrors the observed table semantics:
-  // blank/off, 12-23.5, blank/off, 12-23.5, 11-23.5, 10.5-20.5, 10.5-20.
-  const targetRow = 3;
   const target = [
     null,
     ['12', '23.5', '1'],
@@ -74,14 +91,13 @@ export function buildScheduleImageLayoutFixture() {
     });
   });
 
-  // Additional non-target rows keep the fixture multi-person and ensure row isolation.
   [
     { row: 0, day: 0, values: ['14', '23.5', '1'] },
     { row: 1, day: 1, values: ['9', '14', ''] },
     { row: 2, day: 2, values: ['9.5', '21', '1'] },
     { row: 4, day: 4, values: ['9', '21.5', '1'] },
     { row: 5, day: 5, values: ['12', '23.5', '1'] },
-  ].forEach(({ row, day, values }) => {
+  ].filter((item) => item.row !== targetRow).forEach(({ row, day, values }) => {
     values.forEach((value, sub) => {
       if (!value) return;
       tokens.push(centeredToken(value, subCenter(day, sub), rowCenter(row), 42, 18, 0.94));
@@ -93,4 +109,40 @@ export function buildScheduleImageLayoutFixture() {
     height: HEIGHT,
     tokens,
   };
+}
+
+export function buildRowOrientedScheduleLayoutFixture() {
+  const width = 1000;
+  const height = 360;
+  const tokens = [];
+
+  // Deliberately nonstandard column order: date | end | person | start.
+  const columns = {
+    date: 120,
+    end: 350,
+    person: 610,
+    start: 860,
+  };
+
+  tokens.push(centeredToken('근무표 안내 2026', 500, 28, 170, 20, 0.97));
+  tokens.push(centeredToken('날짜', columns.date, 80, 60, 20));
+  tokens.push(centeredToken('퇴근', columns.end, 80, 60, 20));
+  tokens.push(centeredToken('성명', columns.person, 80, 60, 20));
+  tokens.push(centeredToken('출근', columns.start, 80, 60, 20));
+
+  const rows = [
+    ['2026-09-01', '23.5', '직원A', '11'],
+    ['2026-09-02', '20', '테스트직원', '10.5'],
+    ['2026-09-03', '21.5', '직원B', '9'],
+  ];
+
+  rows.forEach((values, index) => {
+    const cy = 135 + index * 62;
+    tokens.push(centeredToken(values[0], columns.date, cy, 110, 20, 0.96));
+    tokens.push(centeredToken(values[1], columns.end, cy, 55, 20, 0.96));
+    tokens.push(centeredToken(values[2], columns.person, cy, 100, 20, 0.97));
+    tokens.push(centeredToken(values[3], columns.start, cy, 55, 20, 0.96));
+  });
+
+  return { width, height, tokens };
 }
