@@ -97,6 +97,7 @@ try {
   expect(batch?.reviewItems.length === 2, 'parsed batch review item count mismatch');
   expect(batch?.reviewItems.every((item) => item.personId === 'mock-person-1'), 'review person ownership mismatch');
   expect(batch?.reviewItems.every((item) => item.detectedPersonId === batch.detectedPeople[0]?.id), 'review detected-person linkage mismatch');
+  expect(batch?.reviewItems.every((item) => item.resolution == null), 'parsed review items must start unreviewed');
 
   const commit = new commitModule.CommitImportReview(imports, schedules);
   const detectedId = batch?.detectedPeople[0]?.id;
@@ -114,6 +115,17 @@ try {
   const rematched = await imports.getBatch(batchId);
   expect(rematched?.reviewItems.every((item) => item.personId === 'mock-person-1'), 'person rematch did not propagate to review items');
 
+  let unreviewedBlocked = false;
+  try {
+    await commit.execute(batchId);
+  } catch (error) {
+    unreviewedBlocked = error instanceof Error && error.message === 'Import contains unreviewed schedules.';
+  }
+  expect(unreviewedBlocked, 'unreviewed schedule decisions must block commit');
+
+  for (const item of rematched?.reviewItems ?? []) {
+    await imports.setResolution(batchId, item.id, 'NEW');
+  }
   await commit.execute(batchId);
   const firstSaved = await schedules.getByDate('mock-person-1', '2099-01-04');
   const secondSaved = await schedules.getByDate('mock-person-1', '2099-01-05');
