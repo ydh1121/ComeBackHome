@@ -1,5 +1,6 @@
 import { handleApiRequest } from './api';
 import { runScheduledTick } from './scheduler';
+import { createProviderRuntime } from './providers/runtime';
 import type { ExecutionContextLike, ScheduledControllerLike, WorkerEnv } from './runtime-types';
 
 export default {
@@ -7,7 +8,8 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
-      return handleApiRequest(request, env);
+      const providerRuntime = createProviderRuntime(env, globalThis.fetch.bind(globalThis));
+      return handleApiRequest(request, env, providerRuntime);
     }
 
     if (env.ASSETS) {
