@@ -99,3 +99,5 @@ if (failures.length) {
 }
 
 console.log('phase 5AD safe compact half-hour recovery verification passed');
+
+// Phase 5AD dependency-backed verification trigger.
