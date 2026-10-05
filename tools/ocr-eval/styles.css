@@ -94,6 +94,11 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+#selection {
+  margin-top: 8px;
+  font-weight: 700;
+}
+
 #privacy {
   margin-top: 6px;
   color: #555;
