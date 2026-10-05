@@ -193,3 +193,5 @@ try {
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }
+
+// Batch QA handoff dependency-backed verification trigger.
