@@ -11,13 +11,18 @@ export class CommitImportReview implements CommitImportReviewAction {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
 
+    const unresolved = batch.reviewItems.filter((item) => item.personId == null);
+    if (unresolved.length) throw new Error('Import contains unresolved people.');
+
     const entries = [];
     for (const item of batch.reviewItems) {
       if (item.resolution === 'KEEP') continue;
-      const current = await this.schedules.getByDate(item.personId, item.date);
+      const personId = item.personId;
+      if (!personId) continue;
+      const current = await this.schedules.getByDate(personId, item.date);
       entries.push({
         id: current?.id ?? crypto.randomUUID(),
-        personId: item.personId,
+        personId,
         date: item.date,
         enabled: true,
         start: item.imported.start,
