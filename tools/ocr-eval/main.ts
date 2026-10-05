@@ -8,13 +8,27 @@ import { SAME_ORIGIN_TESSERACT_ASSETS } from '../../src/providers/import/ocrRunt
 
 const input = document.querySelector<HTMLInputElement>('#schedule-image');
 const runButton = document.querySelector<HTMLButtonElement>('#run');
+const copyAllButton = document.querySelector<HTMLButtonElement>('#copy-all');
+const saveAllButton = document.querySelector<HTMLButtonElement>('#save-all');
 const clearButton = document.querySelector<HTMLButtonElement>('#clear');
 const status = document.querySelector<HTMLElement>('#status');
+const selection = document.querySelector<HTMLElement>('#selection');
 const summary = document.querySelector<HTMLElement>('#summary');
 const parsed = document.querySelector<HTMLElement>('#parsed');
 const tokens = document.querySelector<HTMLElement>('#tokens');
 
-if (!input || !runButton || !clearButton || !status || !summary || !parsed || !tokens) {
+if (
+  !input ||
+  !runButton ||
+  !copyAllButton ||
+  !saveAllButton ||
+  !clearButton ||
+  !status ||
+  !selection ||
+  !summary ||
+  !parsed ||
+  !tokens
+) {
   throw new Error('OCR evaluation harness DOM is incomplete.');
 }
 
@@ -23,12 +37,90 @@ const extractor = new TesseractScheduleImageTextExtractor(
   new BrowserScheduleOcrPreprocessor(),
 );
 
+interface FileEvaluationResult {
+  source: {
+    name: string;
+    type: string;
+    bytes: number;
+  };
+  runtime: {
+    workerPath: string;
+    corePath: string;
+    langPath: string;
+    externalImageUpload: 0;
+    imagePersistence: 0;
+  };
+  image?: {
+    width: number;
+    height: number;
+  };
+  evidence?: {
+    tokenCount: number;
+    averageConfidence: number;
+  };
+  timingMs: {
+    ocr?: number;
+    parser?: number;
+    total: number;
+  };
+  parser:
+    | {
+        result: 'PARSED_REVIEW_REQUIRED';
+        parsed: unknown;
+      }
+    | {
+        result: 'REVIEW_REQUIRED';
+        error: string;
+      }
+    | {
+        result: 'FAILED_CLOSED';
+        error: string;
+      };
+  tokens: unknown[];
+}
+
+interface EvaluationBundle {
+  schema: 'comebackhome-private-ocr-eval/v2';
+  generatedAt: string;
+  runtime: {
+    workerPath: string;
+    corePath: string;
+    langPath: string;
+    externalImageUpload: 0;
+    sourceImagePersistence: 0;
+    derivedEvidenceExport: 'user-triggered-only';
+  };
+  fileCount: number;
+  files: FileEvaluationResult[];
+}
+
+let latestBundle: EvaluationBundle | null = null;
+
+function runtimeMetadata(): FileEvaluationResult['runtime'] {
+  return {
+    workerPath: SAME_ORIGIN_TESSERACT_ASSETS.workerPath,
+    corePath: SAME_ORIGIN_TESSERACT_ASSETS.corePath,
+    langPath: SAME_ORIGIN_TESSERACT_ASSETS.langPath,
+    externalImageUpload: 0,
+    imagePersistence: 0,
+  };
+}
+
+function updateSelection(): void {
+  const count = input.files?.length ?? 0;
+  selection.textContent = `선택된 이미지 ${count}개`;
+}
+
 function reset(): void {
   input.value = '';
+  latestBundle = null;
   status.textContent = '대기 중';
+  selection.textContent = '선택된 이미지 0개';
   summary.textContent = '아직 실행하지 않았습니다.';
   parsed.textContent = '아직 실행하지 않았습니다.';
   tokens.textContent = '아직 실행하지 않았습니다.';
+  copyAllButton.disabled = true;
+  saveAllButton.disabled = true;
 }
 
 function formatError(error: unknown): string {
@@ -37,21 +129,50 @@ function formatError(error: unknown): string {
     : String(error);
 }
 
-async function runEvaluation(): Promise<void> {
-  const file = input.files?.[0];
-  if (!file) {
-    status.textContent = '이미지를 먼저 선택하세요.';
-    return;
+function bundleText(): string {
+  if (!latestBundle) {
+    throw new Error('복사할 QA 결과가 없습니다.');
   }
+  return JSON.stringify(latestBundle, null, 2);
+}
 
-  runButton.disabled = true;
-  input.disabled = true;
-  status.textContent = '로컬 OCR 실행 중…';
-  summary.textContent = '처리 중…';
-  parsed.textContent = '처리 중…';
-  tokens.textContent = '처리 중…';
+function renderBundle(bundle: EvaluationBundle): void {
+  summary.textContent = JSON.stringify({
+    schema: bundle.schema,
+    generatedAt: bundle.generatedAt,
+    runtime: bundle.runtime,
+    fileCount: bundle.fileCount,
+    files: bundle.files.map((item) => ({
+      source: item.source,
+      image: item.image,
+      evidence: item.evidence,
+      timingMs: item.timingMs,
+      parserResult: item.parser.result,
+    })),
+  }, null, 2);
 
+  parsed.textContent = JSON.stringify(
+    bundle.files.map((item) => ({
+      sourceName: item.source.name,
+      parser: item.parser,
+    })),
+    null,
+    2,
+  );
+
+  tokens.textContent = JSON.stringify(
+    bundle.files.map((item) => ({
+      sourceName: item.source.name,
+      tokens: item.tokens,
+    })),
+    null,
+    2,
+  );
+}
+
+async function evaluateFile(file: File): Promise<FileEvaluationResult> {
   const startedAt = performance.now();
+  const runtime = runtimeMetadata();
 
   try {
     const layout = await extractor.extract(file);
@@ -73,19 +194,13 @@ async function runEvaluation(): Promise<void> {
       ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
       : 0;
 
-    summary.textContent = JSON.stringify({
+    return {
       source: {
         name: file.name,
         type: file.type,
         bytes: file.size,
       },
-      runtime: {
-        workerPath: SAME_ORIGIN_TESSERACT_ASSETS.workerPath,
-        corePath: SAME_ORIGIN_TESSERACT_ASSETS.corePath,
-        langPath: SAME_ORIGIN_TESSERACT_ASSETS.langPath,
-        externalImageUpload: 0,
-        imagePersistence: 0,
-      },
+      runtime,
       image: {
         width: layout.width,
         height: layout.height,
@@ -99,39 +214,155 @@ async function runEvaluation(): Promise<void> {
         parser: Number(parserElapsedMs.toFixed(1)),
         total: Number((performance.now() - startedAt).toFixed(1)),
       },
-    }, null, 2);
-
-    parsed.textContent = parserError
-      ? JSON.stringify({
-          result: 'REVIEW_REQUIRED',
-          error: parserError,
-        }, null, 2)
-      : JSON.stringify({
-          result: 'PARSED_REVIEW_REQUIRED',
-          parsed: parserResult,
-        }, null, 2);
-
-    tokens.textContent = JSON.stringify(layout.tokens, null, 2);
-    status.textContent = parserError
-      ? 'OCR 완료 · 구조 자동판정 실패 · 수동 검토 필요'
-      : 'OCR + adaptive parser 완료 · 검토 필요';
+      parser: parserError
+        ? {
+            result: 'REVIEW_REQUIRED',
+            error: parserError,
+          }
+        : {
+            result: 'PARSED_REVIEW_REQUIRED',
+            parsed: parserResult,
+          },
+      tokens: layout.tokens,
+    };
   } catch (error) {
-    const message = formatError(error);
-    status.textContent = '실패 · 결과를 일정으로 추정하지 않음';
-    summary.textContent = JSON.stringify({
-      result: 'FAILED_CLOSED',
-      error: message,
-    }, null, 2);
-    parsed.textContent = '생성된 일정 없음';
-    tokens.textContent = '신뢰 가능한 OCR evidence 없음';
+    return {
+      source: {
+        name: file.name,
+        type: file.type,
+        bytes: file.size,
+      },
+      runtime,
+      timingMs: {
+        total: Number((performance.now() - startedAt).toFixed(1)),
+      },
+      parser: {
+        result: 'FAILED_CLOSED',
+        error: formatError(error),
+      },
+      tokens: [],
+    };
+  }
+}
+
+async function runEvaluation(): Promise<void> {
+  const files = Array.from(input.files ?? []);
+  if (!files.length) {
+    status.textContent = '이미지를 먼저 선택하세요.';
+    return;
+  }
+
+  runButton.disabled = true;
+  input.disabled = true;
+  copyAllButton.disabled = true;
+  saveAllButton.disabled = true;
+  latestBundle = null;
+  summary.textContent = '처리 중…';
+  parsed.textContent = '처리 중…';
+  tokens.textContent = '처리 중…';
+
+  const results: FileEvaluationResult[] = [];
+
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      status.textContent = `로컬 OCR 실행 중… ${index + 1}/${files.length} · ${file.name}`;
+      results.push(await evaluateFile(file));
+    }
+
+    latestBundle = {
+      schema: 'comebackhome-private-ocr-eval/v2',
+      generatedAt: new Date().toISOString(),
+      runtime: {
+        workerPath: SAME_ORIGIN_TESSERACT_ASSETS.workerPath,
+        corePath: SAME_ORIGIN_TESSERACT_ASSETS.corePath,
+        langPath: SAME_ORIGIN_TESSERACT_ASSETS.langPath,
+        externalImageUpload: 0,
+        sourceImagePersistence: 0,
+        derivedEvidenceExport: 'user-triggered-only',
+      },
+      fileCount: results.length,
+      files: results,
+    };
+
+    renderBundle(latestBundle);
+    copyAllButton.disabled = false;
+    saveAllButton.disabled = false;
+
+    const parsedCount = results.filter(
+      (item) => item.parser.result === 'PARSED_REVIEW_REQUIRED',
+    ).length;
+    const reviewCount = results.filter(
+      (item) => item.parser.result === 'REVIEW_REQUIRED',
+    ).length;
+    const failedCount = results.filter(
+      (item) => item.parser.result === 'FAILED_CLOSED',
+    ).length;
+
+    status.textContent =
+      `전체 완료 · ${results.length}개 · parsed ${parsedCount} · review ${reviewCount} · failed ${failedCount}`;
   } finally {
     runButton.disabled = false;
     input.disabled = false;
   }
 }
 
+async function copyAllResults(): Promise<void> {
+  const text = bundleText();
+
+  try {
+    await navigator.clipboard.writeText(text);
+    status.textContent = '전체 QA 결과를 클립보드에 복사했습니다. ChatGPT에 한 번만 붙여넣으면 됩니다.';
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const copied = document.execCommand('copy');
+    area.remove();
+    if (!copied) {
+      throw new Error('클립보드 복사에 실패했습니다. JSON 저장 버튼을 사용하세요.');
+    }
+    status.textContent = '전체 QA 결과를 클립보드에 복사했습니다. ChatGPT에 한 번만 붙여넣으면 됩니다.';
+  }
+}
+
+function saveAllResults(): void {
+  const text = bundleText();
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  anchor.href = url;
+  anchor.download = `ComeBackHome-OCR-QA-${timestamp}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  status.textContent = '전체 QA 결과 JSON을 저장했습니다. 필요하면 그 파일 하나만 첨부하면 됩니다.';
+}
+
+input.addEventListener('change', updateSelection);
+
 runButton.addEventListener('click', () => {
   void runEvaluation();
+});
+
+copyAllButton.addEventListener('click', () => {
+  void copyAllResults().catch((error) => {
+    status.textContent = formatError(error);
+  });
+});
+
+saveAllButton.addEventListener('click', () => {
+  try {
+    saveAllResults();
+  } catch (error) {
+    status.textContent = formatError(error);
+  }
 });
 
 clearButton.addEventListener('click', reset);
