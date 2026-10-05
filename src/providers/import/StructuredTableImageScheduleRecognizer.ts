@@ -133,11 +133,25 @@ export function parseScheduleHour(value: string): string | null {
   }
 
   const decimal = /^(\d{1,2})(?:\.(0|5))?$/.exec(normalized);
-  if (!decimal) return null;
+  if (decimal) {
+    const hour = Number(decimal[1]);
+    if (hour <= 23) {
+      return String(hour).padStart(2, '0') + ':' + (decimal[2] === '5' ? '30' : '00');
+    }
+  }
 
-  const hour = Number(decimal[1]);
-  if (hour > 23) return null;
-  return String(hour).padStart(2, '0') + ':' + (decimal[2] === '5' ? '30' : '00');
+  // Numeric OCR can lose the decimal point from half-hour notation.
+  // Recover only when the raw integer is impossible as a 24-hour value and
+  // removing the final 5 produces an otherwise valid hour.
+  const compactHalfHour = /^(\d{1,2})5$/.exec(normalized);
+  if (compactHalfHour && Number(normalized) > 23) {
+    const hour = Number(compactHalfHour[1]);
+    if (hour <= 23) {
+      return String(hour).padStart(2, '0') + ':30';
+    }
+  }
+
+  return null;
 }
 
 function matchesAlias(value: string, aliases: string[]): boolean {
