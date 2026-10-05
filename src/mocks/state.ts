@@ -101,7 +101,7 @@ export const MOCK_FIXTURE: MockState = {
       date: '2026-10-04',
       existing: { start: '14:00', end: '22:00' },
       imported: { start: '13:00', end: '21:30' },
-      resolution: 'NEW',
+      resolution: null,
     }],
     committed: false,
   }],
