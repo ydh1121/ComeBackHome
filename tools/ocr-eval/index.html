@@ -20,14 +20,17 @@
       <section class="panel controls">
         <label>
           <span>근무표 이미지 선택</span>
-          <input id="schedule-image" type="file" accept="image/png,image/jpeg,image/webp" />
+          <input id="schedule-image" type="file" accept="image/png,image/jpeg,image/webp" multiple />
         </label>
-        <button id="run" type="button">로컬 OCR 실행</button>
+        <button id="run" type="button">선택 이미지 전체 OCR 실행</button>
+        <button id="copy-all" type="button" class="secondary" disabled>전체 QA 결과 복사</button>
+        <button id="save-all" type="button" class="secondary" disabled>결과 JSON 저장</button>
         <button id="clear" type="button" class="secondary">결과 지우기</button>
       </section>
 
       <section class="panel status-panel">
         <strong id="status">대기 중</strong>
+        <p id="selection">선택된 이미지 0개</p>
         <p id="privacy">외부 전송 0 · source image persistence 0 · review-only</p>
       </section>
 
