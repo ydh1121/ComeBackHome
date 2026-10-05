@@ -1,6 +1,6 @@
 # ComeBackHome Runtime Modes
 
-Status: Phase 5F / pre-deployment
+Status: Phase 5P / pre-deployment
 
 ## Default
 
@@ -17,8 +17,11 @@ Status: Phase 5F / pre-deployment
 - people, schedules, places and persisted commute state use same-origin `/api/*`;
 - notification rules use the Worker API;
 - browser notification permission/subscription state remains client-runtime state;
-- Today/ETA, automatic route candidates, search providers and import preview remain mock/runtime-only;
-- import commit is deliberately disabled while the import parser is still mock-backed;
+- Today/ETA and automatic route candidates remain runtime/provider-derived rather than D1 snapshots;
+- import preview remains client-runtime state and is not persisted to D1;
+- real XLSX parsing runs through WorkbookParser before import review;
+- a reviewed workbook-derived batch may commit schedule rows through the Worker API/D1 batch boundary;
+- image schedule recognition remains unavailable and image files are surfaced as explicit errors;
 - browser push adapter and push-subscription HTTP transport remain inactive.
 
 The API base is not configurable from the client. Requests are same-origin and always use `/api`.
