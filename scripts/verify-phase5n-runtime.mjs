@@ -5,6 +5,23 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 
+const read = async (path) => (await import('node:fs/promises')).readFile(new URL(path, import.meta.url), 'utf8');
+const compositionSource = await read('../src/app/composition.ts');
+const runtimeSource = await read('../src/providers/runtime/ProviderRuntimeRepositories.ts');
+
+for (const text of [
+  'new HttpTransitRouteProvider(client)',
+  'new HttpRealtimeBusProvider(client)',
+  'new HttpRealtimeSubwayProvider(client)',
+  'new ProviderCommuteRepository(persistedCommute, places, routeProvider)',
+  'new ProviderTodayRepository(',
+]) {
+  expect(compositionSource.includes(text), 'Phase5N composition missing ' + text);
+}
+expect(runtimeSource.includes("status: 'UNKNOWN'"), 'UNKNOWN ETA boundary missing');
+expect(runtimeSource.includes(": 'FALLBACK';"), 'default FALLBACK ETA boundary missing');
+expect(!runtimeSource.includes('fetch('), 'application provider runtime must not perform network fetch directly');
+
 const vite = await createViteServer({
   root,
   appType: 'custom',
