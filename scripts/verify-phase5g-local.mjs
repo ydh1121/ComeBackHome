@@ -127,7 +127,7 @@ try {
   await access(wranglerCommand);
 
   await run(npmCommand, ['run', 'build'], {
-    env: { VITE_CBH_RUNTIME: 'api' },
+    env: { VITE_CBH_RUNTIME: 'api', VITE_CBH_PROVIDER_RUNTIME: 'mock' },
   });
 
   await run(wranglerCommand, [
@@ -174,6 +174,17 @@ try {
   assert(Array.isArray(initialBootstrap.people), 'bootstrap people must be an array');
   assert(initialBootstrap.productTimezone === 'Asia/Seoul', 'bootstrap product timezone mismatch');
 
+  const providerStatus = await requestJson('/api/providers/status');
+  assert(providerStatus.enabled === false, 'local provider runtime must remain disabled');
+  assert(providerStatus.source === 'unconfigured', 'disabled provider status source mismatch');
+
+  const disabledProviderResponse = await originalFetch(
+    origin + '/api/providers/place-search?q=' + encodeURIComponent('phase5h'),
+  );
+  const disabledProviderPayload = await disabledProviderResponse.json();
+  assert(disabledProviderResponse.status === 503, 'disabled provider endpoint must fail with HTTP 503');
+  assert(disabledProviderPayload?.error === 'Provider runtime is disabled.', 'disabled provider error contract mismatch');
+
   const created = await requestJson('/api/people', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -190,7 +201,28 @@ try {
     server: { middlewareMode: true },
   });
   const composition = await vite.ssrLoadModule('/src/app/composition.ts');
-  const services = await composition.createHybridApiApplicationServices();
+  const services = await composition.createHybridApiApplicationServices('mock');
+
+  let invalidProviderCombinationBlocked = false;
+  try {
+    await composition.createApplicationServices('mock', 'api');
+  } catch (error) {
+    invalidProviderCombinationBlocked = error instanceof Error &&
+      error.message === 'Provider API runtime requires VITE_CBH_RUNTIME=api.';
+  }
+  assert(invalidProviderCombinationBlocked, 'provider API mode must require API persistence runtime');
+
+  const httpClientModule = await vite.ssrLoadModule('/src/providers/http/HttpJsonClient.ts');
+  const httpProvidersModule = await vite.ssrLoadModule('/src/providers/http/HttpDataProviders.ts');
+  const providerClient = new httpClientModule.HttpJsonClient('/api');
+  const placeProvider = new httpProvidersModule.HttpPlaceSearchProvider(providerClient);
+  let providerTransportBlocked = false;
+  try {
+    await placeProvider.search('phase5h');
+  } catch (error) {
+    providerTransportBlocked = error instanceof Error && error.message === 'Provider runtime is disabled.';
+  }
+  assert(providerTransportBlocked, 'same-origin provider transport must fail closed while Worker provider runtime is disabled');
 
   assert(services.runtime.mode === 'hybrid-api', 'hybrid mode metadata mismatch');
   assert(services.runtime.persistence === 'worker-api', 'hybrid persistence metadata mismatch');
@@ -318,6 +350,9 @@ try {
       'notification persisted/local split',
       'hybrid import commit safety gate',
       'Workers Static Assets SPA shell',
+      'provider runtime status disabled by default',
+      'provider API mode requires API persistence runtime',
+      'same-origin provider transport fail-closed boundary',
     ],
   }, null, 2));
 } finally {
