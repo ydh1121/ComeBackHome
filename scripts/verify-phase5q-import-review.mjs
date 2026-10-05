@@ -144,3 +144,5 @@ if (failures.length) {
 }
 
 console.log('phase 5Q explicit multi-item import review verification passed');
+
+// Phase 5Q dependency-backed verification trigger.
