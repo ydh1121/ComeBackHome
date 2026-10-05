@@ -38,7 +38,7 @@ for (const text of [
 for (const text of [
   "url.pathname === '/api'",
   "url.pathname.startsWith('/api/')",
-  'handleApiRequest(request, env)',
+  'handleApiRequest(request, env, providerRuntime)',
   'env.ASSETS.fetch(request)',
   'async scheduled(',
   'ctx.waitUntil(runScheduledTick',
@@ -49,7 +49,7 @@ for (const text of [
 for (const text of [
   "env.PUSH_DELIVERY_ENABLED !== '1'",
   "status: 'disabled'",
-  "status: 'not-configured'",
+  "emptyResult('not-configured', scheduledAt)",
   'processNotificationOutbox',
   'dependencies.jobs.claimDue(',
   'dependencies.jobs.markSent(',
