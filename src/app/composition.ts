@@ -4,12 +4,13 @@ import { NotificationService, PersonSelectionService, PersonService, ScheduleSer
 import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
 import { BusRouteService, CommuteService, PlaceService, TransitSearchService } from '../application/services/CommuteWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
-import type { AppRuntimeMode } from '../config/runtime';
+import type { AppRuntimeMode, ProviderRuntimeMode } from '../config/runtime';
 import { MockImportFileSelectionAction } from '../mocks/import-actions';
 import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPushSubscriptionProvider } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
+import { HttpPlaceSearchProvider, HttpTransitAccessSearchProvider } from '../providers/http/HttpDataProviders';
 import { HttpJsonClient } from '../providers/http/HttpJsonClient';
 import {
   HttpCommuteRepository,
@@ -94,7 +95,9 @@ export function createMockApplicationServices(): ApplicationServices {
   };
 }
 
-export async function createHybridApiApplicationServices(): Promise<ApplicationServices> {
+export async function createHybridApiApplicationServices(
+  providerMode: ProviderRuntimeMode = 'mock',
+): Promise<ApplicationServices> {
   const runtimeStore = new MockStateStore(structuredClone(MOCK_FIXTURE));
   const changes = createChangeSignalController();
   runtimeStore.subscribe(() => changes.emit());
@@ -135,14 +138,18 @@ export async function createHybridApiApplicationServices(): Promise<ApplicationS
 
   const queries = new ComeBackHomeQueries(repositories, personSelection);
   const importWorkflow = new ImportWorkflowService(imports, people);
-  const placeSearchProvider = new MockPlaceSearchProvider();
-  const transitSearchProvider = new MockTransitAccessSearchProvider();
+  const placeSearchProvider = providerMode === 'api'
+    ? new HttpPlaceSearchProvider(client)
+    : new MockPlaceSearchProvider();
+  const transitSearchProvider = providerMode === 'api'
+    ? new HttpTransitAccessSearchProvider(client)
+    : new MockTransitAccessSearchProvider();
 
   return {
     runtime: {
       mode: 'hybrid-api',
       persistence: 'worker-api',
-      providerData: 'mock',
+      providerData: providerMode === 'api' ? 'worker-api' : 'mock',
     },
     repositories,
     queries,
@@ -174,6 +181,14 @@ export async function createHybridApiApplicationServices(): Promise<ApplicationS
   };
 }
 
-export async function createApplicationServices(mode: AppRuntimeMode): Promise<ApplicationServices> {
-  return mode === 'api' ? createHybridApiApplicationServices() : createMockApplicationServices();
+export async function createApplicationServices(
+  mode: AppRuntimeMode,
+  providerMode: ProviderRuntimeMode = 'mock',
+): Promise<ApplicationServices> {
+  if (providerMode === 'api' && mode !== 'api') {
+    throw new Error('Provider API runtime requires VITE_CBH_RUNTIME=api.');
+  }
+  return mode === 'api'
+    ? createHybridApiApplicationServices(providerMode)
+    : createMockApplicationServices();
 }
