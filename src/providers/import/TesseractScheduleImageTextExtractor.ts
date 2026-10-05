@@ -6,6 +6,7 @@ import type {
   ImageTextToken,
   PreparedImageRaster,
 } from '../../application/contracts/providers';
+import { classifyScheduleShiftLabel } from './ScheduleImportSemantics';
 
 interface OcrBbox {
   x0: number;
@@ -275,6 +276,39 @@ function mergeTokens(
     .sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
+function mergeSupplementalScheduleHeaders(
+  general: ImageTextToken[],
+  supplemental: ImageTextToken[],
+): ImageTextToken[] {
+  const merged = [...general];
+
+  for (const candidate of supplemental) {
+    const candidateKind = classifyScheduleShiftLabel(candidate.text);
+    if (!candidateKind) continue;
+
+    const duplicate = merged
+      .map((token, index) => ({
+        token,
+        index,
+        overlap: intersectionOverUnion(token, candidate),
+        kind: classifyScheduleShiftLabel(token.text),
+      }))
+      .filter((item) => item.overlap >= 0.42 && item.kind === candidateKind)
+      .sort((a, b) => b.overlap - a.overlap)[0];
+
+    if (!duplicate) {
+      merged.push(candidate);
+      continue;
+    }
+
+    if (candidate.confidence > duplicate.token.confidence) {
+      merged[duplicate.index] = candidate;
+    }
+  }
+
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
 export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
   private readonly languages: string[];
   private readonly minimumConfidence: number;
@@ -303,6 +337,35 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
         { text: true, blocks: true },
       );
 
+      const general = flattenWords(generalResult.data)
+        .map((word) => toToken(word, raster))
+        .filter((token): token is ImageTextToken => token != null)
+        .filter((token) => token.confidence >= this.minimumConfidence);
+
+      const generalHeaderKinds = new Set(
+        general
+          .map((token) => classifyScheduleShiftLabel(token.text))
+          .filter((kind): kind is 'start' | 'end' | 'rest' => kind != null),
+      );
+
+      let semanticHeaders: ImageTextToken[] = [];
+      if (!generalHeaderKinds.has('start') || !generalHeaderKinds.has('end')) {
+        await worker.setParameters({
+          tessedit_pageseg_mode: String(PSM.AUTO),
+          preserve_interword_spaces: '1',
+        });
+        const semanticResult = await worker.recognize(
+          raster.image,
+          { rotateAuto: true },
+          { text: true, blocks: true },
+        );
+        semanticHeaders = flattenWords(semanticResult.data)
+          .map((word) => toToken(word, raster))
+          .filter((token): token is ImageTextToken => token != null)
+          .filter((token) => token.confidence >= this.minimumConfidence)
+          .filter((token) => classifyScheduleShiftLabel(token.text) != null);
+      }
+
       await worker.setParameters({
         tessedit_pageseg_mode: String(PSM.SPARSE_TEXT),
         tessedit_char_whitelist: '0123456789.,:/-',
@@ -314,21 +377,18 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
         { text: true, blocks: true },
       );
 
-      const general = flattenWords(generalResult.data)
-        .map((word) => toToken(word, raster))
-        .filter((token): token is ImageTextToken => token != null)
-        .filter((token) => token.confidence >= this.minimumConfidence);
-
       const numeric = flattenWords(numericResult.data)
         .map((word) => toToken(word, raster))
         .filter((token): token is ImageTextToken => token != null)
         .filter((token) => token.confidence >= this.minimumConfidence)
         .filter((token) => numericShape(token.text));
 
+      const semanticMerged = mergeSupplementalScheduleHeaders(general, semanticHeaders);
+
       return {
         width: raster.sourceWidth,
         height: raster.sourceHeight,
-        tokens: mergeTokens(general, numeric),
+        tokens: mergeTokens(semanticMerged, numeric),
       };
     } finally {
       await worker.terminate();
