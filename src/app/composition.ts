@@ -10,7 +10,13 @@ import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../moc
 import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPushSubscriptionProvider } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
-import { HttpPlaceSearchProvider, HttpTransitAccessSearchProvider } from '../providers/http/HttpDataProviders';
+import {
+  HttpPlaceSearchProvider,
+  HttpRealtimeBusProvider,
+  HttpRealtimeSubwayProvider,
+  HttpTransitAccessSearchProvider,
+  HttpTransitRouteProvider,
+} from '../providers/http/HttpDataProviders';
 import { HttpJsonClient } from '../providers/http/HttpJsonClient';
 import {
   HttpCommuteRepository,
@@ -20,6 +26,7 @@ import {
   HttpScheduleRepository,
   HybridCommuteRepository,
 } from '../providers/http/HttpRepositories';
+import { ProviderCommuteRepository, ProviderTodayRepository } from '../providers/runtime/ProviderRuntimeRepositories';
 import { createChangeSignalController } from './changeSignal';
 
 const SELECTED_PERSON_STORAGE_KEY = 'cbh:selected-person-id';
@@ -108,10 +115,22 @@ export async function createHybridApiApplicationServices(
   const places = new HttpPlaceRepository(client);
   const persistedCommute = new HttpCommuteRepository(client);
   const runtimeCommute = new MockCommuteRepository(runtimeStore);
-  const commute = new HybridCommuteRepository(persistedCommute, runtimeCommute);
+  const routeProvider = providerMode === 'api' ? new HttpTransitRouteProvider(client) : null;
+  const realtimeBusProvider = providerMode === 'api' ? new HttpRealtimeBusProvider(client) : null;
+  const realtimeSubwayProvider = providerMode === 'api' ? new HttpRealtimeSubwayProvider(client) : null;
+  const commute = providerMode === 'api' && routeProvider
+    ? new ProviderCommuteRepository(persistedCommute, places, routeProvider)
+    : new HybridCommuteRepository(persistedCommute, runtimeCommute);
   const imports = new MockImportRepository(runtimeStore);
   const notifications = new HttpNotificationRepository(client, () => changes.emit());
-  const today = new MockTodayRepository(runtimeStore);
+  const today = providerMode === 'api' && realtimeBusProvider && realtimeSubwayProvider
+    ? new ProviderTodayRepository(
+        schedules,
+        commute,
+        realtimeBusProvider,
+        realtimeSubwayProvider,
+      )
+    : new MockTodayRepository(runtimeStore);
 
   const repositories: RepositoryBundle = {
     people,
