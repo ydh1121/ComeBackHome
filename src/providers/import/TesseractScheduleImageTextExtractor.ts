@@ -252,16 +252,19 @@ function mergeTokens(
     }
 
     const existing = best.token;
+
+    // Never let a numeric-only pass erase semantic text such as a person name,
+    // schedule label, or special-note string that happens to contain numbers.
+    if (!numericShape(existing.text)) {
+      continue;
+    }
+
     const preferNumeric =
-      numericShape(candidate.text) &&
+      candidate.confidence > existing.confidence + 0.08 ||
       (
-        !numericShape(existing.text) ||
-        candidate.confidence > existing.confidence + 0.08 ||
-        (
-          explicitSchedulePunctuation(candidate.text) &&
-          !explicitSchedulePunctuation(existing.text) &&
-          candidate.confidence >= existing.confidence - 0.12
-        )
+        explicitSchedulePunctuation(candidate.text) &&
+        !explicitSchedulePunctuation(existing.text) &&
+        candidate.confidence >= existing.confidence - 0.12
       );
 
     if (preferNumeric) merged[best.index] = candidate;
