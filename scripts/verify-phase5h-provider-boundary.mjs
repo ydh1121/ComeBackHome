@@ -15,6 +15,7 @@ const workerTypes = await read('../worker/runtime-types.ts');
 const workerApi = await read('../worker/api.ts');
 const wranglerLocal = JSON.parse(await read('../wrangler.local.jsonc'));
 const docs = await read('../docs/provider-runtime.md');
+const normalizedDocs = docs.replaceAll('`', '');
 
 for (const text of [
   "export type ProviderRuntimeMode = 'mock' | 'api'",
@@ -85,7 +86,7 @@ for (const text of [
   'PROVIDER_RUNTIME_ENABLED=0',
   'no external provider request',
 ]) {
-  expect(docs.includes(text), 'provider runtime docs missing ' + text);
+  expect(normalizedDocs.includes(text), 'provider runtime docs missing ' + text);
 }
 
 if (failures.length) {
