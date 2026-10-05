@@ -73,7 +73,13 @@ export async function handleApiRequest(request: Request, env: WorkerEnv): Promis
 
       if (
         segments.length === 3 &&
-        (segments[2] === 'place-search' || segments[2] === 'transit-search')
+        (
+          segments[2] === 'place-search' ||
+          segments[2] === 'transit-search' ||
+          segments[2] === 'routes' ||
+          segments[2] === 'bus-arrivals' ||
+          segments[2] === 'subway-arrivals'
+        )
       ) {
         if (!enabled) {
           return json({ error: 'Provider runtime is disabled.' }, 503);
