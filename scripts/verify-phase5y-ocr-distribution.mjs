@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import {
   access,
   cp,
@@ -145,6 +146,7 @@ try {
   );
 
   let servedBytes = 0;
+  let transparentlyDecodedGzipFiles = 0;
   for (const file of stagedManifest.files) {
     const response = await fetch(origin + publicRuntimeBase + file.path, {
       redirect: 'error',
@@ -156,9 +158,35 @@ try {
     );
 
     const data = Buffer.from(await response.arrayBuffer());
-    assert(data.byteLength === file.bytes, 'Served OCR byte size mismatch: ' + file.path);
-    assert(sha256(data) === file.sha256, 'Served OCR SHA-256 mismatch: ' + file.path);
-    servedBytes += data.byteLength;
+    const distFile = join(tempDist, 'ocr', runtimeId, file.path);
+    const expectedCompressed = await readFile(distFile);
+
+    if (data.byteLength === file.bytes && sha256(data) === file.sha256) {
+      servedBytes += data.byteLength;
+      continue;
+    }
+
+    if (file.path.endsWith('.traineddata.gz')) {
+      const encoding = String(response.headers.get('content-encoding') ?? '').toLowerCase();
+      const expectedRaw = gunzipSync(expectedCompressed);
+      assert(
+        encoding.includes('gzip'),
+        'Traineddata body changed without gzip content-encoding: ' + file.path,
+      );
+      assert(
+        data.byteLength === expectedRaw.byteLength,
+        'Transparently decoded traineddata byte size mismatch: ' + file.path,
+      );
+      assert(
+        sha256(data) === sha256(expectedRaw),
+        'Transparently decoded traineddata SHA-256 mismatch: ' + file.path,
+      );
+      transparentlyDecodedGzipFiles += 1;
+      servedBytes += data.byteLength;
+      continue;
+    }
+
+    throw new Error('Served OCR byte/hash mismatch: ' + file.path);
   }
 
   const source = await readFile(
@@ -185,6 +213,7 @@ try {
     verifiedFiles: stagedManifest.files.length,
     builtBytes: distBytes,
     servedBytes,
+    transparentlyDecodedGzipFiles,
     sameOriginOnly: true,
     productionActivation: false,
     externalImageUpload: 0,
