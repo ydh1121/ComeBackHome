@@ -178,6 +178,13 @@ function isLikelyPersonName(value: string): boolean {
   return /[가-힣a-z]/i.test(value);
 }
 
+function isUsablePersonRowLabel(value: string, confidence: number): boolean {
+  // This filters OCR row-label quality only. It never establishes a real
+  // person identity. Identity resolution belongs to the import matching step.
+  if (/[가-힣]/.test(value)) return value.length >= 2 && confidence >= 0.68;
+  return /^[a-z][a-z.'-]*$/i.test(value) && value.length >= 2 && confidence >= 0.9;
+}
+
 function average(values: number[]): number {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -566,24 +573,13 @@ function dateBlockMatrixStrategy(
       if (!names.length) return null;
       const sourceName = names.map((token) => token.normalized).join('');
       const confidence = average(names.map((token) => token.confidence));
-      const hasHangul = /[가-힣]/.test(sourceName);
-      const trustedIdentity = hasHangul
-        ? sourceName.length >= 2 && confidence >= 0.68
-        : /^[a-z][a-z.'-]*$/i.test(sourceName) &&
-          sourceName.length >= 2 &&
-          confidence >= 0.9;
-      return {
-        sourceName,
-        cy: row.cy,
-        confidence,
-        trustedIdentity,
-      };
+      if (!isUsablePersonRowLabel(sourceName, confidence)) return null;
+      return { sourceName, cy: row.cy, confidence };
     })
     .filter((row): row is {
       sourceName: string;
       cy: number;
       confidence: number;
-      trustedIdentity: boolean;
     } => row != null);
 
   if (!nameRows.length) return null;
@@ -594,12 +590,10 @@ function dateBlockMatrixStrategy(
     bottom: index === nameRows.length - 1 ? layout.height : (row.cy + nameRows[index + 1].cy) / 2,
   }));
 
-  const detectedPeople: ParsedImportPerson[] = personRows
-    .filter((row) => row.trustedIdentity)
-    .map((row) => ({
-      sourceName: row.sourceName,
-      confidence: row.confidence,
-    }));
+  const detectedPeople: ParsedImportPerson[] = personRows.map((row) => ({
+    sourceName: row.sourceName,
+    confidence: row.confidence,
+  }));
 
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
 
@@ -611,8 +605,6 @@ function dateBlockMatrixStrategy(
       token.cx >= gridLeft &&
       token.cx < gridRight
     );
-
-    if (!person.trustedIdentity) continue;
 
     for (const block of blocks) {
       let start: { value: string; confidence: number } | null = null;

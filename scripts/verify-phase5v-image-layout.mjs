@@ -106,6 +106,23 @@ try {
     'target person must not depend on original row index',
   );
 
+  const unseenSourceName = '처음보는신규직원';
+  const unseenLayout = buildScheduleImageLayoutFixture({ targetRow: 4 });
+  unseenLayout.tokens = unseenLayout.tokens.map((item) =>
+    item.text === '테스트직원'
+      ? { ...item, text: unseenSourceName, confidence: 0.97 }
+      : item
+  );
+  const unseenParsed = imageModule.parseScheduleImageLayout(unseenLayout);
+  expect(
+    unseenParsed.detectedPeople.some((person) => person.sourceName === unseenSourceName),
+    'unseen OCR row label must be preserved without a registry dependency',
+  );
+  expect(
+    targetSchedules(unseenParsed, unseenSourceName).length === 5,
+    'unseen OCR row label must retain its schedule candidates',
+  );
+
   const sparseCalendar = buildSparseCalendarDateScheduleLayoutFixture({ targetRow: 3 });
   const sparseParsed = imageModule.parseScheduleImageLayout(sparseCalendar);
   expect(
@@ -218,6 +235,44 @@ try {
   expect(reviewItems.length === 5, 'image import target review item count mismatch');
   expect(reviewItems.every((item) => item.resolution == null), 'image-derived review items must start unreviewed');
   expect(batch?.structure.needsReview === true, 'image-derived batch must force structure review');
+
+  const unseenRecognizer = new imageModule.AdaptiveScheduleImageRecognizer({
+    async extract() {
+      return unseenLayout;
+    },
+  });
+  const unseenStore = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  unseenStore.mutate((state) => {
+    state.people = [{ id: 'mock-person-1', name: '테스트직원', relation: '연인' }];
+    state.importBatches = [];
+    state.schedules = [];
+  });
+  const unseenImports = new reposModule.MockImportRepository(unseenStore);
+  const unseenAction = new serviceModule.WorkbookImportFileSelectionAction(
+    unseenImports,
+    new reposModule.MockPersonRepository(unseenStore),
+    new reposModule.MockScheduleRepository(unseenStore),
+    workbookParser,
+    unseenRecognizer,
+  );
+  const unseenBatchId = await unseenAction.accept([{ kind: 'IMAGE', file: imageFile }]);
+  const unseenBatch = await unseenImports.getBatch(unseenBatchId);
+  const unseenDetected = unseenBatch?.detectedPeople.find(
+    (person) => person.sourceName === unseenSourceName,
+  );
+  expect(unseenDetected != null, 'unseen OCR row label must reach import review');
+  expect(
+    unseenDetected?.matchedPersonId == null,
+    'unseen OCR row label must not be forced onto an existing registered person',
+  );
+  const unseenReviewItems = (unseenBatch?.reviewItems ?? []).filter(
+    (item) => item.detectedPersonId === unseenDetected?.id,
+  );
+  expect(unseenReviewItems.length === 5, 'unseen row label review item count mismatch');
+  expect(
+    unseenReviewItems.every((item) => item.personId == null && item.resolution == null),
+    'unseen row label schedules must stay unresolved until explicit person matching/review',
+  );
 
   const unavailableStore = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   unavailableStore.mutate((state) => { state.importBatches = []; });
