@@ -6,9 +6,10 @@ import type {
   RealtimeSubwayProvider,
   TransitAccessSearchProvider,
   TransitRouteProvider,
+  TransitRouteResult,
   TransitSearchResult,
 } from '../../application/contracts/providers';
-import type { Coordinate, RouteCandidate } from '../../domain/models';
+import type { Coordinate } from '../../domain/models';
 import { HttpJsonClient } from './HttpJsonClient';
 
 export class HttpPlaceSearchProvider implements PlaceSearchProvider {
@@ -40,14 +41,14 @@ export class HttpTransitAccessSearchProvider implements TransitAccessSearchProvi
 export class HttpTransitRouteProvider implements TransitRouteProvider {
   constructor(private readonly client: HttpJsonClient) {}
 
-  async search(origin: Coordinate, destination: Coordinate): Promise<RouteCandidate[]> {
+  async search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]> {
     const params = new URLSearchParams({
       originX: String(origin.x),
       originY: String(origin.y),
       destinationX: String(destination.x),
       destinationY: String(destination.y),
     });
-    return (await this.client.get<{ results: RouteCandidate[] }>(
+    return (await this.client.get<{ results: TransitRouteResult[] }>(
       '/providers/routes?' + params.toString(),
     )).results;
   }
