@@ -2,7 +2,7 @@ import type {
   ImportFileSelectionAction,
   ImportInputFile,
 } from '../contracts/actions';
-import type { WorkbookParser } from '../contracts/providers';
+import type { ImageScheduleRecognizer, WorkbookParser } from '../contracts/providers';
 import type {
   ImportRepository,
   PersonRepository,
@@ -24,19 +24,23 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     private readonly people: PersonRepository,
     private readonly schedules: ScheduleRepository,
     private readonly parser: WorkbookParser,
+    private readonly imageRecognizer?: ImageScheduleRecognizer,
   ) {}
 
   async accept(files: ImportInputFile[]): Promise<string> {
     if (!files.length) throw new Error('No import files were selected.');
 
     const batch = (await this.imports.getCurrentBatch()) ?? await this.imports.createBatch();
-    const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      kind: kind === 'WORKBOOK' ? 'XLSX' : 'IMAGE',
-      progress: kind === 'WORKBOOK' ? 10 : 100,
-      status: kind === 'WORKBOOK' ? 'PARSING' : 'ERROR',
-    }));
+    const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
+      const supported = kind === 'WORKBOOK' || this.imageRecognizer != null;
+      return {
+        id: crypto.randomUUID(),
+        name: file.name,
+        kind: kind === 'WORKBOOK' ? 'XLSX' : 'IMAGE',
+        progress: supported ? 10 : 100,
+        status: supported ? 'PARSING' : 'ERROR',
+      };
+    });
     await this.imports.replaceFiles(batch.id, initialRecords);
 
     const parsedResults = [];
@@ -44,10 +48,14 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
     for (let index = 0; index < files.length; index += 1) {
       const input = files[index];
-      if (input.kind !== 'WORKBOOK') continue;
+      const recognizer = input.kind === 'WORKBOOK' ? this.parser : this.imageRecognizer;
+      if (!recognizer) continue;
 
       try {
-        parsedResults.push(await this.parser.parse(await input.file.arrayBuffer()));
+        const parsed = input.kind === 'WORKBOOK'
+          ? await this.parser.parse(await input.file.arrayBuffer())
+          : await this.imageRecognizer!.parse(input.file);
+        parsedResults.push(parsed);
         completedRecords[index] = {
           ...completedRecords[index],
           progress: 100,
@@ -65,7 +73,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     await this.imports.replaceFiles(batch.id, completedRecords);
 
     if (!parsedResults.length) {
-      throw new Error('No workbook could be parsed. Image recognition is not available yet.');
+      throw new Error('No supported import file could be parsed.');
     }
 
     const availablePeople = await this.people.list();
