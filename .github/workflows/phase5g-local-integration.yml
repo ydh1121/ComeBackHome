@@ -30,6 +30,8 @@ on:
       - "scripts/verify-phase5t-*.mjs"
       - "scripts/verify-phase5u-*.mjs"
       - "scripts/verify-phase5v-*.mjs"
+      - "scripts/verify-phase5w-*.mjs"
+      - "docs/ocr-adapter-evaluation.md"
       - "src/providers/import/StructuredTableImageScheduleRecognizer.ts"
       - "test/fixtures/import/sample-image-layout.mjs"
       - "docs/image-schedule-layout.md"
@@ -79,6 +81,8 @@ on:
       - "scripts/verify-phase5t-*.mjs"
       - "scripts/verify-phase5u-*.mjs"
       - "scripts/verify-phase5v-*.mjs"
+      - "scripts/verify-phase5w-*.mjs"
+      - "docs/ocr-adapter-evaluation.md"
       - "src/providers/import/StructuredTableImageScheduleRecognizer.ts"
       - "test/fixtures/import/sample-image-layout.mjs"
       - "docs/image-schedule-layout.md"
@@ -185,6 +189,9 @@ jobs:
 
       - name: Verify image schedule layout
         run: npm run verify:image-layout
+
+      - name: Verify OCR adapter
+        run: npm run verify:ocr-adapter
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
