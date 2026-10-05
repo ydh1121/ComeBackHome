@@ -18,7 +18,7 @@ export interface ChangeSignal {
 export interface ApplicationRuntimeInfo {
   mode: 'mock' | 'hybrid-api';
   persistence: 'mock' | 'worker-api';
-  providerData: 'mock';
+  providerData: 'mock' | 'worker-api';
 }
 
 export interface ApplicationServices {
