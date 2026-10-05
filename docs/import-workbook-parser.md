@@ -75,10 +75,9 @@ Phase 5P does not auto-create a new Person because the Person domain requires us
 
 ## Conflict and commit rules
 
-For a matched person/date:
+For a matched person/date, the parser attaches existing schedule data when present but does not choose a resolution.
 
-- existing schedule present -> default review resolution KEEP
-- no existing schedule -> default review resolution NEW
+As of Phase 5Q every parser-created review row starts with resolution = null and requires an explicit KEEP or NEW decision before final commit.
 
 Final commit still uses ScheduleRepository.upsertMany, preserving the D1 batch boundary in hybrid API mode.
 
