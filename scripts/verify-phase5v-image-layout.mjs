@@ -217,3 +217,5 @@ if (failures.length) {
 }
 
 console.log('phase 5V adaptive schedule image layout verification passed');
+
+// Phase 5V adaptive dependency-backed verification trigger.
