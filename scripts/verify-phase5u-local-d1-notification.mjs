@@ -248,3 +248,5 @@ try {
   await stopWorker();
   await rm(persistPath, { recursive: true, force: true });
 }
+
+// Phase 5U dependency-backed verification trigger.
