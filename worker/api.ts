@@ -6,6 +6,7 @@ import { D1PlaceRepository } from './repositories/D1PlaceRepository';
 import { D1ScheduleRepository } from './repositories/D1ScheduleRepository';
 import { D1SubscriptionStore } from './repositories/D1SubscriptionStore';
 import type { WorkerEnv } from './runtime-types';
+import type { ProviderSourceBundle } from './providers/contracts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -50,7 +51,11 @@ function errorResponse(error: unknown): Response {
   return json({ error: message }, 400);
 }
 
-export async function handleApiRequest(request: Request, env: WorkerEnv): Promise<Response> {
+export async function handleApiRequest(
+  request: Request,
+  env: WorkerEnv,
+  providerRuntime: ProviderSourceBundle | null = null,
+): Promise<Response> {
   const url = new URL(request.url);
   const segments = url.pathname.split('/').filter(Boolean);
   if (segments[0] !== 'api') return json({ error: 'Not found.' }, 404);
@@ -67,7 +72,7 @@ export async function handleApiRequest(request: Request, env: WorkerEnv): Promis
       if (segments.length === 3 && segments[2] === 'status') {
         return json({
           enabled,
-          source: enabled ? 'worker-provider' : 'unconfigured',
+          source: providerRuntime ? 'worker-provider' : enabled ? 'unavailable' : 'unconfigured',
         });
       }
 
@@ -81,8 +86,51 @@ export async function handleApiRequest(request: Request, env: WorkerEnv): Promis
           segments[2] === 'subway-arrivals'
         )
       ) {
-        if (!enabled) {
+        if (!enabled || !providerRuntime) {
           return json({ error: 'Provider runtime is disabled.' }, 503);
+        }
+
+        if (
+          segments[2] === 'transit-search' ||
+          segments[2] === 'bus-arrivals' ||
+          segments[2] === 'subway-arrivals'
+        ) {
+          return json({ error: 'Seoul provider secure transport is unavailable.' }, 503);
+        }
+
+        try {
+          if (segments[2] === 'place-search') {
+            const query = url.searchParams.get('q')?.trim();
+            if (!query) return json({ error: 'q is required.' }, 400);
+
+            const x = Number(url.searchParams.get('x'));
+            const y = Number(url.searchParams.get('y'));
+            const near = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+            return json({ results: await providerRuntime.kakao.searchPlaces(query, near) });
+          }
+
+          if (segments[2] === 'routes') {
+            const originX = Number(url.searchParams.get('originX'));
+            const originY = Number(url.searchParams.get('originY'));
+            const destinationX = Number(url.searchParams.get('destinationX'));
+            const destinationY = Number(url.searchParams.get('destinationY'));
+            if (![originX, originY, destinationX, destinationY].every(Number.isFinite)) {
+              return json({ error: 'origin/destination coordinates are required.' }, 400);
+            }
+
+            return json({
+              results: await providerRuntime.kakao.publicTransitRoutes(
+                { x: originX, y: originY },
+                { x: destinationX, y: destinationY },
+              ),
+            });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Provider request failed.';
+          if (message.startsWith('Provider activation blocked:')) {
+            return json({ error: message }, 503);
+          }
+          throw error;
         }
 
         return json({ error: 'Provider adapter is not configured yet.' }, 501);
