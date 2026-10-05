@@ -7,6 +7,8 @@ import type {
 } from './contracts';
 import { PushDeliveryError } from './contracts';
 import type { WorkerEnv } from './runtime-types';
+import { planNotificationJobs } from './notification-planner';
+import type { NotificationPlanResult, NotificationPlannerDependencies } from './notification-planner';
 
 export interface NotificationOutboxDependencies {
   jobs: NotificationJobStore;
@@ -14,6 +16,19 @@ export interface NotificationOutboxDependencies {
   gateway: PushDeliveryGateway;
   retryPolicy: NotificationRetryPolicy;
   batchSize?: number;
+}
+
+export interface ScheduledNotificationDependencies {
+  planner: NotificationPlannerDependencies;
+  outbox: NotificationOutboxDependencies;
+}
+
+export interface ScheduledNotificationCycleResult {
+  status: 'disabled' | 'not-configured' | 'processed';
+  scheduledAt: string;
+  planning: NotificationPlanResult | null;
+  planningError: string | null;
+  delivery: SchedulerRunResult;
 }
 
 export interface SchedulerRunResult {
@@ -163,4 +178,62 @@ export async function runScheduledTick(
   }
 
   return processNotificationOutbox(dependencies, scheduledTime);
+}
+
+
+function safePlanningError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message.trim().slice(0, 500) || 'Notification planning failed.';
+  }
+  return 'Notification planning failed.';
+}
+
+export async function runScheduledNotificationCycle(
+  env: WorkerEnv,
+  scheduledTime: number,
+  dependencies?: ScheduledNotificationDependencies,
+): Promise<ScheduledNotificationCycleResult> {
+  const scheduledAt = new Date(scheduledTime).toISOString();
+
+  if (env.PUSH_DELIVERY_ENABLED !== '1') {
+    return {
+      status: 'disabled',
+      scheduledAt,
+      planning: null,
+      planningError: null,
+      delivery: emptyResult('disabled', scheduledAt),
+    };
+  }
+
+  if (!dependencies) {
+    return {
+      status: 'not-configured',
+      scheduledAt,
+      planning: null,
+      planningError: null,
+      delivery: emptyResult('not-configured', scheduledAt),
+    };
+  }
+
+  let planning: NotificationPlanResult | null = null;
+  let planningError: string | null = null;
+
+  try {
+    planning = await planNotificationJobs(dependencies.planner, scheduledTime);
+  } catch (error) {
+    planningError = safePlanningError(error);
+  }
+
+  const delivery = await processNotificationOutbox(
+    dependencies.outbox,
+    scheduledTime,
+  );
+
+  return {
+    status: 'processed',
+    scheduledAt,
+    planning,
+    planningError,
+    delivery,
+  };
 }
