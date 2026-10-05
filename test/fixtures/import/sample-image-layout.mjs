@@ -146,3 +146,47 @@ export function buildRowOrientedScheduleLayoutFixture() {
 
   return { width, height, tokens };
 }
+
+
+export function buildSparseCalendarDateScheduleLayoutFixture({ targetRow = 3 } = {}) {
+  const base = buildScheduleImageLayoutFixture({ targetRow });
+  const keptDates = new Set([
+    '2026-08-17',
+    '2026-08-18',
+    '2026-08-21',
+  ]);
+
+  const tokens = base.tokens.filter((item) => {
+    if (/^2026-08-\d{2}$/.test(item.text)) {
+      return keptDates.has(item.text);
+    }
+    if (item.text === '직원A') return false;
+    return true;
+  });
+
+  const weekdays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  weekdays.forEach((label, day) => {
+    tokens.push(centeredToken(label, dayCenter(day), 16, 82, 18, 0.95));
+  });
+
+  // Compact date evidence is valid calendar evidence even when punctuation OCR is lost.
+  tokens.push(centeredToken('20260822', dayCenter(5), 40, 94, 18, 0.9));
+
+  // Keep the first row as a geometric row anchor while making its identity unsafe.
+  tokens.push(centeredToken('a', 25, rowCenter(0), 12, 12, 0.51));
+  tokens.push(centeredToken('ACH', 55, rowCenter(0), 36, 14, 0.85));
+
+  return {
+    ...base,
+    tokens,
+  };
+}
