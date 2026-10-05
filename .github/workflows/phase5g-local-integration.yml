@@ -27,6 +27,7 @@ on:
       - "scripts/verify-phase5q-*.mjs"
       - "scripts/verify-phase5r-*.mjs"
       - "scripts/verify-phase5s-*.mjs"
+      - "scripts/verify-phase5t-*.mjs"
       - "worker/notification-planner.ts"
       - "worker/repositories/D1NotificationPlannerStateStore.ts"
       - "worker/scheduler.ts"
@@ -66,6 +67,7 @@ on:
       - "scripts/verify-phase5q-*.mjs"
       - "scripts/verify-phase5r-*.mjs"
       - "scripts/verify-phase5s-*.mjs"
+      - "scripts/verify-phase5t-*.mjs"
       - "worker/notification-planner.ts"
       - "worker/repositories/D1NotificationPlannerStateStore.ts"
       - "worker/scheduler.ts"
@@ -159,6 +161,9 @@ jobs:
 
       - name: Verify notification planner
         run: npm run verify:notification-planner
+
+      - name: Verify scheduled notification composition
+        run: npm run verify:scheduled-notification
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
