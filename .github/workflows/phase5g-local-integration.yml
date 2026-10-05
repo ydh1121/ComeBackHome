@@ -22,6 +22,7 @@ on:
       - "scripts/verify-phase5l-*.mjs"
       - "scripts/verify-phase5m-*.mjs"
       - "scripts/verify-phase5n-*.mjs"
+      - "scripts/verify-phase5o-*.mjs"
       - "test/fixtures/providers/**"
   pull_request:
     branches:
@@ -43,6 +44,7 @@ on:
       - "scripts/verify-phase5l-*.mjs"
       - "scripts/verify-phase5m-*.mjs"
       - "scripts/verify-phase5n-*.mjs"
+      - "scripts/verify-phase5o-*.mjs"
       - "test/fixtures/providers/**"
 
 permissions:
@@ -90,6 +92,9 @@ jobs:
 
       - name: Verify provider runtime
         run: npm run verify:provider-runtime
+
+      - name: Verify provider E2E
+        run: npm run verify:provider-e2e
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
