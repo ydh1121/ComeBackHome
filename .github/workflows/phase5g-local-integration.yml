@@ -25,6 +25,9 @@ on:
       - "scripts/verify-phase5o-*.mjs"
       - "scripts/verify-phase5p-*.mjs"
       - "scripts/verify-phase5q-*.mjs"
+      - "scripts/verify-phase5r-*.mjs"
+      - "worker/scheduler.ts"
+      - "worker/contracts.ts"
       - "src/pages/ImportReviewPage.tsx"
       - "src/pages/ImportPersonMatchPage.tsx"
       - "src/pages/import-page.css"
@@ -58,6 +61,9 @@ on:
       - "scripts/verify-phase5o-*.mjs"
       - "scripts/verify-phase5p-*.mjs"
       - "scripts/verify-phase5q-*.mjs"
+      - "scripts/verify-phase5r-*.mjs"
+      - "worker/scheduler.ts"
+      - "worker/contracts.ts"
       - "src/pages/ImportReviewPage.tsx"
       - "src/pages/ImportPersonMatchPage.tsx"
       - "src/pages/import-page.css"
@@ -129,6 +135,21 @@ jobs:
 
       - name: Verify explicit import review
         run: npm run verify:import-review
+
+      - name: Verify push boundary
+        run: npm run verify:push
+
+      - name: Verify push client boundary
+        run: npm run verify:push-client
+
+      - name: Verify backend architecture
+        run: npm run verify:backend
+
+      - name: Verify Worker adapters
+        run: npm run verify:worker
+
+      - name: Verify notification outbox
+        run: npm run verify:notification-outbox
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
