@@ -165,3 +165,18 @@ Use scripts/prepare-ocr-assets.mjs to stage runtime files from installed npm pac
 The staging output must include a SHA-256 manifest. A package-version mismatch, missing runtime file, or non-root-relative public path is a hard failure.
 
 Do not silently add OCR staging to the normal production build while OCR remains disabled. Production asset activation is a separate reviewed step.
+
+## Local distribution smoke rule
+
+Before production OCR activation, the versioned OCR runtime must survive an actual Vite public-copy/build/serve path.
+
+Phase 5Y verification must:
+- stage into an isolated temporary public directory;
+- build with Vite without changing the default production build command;
+- serve the temporary build from 127.0.0.1 only;
+- fetch every manifest-tracked runtime file over that same local origin;
+- compare served byte length and SHA-256 with the staging manifest;
+- reject redirects outside the local origin;
+- clean the temporary build/staging area after verification.
+
+This distribution smoke uses no workplace screenshot and does not activate TesseractScheduleImageTextExtractor in application composition.
