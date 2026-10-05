@@ -4,6 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import {
   buildRowOrientedScheduleLayoutFixture,
   buildScheduleImageLayoutFixture,
+  buildSparseCalendarDateScheduleLayoutFixture,
   transformImageLayout,
 } from '../test/fixtures/import/sample-image-layout.mjs';
 
@@ -71,6 +72,18 @@ try {
   expect(imageModule.parseScheduleHour('23,5') === '23:30', 'OCR comma decimal must normalize safely');
   expect(imageModule.parseScheduleHour('23.25') === null, 'unsupported decimal fraction must be rejected');
   expect(imageModule.parseScheduleHour('24') === null, 'hour 24 must be rejected');
+  expect(
+    imageModule.parseScheduleDate('20260815') === '2026-08-15',
+    'compact YYYYMMDD date OCR must normalize safely',
+  );
+  expect(
+    imageModule.parseScheduleDate('2026-08-15') === '2026-08-15',
+    'dashed date OCR must remain supported',
+  );
+  expect(
+    imageModule.parseScheduleDate('20261340') === null,
+    'invalid compact date OCR must be rejected',
+  );
 
   const sampleProfile = buildScheduleImageLayoutFixture({ targetRow: 3 });
   const parsedSample = imageModule.parseScheduleImageLayout(sampleProfile);
@@ -91,6 +104,22 @@ try {
   expect(
     movedParsed.scheduleCandidates.some((item) => item.sourcePersonName === '테스트직원'),
     'target person must not depend on original row index',
+  );
+
+  const sparseCalendar = buildSparseCalendarDateScheduleLayoutFixture({ targetRow: 3 });
+  const sparseParsed = imageModule.parseScheduleImageLayout(sparseCalendar);
+  expect(
+    sparseParsed.structure.sheet.includes('calendar-strip'),
+    'sparse full-date OCR must use calendar-strip reconstruction',
+  );
+  expectReferenceTarget(sparseParsed, 'sparse calendar reconstruction');
+  expect(
+    !sparseParsed.detectedPeople.some((person) => /^a?ach$/i.test(person.sourceName)),
+    'weak Latin OCR fragment must not be promoted to a detected person',
+  );
+  expect(
+    !sparseParsed.scheduleCandidates.some((item) => /^a?ach$/i.test(item.sourcePersonName)),
+    'weak person identity row must not emit schedule candidates',
   );
 
   const transformed = transformImageLayout(
