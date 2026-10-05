@@ -7,6 +7,11 @@ import type {
   ParsedImportPerson,
   ParsedScheduleCandidate,
 } from '../../application/contracts/providers';
+import {
+  END_LABELS as END_ALIASES,
+  REST_LABELS as REST_ALIASES,
+  START_LABELS as START_ALIASES,
+} from './ScheduleImportSemantics';
 
 interface BoxToken extends ImageTextToken {
   cx: number;
@@ -46,9 +51,6 @@ interface RowBand {
 
 const PERSON_ALIASES = ['이름', '성명', '직원', '직원이름', '사람', 'name', 'person', 'employee'];
 const DATE_ALIASES = ['날짜', '일자', '근무일', '근무날짜', 'date', 'workdate'];
-const START_ALIASES = ['출근', '출근시간', '시작', '시작시간', '근무시작', 'start', 'starttime'];
-const END_ALIASES = ['퇴근', '퇴근시간', '종료', '종료시간', '근무종료', 'end', 'endtime'];
-const REST_ALIASES = ['쉬는시간', '휴게', '휴게시간', 'break', 'rest'];
 
 function clampConfidence(value: number): number {
   if (!Number.isFinite(value)) return 0;
