@@ -85,11 +85,13 @@ Import preview remains runtime-only. Parsed workbook contents are not persisted 
 
 ## Image files
 
-ImageScheduleRecognizer remains unimplemented.
+The XLSX parser remains independent from image recognition.
 
-Image files selected alongside a workbook are represented with explicit ERROR status. An image-only selection cannot create a parsed import batch.
+As of Phase 5V, the import action may receive an ImageScheduleRecognizer. When one is supplied, image-derived ParsedImport data enters the same person-match, structure-review and explicit schedule-review pipeline as workbook data.
 
-No OCR service or image upload is added in Phase 5P.
+The production composition still supplies no OCR ImageTextExtractor, so image import remains fail-closed until an OCR adapter is explicitly selected and wired.
+
+No image upload or external OCR service is activated by the workbook parser.
 
 ## Hybrid API change
 
@@ -110,8 +112,8 @@ read-excel-file 9.3.10 is pinned in package.json. It supports browser/Node XLSX 
 ## Safety boundary
 
 Phase 5P does not:
-- implement OCR
-- upload workbook contents
+- activate an OCR engine or external OCR service
+- upload workbook contents or schedule screenshots
 - add provider credentials
 - activate Kakao
 - activate push delivery
