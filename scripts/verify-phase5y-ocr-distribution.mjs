@@ -225,3 +225,5 @@ try {
   }
   await rm(tempRoot, { recursive: true, force: true });
 }
+
+// Phase 5Y final dependency-backed distribution verification trigger.
