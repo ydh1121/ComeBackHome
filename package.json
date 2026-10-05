@@ -24,7 +24,7 @@
     "verify:backend": "node scripts/verify-phase5d-backend.mjs",
     "verify:worker": "node scripts/verify-phase5e-worker.mjs",
     "verify:http-runtime": "node scripts/verify-phase5f-http.mjs",
-    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker && npm run verify:http-runtime && npm run verify:local-contract && npm run verify:provider-boundary && npm run verify:provider-feasibility && npm run verify:provider-mappers && npm run verify:provider-clients && npm run verify:provider-security && npm run verify:kakao-transport && npm run verify:provider-runtime && npm run verify:provider-e2e && npm run verify:import-parser && npm run verify:import-review && npm run verify:notification-outbox && npm run verify:notification-planner && npm run verify:scheduled-notification && npm run verify:notification-d1-e2e && npm run verify:image-layout && npm run verify:ocr-adapter && npm run verify:ocr-assets",
+    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker && npm run verify:http-runtime && npm run verify:local-contract && npm run verify:provider-boundary && npm run verify:provider-feasibility && npm run verify:provider-mappers && npm run verify:provider-clients && npm run verify:provider-security && npm run verify:kakao-transport && npm run verify:provider-runtime && npm run verify:provider-e2e && npm run verify:import-parser && npm run verify:import-review && npm run verify:notification-outbox && npm run verify:notification-planner && npm run verify:scheduled-notification && npm run verify:notification-d1-e2e && npm run verify:image-layout && npm run verify:ocr-adapter && npm run verify:ocr-assets && npm run verify:ocr-distribution",
     "cf:local:migrate": "wrangler d1 migrations apply come-back-home-db --local --config wrangler.local.jsonc",
     "cf:local:dev": "wrangler dev --local --config wrangler.local.jsonc",
     "verify:local-contract": "node scripts/verify-phase5g-local-contract.mjs",
@@ -46,7 +46,8 @@
     "verify:image-layout": "node scripts/verify-phase5v-image-layout.mjs",
     "verify:ocr-adapter": "node scripts/verify-phase5w-ocr-adapter.mjs",
     "prepare:ocr-assets": "node scripts/prepare-ocr-assets.mjs",
-    "verify:ocr-assets": "node scripts/verify-phase5x-ocr-assets.mjs"
+    "verify:ocr-assets": "node scripts/verify-phase5x-ocr-assets.mjs",
+    "verify:ocr-distribution": "node scripts/verify-phase5y-ocr-distribution.mjs"
   },
   "dependencies": {
     "react": "19.3.0",
