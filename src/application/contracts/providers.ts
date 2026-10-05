@@ -14,6 +14,9 @@ export interface ParsedImportPerson { sourceName: string; confidence: number; }
 export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
 export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
+export interface ImageTextToken { text: string; x: number; y: number; width: number; height: number; confidence: number; }
+export interface ImageTextLayout { width: number; height: number; tokens: ImageTextToken[]; }
+export interface ImageTextExtractor { extract(file: File): Promise<ImageTextLayout>; }
 export interface ImageScheduleRecognizer { parse(file: File): Promise<ParsedImport>; }
 export interface NotificationPermissionProvider { getPermission(): Promise<NotificationPermission>; requestPermissionFromUserGesture(): Promise<NotificationPermission>; }
 export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; }
