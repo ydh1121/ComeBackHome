@@ -1,5 +1,5 @@
-import type { Arrival, Coordinate } from '../../src/domain/models';
-import type { PlaceSearchResult, TransitRouteResult, TransitSearchResult } from '../../src/application/contracts/providers';
+import type { Coordinate } from '../../src/domain/models';
+import type { Arrival, PlaceSearchResult, TransitRouteResult, TransitSearchResult } from '../../src/application/contracts/providers';
 
 export type ProviderSourceId = 'kakao-map' | 'seoul-bus' | 'seoul-subway';
 export type ProviderCoverage = 'KOREA' | 'SEOUL' | 'SEOUL_METRO_PARTIAL';
