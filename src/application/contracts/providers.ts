@@ -8,7 +8,7 @@ export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearc
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]>; }
 export interface TransitAccessSearchProvider { search(query: string, near: Coordinate): Promise<TransitSearchResult[]>; }
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
-export interface RealtimeSubwayProvider { arrivals(providerStationId: string, line?: string): Promise<Arrival[]>; }
+export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImport { detectedPeople: unknown[]; scheduleCandidates: unknown[]; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageScheduleRecognizer { parse(file: File): Promise<ParsedImport>; }
