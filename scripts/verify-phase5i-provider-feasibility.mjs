@@ -64,3 +64,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('phase 5I provider feasibility verification passed');
+
+// Phase 5I dependency-backed verification trigger.
