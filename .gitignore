@@ -7,3 +7,6 @@ dist/
 !.env.example
 .DS_Store
 .wrangler/
+
+# Generated local OCR runtime assets (Phase 5X; do not commit binaries)
+public/ocr/
