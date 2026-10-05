@@ -12,8 +12,10 @@ on:
       - "worker/**"
       - "src/app/**"
       - "src/config/runtime.ts"
+      - "src/application/contracts/**"
       - "src/providers/http/**"
       - "scripts/verify-phase5g-local*.mjs"
+      - "scripts/verify-phase5h-*.mjs"
   pull_request:
     branches:
       - main
@@ -27,6 +29,7 @@ on:
       - "src/config/runtime.ts"
       - "src/providers/http/**"
       - "scripts/verify-phase5g-local*.mjs"
+      - "scripts/verify-phase5h-*.mjs"
 
 permissions:
   contents: read
@@ -49,6 +52,9 @@ jobs:
 
       - name: Verify local-only contract
         run: npm run verify:local-contract
+
+      - name: Verify provider boundary
+        run: npm run verify:provider-boundary
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
