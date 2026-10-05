@@ -96,6 +96,7 @@ export const MOCK_FIXTURE: MockState = {
     },
     reviewItems: [{
       id: 'mock-review-1',
+      detectedPersonId: 'mock-detected-1',
       personId: 'mock-person-1',
       date: '2026-10-04',
       existing: { start: '14:00', end: '22:00' },
