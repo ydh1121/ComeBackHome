@@ -2,10 +2,10 @@ import type { ApplicationServices, RepositoryBundle } from '../application/contr
 import { ComeBackHomeQueries } from '../application/queries/ComeBackHomeQueries';
 import { NotificationService, PersonSelectionService, PersonService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
 import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
+import { WorkbookImportFileSelectionAction } from '../application/services/WorkbookImportFileSelectionAction';
 import { BusRouteService, CommuteService, PlaceService, TransitSearchService } from '../application/services/CommuteWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import type { AppRuntimeMode, ProviderRuntimeMode } from '../config/runtime';
-import { MockImportFileSelectionAction } from '../mocks/import-actions';
 import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPushSubscriptionProvider } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
@@ -26,6 +26,7 @@ import {
   HttpScheduleRepository,
   HybridCommuteRepository,
 } from '../providers/http/HttpRepositories';
+import { ReadExcelWorkbookParser } from '../providers/import/ReadExcelWorkbookParser';
 import { ProviderCommuteRepository, ProviderTodayRepository } from '../providers/runtime/ProviderRuntimeRepositories';
 import { createChangeSignalController } from './changeSignal';
 
@@ -66,6 +67,12 @@ export function createMockApplicationServices(): ApplicationServices {
   const importWorkflow = new ImportWorkflowService(repositories.imports, repositories.people);
   const placeSearchProvider = new MockPlaceSearchProvider();
   const transitSearchProvider = new MockTransitAccessSearchProvider();
+  const importFileSelection = new WorkbookImportFileSelectionAction(
+    repositories.imports,
+    repositories.people,
+    repositories.schedules,
+    new ReadExcelWorkbookParser(),
+  );
 
   return {
     runtime: {
@@ -91,7 +98,7 @@ export function createMockApplicationServices(): ApplicationServices {
       transitSearch: new TransitSearchService(repositories.places, repositories.commute, transitSearchProvider),
       busRoutes: new BusRouteService(repositories.commute),
       schedule: new ScheduleService(repositories.schedules, personSelection),
-      importFiles: new MockImportFileSelectionAction(repositories.imports),
+      importFiles: importFileSelection,
       importMatch: importWorkflow,
       importReview: importWorkflow,
     },
@@ -163,6 +170,12 @@ export async function createHybridApiApplicationServices(
   const transitSearchProvider = providerMode === 'api'
     ? new HttpTransitAccessSearchProvider(client)
     : new MockTransitAccessSearchProvider();
+  const importFileSelection = new WorkbookImportFileSelectionAction(
+    imports,
+    people,
+    schedules,
+    new ReadExcelWorkbookParser(),
+  );
 
   return {
     runtime: {
@@ -173,11 +186,7 @@ export async function createHybridApiApplicationServices(
     repositories,
     queries,
     actions: {
-      commitImportReview: {
-        async execute(): Promise<void> {
-          throw new Error('Import commit is disabled in hybrid API mode until a real import parser is connected.');
-        },
-      },
+      commitImportReview: new CommitImportReview(imports, schedules),
       transitAccess: new TransitAccessService(commute, () => changes.emit()),
       notifications: new NotificationService(
         notifications,
@@ -192,7 +201,7 @@ export async function createHybridApiApplicationServices(
       transitSearch: new TransitSearchService(places, commute, transitSearchProvider),
       busRoutes: new BusRouteService(commute),
       schedule: new ScheduleService(schedules, personSelection),
-      importFiles: new MockImportFileSelectionAction(imports),
+      importFiles: importFileSelection,
       importMatch: importWorkflow,
       importReview: importWorkflow,
     },
