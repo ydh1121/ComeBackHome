@@ -29,6 +29,10 @@ on:
       - "scripts/verify-phase5s-*.mjs"
       - "scripts/verify-phase5t-*.mjs"
       - "scripts/verify-phase5u-*.mjs"
+      - "scripts/verify-phase5v-*.mjs"
+      - "src/providers/import/StructuredTableImageScheduleRecognizer.ts"
+      - "test/fixtures/import/sample-image-layout.mjs"
+      - "docs/image-schedule-layout.md"
       - "wrangler.phase5u.jsonc"
       - "worker/notification-runtime.ts"
       - "worker/testing/phase5u-local.ts"
@@ -73,6 +77,10 @@ on:
       - "scripts/verify-phase5s-*.mjs"
       - "scripts/verify-phase5t-*.mjs"
       - "scripts/verify-phase5u-*.mjs"
+      - "scripts/verify-phase5v-*.mjs"
+      - "src/providers/import/StructuredTableImageScheduleRecognizer.ts"
+      - "test/fixtures/import/sample-image-layout.mjs"
+      - "docs/image-schedule-layout.md"
       - "wrangler.phase5u.jsonc"
       - "worker/notification-runtime.ts"
       - "worker/testing/phase5u-local.ts"
@@ -172,6 +180,9 @@ jobs:
 
       - name: Verify scheduled notification composition
         run: npm run verify:scheduled-notification
+
+      - name: Verify image schedule layout
+        run: npm run verify:image-layout
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
