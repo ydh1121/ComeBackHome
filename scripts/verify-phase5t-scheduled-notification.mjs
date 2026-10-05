@@ -345,3 +345,5 @@ if (failures.length) {
 }
 
 console.log('phase 5T scheduled notification composition verification passed');
+
+// Phase 5T dependency-backed verification trigger.
