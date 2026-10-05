@@ -135,3 +135,5 @@ try {
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }
+
+// Phase 5X dependency-backed same-origin runtime verification trigger.
