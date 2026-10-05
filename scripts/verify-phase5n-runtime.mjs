@@ -161,3 +161,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('phase 5N provider-backed commute/ETA runtime verification passed');
+
+// Phase 5N dependency-backed verification trigger.
