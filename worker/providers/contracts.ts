@@ -1,0 +1,57 @@
+import type { Arrival, Coordinate, RouteCandidate } from '../../src/domain/models';
+import type { PlaceSearchResult, TransitSearchResult } from '../../src/application/contracts/providers';
+
+export type ProviderSourceId = 'kakao-map' | 'seoul-bus' | 'seoul-subway';
+export type ProviderCoverage = 'KOREA' | 'SEOUL' | 'SEOUL_METRO_PARTIAL';
+
+export interface ProviderSecretBindings {
+  KAKAO_REST_API_KEY?: string;
+  SEOUL_SUBWAY_API_KEY?: string;
+  SEOUL_BUS_SERVICE_KEY?: string;
+}
+
+export interface ProviderRequestContext {
+  signal?: AbortSignal;
+  fetchedAt: string;
+}
+
+export interface KakaoMapSource {
+  searchPlaces(query: string, near?: Coordinate, context?: ProviderRequestContext): Promise<PlaceSearchResult[]>;
+  publicTransitRoutes(origin: Coordinate, destination: Coordinate, context?: ProviderRequestContext): Promise<RouteCandidate[]>;
+}
+
+export interface SeoulBusSource {
+  searchStops(query: string, near: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
+  arrivals(stopProviderId: string, routeProviderId: string, context?: ProviderRequestContext): Promise<Arrival[]>;
+}
+
+export interface SeoulSubwaySource {
+  searchStations(query: string, near: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
+  arrivals(stationName: string, line?: string, context?: ProviderRequestContext): Promise<Arrival[]>;
+  trainPositions(line: string, context?: ProviderRequestContext): Promise<SubwayTrainPosition[]>;
+}
+
+export interface SubwayTrainPosition {
+  providerTrainId: string;
+  line: string;
+  stationName: string;
+  observedAt: string;
+  direction?: string;
+  terminalName?: string;
+  status?: string;
+  express?: boolean;
+}
+
+export interface ProviderSourceBundle {
+  kakao: KakaoMapSource;
+  seoulBus: SeoulBusSource;
+  seoulSubway: SeoulSubwaySource;
+}
+
+export interface ProviderFreshnessPolicy {
+  classify(observedAt: string, now: Date): 'LIVE' | 'STALE';
+}
+
+export interface ProviderFallbackPolicy {
+  realtimeUnavailable(reason: 'OUT_OF_COVERAGE' | 'STALE' | 'ERROR' | 'RATE_LIMIT'): 'FALLBACK' | 'UNKNOWN';
+}
