@@ -24,9 +24,17 @@ interface LayoutCandidate {
 
 interface DateBlock {
   date: string;
-  token: BoxToken;
+  center: number;
   left: number;
   right: number;
+  confidence: number;
+  inferred: boolean;
+}
+
+interface WeekdayAnchor {
+  index: number;
+  family: 'english' | 'korean';
+  token: BoxToken;
 }
 
 interface RowBand {
@@ -80,9 +88,16 @@ function box(token: ImageTextToken): BoxToken {
   };
 }
 
-function parseDate(value: string): string | null {
-  const normalized = value.replace(/[./]/g, '-');
-  const match = /^(20\d{2})-(\d{1,2})-(\d{1,2})$/.exec(normalized);
+export function parseScheduleDate(value: string): string | null {
+  const normalized = value
+    .normalize('NFKC')
+    .trim()
+    .replace(/[./]/g, '-')
+    .replace(/\s+/g, '');
+
+  const dashed = /^(20\d{2})-(\d{1,2})-(\d{1,2})$/.exec(normalized);
+  const compact = /^(20\d{2})(\d{2})(\d{2})$/.exec(normalized);
+  const match = dashed ?? compact;
   if (!match) return null;
 
   const year = Number(match[1]);
@@ -137,7 +152,7 @@ function isScheduleHeader(value: string): boolean {
 
 function isLikelyPersonName(value: string): boolean {
   if (!value || value.length > 30) return false;
-  if (parseDate(value) || parseScheduleHour(value) || isScheduleHeader(value)) return false;
+  if (parseScheduleDate(value) || parseScheduleHour(value) || isScheduleHeader(value)) return false;
   if (
     matchesAlias(value, PERSON_ALIASES) ||
     matchesAlias(value, DATE_ALIASES)
@@ -150,6 +165,50 @@ function isLikelyPersonName(value: string): boolean {
 function average(values: number[]): number {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+const ENGLISH_WEEKDAY_PREFIXES: Array<{ prefix: string; index: number }> = [
+  { prefix: 'monda', index: 0 },
+  { prefix: 'tuesda', index: 1 },
+  { prefix: 'wednesda', index: 2 },
+  { prefix: 'thursda', index: 3 },
+  { prefix: 'frida', index: 4 },
+  { prefix: 'saturda', index: 5 },
+  { prefix: 'sunda', index: 6 },
+];
+
+const KOREAN_WEEKDAY_INDEX = new Map<string, number>([
+  ['월', 0],
+  ['화', 1],
+  ['수', 2],
+  ['목', 3],
+  ['금', 4],
+  ['토', 5],
+  ['일', 6],
+]);
+
+function parseWeekdayAnchor(token: BoxToken): WeekdayAnchor | null {
+  const korean = KOREAN_WEEKDAY_INDEX.get(token.normalized);
+  if (korean != null) return { index: korean, family: 'korean', token };
+
+  const english = ENGLISH_WEEKDAY_PREFIXES.find(({ prefix }) =>
+    token.normalized.startsWith(prefix)
+  );
+  return english
+    ? { index: english.index, family: 'english', token }
+    : null;
+}
+
+function isoDateAddDays(value: string, days: number): string {
+  const parsed = parseScheduleDate(value);
+  if (!parsed) throw new Error('Internal calendar anchor date is invalid.');
+  const [year, month, day] = parsed.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return [
+    String(date.getUTCFullYear()).padStart(4, '0'),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+  ].join('-');
 }
 
 function median(values: number[]): number {
@@ -212,8 +271,196 @@ function buildDateBlocks(dateTokens: Array<{ date: string; token: BoxToken }>, w
     const right = next
       ? (item.token.cx + next.token.cx) / 2
       : Math.min(width, item.token.cx + (item.token.cx - previous.token.cx) / 2);
-    return { ...item, left, right };
+    return {
+      date: item.date,
+      center: item.token.cx,
+      left,
+      right,
+      confidence: item.token.confidence,
+      inferred: false,
+    };
   });
+}
+
+function buildCalendarStripDateBlocks(
+  tokens: BoxToken[],
+  width: number,
+): DateBlock[] {
+  const rawWeekdays = tokens
+    .map((token) => parseWeekdayAnchor(token))
+    .filter((item): item is WeekdayAnchor => item != null);
+
+  if (rawWeekdays.length < 3) return [];
+
+  const minimumCy = Math.min(...rawWeekdays.map((item) => item.token.cy));
+  const typicalHeight = median(
+    rawWeekdays.map((item) => item.token.height).filter((height) => height > 0),
+  ) || 12;
+  const topBandLimit = minimumCy + Math.max(18, typicalHeight * 1.6);
+  const topBand = rawWeekdays.filter((item) => item.token.cy <= topBandLimit);
+
+  const english = topBand.filter((item) => item.family === 'english');
+  const korean = topBand.filter((item) => item.family === 'korean');
+  const uniqueCount = (items: WeekdayAnchor[]): number =>
+    new Set(items.map((item) => item.index)).size;
+
+  const selected = uniqueCount(english) >= 3
+    ? english
+    : uniqueCount(korean) >= 3
+      ? korean
+      : [];
+
+  if (!selected.length) return [];
+
+  const strongestByIndex = new Map<number, WeekdayAnchor>();
+  for (const item of selected) {
+    const existing = strongestByIndex.get(item.index);
+    if (!existing || item.token.confidence > existing.token.confidence) {
+      strongestByIndex.set(item.index, item);
+    }
+  }
+
+  const ordered = [...strongestByIndex.values()]
+    .sort((a, b) => a.token.cx - b.token.cx);
+  if (ordered.length < 3) return [];
+
+  const unwrapped: Array<{ ordinal: number; anchor: WeekdayAnchor }> = [];
+  let ordinal = 0;
+  unwrapped.push({ ordinal, anchor: ordered[0] });
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = ordered[index - 1].index;
+    const current = ordered[index].index;
+    const delta = (current - previous + 7) % 7;
+    if (delta === 0) continue;
+    ordinal += delta;
+    if (ordinal > 6) return [];
+    unwrapped.push({ ordinal, anchor: ordered[index] });
+  }
+
+  if (unwrapped.length < 3) return [];
+
+  const stepCandidates: number[] = [];
+  for (let index = 1; index < unwrapped.length; index += 1) {
+    const previous = unwrapped[index - 1];
+    const current = unwrapped[index];
+    const deltaOrdinal = current.ordinal - previous.ordinal;
+    if (deltaOrdinal <= 0) continue;
+    stepCandidates.push(
+      (current.anchor.token.cx - previous.anchor.token.cx) / deltaOrdinal,
+    );
+  }
+
+  const step = median(stepCandidates.filter((value) => value > 0));
+  if (!Number.isFinite(step) || step <= 0) return [];
+
+  const origins = unwrapped.map(({ ordinal: itemOrdinal, anchor: item }) =>
+    item.token.cx - itemOrdinal * step
+  );
+  const origin = median(origins);
+
+  const residuals = unwrapped.map(({ ordinal: itemOrdinal, anchor: item }) =>
+    Math.abs(item.token.cx - (origin + itemOrdinal * step))
+  );
+  if (Math.max(...residuals) > step * 0.18) return [];
+
+  const minimumOrdinal = Math.min(...unwrapped.map((item) => item.ordinal));
+  const maximumOrdinal = Math.max(...unwrapped.map((item) => item.ordinal));
+  if (maximumOrdinal - minimumOrdinal < 2) return [];
+
+  const dateTokens = tokens
+    .map((token) => ({ token, date: parseScheduleDate(token.normalized) }))
+    .filter((item): item is { token: BoxToken; date: string } => item.date != null);
+
+  const mappedDates: Array<{
+    ordinal: number;
+    date: string;
+    token: BoxToken;
+  }> = [];
+
+  for (const item of dateTokens) {
+    const estimatedOrdinal = Math.round((item.token.cx - origin) / step);
+    if (
+      estimatedOrdinal < minimumOrdinal ||
+      estimatedOrdinal > maximumOrdinal
+    ) continue;
+
+    const expectedCenter = origin + estimatedOrdinal * step;
+    if (Math.abs(item.token.cx - expectedCenter) > step * 0.42) continue;
+
+    mappedDates.push({
+      ordinal: estimatedOrdinal,
+      date: item.date,
+      token: item.token,
+    });
+  }
+
+  if (!mappedDates.length) return [];
+
+  const baseWeights = new Map<string, number>();
+  for (const item of mappedDates) {
+    const base = isoDateAddDays(item.date, -item.ordinal);
+    baseWeights.set(
+      base,
+      (baseWeights.get(base) ?? 0) + Math.max(0.05, item.token.confidence),
+    );
+  }
+
+  const rankedBases = [...baseWeights.entries()]
+    .sort((a, b) => b[1] - a[1]);
+  const [baseDate, baseWeight] = rankedBases[0] ?? [];
+  if (!baseDate || baseWeight == null) return [];
+
+  const totalWeight = rankedBases.reduce((sum, [, weight]) => sum + weight, 0);
+  if (rankedBases.length > 1 && baseWeight < totalWeight * 0.6) return [];
+
+  const directByOrdinal = new Map<number, {
+    date: string;
+    token: BoxToken;
+  }>();
+  for (const item of mappedDates) {
+    if (isoDateAddDays(baseDate, item.ordinal) !== item.date) continue;
+    const existing = directByOrdinal.get(item.ordinal);
+    if (!existing || item.token.confidence > existing.token.confidence) {
+      directByOrdinal.set(item.ordinal, {
+        date: item.date,
+        token: item.token,
+      });
+    }
+  }
+
+  const weekdayConfidence = average(
+    unwrapped.map((item) => item.anchor.token.confidence),
+  );
+  const dateConfidence = average(
+    mappedDates
+      .filter((item) => isoDateAddDays(baseDate, item.ordinal) === item.date)
+      .map((item) => item.token.confidence),
+  );
+  const inferredConfidence = Math.min(
+    0.84,
+    weekdayConfidence || 0.84,
+    dateConfidence || 0.84,
+  );
+
+  const blocks: DateBlock[] = [];
+  for (
+    let itemOrdinal = minimumOrdinal;
+    itemOrdinal <= maximumOrdinal;
+    itemOrdinal += 1
+  ) {
+    const center = origin + itemOrdinal * step;
+    const direct = directByOrdinal.get(itemOrdinal);
+    blocks.push({
+      date: isoDateAddDays(baseDate, itemOrdinal),
+      center,
+      left: Math.max(0, center - step / 2),
+      right: Math.min(width, center + step / 2),
+      confidence: direct?.token.confidence ?? inferredConfidence,
+      inferred: !direct,
+    });
+  }
+
+  return blocks;
 }
 
 function blockForX(blocks: DateBlock[], cx: number): DateBlock | null {
@@ -253,11 +500,16 @@ function dateBlockMatrixStrategy(
   tokens: BoxToken[],
 ): LayoutCandidate | null {
   const dateTokens = tokens
-    .map((token) => ({ token, date: parseDate(token.normalized) }))
+    .map((token) => ({ token, date: parseScheduleDate(token.normalized) }))
     .filter((item): item is { token: BoxToken; date: string } => item.date != null);
 
-  const blocks = buildDateBlocks(dateTokens, layout.width);
+  const calendarBlocks = buildCalendarStripDateBlocks(tokens, layout.width);
+  const blocks = calendarBlocks.length >= 2
+    ? calendarBlocks
+    : buildDateBlocks(dateTokens, layout.width);
   if (blocks.length < 2) return null;
+
+  const usedCalendarStrip = calendarBlocks.length >= 2;
 
   const labelTokens = tokens.filter((token) => isScheduleHeader(token.normalized));
   const startFractions: number[] = [];
@@ -296,13 +548,27 @@ function dateBlockMatrixStrategy(
     .map((row) => {
       const names = row.tokens.filter((token) => isLikelyPersonName(token.normalized));
       if (!names.length) return null;
+      const sourceName = names.map((token) => token.normalized).join('');
+      const confidence = average(names.map((token) => token.confidence));
+      const hasHangul = /[가-힣]/.test(sourceName);
+      const trustedIdentity = hasHangul
+        ? sourceName.length >= 2 && confidence >= 0.68
+        : /^[a-z][a-z.'-]*$/i.test(sourceName) &&
+          sourceName.length >= 2 &&
+          confidence >= 0.9;
       return {
-        sourceName: names.map((token) => token.normalized).join(''),
+        sourceName,
         cy: row.cy,
-        confidence: average(names.map((token) => token.confidence)),
+        confidence,
+        trustedIdentity,
       };
     })
-    .filter((row): row is { sourceName: string; cy: number; confidence: number } => row != null);
+    .filter((row): row is {
+      sourceName: string;
+      cy: number;
+      confidence: number;
+      trustedIdentity: boolean;
+    } => row != null);
 
   if (!nameRows.length) return null;
 
@@ -312,10 +578,12 @@ function dateBlockMatrixStrategy(
     bottom: index === nameRows.length - 1 ? layout.height : (row.cy + nameRows[index + 1].cy) / 2,
   }));
 
-  const detectedPeople: ParsedImportPerson[] = personRows.map((row) => ({
-    sourceName: row.sourceName,
-    confidence: row.confidence,
-  }));
+  const detectedPeople: ParsedImportPerson[] = personRows
+    .filter((row) => row.trustedIdentity)
+    .map((row) => ({
+      sourceName: row.sourceName,
+      confidence: row.confidence,
+    }));
 
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
 
@@ -327,6 +595,8 @@ function dateBlockMatrixStrategy(
       token.cx >= gridLeft &&
       token.cx < gridRight
     );
+
+    if (!person.trustedIdentity) continue;
 
     for (const block of blocks) {
       let start: { value: string; confidence: number } | null = null;
@@ -362,7 +632,7 @@ function dateBlockMatrixStrategy(
         sourceRow: rowIndex + 1,
         confidence: Math.min(
           person.confidence,
-          block.token.confidence,
+          block.confidence,
           start.confidence,
           end.confidence,
         ),
@@ -388,7 +658,9 @@ function dateBlockMatrixStrategy(
       detectedPeople,
       scheduleCandidates,
       structure: {
-        sheet: '이미지 근무표 / date-block-matrix',
+        sheet: usedCalendarStrip
+          ? '이미지 근무표 / date-block-matrix + calendar-strip'
+          : '이미지 근무표 / date-block-matrix',
         headerRow: 1,
         personColumn: '표 외곽 이름 영역(자동 추론)',
         dateColumn: '날짜 블록(자동 추론)',
@@ -478,7 +750,7 @@ function rowTableStrategy(
     const sourceName = personTokens.map((token) => token.normalized).join('');
     if (!sourceName || !isLikelyPersonName(sourceName)) continue;
 
-    const date = dateTokens.map((token) => parseDate(token.normalized)).find((value) => value != null) ?? null;
+    const date = dateTokens.map((token) => parseScheduleDate(token.normalized)).find((value) => value != null) ?? null;
     const startToken = startTokens.find((token) => parseScheduleHour(token.normalized) != null);
     const endToken = endTokens.find((token) => parseScheduleHour(token.normalized) != null);
     const start = startToken ? parseScheduleHour(startToken.normalized) : null;
