@@ -19,6 +19,8 @@ export function ImportPersonMatchPage() {
   }
 
   const batch = workflow.batch;
+  const allMatched = batch.detectedPeople.length > 0 &&
+    batch.detectedPeople.every((detected) => detected.matchedPersonId != null);
 
   return (
     <section className="import-page" data-route={'/import/' + batchId + '/people'} data-page="ImportPersonMatchPage" data-state="MATCH_REQUIRED">
@@ -39,7 +41,7 @@ export function ImportPersonMatchPage() {
                 className="mapping-select"
                 onClick={() => services.actions.importMatch.cyclePersonMatch(batch.id, detected.id)}
               >
-                <span>{matched?.name ?? '새 사람'}</span>
+                <span>{matched?.name ?? '연결 안 됨'}</span>
                 <Icon name="chevron-down" />
               </button>
             </div>
@@ -50,6 +52,7 @@ export function ImportPersonMatchPage() {
       <button
         type="button"
         className="cta"
+        disabled={!allMatched}
         onClick={() => navigate('/import/' + encodeURIComponent(batch.id) + '/structure')}
       >
         다음
