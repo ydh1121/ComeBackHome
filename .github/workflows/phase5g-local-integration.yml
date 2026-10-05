@@ -33,6 +33,10 @@ on:
       - "scripts/verify-phase5w-*.mjs"
       - "scripts/verify-phase5x-*.mjs"
       - "scripts/verify-phase5y-*.mjs"
+      - "scripts/verify-phase5z-*.mjs"
+      - "scripts/run-ocr-eval.mjs"
+      - "tools/ocr-eval/**"
+      - "docs/ocr-private-evaluation-harness.md"
       - "docs/ocr-local-distribution-smoke.md"
       - "scripts/prepare-ocr-assets.mjs"
       - "src/providers/import/ocrRuntimeConfig.ts"
@@ -90,6 +94,10 @@ on:
       - "scripts/verify-phase5w-*.mjs"
       - "scripts/verify-phase5x-*.mjs"
       - "scripts/verify-phase5y-*.mjs"
+      - "scripts/verify-phase5z-*.mjs"
+      - "scripts/run-ocr-eval.mjs"
+      - "tools/ocr-eval/**"
+      - "docs/ocr-private-evaluation-harness.md"
       - "docs/ocr-local-distribution-smoke.md"
       - "scripts/prepare-ocr-assets.mjs"
       - "src/providers/import/ocrRuntimeConfig.ts"
@@ -210,6 +218,9 @@ jobs:
 
       - name: Verify OCR local distribution
         run: npm run verify:ocr-distribution
+
+      - name: Verify private OCR evaluation harness
+        run: npm run verify:ocr-eval-harness
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
