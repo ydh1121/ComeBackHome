@@ -24,6 +24,11 @@ on:
       - "scripts/verify-phase5n-*.mjs"
       - "scripts/verify-phase5o-*.mjs"
       - "scripts/verify-phase5p-*.mjs"
+      - "scripts/verify-phase5q-*.mjs"
+      - "src/pages/ImportReviewPage.tsx"
+      - "src/pages/ImportPersonMatchPage.tsx"
+      - "src/pages/import-page.css"
+      - "src/domain/models.ts"
       - "src/providers/import/**"
       - "src/application/services/WorkbookImportFileSelectionAction.ts"
       - "src/application/use-cases/commitImportReview.ts"
@@ -52,6 +57,11 @@ on:
       - "scripts/verify-phase5n-*.mjs"
       - "scripts/verify-phase5o-*.mjs"
       - "scripts/verify-phase5p-*.mjs"
+      - "scripts/verify-phase5q-*.mjs"
+      - "src/pages/ImportReviewPage.tsx"
+      - "src/pages/ImportPersonMatchPage.tsx"
+      - "src/pages/import-page.css"
+      - "src/domain/models.ts"
       - "src/providers/import/**"
       - "src/application/services/WorkbookImportFileSelectionAction.ts"
       - "src/application/use-cases/commitImportReview.ts"
@@ -116,6 +126,9 @@ jobs:
 
       - name: Verify workbook import parser
         run: npm run verify:import-parser
+
+      - name: Verify explicit import review
+        run: npm run verify:import-review
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
