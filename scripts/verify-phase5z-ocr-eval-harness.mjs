@@ -55,6 +55,7 @@ async function copyExistingPublic() {
 }
 
 try {
+  const indexSource = await readFile(resolve(evalRoot, 'index.html'), 'utf8');
   const mainSource = await readFile(resolve(evalRoot, 'main.ts'), 'utf8');
   const launcherSource = await readFile(resolve(root, 'scripts/run-ocr-eval.mjs'), 'utf8');
   const composition = await readFile(resolve(root, 'src/app/composition.ts'), 'utf8');
@@ -73,6 +74,35 @@ try {
   ]) {
     assert(!mainSource.includes(forbidden), 'OCR evaluation page contains forbidden image persistence/upload primitive: ' + forbidden);
   }
+
+  assert(
+    indexSource.includes('multiple'),
+    'OCR evaluation file input must allow multi-image batch selection',
+  );
+  assert(
+    indexSource.includes('전체 QA 결과 복사'),
+    'OCR evaluation page must expose one-click complete QA copy',
+  );
+  assert(
+    indexSource.includes('결과 JSON 저장'),
+    'OCR evaluation page must expose one-file QA export',
+  );
+  assert(
+    mainSource.includes('comebackhome-private-ocr-eval/v2'),
+    'OCR evaluation page must emit the batch QA bundle schema',
+  );
+  assert(
+    mainSource.includes('navigator.clipboard.writeText'),
+    'OCR evaluation page must support one-click complete QA copy',
+  );
+  assert(
+    mainSource.includes("derivedEvidenceExport: 'user-triggered-only'"),
+    'OCR evaluation bundle must mark derived-evidence export as user-triggered',
+  );
+  assert(
+    mainSource.includes('sourceImagePersistence: 0'),
+    'Batch QA export must keep source image persistence at zero',
+  );
 
   assert(
     mainSource.includes('TesseractScheduleImageTextExtractor'),
