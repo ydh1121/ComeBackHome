@@ -70,8 +70,10 @@ for (const text of [
   'new HybridCommuteRepository(persistedCommute, runtimeCommute)',
   "mode: 'hybrid-api'",
   "persistence: 'worker-api'",
-  "providerData: 'mock'",
-  'Import commit is disabled in hybrid API mode',
+  "providerData: providerMode === 'api' ? 'worker-api' : 'mock'",
+  'new WorkbookImportFileSelectionAction',
+  'new ReadExcelWorkbookParser',
+  'commitImportReview: new CommitImportReview(imports, schedules)',
 ]) {
   if (!composition.includes(text)) failures.push('hybrid composition missing ' + text);
 }
@@ -81,7 +83,7 @@ if (composition.includes('HttpPushSubscriptionTransport')) failures.push('push t
 for (const text of [
   "mode: 'mock' | 'hybrid-api'",
   "persistence: 'mock' | 'worker-api'",
-  "providerData: 'mock'",
+  "providerData: 'mock' | 'worker-api'",
 ]) {
   if (!runtimeContracts.includes(text)) failures.push('runtime metadata contract missing ' + text);
 }
@@ -98,7 +100,7 @@ for (const text of [
 }
 
 for (const text of [
-  'createApplicationServices(resolveRuntimeMode())',
+  'createApplicationServices(resolveRuntimeMode(), resolveProviderRuntimeMode())',
   "root.textContent = 'ComeBackHome 시작 실패: '",
 ]) {
   if (!main.includes(text)) failures.push('main runtime bootstrap missing ' + text);
@@ -110,7 +112,7 @@ if (!qa.includes('services.runtime.persistence') || !qa.includes('services.runti
 for (const text of [
   'VITE_CBH_RUNTIME=api',
   'same-origin /api/*',
-  'import commit is deliberately disabled',
+  'real XLSX parsing runs through WorkbookParser',
   'browser push adapter and push-subscription HTTP transport remain inactive',
 ]) {
   const normalizedDocs = docs.replaceAll('`', '');
