@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { createServer as createViteServer } from 'vite';
 import {
   buildRowOrientedScheduleLayoutFixture,
@@ -9,6 +10,22 @@ import {
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
+
+const skillSource = await readFile(
+  new URL('../skills/schedule-image-ocr/SKILL.md', import.meta.url),
+  'utf8',
+);
+for (const text of [
+  "Do not assume a person's row index.",
+  'Do not assume employee names are in the leftmost column.',
+  'Do not assume dates are always horizontal.',
+  'Do not assume seven days are visible.',
+  'Do not assume start/end/rest are always three equal subcolumns.',
+  'fail closed',
+  'external OCR/AI API',
+]) {
+  expect(skillSource.includes(text), 'project OCR skill missing rule: ' + text);
+}
 
 function targetSchedules(parsed, name = '테스트직원') {
   return parsed.scheduleCandidates.filter((item) => item.sourcePersonName === name);
