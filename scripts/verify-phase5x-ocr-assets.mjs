@@ -93,11 +93,27 @@ try {
     resolve(root, 'src/providers/import/TesseractScheduleImageTextExtractor.ts'),
     'utf8',
   );
+  const runtimeConfig = await readFile(
+    resolve(root, 'src/providers/import/ocrRuntimeConfig.ts'),
+    'utf8',
+  );
+  const prepareSource = await readFile(
+    resolve(root, 'scripts/prepare-ocr-assets.mjs'),
+    'utf8',
+  );
   const composition = await readFile(resolve(root, 'src/app/composition.ts'), 'utf8');
+  const gitignore = await readFile(resolve(root, '.gitignore'), 'utf8');
   const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 
   assert(!source.includes('cdn.jsdelivr'), 'OCR extractor source contains CDN fallback');
   assert(!source.includes('unpkg.com'), 'OCR extractor source contains unpkg fallback');
+  assert(!/https?:\/\//i.test(prepareSource), 'OCR staging script must not contain remote HTTP download paths');
+  assert(!/\bfetch\s*\(/.test(prepareSource), 'OCR staging script must not fetch runtime assets');
+  assert(runtimeConfig.includes("OCR_RUNTIME_ID = 'tesseract-7.0.0-data-1.0.0'"), 'OCR runtime config id mismatch');
+  assert(runtimeConfig.includes(manifest.publicPaths.workerPath), 'OCR runtime worker path differs from manifest');
+  assert(runtimeConfig.includes(manifest.publicPaths.corePath), 'OCR runtime core path differs from manifest');
+  assert(runtimeConfig.includes(manifest.publicPaths.langPath), 'OCR runtime lang path differs from manifest');
+  assert(gitignore.split(/\r?\n/).includes('public/ocr/'), 'Generated OCR runtime tree must remain gitignored');
   assert(!composition.includes('TesseractScheduleImageTextExtractor'), 'OCR must remain inactive in app composition during Phase5X');
   assert(
     packageJson.scripts?.build === 'tsc -b && vite build',
