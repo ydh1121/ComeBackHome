@@ -61,6 +61,28 @@ export async function handleApiRequest(request: Request, env: WorkerEnv): Promis
       return json({ ok: row?.ok === 1 });
     }
 
+    if (segments[1] === 'providers' && request.method === 'GET') {
+      const enabled = env.PROVIDER_RUNTIME_ENABLED === '1';
+
+      if (segments.length === 3 && segments[2] === 'status') {
+        return json({
+          enabled,
+          source: enabled ? 'worker-provider' : 'unconfigured',
+        });
+      }
+
+      if (
+        segments.length === 3 &&
+        (segments[2] === 'place-search' || segments[2] === 'transit-search')
+      ) {
+        if (!enabled) {
+          return json({ error: 'Provider runtime is disabled.' }, 503);
+        }
+
+        return json({ error: 'Provider adapter is not configured yet.' }, 501);
+      }
+    }
+
     if (segments.length === 2 && segments[1] === 'bootstrap' && request.method === 'GET') {
       const people = new D1PersonRepository(env.DB);
       const notifications = new D1NotificationSettingsStore(env.DB);
