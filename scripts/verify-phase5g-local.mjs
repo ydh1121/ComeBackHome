@@ -183,7 +183,7 @@ try {
     '/api/providers/transit-search?q=phase5h&x=127&y=37.5',
     '/api/providers/routes?originX=127&originY=37.5&destinationX=126.9&destinationY=37.4',
     '/api/providers/bus-arrivals?stopProviderId=stop&routeProviderId=route',
-    '/api/providers/subway-arrivals?providerStationId=station&line=2',
+    '/api/providers/subway-arrivals?stationName=강남&line=2호선',
   ]) {
     const disabledProviderResponse = await originalFetch(origin + path);
     const disabledProviderPayload = await disabledProviderResponse.json();
