@@ -24,7 +24,7 @@
     "verify:backend": "node scripts/verify-phase5d-backend.mjs",
     "verify:worker": "node scripts/verify-phase5e-worker.mjs",
     "verify:http-runtime": "node scripts/verify-phase5f-http.mjs",
-    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker && npm run verify:http-runtime && npm run verify:local-contract && npm run verify:provider-boundary && npm run verify:provider-feasibility && npm run verify:provider-mappers && npm run verify:provider-clients && npm run verify:provider-security && npm run verify:kakao-transport && npm run verify:provider-runtime && npm run verify:provider-e2e && npm run verify:import-parser && npm run verify:import-review",
+    "check": "npm run typecheck && npm run typecheck:worker && npm run verify:architecture && npm run verify:ui-contracts && npm run verify:today && npm run verify:schedule && npm run verify:import && npm run verify:people && npm run verify:commute && npm run verify:notifications && npm run verify:runtime && npm run verify:pwa && npm run verify:push && npm run verify:push-client && npm run verify:backend && npm run verify:worker && npm run verify:http-runtime && npm run verify:local-contract && npm run verify:provider-boundary && npm run verify:provider-feasibility && npm run verify:provider-mappers && npm run verify:provider-clients && npm run verify:provider-security && npm run verify:kakao-transport && npm run verify:provider-runtime && npm run verify:provider-e2e && npm run verify:import-parser && npm run verify:import-review && npm run verify:notification-outbox",
     "cf:local:migrate": "wrangler d1 migrations apply come-back-home-db --local --config wrangler.local.jsonc",
     "cf:local:dev": "wrangler dev --local --config wrangler.local.jsonc",
     "verify:local-contract": "node scripts/verify-phase5g-local-contract.mjs",
@@ -38,7 +38,8 @@
     "verify:provider-runtime": "node scripts/verify-phase5n-runtime.mjs",
     "verify:provider-e2e": "node scripts/verify-phase5o-provider-e2e.mjs",
     "verify:import-parser": "node scripts/verify-phase5p-import-parser.mjs",
-    "verify:import-review": "node scripts/verify-phase5q-import-review.mjs"
+    "verify:import-review": "node scripts/verify-phase5q-import-review.mjs",
+    "verify:notification-outbox": "node scripts/verify-phase5r-notification-outbox.mjs"
   },
   "dependencies": {
     "react": "19.3.0",
