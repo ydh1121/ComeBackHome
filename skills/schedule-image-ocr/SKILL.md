@@ -190,3 +190,18 @@ Distribution verification must therefore keep strict staged/built SHA-256 checks
 - a gzip-encoded HTTP response whose decoded body equals gunzip(the staged file).
 
 Do not generalize this exception to worker/core or unrelated assets.
+
+## Private evaluation harness rule
+
+Real workplace screenshots may be evaluated only through a local/non-production path unless the user explicitly approves another path.
+
+The Phase 5Z harness:
+- binds to 127.0.0.1 only;
+- accepts the screenshot from a browser file input;
+- uses the same project Tesseract extractor and adaptive parser;
+- must not upload or persist the source screenshot;
+- may display OCR evidence, bbox, confidence, latency and parser output for human review;
+- must not commit schedule data or bypass existing review guards;
+- must not be imported into production app composition.
+
+Static OCR model/traineddata caching is distinct from source-image persistence. Never describe cached language model data as a persisted user screenshot.
