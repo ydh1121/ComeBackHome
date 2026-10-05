@@ -208,3 +208,5 @@ if (failures.length) {
 }
 
 console.log('phase 5W local-first OCR adapter verification passed');
+
+// Phase 5W final dependency-backed verification trigger.
