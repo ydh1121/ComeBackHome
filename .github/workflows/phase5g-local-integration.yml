@@ -23,6 +23,12 @@ on:
       - "scripts/verify-phase5m-*.mjs"
       - "scripts/verify-phase5n-*.mjs"
       - "scripts/verify-phase5o-*.mjs"
+      - "scripts/verify-phase5p-*.mjs"
+      - "src/providers/import/**"
+      - "src/application/services/WorkbookImportFileSelectionAction.ts"
+      - "src/application/use-cases/commitImportReview.ts"
+      - "src/mocks/repositories.ts"
+      - "test/fixtures/import/**"
       - "test/fixtures/providers/**"
   pull_request:
     branches:
@@ -45,6 +51,12 @@ on:
       - "scripts/verify-phase5m-*.mjs"
       - "scripts/verify-phase5n-*.mjs"
       - "scripts/verify-phase5o-*.mjs"
+      - "scripts/verify-phase5p-*.mjs"
+      - "src/providers/import/**"
+      - "src/application/services/WorkbookImportFileSelectionAction.ts"
+      - "src/application/use-cases/commitImportReview.ts"
+      - "src/mocks/repositories.ts"
+      - "test/fixtures/import/**"
       - "test/fixtures/providers/**"
 
 permissions:
@@ -95,6 +107,9 @@ jobs:
 
       - name: Verify provider E2E
         run: npm run verify:provider-e2e
+
+      - name: Verify workbook import parser
+        run: npm run verify:import-parser
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
