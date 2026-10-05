@@ -34,6 +34,8 @@ on:
       - "scripts/verify-phase5x-*.mjs"
       - "scripts/verify-phase5y-*.mjs"
       - "scripts/verify-phase5z-*.mjs"
+      - "scripts/verify-phase5ab-*.mjs"
+      - "docs/ocr-calendar-strip-reconstruction.md"
       - "scripts/run-ocr-eval.mjs"
       - "tools/ocr-eval/**"
       - "docs/ocr-private-evaluation-harness.md"
@@ -95,6 +97,8 @@ on:
       - "scripts/verify-phase5x-*.mjs"
       - "scripts/verify-phase5y-*.mjs"
       - "scripts/verify-phase5z-*.mjs"
+      - "scripts/verify-phase5ab-*.mjs"
+      - "docs/ocr-calendar-strip-reconstruction.md"
       - "scripts/run-ocr-eval.mjs"
       - "tools/ocr-eval/**"
       - "docs/ocr-private-evaluation-harness.md"
@@ -221,6 +225,9 @@ jobs:
 
       - name: Verify private OCR evaluation harness
         run: npm run verify:ocr-eval-harness
+
+      - name: Verify OCR calendar reconstruction
+        run: npm run verify:ocr-calendar-reconstruction
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
