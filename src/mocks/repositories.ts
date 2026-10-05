@@ -67,18 +67,44 @@ export class MockTodayRepository implements TodayRepository {
 
 export class MockImportRepository implements ImportRepository {
   constructor(private readonly store: MockStateStore) {}
-  async getCurrentBatch() { return clone(this.store.read().importBatches.find((batch) => !batch.committed) ?? this.store.read().importBatches[0] ?? null); }
+  async getCurrentBatch() { return clone(this.store.read().importBatches.find((batch) => !batch.committed) ?? null); }
   async getBatch(batchId: EntityId) { return clone(this.store.read().importBatches.find((batch) => batch.id === batchId) ?? null); }
+  async createBatch() {
+    const batch = {
+      id: crypto.randomUUID(),
+      files: [],
+      detectedPeople: [],
+      structure: { sheet: '', headerRow: 0, personColumn: '', dateColumn: '', shiftColumn: '', needsReview: true },
+      reviewItems: [],
+      committed: false,
+    };
+    this.store.mutate((state) => { state.importBatches.push(clone(batch)); });
+    return clone(batch);
+  }
   async replaceFiles(batchId: EntityId, files: ImportFileRecord[]): Promise<void> {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       if (batch) batch.files = clone(files);
     });
   }
+  async replaceParsedResult(batchId: EntityId, result: Pick<ImportBatch, 'detectedPeople' | 'structure' | 'reviewItems'>): Promise<void> {
+    this.store.mutate((state) => {
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      if (!batch) return;
+      batch.detectedPeople = clone(result.detectedPeople);
+      batch.structure = clone(result.structure);
+      batch.reviewItems = clone(result.reviewItems);
+      batch.committed = false;
+    });
+  }
   async setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void> {
     this.store.mutate((state) => {
-      const person = state.importBatches.find((batch) => batch.id === batchId)?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (person) person.matchedPersonId = personId;
+      for (const item of batch?.reviewItems ?? []) {
+        if (item.detectedPersonId === detectedPersonId) item.personId = personId;
+      }
     });
   }
   async setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {
