@@ -20,9 +20,10 @@ The verifier:
 6. starts a local Vite preview server on 127.0.0.1;
 7. fetches manifest.json from the local origin;
 8. fetches every staged worker/core/language/license file from the same local origin;
-9. verifies every HTTP response byte length + SHA-256;
-10. confirms no served URL leaves the local origin;
-11. closes the preview server and deletes the temporary workspace.
+9. verifies every HTTP response against the staged asset content;
+10. for .traineddata.gz, accepts either the exact gzip bytes or the browser/HTTP stack's transparent gzip-decoded traineddata when Content-Encoding: gzip is present;
+11. confirms no served URL leaves the local origin;
+12. closes the preview server and deletes the temporary workspace.
 
 ## Runtime scope
 
@@ -93,3 +94,16 @@ That evaluation must measure:
 - adaptive layout parser result quality.
 
 No result may bypass explicit review, and no sample workplace layout becomes a permanent parser assumption.
+
+## Gzip transport detail
+
+Tesseract.js requests language files using the .traineddata.gz URL when gzip mode is enabled.
+
+Its worker checks the received bytes for gzip magic. If gzip magic is present, Tesseract.js gunzips the data itself. If the browser HTTP stack already decoded a response because the server sent Content-Encoding: gzip, the received body is raw traineddata and Tesseract.js uses it directly.
+
+Therefore Phase 5Y does not require the post-fetch browser body to remain byte-identical to the on-disk .gz file. It requires one of two valid representations:
+
+- exact gzip file bytes matching the manifest; or
+- transparent HTTP gzip decoding whose body matches gunzip(staged .traineddata.gz), with gzip content-encoding declared.
+
+This rule applies only to the language traineddata transport and does not weaken hash validation for the staged/built files themselves.
