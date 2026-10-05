@@ -32,6 +32,8 @@ on:
       - "scripts/verify-phase5v-*.mjs"
       - "scripts/verify-phase5w-*.mjs"
       - "scripts/verify-phase5x-*.mjs"
+      - "scripts/verify-phase5y-*.mjs"
+      - "docs/ocr-local-distribution-smoke.md"
       - "scripts/prepare-ocr-assets.mjs"
       - "src/providers/import/ocrRuntimeConfig.ts"
       - "docs/ocr-runtime-assets.md"
@@ -87,6 +89,8 @@ on:
       - "scripts/verify-phase5v-*.mjs"
       - "scripts/verify-phase5w-*.mjs"
       - "scripts/verify-phase5x-*.mjs"
+      - "scripts/verify-phase5y-*.mjs"
+      - "docs/ocr-local-distribution-smoke.md"
       - "scripts/prepare-ocr-assets.mjs"
       - "src/providers/import/ocrRuntimeConfig.ts"
       - "docs/ocr-runtime-assets.md"
@@ -203,6 +207,9 @@ jobs:
 
       - name: Verify OCR runtime assets
         run: npm run verify:ocr-assets
+
+      - name: Verify OCR local distribution
+        run: npm run verify:ocr-distribution
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
