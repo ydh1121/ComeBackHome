@@ -18,6 +18,7 @@ on:
       - "scripts/verify-phase5h-*.mjs"
       - "scripts/verify-phase5i-*.mjs"
       - "scripts/verify-phase5j-*.mjs"
+      - "scripts/verify-phase5k-*.mjs"
       - "test/fixtures/providers/**"
   pull_request:
     branches:
@@ -35,6 +36,7 @@ on:
       - "scripts/verify-phase5h-*.mjs"
       - "scripts/verify-phase5i-*.mjs"
       - "scripts/verify-phase5j-*.mjs"
+      - "scripts/verify-phase5k-*.mjs"
       - "test/fixtures/providers/**"
 
 permissions:
@@ -67,6 +69,9 @@ jobs:
 
       - name: Verify provider mappers
         run: npm run verify:provider-mappers
+
+      - name: Verify provider clients
+        run: npm run verify:provider-clients
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
