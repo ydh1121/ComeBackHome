@@ -1,1 +1,1 @@
-export const OCR_SEMANTICS_VERSION = 1;
+export const OCR_SEMANTICS_VERSION = 2;
