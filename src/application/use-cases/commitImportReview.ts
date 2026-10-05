@@ -14,6 +14,9 @@ export class CommitImportReview implements CommitImportReviewAction {
     const unresolved = batch.reviewItems.filter((item) => item.personId == null);
     if (unresolved.length) throw new Error('Import contains unresolved people.');
 
+    const unreviewed = batch.reviewItems.filter((item) => item.resolution == null);
+    if (unreviewed.length) throw new Error('Import contains unreviewed schedules.');
+
     const entries = [];
     for (const item of batch.reviewItems) {
       if (item.resolution === 'KEEP') continue;
