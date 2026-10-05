@@ -175,6 +175,73 @@ try {
     'numeric-only pass must not replace overlapping semantic note text',
   );
 
+  const fallbackParameterCalls = [];
+  const fallbackRecognizeCalls = [];
+  const fallbackGeneralWords = [
+    word('2026-08-10', 96, 200, 30, 400, 70),
+    word('출근', 91, 180, 90, 260, 130),
+    word('테스트직원', 95, 20, 150, 150, 190),
+    word('12', 92, 190, 150, 240, 190),
+    word('235', 92, 350, 150, 420, 190),
+  ];
+  const fallbackSemanticWords = [
+    word('출근', 94, 180, 90, 260, 130),
+    word('퇴근', 95, 340, 90, 420, 130),
+  ];
+  const fallbackNumericWords = [
+    word('2026-08-10', 90, 200, 30, 400, 70),
+    word('12', 93, 190, 150, 240, 190),
+    word('23.5', 91, 350, 150, 420, 190),
+  ];
+
+  const fallbackWorker = {
+    async setParameters(params) {
+      fallbackParameterCalls.push(structuredClone(params));
+    },
+    async recognize(_image, options, output) {
+      fallbackRecognizeCalls.push({ options: structuredClone(options), output: structuredClone(output) });
+      if (fallbackRecognizeCalls.length === 1) return { data: page(fallbackGeneralWords) };
+      if (fallbackRecognizeCalls.length === 2) return { data: page(fallbackSemanticWords) };
+      return { data: page(fallbackNumericWords) };
+    },
+    async terminate() {
+      terminated += 1;
+    },
+  };
+
+  const fallbackExtractor = new module.TesseractScheduleImageTextExtractor(
+    { async create() { return fallbackWorker; } },
+    preprocessor,
+    { minimumConfidence: 0.18 },
+  );
+
+  const fallbackResult = await fallbackExtractor.extract({
+    name: 'private-header-fallback.png',
+    type: 'image/png',
+  });
+
+  expect(
+    fallbackParameterCalls.length === 3 && fallbackRecognizeCalls.length === 3,
+    'missing start/end semantic anchors must trigger exactly one supplemental OCR pass',
+  );
+  expect(
+    fallbackParameterCalls[1]?.tessedit_pageseg_mode === String(module.PSM?.AUTO ?? 3) ||
+      fallbackParameterCalls[1]?.tessedit_pageseg_mode !== fallbackParameterCalls[0]?.tessedit_pageseg_mode,
+    'supplemental semantic OCR pass must use a non-sparse page segmentation mode',
+  );
+  expect(
+    fallbackResult.tokens.some((token) => token.text === '퇴근'),
+    'supplemental semantic OCR pass must contribute a missing schedule header label',
+  );
+  expect(
+    fallbackResult.tokens.some((token) => token.text === '23.5'),
+    'numeric OCR pass must still run after semantic fallback',
+  );
+  expect(
+    fallbackResult.tokens.filter((token) => token.text === '출근').length === 1,
+    'supplemental semantic OCR pass must not duplicate an overlapping existing header',
+  );
+
   const failingWorker = {
     async setParameters() {},
     async recognize() {
