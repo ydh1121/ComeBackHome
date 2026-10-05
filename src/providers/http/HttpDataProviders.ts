@@ -68,8 +68,8 @@ export class HttpRealtimeBusProvider implements RealtimeBusProvider {
 export class HttpRealtimeSubwayProvider implements RealtimeSubwayProvider {
   constructor(private readonly client: HttpJsonClient) {}
 
-  async arrivals(providerStationId: string, line?: string): Promise<Arrival[]> {
-    const params = new URLSearchParams({ providerStationId });
+  async arrivals(stationName: string, line?: string): Promise<Arrival[]> {
+    const params = new URLSearchParams({ stationName });
     if (line) params.set('line', line);
     return (await this.client.get<{ arrivals: Arrival[] }>(
       '/providers/subway-arrivals?' + params.toString(),
