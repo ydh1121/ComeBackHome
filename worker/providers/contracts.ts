@@ -1,5 +1,5 @@
-import type { Arrival, Coordinate, RouteCandidate } from '../../src/domain/models';
-import type { PlaceSearchResult, TransitSearchResult } from '../../src/application/contracts/providers';
+import type { Arrival, Coordinate } from '../../src/domain/models';
+import type { PlaceSearchResult, TransitRouteResult, TransitSearchResult } from '../../src/application/contracts/providers';
 
 export type ProviderSourceId = 'kakao-map' | 'seoul-bus' | 'seoul-subway';
 export type ProviderCoverage = 'KOREA' | 'SEOUL' | 'SEOUL_METRO_PARTIAL';
@@ -17,7 +17,7 @@ export interface ProviderRequestContext {
 
 export interface KakaoMapSource {
   searchPlaces(query: string, near?: Coordinate, context?: ProviderRequestContext): Promise<PlaceSearchResult[]>;
-  publicTransitRoutes(origin: Coordinate, destination: Coordinate, context?: ProviderRequestContext): Promise<RouteCandidate[]>;
+  publicTransitRoutes(origin: Coordinate, destination: Coordinate, context?: ProviderRequestContext): Promise<TransitRouteResult[]>;
 }
 
 export interface SeoulBusSource {
