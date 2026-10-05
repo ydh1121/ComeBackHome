@@ -16,25 +16,45 @@ interface BoxToken extends ImageTextToken {
   normalized: string;
 }
 
-interface DateHeader {
+interface LayoutCandidate {
+  strategy: string;
+  score: number;
+  parsed: ParsedImport;
+}
+
+interface DateBlock {
   date: string;
   token: BoxToken;
   left: number;
   right: number;
 }
 
-interface PersonRow {
-  sourceName: string;
+interface RowBand {
   cy: number;
   top: number;
   bottom: number;
-  confidence: number;
+  tokens: BoxToken[];
 }
+
+const PERSON_ALIASES = ['이름', '성명', '직원', '직원이름', '사람', 'name', 'person', 'employee'];
+const DATE_ALIASES = ['날짜', '일자', '근무일', '근무날짜', 'date', 'workdate'];
+const START_ALIASES = ['출근', '출근시간', '시작', '시작시간', '근무시작', 'start', 'starttime'];
+const END_ALIASES = ['퇴근', '퇴근시간', '종료', '종료시간', '근무종료', 'end', 'endtime'];
+const REST_ALIASES = ['쉬는시간', '휴게', '휴게시간', 'break', 'rest'];
 
 function clampConfidence(value: number): number {
   if (!Number.isFinite(value)) return 0;
   if (value > 1) return Math.max(0, Math.min(1, value / 100));
   return Math.max(0, Math.min(1, value));
+}
+
+function normalizeText(value: string): string {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[‐‑‒–—―]/g, '-')
+    .replace(/[\s_()[\]{}]/g, '');
 }
 
 function box(token: ImageTextToken): BoxToken {
@@ -56,27 +76,31 @@ function box(token: ImageTextToken): BoxToken {
     cy: y + height / 2,
     right: x + width,
     bottom: y + height,
-    normalized: String(token.text ?? '')
-      .normalize('NFKC')
-      .trim()
-      .replace(/[‐‑‒–—―]/g, '-')
-      .replace(/\s+/g, ''),
+    normalized: normalizeText(token.text),
   };
 }
 
 function parseDate(value: string): string | null {
-  const match = /^(20\d{2})-(\d{2})-(\d{2})$/.exec(value);
+  const normalized = value.replace(/[./]/g, '-');
+  const match = /^(20\d{2})-(\d{1,2})-(\d{1,2})$/.exec(normalized);
   if (!match) return null;
+
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
+
   if (
     date.getUTCFullYear() !== year ||
     date.getUTCMonth() + 1 !== month ||
     date.getUTCDate() !== day
   ) return null;
-  return value;
+
+  return [
+    String(year).padStart(4, '0'),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-');
 }
 
 export function parseScheduleHour(value: string): string | null {
@@ -98,67 +122,86 @@ export function parseScheduleHour(value: string): string | null {
 
   const hour = Number(decimal[1]);
   if (hour > 23) return null;
-  const minutes = decimal[2] === '5' ? '30' : '00';
-  return String(hour).padStart(2, '0') + ':' + minutes;
+  return String(hour).padStart(2, '0') + ':' + (decimal[2] === '5' ? '30' : '00');
 }
 
-function isScheduleLabel(value: string): boolean {
-  return value === '출근' || value === '퇴근' || value === '쉬는시간';
+function matchesAlias(value: string, aliases: string[]): boolean {
+  return aliases.some((alias) => normalizeText(alias) === value);
+}
+
+function isScheduleHeader(value: string): boolean {
+  return matchesAlias(value, START_ALIASES) ||
+    matchesAlias(value, END_ALIASES) ||
+    matchesAlias(value, REST_ALIASES);
 }
 
 function isLikelyPersonName(value: string): boolean {
-  if (!value || value.length > 24) return false;
-  if (parseDate(value) || parseScheduleHour(value) || isScheduleLabel(value)) return false;
+  if (!value || value.length > 30) return false;
+  if (parseDate(value) || parseScheduleHour(value) || isScheduleHeader(value)) return false;
+  if (
+    matchesAlias(value, PERSON_ALIASES) ||
+    matchesAlias(value, DATE_ALIASES)
+  ) return false;
   if (/^\d+월$/.test(value)) return false;
-  if (/^[A-Za-z]+day$/i.test(value)) return false;
-  return /[가-힣A-Za-z]/.test(value);
+  if (/^[a-z]+day$/i.test(value)) return false;
+  return /[가-힣a-z]/i.test(value);
 }
 
-function mergeNameTokens(tokens: BoxToken[], rowTolerance: number): Array<{
-  sourceName: string;
-  cy: number;
-  confidence: number;
-}> {
-  const sorted = [...tokens].sort((left, right) => left.cy - right.cy || left.x - right.x);
+function average(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function groupRows(tokens: BoxToken[], tolerance?: number): RowBand[] {
+  if (!tokens.length) return [];
+
+  const typicalHeight = median(tokens.map((token) => token.height).filter((value) => value > 0)) || 12;
+  const rowTolerance = tolerance ?? Math.max(3, typicalHeight * 0.65);
   const rows: BoxToken[][] = [];
 
-  for (const token of sorted) {
-    const row = rows.find((candidate) => {
-      const average = candidate.reduce((sum, item) => sum + item.cy, 0) / candidate.length;
-      return Math.abs(average - token.cy) <= rowTolerance;
-    });
-    if (row) row.push(token);
+  for (const token of [...tokens].sort((a, b) => a.cy - b.cy || a.x - b.x)) {
+    let bestRow: BoxToken[] | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const row of rows) {
+      const cy = average(row.map((item) => item.cy));
+      const distance = Math.abs(cy - token.cy);
+      if (distance <= rowTolerance && distance < bestDistance) {
+        bestRow = row;
+        bestDistance = distance;
+      }
+    }
+
+    if (bestRow) bestRow.push(token);
     else rows.push([token]);
   }
 
-  return rows.map((row) => {
-    const ordered = row.sort((left, right) => left.x - right.x);
-    return {
-      sourceName: ordered.map((token) => token.normalized).join(''),
-      cy: ordered.reduce((sum, token) => sum + token.cy, 0) / ordered.length,
-      confidence: ordered.reduce((sum, token) => sum + token.confidence, 0) / ordered.length,
-    };
-  }).filter((row) => isLikelyPersonName(row.sourceName));
-}
+  const centers = rows
+    .map((row) => ({
+      cy: average(row.map((token) => token.cy)),
+      tokens: row.sort((a, b) => a.x - b.x),
+    }))
+    .sort((a, b) => a.cy - b.cy);
 
-function buildPersonRows(
-  names: Array<{ sourceName: string; cy: number; confidence: number }>,
-  dataTop: number,
-  imageHeight: number,
-): PersonRow[] {
-  const sorted = [...names].sort((left, right) => left.cy - right.cy);
-  return sorted.map((row, index) => ({
+  return centers.map((row, index) => ({
     ...row,
-    top: index === 0 ? dataTop : (sorted[index - 1].cy + row.cy) / 2,
-    bottom: index === sorted.length - 1 ? imageHeight : (row.cy + sorted[index + 1].cy) / 2,
+    top: index === 0 ? 0 : (centers[index - 1].cy + row.cy) / 2,
+    bottom: index === centers.length - 1
+      ? Number.POSITIVE_INFINITY
+      : (row.cy + centers[index + 1].cy) / 2,
   }));
 }
 
-function buildDateHeaders(dateTokens: Array<{ date: string; token: BoxToken }>, width: number): DateHeader[] {
-  const sorted = [...dateTokens].sort((left, right) => left.token.cx - right.token.cx);
-  if (sorted.length < 2) {
-    throw new Error('At least two date columns are required for image schedule recognition.');
-  }
+function buildDateBlocks(dateTokens: Array<{ date: string; token: BoxToken }>, width: number): DateBlock[] {
+  const sorted = [...dateTokens].sort((a, b) => a.token.cx - b.token.cx);
+  if (sorted.length < 2) return [];
 
   return sorted.map((item, index) => {
     const previous = sorted[index - 1];
@@ -173,58 +216,101 @@ function buildDateHeaders(dateTokens: Array<{ date: string; token: BoxToken }>, 
   });
 }
 
-function columnOf(header: DateHeader, cx: number): 'start' | 'end' | 'rest' | null {
-  if (cx < header.left || cx >= header.right) return null;
-  const fraction = (cx - header.left) / (header.right - header.left);
-  if (fraction < 1 / 3) return 'start';
-  if (fraction < 2 / 3) return 'end';
-  return 'rest';
+function blockForX(blocks: DateBlock[], cx: number): DateBlock | null {
+  return blocks.find((block) => cx >= block.left && cx < block.right) ?? null;
 }
 
-function confidenceAverage(values: number[]): number {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+function relativeX(block: DateBlock, cx: number): number {
+  return (cx - block.left) / Math.max(1, block.right - block.left);
 }
 
-export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport {
-  if (!Number.isFinite(layout.width) || !Number.isFinite(layout.height) || layout.width <= 0 || layout.height <= 0) {
-    throw new Error('Image dimensions are invalid.');
+function nearestField(
+  fraction: number,
+  startFraction: number,
+  endFraction: number,
+  restFraction: number | null,
+): 'start' | 'end' | 'rest' | null {
+  const choices: Array<{ field: 'start' | 'end' | 'rest'; distance: number }> = [
+    { field: 'start', distance: Math.abs(fraction - startFraction) },
+    { field: 'end', distance: Math.abs(fraction - endFraction) },
+  ];
+  if (restFraction != null) {
+    choices.push({ field: 'rest', distance: Math.abs(fraction - restFraction) });
   }
+  choices.sort((a, b) => a.distance - b.distance);
+  return choices[0]?.distance <= 0.22 ? choices[0].field : null;
+}
 
-  const tokens = layout.tokens.map(box).filter((token) => token.normalized.length > 0);
+function signature(parsed: ParsedImport): string {
+  return parsed.scheduleCandidates
+    .map((item) => [item.sourcePersonName, item.date, item.start, item.end].join('|'))
+    .sort()
+    .join('\n');
+}
+
+function dateBlockMatrixStrategy(
+  layout: ImageTextLayout,
+  tokens: BoxToken[],
+): LayoutCandidate | null {
   const dateTokens = tokens
     .map((token) => ({ token, date: parseDate(token.normalized) }))
     .filter((item): item is { token: BoxToken; date: string } => item.date != null);
 
-  const headers = buildDateHeaders(dateTokens, layout.width);
-  const firstHeader = headers[0];
-  const scheduleLabels = tokens.filter((token) => isScheduleLabel(token.normalized));
+  const blocks = buildDateBlocks(dateTokens, layout.width);
+  if (blocks.length < 2) return null;
 
-  if (scheduleLabels.length < 2) {
-    throw new Error('Image schedule headers were not recognized.');
+  const labelTokens = tokens.filter((token) => isScheduleHeader(token.normalized));
+  const startFractions: number[] = [];
+  const endFractions: number[] = [];
+  const restFractions: number[] = [];
+
+  for (const token of labelTokens) {
+    const block = blockForX(blocks, token.cx);
+    if (!block) continue;
+    const fraction = relativeX(block, token.cx);
+    if (matchesAlias(token.normalized, START_ALIASES)) startFractions.push(fraction);
+    else if (matchesAlias(token.normalized, END_ALIASES)) endFractions.push(fraction);
+    else if (matchesAlias(token.normalized, REST_ALIASES)) restFractions.push(fraction);
   }
 
-  const headerBottom = Math.max(...scheduleLabels.map((token) => token.bottom));
-  const nameBandRight = firstHeader.left;
-  const nameTokens = tokens.filter((token) =>
-    token.cx < nameBandRight &&
+  if (!startFractions.length || !endFractions.length) return null;
+
+  const startFraction = median(startFractions);
+  const endFraction = median(endFractions);
+  const restFraction = restFractions.length ? median(restFractions) : null;
+  if (Math.abs(startFraction - endFraction) < 0.08) return null;
+
+  const headerBottom = Math.max(...labelTokens.map((token) => token.bottom));
+  const gridLeft = Math.min(...blocks.map((block) => block.left));
+  const gridRight = Math.max(...blocks.map((block) => block.right));
+
+  const outsideGridTokens = tokens.filter((token) =>
     token.cy > headerBottom &&
+    (token.cx < gridLeft || token.cx >= gridRight) &&
     isLikelyPersonName(token.normalized)
   );
 
-  if (!nameTokens.length) {
-    throw new Error('Image schedule person rows were not recognized.');
-  }
+  if (!outsideGridTokens.length) return null;
 
-  const medianNameHeight = [...nameTokens]
-    .map((token) => token.height)
-    .sort((left, right) => left - right)[Math.floor(nameTokens.length / 2)] || 12;
-  const mergedNames = mergeNameTokens(nameTokens, Math.max(3, medianNameHeight * 0.55));
-  const personRows = buildPersonRows(mergedNames, headerBottom, layout.height);
+  const nameRows = groupRows(outsideGridTokens)
+    .map((row) => {
+      const names = row.tokens.filter((token) => isLikelyPersonName(token.normalized));
+      if (!names.length) return null;
+      return {
+        sourceName: names.map((token) => token.normalized).join(''),
+        cy: row.cy,
+        confidence: average(names.map((token) => token.confidence)),
+      };
+    })
+    .filter((row): row is { sourceName: string; cy: number; confidence: number } => row != null);
 
-  if (!personRows.length) {
-    throw new Error('Image schedule person rows were not recognized.');
-  }
+  if (!nameRows.length) return null;
+
+  const personRows = nameRows.map((row, index) => ({
+    ...row,
+    top: index === 0 ? headerBottom : (nameRows[index - 1].cy + row.cy) / 2,
+    bottom: index === nameRows.length - 1 ? layout.height : (row.cy + nameRows[index + 1].cy) / 2,
+  }));
 
   const detectedPeople: ParsedImportPerson[] = personRows.map((row) => ({
     sourceName: row.sourceName,
@@ -232,73 +318,273 @@ export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport 
   }));
 
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
-  const candidateConfidences: number[] = [];
 
   for (let rowIndex = 0; rowIndex < personRows.length; rowIndex += 1) {
     const person = personRows[rowIndex];
     const rowTokens = tokens.filter((token) =>
       token.cy >= person.top &&
       token.cy < person.bottom &&
-      token.cx >= nameBandRight
+      token.cx >= gridLeft &&
+      token.cx < gridRight
     );
 
-    for (const header of headers) {
+    for (const block of blocks) {
       let start: { value: string; confidence: number } | null = null;
       let end: { value: string; confidence: number } | null = null;
 
       for (const token of rowTokens) {
-        const column = columnOf(header, token.cx);
-        if (column !== 'start' && column !== 'end') continue;
+        if (token.cx < block.left || token.cx >= block.right) continue;
         const time = parseScheduleHour(token.normalized);
         if (!time) continue;
-        if (column === 'start' && !start) start = { value: time, confidence: token.confidence };
-        if (column === 'end' && !end) end = { value: time, confidence: token.confidence };
+
+        const field = nearestField(
+          relativeX(block, token.cx),
+          startFraction,
+          endFraction,
+          restFraction,
+        );
+
+        if (field === 'start' && (!start || token.confidence > start.confidence)) {
+          start = { value: time, confidence: token.confidence };
+        }
+        if (field === 'end' && (!end || token.confidence > end.confidence)) {
+          end = { value: time, confidence: token.confidence };
+        }
       }
 
       if (!start || !end) continue;
 
-      const confidence = Math.min(
-        person.confidence,
-        header.token.confidence,
-        start.confidence,
-        end.confidence,
-      );
-
       scheduleCandidates.push({
         sourcePersonName: person.sourceName,
-        date: header.date,
+        date: block.date,
         start: start.value,
         end: end.value,
         sourceRow: rowIndex + 1,
-        confidence,
+        confidence: Math.min(
+          person.confidence,
+          block.token.confidence,
+          start.confidence,
+          end.confidence,
+        ),
       });
-      candidateConfidences.push(confidence);
     }
   }
 
-  if (!scheduleCandidates.length) {
-    throw new Error('No complete image schedule rows were recognized.');
-  }
+  if (!scheduleCandidates.length) return null;
+
+  const candidateConfidence = average(scheduleCandidates.map((item) => item.confidence));
+  const semanticAnchorScore = Math.min(
+    1,
+    0.55 +
+      Math.min(blocks.length, 7) * 0.035 +
+      Math.min(labelTokens.length, blocks.length * 3) * 0.01,
+  );
+  const score = Math.min(1, candidateConfidence * 0.75 + semanticAnchorScore * 0.25);
 
   return {
-    detectedPeople,
-    scheduleCandidates,
-    structure: {
-      sheet: '이미지 근무표',
-      headerRow: 1,
-      personColumn: '좌측 이름열',
-      dateColumn: '요일별 YYYY-MM-DD',
-      shiftColumn: '출근 / 퇴근 / 쉬는시간',
-      needsReview: true,
+    strategy: 'date-block-matrix',
+    score,
+    parsed: {
+      detectedPeople,
+      scheduleCandidates,
+      structure: {
+        sheet: '이미지 근무표 / date-block-matrix',
+        headerRow: 1,
+        personColumn: '표 외곽 이름 영역(자동 추론)',
+        dateColumn: '날짜 블록(자동 추론)',
+        shiftColumn: '출근/퇴근 라벨 상대 위치(자동 추론)',
+        needsReview: true,
+      },
+      confidence: candidateConfidence,
     },
-    confidence: confidenceAverage(candidateConfidences),
   };
 }
 
-export class StructuredTableImageScheduleRecognizer implements ImageScheduleRecognizer {
+interface ColumnAnchor {
+  kind: 'person' | 'date' | 'start' | 'end';
+  token: BoxToken;
+}
+
+function classifyHeader(token: BoxToken): ColumnAnchor['kind'] | null {
+  if (matchesAlias(token.normalized, PERSON_ALIASES)) return 'person';
+  if (matchesAlias(token.normalized, DATE_ALIASES)) return 'date';
+  if (matchesAlias(token.normalized, START_ALIASES)) return 'start';
+  if (matchesAlias(token.normalized, END_ALIASES)) return 'end';
+  return null;
+}
+
+function rowTableStrategy(
+  _layout: ImageTextLayout,
+  tokens: BoxToken[],
+): LayoutCandidate | null {
+  const rows = groupRows(tokens);
+  let header: { row: RowBand; anchors: ColumnAnchor[] } | null = null;
+
+  for (const row of rows) {
+    const anchors = row.tokens
+      .map((token) => ({ token, kind: classifyHeader(token) }))
+      .filter((item): item is ColumnAnchor => item.kind != null);
+
+    const kinds = new Set(anchors.map((item) => item.kind));
+    if (
+      kinds.has('person') &&
+      kinds.has('date') &&
+      kinds.has('start') &&
+      kinds.has('end')
+    ) {
+      header = { row, anchors };
+      break;
+    }
+  }
+
+  if (!header) return null;
+
+  const centers = new Map<ColumnAnchor['kind'], number>();
+  for (const kind of ['person', 'date', 'start', 'end'] as const) {
+    const matches = header.anchors.filter((anchor) => anchor.kind === kind);
+    if (!matches.length) return null;
+    centers.set(kind, average(matches.map((anchor) => anchor.token.cx)));
+  }
+
+  const orderedCenters = [...centers.entries()]
+    .map(([kind, cx]) => ({ kind, cx }))
+    .sort((a, b) => a.cx - b.cx);
+
+  const bounds = orderedCenters.map((column, index) => ({
+    ...column,
+    left: index === 0 ? Number.NEGATIVE_INFINITY : (orderedCenters[index - 1].cx + column.cx) / 2,
+    right: index === orderedCenters.length - 1
+      ? Number.POSITIVE_INFINITY
+      : (column.cx + orderedCenters[index + 1].cx) / 2,
+  }));
+
+  const getCell = (row: RowBand, kind: ColumnAnchor['kind']): BoxToken[] => {
+    const bound = bounds.find((item) => item.kind === kind);
+    if (!bound) return [];
+    return row.tokens.filter((token) => token.cx >= bound.left && token.cx < bound.right);
+  };
+
+  const detected = new Map<string, ParsedImportPerson>();
+  const scheduleCandidates: ParsedScheduleCandidate[] = [];
+  const dataRows = rows.filter((row) => row.cy > header!.row.cy + 1);
+
+  for (let index = 0; index < dataRows.length; index += 1) {
+    const row = dataRows[index];
+    const personTokens = getCell(row, 'person').filter((token) => isLikelyPersonName(token.normalized));
+    const dateTokens = getCell(row, 'date');
+    const startTokens = getCell(row, 'start');
+    const endTokens = getCell(row, 'end');
+
+    const sourceName = personTokens.map((token) => token.normalized).join('');
+    if (!sourceName || !isLikelyPersonName(sourceName)) continue;
+
+    const date = dateTokens.map((token) => parseDate(token.normalized)).find((value) => value != null) ?? null;
+    const startToken = startTokens.find((token) => parseScheduleHour(token.normalized) != null);
+    const endToken = endTokens.find((token) => parseScheduleHour(token.normalized) != null);
+    const start = startToken ? parseScheduleHour(startToken.normalized) : null;
+    const end = endToken ? parseScheduleHour(endToken.normalized) : null;
+
+    if (!date || !start || !end || !startToken || !endToken) continue;
+
+    const personConfidence = average(personTokens.map((token) => token.confidence));
+    const confidence = Math.min(
+      personConfidence,
+      ...dateTokens.map((token) => token.confidence),
+      startToken.confidence,
+      endToken.confidence,
+    );
+
+    const existing = detected.get(sourceName);
+    if (!existing || confidence > existing.confidence) {
+      detected.set(sourceName, { sourceName, confidence: personConfidence });
+    }
+
+    scheduleCandidates.push({
+      sourcePersonName: sourceName,
+      date,
+      start,
+      end,
+      sourceRow: index + 1,
+      confidence,
+    });
+  }
+
+  if (!scheduleCandidates.length) return null;
+
+  const candidateConfidence = average(scheduleCandidates.map((item) => item.confidence));
+  const headerConfidence = average(header.anchors.map((anchor) => anchor.token.confidence));
+  const score = Math.min(1, candidateConfidence * 0.75 + headerConfidence * 0.25);
+
+  return {
+    strategy: 'row-table',
+    score,
+    parsed: {
+      detectedPeople: [...detected.values()],
+      scheduleCandidates,
+      structure: {
+        sheet: '이미지 근무표 / row-table',
+        headerRow: rows.indexOf(header.row) + 1,
+        personColumn: '사람 열(헤더 라벨 자동 추론)',
+        dateColumn: '날짜 열(헤더 라벨 자동 추론)',
+        shiftColumn: '출근/퇴근 열(헤더 라벨 자동 추론)',
+        needsReview: true,
+      },
+      confidence: candidateConfidence,
+    },
+  };
+}
+
+function assertLayout(layout: ImageTextLayout): BoxToken[] {
+  if (
+    !Number.isFinite(layout.width) ||
+    !Number.isFinite(layout.height) ||
+    layout.width <= 0 ||
+    layout.height <= 0
+  ) {
+    throw new Error('Image dimensions are invalid.');
+  }
+  return layout.tokens.map(box).filter((token) => token.normalized.length > 0);
+}
+
+export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport {
+  const tokens = assertLayout(layout);
+  const candidates = [
+    dateBlockMatrixStrategy(layout, tokens),
+    rowTableStrategy(layout, tokens),
+  ].filter((candidate): candidate is LayoutCandidate => candidate != null)
+    .sort((a, b) => b.score - a.score);
+
+  if (!candidates.length || candidates[0].score < 0.65) {
+    throw new Error('Image schedule layout was not recognized confidently.');
+  }
+
+  if (
+    candidates.length > 1 &&
+    candidates[1].score >= candidates[0].score - 0.06 &&
+    signature(candidates[0].parsed) !== signature(candidates[1].parsed)
+  ) {
+    throw new Error('Image schedule layout is ambiguous and requires manual review.');
+  }
+
+  return {
+    ...candidates[0].parsed,
+    structure: {
+      ...candidates[0].parsed.structure,
+      needsReview: true,
+    },
+  };
+}
+
+export class AdaptiveScheduleImageRecognizer implements ImageScheduleRecognizer {
   constructor(private readonly extractor: ImageTextExtractor) {}
 
   async parse(file: File): Promise<ParsedImport> {
     return parseScheduleImageLayout(await this.extractor.extract(file));
   }
 }
+
+/**
+ * Compatibility alias for the first Phase 5V name.
+ * The implementation is adaptive and does not assume a single fixed table layout.
+ */
+export class StructuredTableImageScheduleRecognizer extends AdaptiveScheduleImageRecognizer {}
