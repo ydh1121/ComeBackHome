@@ -115,3 +115,5 @@ if (failures.length) {
 }
 
 console.log('phase 5K fixture-backed provider request client verification passed');
+
+// Phase 5K dependency-backed verification trigger.
