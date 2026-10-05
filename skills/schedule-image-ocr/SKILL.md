@@ -205,3 +205,29 @@ The Phase 5Z harness:
 - must not be imported into production app composition.
 
 Static OCR model/traineddata caching is distinct from source-image persistence. Never describe cached language model data as a persisted user screenshot.
+
+## Sparse horizontal calendar reconstruction rule
+
+A horizontal weekly/calendar strategy may reconstruct missing date cells only when structural weekday evidence supports it.
+
+Allowed:
+- derive relative day spacing from a coherent top-row weekday sequence;
+- use surviving full-date tokens to derive a consensus base date;
+- fill only consecutive columns evidenced by that strip;
+- accept calendar-validated YYYYMMDD when OCR loses date punctuation;
+- assign lower confidence to inferred dates;
+- fail closed when weekday geometry or date consensus conflicts.
+
+Not allowed:
+- hard-code the current employer's pixel coordinates;
+- assume every image has seven days;
+- treat a date inferred from color or empty grid position as truth;
+- apply the horizontal-calendar rule to unrelated table strategies.
+
+## Person row identity trust rule
+
+Preserving a row boundary and trusting the row's person text are separate decisions.
+
+A weak OCR fragment may remain as a geometric row anchor so neighboring schedules do not shift rows, while being excluded from detectedPeople and from schedule-candidate emission.
+
+Current conservative trust thresholds are implementation guards, not identity truth. Every image-derived identity still requires review/matching before commit.
