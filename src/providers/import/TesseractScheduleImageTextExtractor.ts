@@ -7,6 +7,11 @@ import type {
   PreparedImageRaster,
 } from '../../application/contracts/providers';
 import { classifyScheduleShiftLabel } from './ScheduleImportSemantics';
+import {
+  analyzeScheduleImagePattern,
+  parseScheduleHour,
+  type SchedulePatternProbeRegion,
+} from './StructuredTableImageScheduleRecognizer';
 
 interface OcrBbox {
   x0: number;
@@ -309,6 +314,109 @@ function mergeSupplementalScheduleHeaders(
   return merged.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
+function sourceRegionToRasterRectangle(
+  region: SchedulePatternProbeRegion,
+  raster: PreparedImageRaster,
+): { left: number; top: number; width: number; height: number } {
+  const scaleX = raster.rasterWidth / raster.sourceWidth;
+  const scaleY = raster.rasterHeight / raster.sourceHeight;
+  const left = Math.max(0, Math.floor(region.x * scaleX));
+  const top = Math.max(0, Math.floor(region.y * scaleY));
+  const right = Math.min(
+    raster.rasterWidth,
+    Math.ceil((region.x + region.width) * scaleX),
+  );
+  const bottom = Math.min(
+    raster.rasterHeight,
+    Math.ceil((region.y + region.height) * scaleY),
+  );
+
+  return {
+    left,
+    top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top),
+  };
+}
+
+function regionToken(
+  region: SchedulePatternProbeRegion,
+  text: string,
+  confidence: number,
+): ImageTextToken {
+  return {
+    text,
+    x: region.x + region.width * 0.16,
+    y: region.y + region.height * 0.2,
+    width: Math.max(1, region.width * 0.68),
+    height: Math.max(1, region.height * 0.6),
+    confidence,
+  };
+}
+
+function personLabelCandidate(words: OcrWord[]): {
+  text: string;
+  confidence: number;
+} | null {
+  const usable = words
+    .map((word) => ({
+      text: String(word.text ?? '').normalize('NFKC').trim(),
+      confidence: normalizeConfidence(word.confidence),
+    }))
+    .filter((item) =>
+      item.text.length > 0 &&
+      !/\d/.test(item.text) &&
+      /[가-힣a-z]/i.test(item.text)
+    );
+
+  if (!usable.length) return null;
+  const text = usable.map((item) => item.text.replace(/\s+/g, '')).join('');
+  const confidence = usable.reduce((sum, item) => sum + item.confidence, 0) / usable.length;
+  if (!/[가-힣a-z]/i.test(text)) return null;
+  return { text, confidence };
+}
+
+function bestNumericCandidate(words: OcrWord[]): {
+  text: string;
+  confidence: number;
+} | null {
+  return words
+    .map((word) => ({
+      text: String(word.text ?? '').normalize('NFKC').trim(),
+      confidence: normalizeConfidence(word.confidence),
+    }))
+    .filter((item) => numericShape(item.text) && parseScheduleHour(item.text) != null)
+    .sort((left, right) => right.confidence - left.confidence)[0] ?? null;
+}
+
+function tokenCenterInside(
+  token: ImageTextToken,
+  region: SchedulePatternProbeRegion,
+): boolean {
+  const cx = token.x + token.width / 2;
+  const cy = token.y + token.height / 2;
+  return (
+    cx >= region.x &&
+    cx < region.x + region.width &&
+    cy >= region.y &&
+    cy < region.y + region.height
+  );
+}
+
+function mergePersonRegionToken(
+  tokens: ImageTextToken[],
+  region: SchedulePatternProbeRegion,
+  candidate: ImageTextToken,
+): ImageTextToken[] {
+  const kept = tokens.filter((token) => {
+    if (!tokenCenterInside(token, region)) return true;
+    if (numericShape(token.text) || classifyScheduleShiftLabel(token.text)) return true;
+    return !/[가-힣a-z]/i.test(token.text);
+  });
+  kept.push(candidate);
+  return kept.sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
 export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
   private readonly languages: string[];
   private readonly minimumConfidence: number;
@@ -384,12 +492,86 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
         .filter((token) => numericShape(token.text));
 
       const semanticMerged = mergeSupplementalScheduleHeaders(general, semanticHeaders);
-
-      return {
+      let refinedLayout: ImageTextLayout = {
         width: raster.sourceWidth,
         height: raster.sourceHeight,
         tokens: mergeTokens(semanticMerged, numeric),
       };
+
+      const initialPattern = analyzeScheduleImagePattern(refinedLayout);
+      if (initialPattern) {
+        const personRegions = initialPattern.probeRegions.filter(
+          (region) => region.kind === 'person-label',
+        );
+
+        if (personRegions.length) {
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_LINE),
+            tessedit_char_whitelist: '',
+            preserve_interword_spaces: '1',
+          });
+
+          for (const region of personRegions) {
+            const result = await worker.recognize(
+              raster.image,
+              {
+                rotateAuto: false,
+                rectangle: sourceRegionToRasterRectangle(region, raster),
+              },
+              { text: true, blocks: true },
+            );
+            const candidate = personLabelCandidate(flattenWords(result.data));
+            if (!candidate || candidate.confidence < this.minimumConfidence) continue;
+            refinedLayout = {
+              ...refinedLayout,
+              tokens: mergePersonRegionToken(
+                refinedLayout.tokens,
+                region,
+                regionToken(region, candidate.text, candidate.confidence),
+              ),
+            };
+          }
+        }
+
+        const renamedPattern = analyzeScheduleImagePattern(refinedLayout);
+        const numericRegions = (renamedPattern?.probeRegions ?? []).filter(
+          (region) => region.kind === 'start' || region.kind === 'end',
+        );
+
+        if (numericRegions.length) {
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_LINE),
+            tessedit_char_whitelist: '0123456789.,:/-',
+            preserve_interword_spaces: '1',
+          });
+
+          const targetedNumeric: ImageTextToken[] = [];
+          for (const region of numericRegions) {
+            const result = await worker.recognize(
+              raster.image,
+              {
+                rotateAuto: false,
+                rectangle: sourceRegionToRasterRectangle(region, raster),
+              },
+              { text: true, blocks: true },
+            );
+            const candidate = bestNumericCandidate(flattenWords(result.data));
+            if (!candidate || candidate.confidence < this.minimumConfidence) continue;
+            targetedNumeric.push(
+              regionToken(region, candidate.text, candidate.confidence),
+            );
+          }
+
+          if (targetedNumeric.length) {
+            refinedLayout = {
+              ...refinedLayout,
+              tokens: mergeTokens(refinedLayout.tokens, targetedNumeric),
+            };
+          }
+        }
+      }
+
+      return refinedLayout;
     } finally {
       await worker.terminate();
     }

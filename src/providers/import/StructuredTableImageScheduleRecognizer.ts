@@ -518,10 +518,65 @@ function signature(parsed: ParsedImport): string {
     .join('\n');
 }
 
-function dateBlockMatrixStrategy(
+interface DateBlockPersonRow {
+  sourceName: string;
+  confidence: number;
+  cy: number;
+  top: number;
+  bottom: number;
+}
+
+interface DateBlockMatrixGeometry {
+  blocks: DateBlock[];
+  usedCalendarStrip: boolean;
+  labelTokens: BoxToken[];
+  startFraction: number;
+  endFraction: number;
+  restFraction: number | null;
+  headerBottom: number;
+  gridLeft: number;
+  gridRight: number;
+  personRows: DateBlockPersonRow[];
+}
+
+export interface SchedulePatternProbeRegion {
+  id: string;
+  kind: 'person-label' | 'start' | 'end';
+  sourceRow: number;
+  sourcePersonName: string;
+  date: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ScheduleCellPattern {
+  sourceRow: number;
+  sourcePersonName: string;
+  date: string;
+  state: 'WORK' | 'INCOMPLETE' | 'OFF_OR_BLANK';
+  start: string | null;
+  end: string | null;
+  numericEvidenceCount: number;
+}
+
+export interface ScheduleImagePatternAnalysis {
+  strategy: 'date-block-matrix';
+  people: Array<{
+    sourceRow: number;
+    sourceName: string;
+    confidence: number;
+  }>;
+  dates: string[];
+  probeRegions: SchedulePatternProbeRegion[];
+  cells: ScheduleCellPattern[];
+}
+
+function inferDateBlockMatrixGeometry(
   layout: ImageTextLayout,
   tokens: BoxToken[],
-): LayoutCandidate | null {
+): DateBlockMatrixGeometry | null {
   const dateTokens = tokens
     .map((token) => ({ token, date: parseScheduleDate(token.normalized) }))
     .filter((item): item is { token: BoxToken; date: string } => item.date != null);
@@ -533,7 +588,6 @@ function dateBlockMatrixStrategy(
   if (blocks.length < 2) return null;
 
   const usedCalendarStrip = calendarBlocks.length >= 2;
-
   const labelTokens = tokens.filter((token) => isScheduleHeader(token.normalized));
   const startFractions: number[] = [];
   const endFractions: number[] = [];
@@ -564,7 +618,6 @@ function dateBlockMatrixStrategy(
     (token.cx < gridLeft || token.cx >= gridRight) &&
     isLikelyPersonName(token.normalized)
   );
-
   if (!outsideGridTokens.length) return null;
 
   const nameRows = groupRows(outsideGridTokens)
@@ -584,11 +637,186 @@ function dateBlockMatrixStrategy(
 
   if (!nameRows.length) return null;
 
-  const personRows = nameRows.map((row, index) => ({
+  const personRows: DateBlockPersonRow[] = nameRows.map((row, index) => ({
     ...row,
     top: index === 0 ? headerBottom : (nameRows[index - 1].cy + row.cy) / 2,
-    bottom: index === nameRows.length - 1 ? layout.height : (row.cy + nameRows[index + 1].cy) / 2,
+    bottom:
+      index === nameRows.length - 1
+        ? layout.height
+        : (row.cy + nameRows[index + 1].cy) / 2,
   }));
+
+  return {
+    blocks,
+    usedCalendarStrip,
+    labelTokens,
+    startFraction,
+    endFraction,
+    restFraction,
+    headerBottom,
+    gridLeft,
+    gridRight,
+    personRows,
+  };
+}
+
+function fieldRegion(
+  geometry: DateBlockMatrixGeometry,
+  block: DateBlock,
+  person: DateBlockPersonRow,
+  sourceRow: number,
+  targetField: 'start' | 'end',
+): SchedulePatternProbeRegion {
+  const fraction =
+    targetField === 'start'
+      ? geometry.startFraction
+      : geometry.endFraction;
+  const peerFractions = [
+    geometry.startFraction,
+    geometry.endFraction,
+    geometry.restFraction,
+  ].filter((value): value is number => value != null && value !== fraction);
+  const nearestDistance = peerFractions.length
+    ? Math.min(...peerFractions.map((value) => Math.abs(value - fraction)))
+    : Math.abs(geometry.startFraction - geometry.endFraction);
+  const halfFraction = Math.max(0.04, Math.min(0.18, nearestDistance * 0.42));
+  const blockWidth = Math.max(1, block.right - block.left);
+  const left = Math.max(block.left, block.left + (fraction - halfFraction) * blockWidth);
+  const right = Math.min(block.right, block.left + (fraction + halfFraction) * blockWidth);
+
+  return {
+    id: [
+      sourceRow,
+      person.sourceName,
+      block.date,
+      targetField,
+    ].map((value) => encodeURIComponent(String(value))).join('::'),
+    kind: targetField,
+    sourceRow,
+    sourcePersonName: person.sourceName,
+    date: block.date,
+    x: left,
+    y: person.top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, person.bottom - person.top),
+  };
+}
+
+export function analyzeScheduleImagePattern(
+  layout: ImageTextLayout,
+): ScheduleImagePatternAnalysis | null {
+  const tokens = assertLayout(layout);
+  const geometry = inferDateBlockMatrixGeometry(layout, tokens);
+  if (!geometry) return null;
+
+  const probeRegions: SchedulePatternProbeRegion[] = [];
+  const cells: ScheduleCellPattern[] = [];
+
+  geometry.personRows.forEach((person, rowIndex) => {
+    const sourceRow = rowIndex + 1;
+    const nameOnLeft = person.cy >= geometry.headerBottom &&
+      tokens.some((token) =>
+        token.cy >= person.top &&
+        token.cy < person.bottom &&
+        token.cx < geometry.gridLeft &&
+        token.normalized.includes(person.sourceName)
+      );
+    probeRegions.push({
+      id: `person::${sourceRow}`,
+      kind: 'person-label',
+      sourceRow,
+      sourcePersonName: person.sourceName,
+      date: null,
+      x: nameOnLeft ? 0 : geometry.gridRight,
+      y: person.top,
+      width: nameOnLeft
+        ? Math.max(1, geometry.gridLeft)
+        : Math.max(1, layout.width - geometry.gridRight),
+      height: Math.max(1, person.bottom - person.top),
+    });
+
+    const rowTokens = tokens.filter((token) =>
+      token.cy >= person.top &&
+      token.cy < person.bottom &&
+      token.cx >= geometry.gridLeft &&
+      token.cx < geometry.gridRight
+    );
+
+    for (const block of geometry.blocks) {
+      let start: string | null = null;
+      let end: string | null = null;
+      let numericEvidenceCount = 0;
+
+      for (const token of rowTokens) {
+        if (token.cx < block.left || token.cx >= block.right) continue;
+        const time = parseScheduleHour(token.normalized);
+        if (!time) continue;
+        numericEvidenceCount += 1;
+        const field = nearestField(
+          relativeX(block, token.cx),
+          geometry.startFraction,
+          geometry.endFraction,
+          geometry.restFraction,
+        );
+        if (field === 'start' && start == null) start = time;
+        if (field === 'end' && end == null) end = time;
+      }
+
+      cells.push({
+        sourceRow,
+        sourcePersonName: person.sourceName,
+        date: block.date,
+        state:
+          start && end
+            ? 'WORK'
+            : numericEvidenceCount > 0
+              ? 'INCOMPLETE'
+              : 'OFF_OR_BLANK',
+        start,
+        end,
+        numericEvidenceCount,
+      });
+
+      if (!(start && end)) {
+        probeRegions.push(
+          fieldRegion(geometry, block, person, sourceRow, 'start'),
+          fieldRegion(geometry, block, person, sourceRow, 'end'),
+        );
+      }
+    }
+  });
+
+  return {
+    strategy: 'date-block-matrix',
+    people: geometry.personRows.map((person, index) => ({
+      sourceRow: index + 1,
+      sourceName: person.sourceName,
+      confidence: person.confidence,
+    })),
+    dates: geometry.blocks.map((block) => block.date),
+    probeRegions,
+    cells,
+  };
+}
+
+function dateBlockMatrixStrategy(
+  layout: ImageTextLayout,
+  tokens: BoxToken[],
+): LayoutCandidate | null {
+  const geometry = inferDateBlockMatrixGeometry(layout, tokens);
+  if (!geometry) return null;
+
+  const {
+    blocks,
+    usedCalendarStrip,
+    labelTokens,
+    startFraction,
+    endFraction,
+    restFraction,
+    gridLeft,
+    gridRight,
+    personRows,
+  } = geometry;
 
   const detectedPeople: ParsedImportPerson[] = personRows.map((row) => ({
     sourceName: row.sourceName,

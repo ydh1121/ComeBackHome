@@ -3,7 +3,12 @@ import {
   TesseractJsWorkerFactory,
   TesseractScheduleImageTextExtractor,
 } from '../../src/providers/import/TesseractScheduleImageTextExtractor';
-import { parseScheduleImageLayout } from '../../src/providers/import/StructuredTableImageScheduleRecognizer';
+import {
+  analyzeScheduleImagePattern,
+  parseScheduleImageLayout,
+  type ScheduleImagePatternAnalysis,
+} from '../../src/providers/import/StructuredTableImageScheduleRecognizer';
+import { buildScheduleBatchPatternSummary } from '../../src/providers/import/ScheduleBatchPatternSummary';
 import { SAME_ORIGIN_TESSERACT_ASSETS } from '../../src/providers/import/ocrRuntimeConfig';
 
 const input = document.querySelector<HTMLInputElement>('#schedule-image');
@@ -58,6 +63,7 @@ interface FileEvaluationResult {
     tokenCount: number;
     averageConfidence: number;
   };
+  pattern?: ScheduleImagePatternAnalysis | null;
   timingMs: {
     ocr?: number;
     parser?: number;
@@ -91,6 +97,7 @@ interface EvaluationBundle {
     derivedEvidenceExport: 'user-triggered-only';
   };
   fileCount: number;
+  batchPattern: ReturnType<typeof buildScheduleBatchPatternSummary>;
   files: FileEvaluationResult[];
 }
 
@@ -142,10 +149,12 @@ function renderBundle(bundle: EvaluationBundle): void {
     generatedAt: bundle.generatedAt,
     runtime: bundle.runtime,
     fileCount: bundle.fileCount,
+    batchPattern: bundle.batchPattern,
     files: bundle.files.map((item) => ({
       source: item.source,
       image: item.image,
       evidence: item.evidence,
+      pattern: item.pattern,
       timingMs: item.timingMs,
       parserResult: item.parser.result,
     })),
@@ -209,6 +218,7 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
         tokenCount: layout.tokens.length,
         averageConfidence: Number(averageConfidence.toFixed(4)),
       },
+      pattern: analyzeScheduleImagePattern(layout),
       timingMs: {
         ocr: Number(ocrElapsedMs.toFixed(1)),
         parser: Number(parserElapsedMs.toFixed(1)),
@@ -282,6 +292,12 @@ async function runEvaluation(): Promise<void> {
         derivedEvidenceExport: 'user-triggered-only',
       },
       fileCount: results.length,
+      batchPattern: buildScheduleBatchPatternSummary(
+        results.map((item) => ({
+          sourceName: item.source.name,
+          pattern: item.pattern ?? null,
+        })),
+      ),
       files: results,
     };
 
