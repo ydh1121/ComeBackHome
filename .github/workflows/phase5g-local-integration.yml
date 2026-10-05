@@ -17,6 +17,8 @@ on:
       - "scripts/verify-phase5g-local*.mjs"
       - "scripts/verify-phase5h-*.mjs"
       - "scripts/verify-phase5i-*.mjs"
+      - "scripts/verify-phase5j-*.mjs"
+      - "test/fixtures/providers/**"
   pull_request:
     branches:
       - main
@@ -32,6 +34,8 @@ on:
       - "scripts/verify-phase5g-local*.mjs"
       - "scripts/verify-phase5h-*.mjs"
       - "scripts/verify-phase5i-*.mjs"
+      - "scripts/verify-phase5j-*.mjs"
+      - "test/fixtures/providers/**"
 
 permissions:
   contents: read
@@ -60,6 +64,9 @@ jobs:
 
       - name: Verify provider feasibility
         run: npm run verify:provider-feasibility
+
+      - name: Verify provider mappers
+        run: npm run verify:provider-mappers
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
