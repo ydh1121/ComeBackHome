@@ -163,3 +163,5 @@ try {
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }
+
+// Phase 5Z dependency-backed private harness verification trigger.
