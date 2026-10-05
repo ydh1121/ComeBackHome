@@ -1,0 +1,27 @@
+{
+  "errorMessage": {
+    "status": 200,
+    "code": "INFO-000",
+    "message": "정상 처리되었습니다.",
+    "link": "",
+    "developerMessage": "",
+    "total": 1
+  },
+  "realtimePositionList": [
+    {
+      "subwayId": "1002",
+      "subwayNm": "2호선",
+      "statnId": "1002000222",
+      "statnNm": "강남",
+      "trainNo": "2258",
+      "lastRecptnDt": "20261005",
+      "recptnDt": "2026-10-05 09:45:30",
+      "updnLine": "0",
+      "statnTid": "1002000201",
+      "statnTnm": "성수",
+      "trainSttus": "2",
+      "directAt": "0",
+      "lstcarAt": "0"
+    }
+  ]
+}
