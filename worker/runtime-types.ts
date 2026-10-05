@@ -32,6 +32,7 @@ export interface WorkerEnv {
   DB: D1DatabaseLike;
   ASSETS?: StaticAssetFetcher;
   PUSH_DELIVERY_ENABLED?: string;
+  PROVIDER_RUNTIME_ENABLED?: string;
 }
 
 export interface ScheduledControllerLike {
