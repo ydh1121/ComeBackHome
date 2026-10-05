@@ -180,3 +180,13 @@ Phase 5Y verification must:
 - clean the temporary build/staging area after verification.
 
 This distribution smoke uses no workplace screenshot and does not activate TesseractScheduleImageTextExtractor in application composition.
+
+## Traineddata HTTP gzip rule
+
+When same-origin .traineddata.gz is served with Content-Encoding: gzip, browser fetch may expose the transparently decoded raw traineddata bytes. This is valid for Tesseract.js because its worker only gunzips when gzip magic is still present.
+
+Distribution verification must therefore keep strict staged/built SHA-256 checks, while HTTP verification for traineddata may accept either:
+- exact gzip bytes; or
+- a gzip-encoded HTTP response whose decoded body equals gunzip(the staged file).
+
+Do not generalize this exception to worker/core or unrelated assets.
