@@ -15,9 +15,15 @@ export interface ProviderRequestContext {
   fetchedAt: string;
 }
 
+export interface KakaoStaticMapImage {
+  body: ArrayBuffer;
+  contentType: string;
+}
+
 export interface KakaoMapSource {
   searchPlaces(query: string, near?: Coordinate, context?: ProviderRequestContext): Promise<PlaceSearchResult[]>;
   publicTransitRoutes(origin: Coordinate, destination: Coordinate, context?: ProviderRequestContext): Promise<TransitRouteResult[]>;
+  staticMap(center: Coordinate, markers: Coordinate[], context?: ProviderRequestContext): Promise<KakaoStaticMapImage>;
 }
 
 export interface SeoulBusSource {
