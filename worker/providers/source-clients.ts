@@ -98,6 +98,34 @@ export class KakaoMapRequestClient implements KakaoMapSource {
     };
     return mapKakaoPublicTransitRoutes(await this.transport.getJson(request, context));
   }
+
+  async staticMap(center: Coordinate, markers: Coordinate[], context?: ProviderRequestContext) {
+    const markerValues = [
+      'location:' + center.x + ',' + center.y + '|option:false',
+      ...markers.slice(0, 4).map((marker) =>
+        'location:' + marker.x + ',' + marker.y + '|option:false'
+      ),
+    ];
+    const request: ProviderJsonRequest = {
+      source: 'kakao-map',
+      capability: 'static-map',
+      method: 'GET',
+      urlTemplate: 'https://dapi.kakao.com/v2/maps/staticmap',
+      query: {
+        center: String(center.x) + ',' + String(center.y),
+        size: '640x420',
+        format: 'png',
+        scale: '1',
+        lv: '4',
+        coord: 'WGS84',
+        logo_pos: 'BOTTOM_RIGHT',
+        markers: markerValues,
+      },
+      auth: kakaoAuth(),
+      security: 'TLS_VERIFIED',
+    };
+    return this.transport.getBytes(request, context);
+  }
 }
 
 export class SeoulBusRequestClient implements SeoulBusSource {
