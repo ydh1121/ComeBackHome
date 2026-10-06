@@ -1,0 +1,20 @@
+{
+  "databaseName": "come-back-home-db",
+  "remote": true,
+  "appliedMigrations": [
+    "0001_initial.sql",
+    "0002_notification_planner_state.sql",
+    "0003_presence_notification_settings.sql"
+  ],
+  "verifiedTables": [
+    "people",
+    "schedules",
+    "places",
+    "notification_settings",
+    "push_subscriptions",
+    "notification_jobs",
+    "notification_planner_state"
+  ],
+  "migrationCount": 3,
+  "tableCount": 13
+}
