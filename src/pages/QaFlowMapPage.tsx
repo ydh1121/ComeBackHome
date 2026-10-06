@@ -17,6 +17,8 @@ export function QaFlowMapPage() {
         <div className="flow-node">출발·도착 수정 → 근처 교통 → 검색/버스</div>
         <div className="flow-arrow">↓</div>
         <div className="flow-node">설정 → 알림 권한/규칙/테스트</div>
+        <div className="flow-arrow">↓</div>
+        <div className="flow-node">설정 → 퇴근·귀가 단축어 자동화</div>
       </div>
     </section>
   );
