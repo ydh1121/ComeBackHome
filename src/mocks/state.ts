@@ -1,4 +1,4 @@
-import type { ImportBatch, NotificationSettings, Person, Place, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../domain/models';
+import type { ImportBatch, NotificationSettings, Person, Place, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint } from '../domain/models';
 
 export interface MockState {
   selectedPersonId: string | null;
@@ -7,6 +7,7 @@ export interface MockState {
   places: Place[];
   accessPoints: TransitAccessPoint[];
   routePreferences: RoutePreference[];
+  savedRoutes: SavedCommuteRoute[];
   routeCandidates: RouteCandidate[];
   preferredRouteCandidateIds: Record<string, string>;
   todaySnapshots: TodaySnapshot[];
@@ -68,6 +69,10 @@ export const MOCK_FIXTURE: MockState = {
     { id: 'mock-access-destination-subway', personId: 'mock-person-1', providerId: 'mock-station-dest', placeKind: 'destination', mode: 'SUBWAY', name: '샘플 도착역', line: '샘플선 B', walkMinutes: 4, selected: true },
   ],
   routePreferences: [{ id: 'mock-route-pref', personId: 'mock-person-1', originPlaceKind: 'origin', destinationPlaceKind: 'destination', viaAccessPointIds: ['mock-access-bus', 'mock-access-subway'] }],
+  savedRoutes: [
+    { id: 'mock-saved-route-1', personId: 'mock-person-1', position: 1, label: '경로 1', originAccessPointId: 'mock-access-bus', viaAccessPointIds: ['mock-access-subway'], active: true },
+    { id: 'mock-saved-route-2', personId: 'mock-person-1', position: 2, label: '경로 2', viaAccessPointIds: [], active: false },
+  ],
   routeCandidates: [
     { id: 'mock-route-fast', personId: 'mock-person-1', totalMinutes: 38, transferCount: 2, walkMinutes: 7, fare: 1550, policyLabels: ['빠름'], matchesPreference: true, steps: [{ type: 'WALKING', label: '출발지 → 샘플 정류장 A' }, { type: 'BUS', label: '샘플 정류장 A → 샘플 환승역' }, { type: 'SUBWAY', label: '샘플 환승역 → 샘플 도착역' }, { type: 'WALKING', label: '샘플 도착역 → 도착지' }] },
     { id: 'mock-route-simple', personId: 'mock-person-1', totalMinutes: 44, transferCount: 1, walkMinutes: 11, fare: 1450, policyLabels: ['환승 적음'], steps: [{ type: 'SUBWAY', label: '샘플 출발역 → 샘플 도착역' }] },

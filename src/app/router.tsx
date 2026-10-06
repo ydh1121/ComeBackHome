@@ -43,6 +43,7 @@ function componentFor(path: string) {
   if (path === '/people/:personId/place/destination') return DestinationPlaceEditPage;
   if (path === '/people/:personId/commute') return CommuteRoutePage;
   if (path === '/people/:personId/commute/manual') return CommuteManualPage;
+  if (path === '/people/:personId/commute/routes/:routeId') return CommuteManualPage;
   if (path === '/people/:personId/commute/:placeKind/access') return TransitAccessPage;
   if (path === '/people/:personId/commute/:placeKind/access/search') return TransitSearchPage;
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;

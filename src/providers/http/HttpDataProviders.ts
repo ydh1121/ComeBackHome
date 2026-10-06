@@ -36,6 +36,16 @@ export class HttpTransitAccessSearchProvider implements TransitAccessSearchProvi
       '/providers/transit-search?' + params.toString(),
     )).results;
   }
+
+  async nearby(near: Coordinate): Promise<TransitSearchResult[]> {
+    const params = new URLSearchParams({
+      x: String(near.x),
+      y: String(near.y),
+    });
+    return (await this.client.get<{ results: TransitSearchResult[] }>(
+      '/providers/transit-nearby?' + params.toString(),
+    )).results;
+  }
 }
 
 export class HttpTransitRouteProvider implements TransitRouteProvider {

@@ -8,6 +8,7 @@ const manual = await read('../src/pages/CommuteManualPage.tsx');
 const access = await read('../src/pages/TransitAccessPage.tsx');
 const search = await read('../src/pages/TransitSearchPage.tsx');
 const bus = await read('../src/pages/BusRoutePage.tsx');
+const map = await read('../src/shared/components/KakaoTransitMap.tsx');
 const service = await read('../src/application/services/CommuteWorkflowService.ts');
 const runtime = await read('../src/application/contracts/runtime.ts');
 const repository = await read('../src/application/contracts/repositories.ts');
@@ -16,17 +17,19 @@ const manifest = await read('../src/application/route-manifest.ts');
 const css = await read('../src/pages/commute-page.css');
 
 for (const text of ['장소 이름','도로명·건물명 검색','상세주소','onCompositionStart','250','actions.places.save']) if (!place.includes(text)) failures.push('place missing ' + text);
-for (const text of ['경로 설정','내 경로','자동 경로','actions.commute.selectRouteCandidate','다른 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
-for (const text of ['내 경로 편집','구간 추가','draggable','ArrowUp','ArrowDown','actions.commute.movePreferenceStep']) if (!manual.includes(text)) failures.push('manual missing ' + text);
-for (const text of ['근처 교통','전체','지하철','버스','actions.transitAccess.toggleAccess','다른 교통 추가']) if (!access.includes(text)) failures.push('access missing ' + text);
-for (const text of ['교통 추가','역·정류장명 검색','onCompositionStart','250','routeEdit','actions.transitSearch.addAccessPoint']) if (!search.includes(text)) failures.push('search missing ' + text);
-for (const text of ['버스 선택','이름 수정','공식명','이 정류장을 지나는 버스','actions.busRoutes.setAlias','actions.busRoutes.selectRoute']) if (!bus.includes(text)) failures.push('bus missing ' + text);
+for (const text of ['경로 설정','경로 추가','savedRoutes','createSavedRoute','selectSavedRoute','자동 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
+for (const text of ['출발 교통수단 추가','경유 교통수단 추가','draggable','ArrowUp','ArrowDown','moveRouteVia','removeRouteVia']) if (!manual.includes(text)) failures.push('manual missing ' + text);
+for (const text of ['KakaoTransitMap','근처 교통','actions.transitSearch.nearby','이 정류장 선택 후 버스 보기','정류장명·번호 직접 검색']) if (!access.includes(text)) failures.push('access missing ' + text);
+for (const text of ['정류장·역 직접 검색','정류장명·번호 또는 역 이름','routeId','routeRole','actions.transitSearch.addAccessPoint']) if (!search.includes(text)) failures.push('search missing ' + text);
+for (const text of ['버스 선택','이름 수정','listRoutes','이 정류장에서 이용 가능한 버스','actions.busRoutes.selectRoute','선택 완료']) if (!bus.includes(text)) failures.push('bus missing ' + text);
+for (const text of ['dapi.kakao.com/v2/maps/sdk.js','/api/providers/static-map','onSelect']) if (!map.includes(text)) failures.push('map missing ' + text);
 
 for (const path of [
   '/people/:personId/place/origin',
   '/people/:personId/place/destination',
   '/people/:personId/commute',
   '/people/:personId/commute/manual',
+  '/people/:personId/commute/routes/:routeId',
   '/people/:personId/commute/:placeKind/access',
   '/people/:personId/commute/:placeKind/access/search',
   '/people/:personId/commute/:placeKind/access/:accessId/bus-routes',
@@ -36,11 +39,11 @@ for (const path of [
 }
 
 for (const text of ['places: PlaceActions','commute: CommuteActions','transitSearch: TransitSearchActions','busRoutes: BusRouteActions']) if (!runtime.includes(text)) failures.push('runtime missing ' + text);
-for (const text of ['upsertAccessPoint','setAccessPointAlias','setSelectedBusRoute','getPreferredRouteCandidateId','setPreferredRouteCandidateId']) if (!repository.includes(text)) failures.push('repository missing ' + text);
-for (const text of ['class PlaceService','class CommuteService','class TransitSearchService','class BusRouteService']) if (!service.includes(text)) failures.push('service missing ' + text);
-if (!manual.includes("aria-label="구간 순서 이동"")) failures.push('manual reorder aria label missing');
+for (const text of ['upsertAccessPoint','listSavedRoutes','createSavedRoute','saveSavedRoute','setActiveSavedRoute','setSelectedBusRoute']) if (!repository.includes(text)) failures.push('repository missing ' + text);
+for (const text of ['class PlaceService','class CommuteService','class TransitSearchService','class BusRouteService','nearby(','listRoutes(']) if (!service.includes(text)) failures.push('service missing ' + text);
+if (!manual.includes('aria-label="경유 교통수단 순서 이동"')) failures.push('manual reorder aria label missing');
 if (manifest.includes('/commute/edit') || manifest.includes('/access/bus')) failures.push('prototype route aliases leaked into canonical manifest');
-if (!css.includes('.commute-page .route-candidate') || !css.includes('.commute-page .transit-row') || !css.includes('.commute-page .bus-route-option')) failures.push('commute styles missing');
+for (const text of ['.commute-page .route-candidate','.commute-page .transit-row','.commute-page .bus-route-option','.commute-page .kakao-transit-map-shell','.commute-page .saved-route-setting']) if (!css.includes(text)) failures.push('commute styles missing ' + text);
 
 for (const [name, source] of [['place', place], ['route', route], ['manual', manual], ['access', access], ['search', search], ['bus', bus]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
@@ -52,4 +55,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('phase 4E commute workflow verification passed');
+console.log('phase 4E multi-route map-first commute workflow verification passed');

@@ -15,6 +15,7 @@ import type {
   PlaceKind,
   RouteCandidate,
   RoutePreference,
+  SavedCommuteRoute,
   ScheduleEntry,
   TransitAccessPoint,
   WebPushSubscriptionRecord,
@@ -101,6 +102,7 @@ export class HttpPlaceRepository implements PlaceRepository {
 interface CommuteSnapshotResponse {
   accessPoints: TransitAccessPoint[];
   routePreference: RoutePreference | null;
+  savedRoutes: SavedCommuteRoute[];
   preferredRouteCandidateId: EntityId | null;
 }
 
@@ -146,6 +148,31 @@ export class HttpCommuteRepository implements CommuteRepository {
     await this.client.put(
       '/people/' + encodeURIComponent(preference.personId) + '/commute/preference',
       { viaAccessPointIds: preference.viaAccessPointIds },
+    );
+  }
+
+  async listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> {
+    return (await this.getSnapshot(personId, 'origin')).savedRoutes ?? [];
+  }
+
+  async createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    return (await this.client.post<{ route: SavedCommuteRoute }>(
+      '/people/' + encodeURIComponent(personId) + '/commute/routes',
+      {},
+    )).route;
+  }
+
+  async saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
+    await this.client.put(
+      '/people/' + encodeURIComponent(route.personId) + '/commute/routes/' + encodeURIComponent(route.id),
+      route,
+    );
+  }
+
+  async setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    await this.client.patch(
+      '/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(routeId),
+      { active: true },
     );
   }
 
@@ -214,6 +241,22 @@ export class HybridCommuteRepository implements CommuteRepository {
 
   saveRoutePreference(preference: RoutePreference): Promise<void> {
     return this.persisted.saveRoutePreference(preference);
+  }
+
+  listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> {
+    return this.persisted.listSavedRoutes(personId);
+  }
+
+  createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    return this.persisted.createSavedRoute(personId);
+  }
+
+  saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
+    return this.persisted.saveSavedRoute(route);
+  }
+
+  setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    return this.persisted.setActiveSavedRoute(personId, routeId);
   }
 
   listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> {

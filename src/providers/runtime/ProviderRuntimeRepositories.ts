@@ -4,6 +4,7 @@ import type {
   PlaceKind,
   RouteCandidate,
   RoutePreference,
+  SavedCommuteRoute,
   TodaySnapshot,
   TransitAccessPoint,
 } from '../../domain/models';
@@ -113,6 +114,22 @@ export class ProviderCommuteRepository implements CommuteRepository {
     return this.persisted.saveRoutePreference(preference);
   }
 
+  listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> {
+    return this.persisted.listSavedRoutes(personId);
+  }
+
+  createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    return this.persisted.createSavedRoute(personId);
+  }
+
+  saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
+    return this.persisted.saveSavedRoute(route);
+  }
+
+  setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    return this.persisted.setActiveSavedRoute(personId, routeId);
+  }
+
   async listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> {
     const [origin, destination] = await Promise.all([
       this.places.get(personId, 'origin'),
@@ -160,11 +177,12 @@ export class ProviderTodayRepository implements TodayRepository {
   async get(personId: EntityId): Promise<TodaySnapshot | null> {
     const now = this.clock.now();
     const date = kstDate(now);
-    const [schedule, routes, preferredRouteCandidateId, originAccessPoints] = await Promise.all([
+    const [schedule, routes, preferredRouteCandidateId, originAccessPoints, savedRoutes] = await Promise.all([
       this.schedules.getByDate(personId, date),
       this.commute.listRouteCandidates(personId),
       this.commute.getPreferredRouteCandidateId(personId),
       this.commute.listAccessPoints(personId, 'origin'),
+      this.commute.listSavedRoutes(personId),
     ]);
 
     const route =
@@ -191,7 +209,10 @@ export class ProviderTodayRepository implements TodayRepository {
       : Math.max(now.getTime(), shiftEndTime);
     const arrivalAt = new Date(departureMs + route.totalMinutes * 60_000);
 
-    const selectedAccess = originAccessPoints.find((point) => point.selected);
+    const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
+    const selectedAccess = activeSavedRoute?.originAccessPointId
+      ? originAccessPoints.find((point) => point.id === activeSavedRoute.originAccessPointId)
+      : originAccessPoints.find((point) => point.selected);
     let arrivals: Arrival[] = [];
     try {
       if (selectedAccess?.mode === 'BUS' && selectedAccess.selectedBusRouteId) {

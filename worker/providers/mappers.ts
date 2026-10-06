@@ -4,7 +4,7 @@ import type {
   TransitRouteResult,
   TransitSearchResult,
 } from '../../src/application/contracts/providers';
-import type { CommuteStep, CommuteStepType } from '../../src/domain/models';
+import type { BusRouteOption, CommuteStep, CommuteStepType } from '../../src/domain/models';
 import type { SubwayTrainPosition } from './contracts';
 
 type JsonRecord = Record<string, unknown>;
@@ -166,6 +166,7 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
 
     const rawSteps = asRecords(route.steps);
     const steps: CommuteStep[] = [];
+    const busLegs: Array<{ stopNames: string[]; routes: BusRouteOption[] }> = [];
     let walkingSeconds = 0;
 
     const identitySteps = rawSteps.flatMap((step) => {
@@ -179,13 +180,33 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
 
       const label = routeStepLabel(stepProperties, type);
       steps.push({ type, label });
+
+      const vehicleNames = asRecords(stepProperties.vehicles)
+        .map((vehicle) => text(vehicle.name))
+        .filter((name): name is string => Boolean(name));
+
+      if (type === 'BUS') {
+        const stopNames = asRecords(stepProperties.stops)
+          .map((stop) => text(stop.name))
+          .filter((name): name is string => Boolean(name));
+        const directionLabel =
+          stopNames.length >= 2
+            ? stopNames[0] + ' → ' + stopNames[stopNames.length - 1]
+            : label;
+        const routes = vehicleNames.map((routeNo): BusRouteOption => ({
+          providerRouteId: 'kakao-bus:' + fnv1a(JSON.stringify({ routeNo, stopNames, directionLabel })),
+          routeNo,
+          directionLabel,
+          ...(stopNames.length ? { terminalName: stopNames[stopNames.length - 1] } : {}),
+        }));
+        if (stopNames.length && routes.length) busLegs.push({ stopNames, routes });
+      }
+
       return [{
         type,
         label,
         time: Math.max(0, Math.round(stepSeconds)),
-        vehicles: asRecords(stepProperties.vehicles)
-          .map((vehicle) => text(vehicle.name))
-          .filter((name): name is string => Boolean(name)),
+        vehicles: vehicleNames,
       }];
     });
 
@@ -207,6 +228,7 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
       ...(walkingSeconds > 0 ? { walkMinutes: Math.ceil(walkingSeconds / 60) } : {}),
       ...(fare != null ? { fare } : {}),
       ...(steps.length ? { steps } : {}),
+      ...(busLegs.length ? { busLegs } : {}),
     }];
   });
 }

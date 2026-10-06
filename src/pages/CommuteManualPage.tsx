@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
-import type { TransitAccessPoint } from '../domain/models';
+import type { SavedCommuteRoute, TransitAccessPoint } from '../domain/models';
 import { useCommuteOverview } from '../features/commute/useCommuteWorkflow';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
@@ -19,36 +19,71 @@ function accessMeta(point: TransitAccessPoint): string {
   return parts.join(' · ');
 }
 
+function selectedRoute(routes: SavedCommuteRoute[], routeId?: string): SavedCommuteRoute | null {
+  return routes.find((route) => route.id === routeId) ?? routes.find((route) => route.active) ?? routes[0] ?? null;
+}
+
 export function CommuteManualPage() {
-  const { personId = '' } = useParams();
+  const { personId = '', routeId } = useParams();
   const navigate = useNavigate();
   const services = useApplicationServices();
   const state = useCommuteOverview(personId);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
-  if (state.status === 'loading') return <section className="commute-page"><div className="commute-message">내 경로를 불러오는 중</div></section>;
-  if (state.status === 'error' || !state.overview.person) return <section className="commute-page"><div className="commute-message">내 경로를 불러오지 못했습니다.</div></section>;
+  if (state.status === 'loading') return <section className="commute-page"><div className="commute-message">경로를 불러오는 중</div></section>;
+  if (state.status === 'error' || !state.overview.person) return <section className="commute-page"><div className="commute-message">경로를 불러오지 못했습니다.</div></section>;
 
   const { overview } = state;
+  const route = selectedRoute(overview.savedRoutes, routeId);
   const points = [...overview.originAccessPoints, ...overview.destinationAccessPoints];
-  const ids = overview.routePreference?.viaAccessPointIds ?? [];
-  const routePoints = ids.map((id) => points.find((point) => point.id === id)).filter((point): point is TransitAccessPoint => Boolean(point));
 
-  const editSearchPath = (point: TransitAccessPoint, index: number) =>
-    '/people/' + encodeURIComponent(personId) + '/commute/' + point.placeKind + '/access/search?routeEdit=replace&index=' + index;
+  if (!route) {
+    return (
+      <section className="commute-page" data-page="CommuteRouteManualPage" data-state="EMPTY">
+        <BackButton fallbackTo={'/people/' + encodeURIComponent(personId) + '/commute'} />
+        <h1 className="page-title">경로 설정</h1>
+        <div className="empty-inline">저장된 경로가 없습니다.</div>
+        <button
+          type="button"
+          className="cta"
+          onClick={async () => {
+            const created = await services.actions.commute.createSavedRoute(personId);
+            navigate('/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(created.id), { replace: true });
+          }}
+        >
+          <Icon name="plus" /> 경로 1 만들기
+        </button>
+      </section>
+    );
+  }
 
-  const addKind = routePoints[routePoints.length - 1]?.placeKind ?? 'origin';
-  const addPath = '/people/' + encodeURIComponent(personId) + '/commute/' + addKind + '/access/search?routeEdit=insert&index=' + ids.length;
+  const originPoint = points.find((point) => point.id === route.originAccessPointId);
+  const viaPoints = route.viaAccessPointIds
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
+
+  const routeBase =
+    '/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(route.id);
+  const originAccessPath =
+    '/people/' + encodeURIComponent(personId) + '/commute/origin/access?routeId=' +
+    encodeURIComponent(route.id) + '&routeRole=origin';
+  const viaAccessPath =
+    '/people/' + encodeURIComponent(personId) + '/commute/origin/access?routeId=' +
+    encodeURIComponent(route.id) + '&routeRole=via&index=' + route.viaAccessPointIds.length;
+
+  const replaceViaPath = (index: number) =>
+    '/people/' + encodeURIComponent(personId) + '/commute/origin/access?routeId=' +
+    encodeURIComponent(route.id) + '&routeRole=via&routeEdit=replace&index=' + index;
 
   const move = async (from: number, to: number) => {
-    if (to < 0 || to >= ids.length || from === to) return;
-    await services.actions.commute.movePreferenceStep(personId, from, to);
+    if (to < 0 || to >= route.viaAccessPointIds.length || from === to) return;
+    await services.actions.commute.moveRouteVia(personId, route.id, from, to);
   };
 
   return (
-    <section className="commute-page" data-route={'/people/' + personId + '/commute/manual'} data-page="CommuteRouteManualPage" data-state="EDITING">
+    <section className="commute-page" data-route={routeBase} data-page="CommuteRouteManualPage" data-state="EDITING">
       <BackButton fallbackTo={'/people/' + encodeURIComponent(personId) + '/commute'} />
-      <h1 className="page-title">내 경로 편집</h1>
+      <h1 className="page-title">{route.label} 설정</h1>
 
       <div className="manual-route-list">
         <button type="button" className="manual-route-node" onClick={() => navigate('/people/' + encodeURIComponent(personId) + '/place/origin')}>
@@ -57,10 +92,27 @@ export function CommuteManualPage() {
           <Icon name="chevron-right" />
         </button>
 
-        {routePoints.map((point, index) => (
+        {originPoint ? (
+          <div className="manual-route-transport">
+            <div className="manual-route-transport-label">출발 교통수단</div>
+            <button type="button" className="manual-route-edit" onClick={() => navigate(originAccessPath)}>
+              <span className="manual-route-mode"><Icon name={originPoint.mode === 'BUS' ? 'bus' : 'train'} /></span>
+              <span><b>{displayName(originPoint)}</b>{accessMeta(originPoint) ? <span className="manual-route-meta">{accessMeta(originPoint)}</span> : null}</span>
+              <span className="node-trailing"><Icon name="chevron-right" /></span>
+            </button>
+          </div>
+        ) : null}
+
+        <button type="button" className="cta secondary route-leg-add" onClick={() => navigate(originAccessPath)}>
+          <Icon name="plus" /> {originPoint ? '출발 교통수단 변경' : '출발 교통수단 추가'}
+        </button>
+
+        <div className="manual-route-section-title">경유 교통수단</div>
+
+        {viaPoints.map((point, index) => (
           <div
             className="manual-route-draggable"
-            key={point.id}
+            key={route.viaAccessPointIds[index] ?? point.id}
             draggable
             onDragStart={() => setDragIndex(index)}
             onDragOver={(event) => event.preventDefault()}
@@ -72,7 +124,7 @@ export function CommuteManualPage() {
             <button
               type="button"
               className="route-drag-handle"
-              aria-label="구간 순서 이동"
+              aria-label="경유 교통수단 순서 이동"
               onKeyDown={async (event) => {
                 if (event.key === 'ArrowUp') {
                   event.preventDefault();
@@ -86,13 +138,25 @@ export function CommuteManualPage() {
             >
               <Icon name="grip" />
             </button>
-            <button type="button" className="manual-route-edit" onClick={() => navigate(editSearchPath(point, index))}>
+            <button type="button" className="manual-route-edit" onClick={() => navigate(replaceViaPath(index))}>
               <span className="manual-route-mode"><Icon name={point.mode === 'BUS' ? 'bus' : 'train'} /></span>
               <span><b>{displayName(point)}</b>{accessMeta(point) ? <span className="manual-route-meta">{accessMeta(point)}</span> : null}</span>
               <span className="node-trailing"><Icon name="chevron-right" /></span>
             </button>
+            <button
+              type="button"
+              className="route-via-remove"
+              aria-label={displayName(point) + ' 경유 삭제'}
+              onClick={() => services.actions.commute.removeRouteVia(personId, route.id, index)}
+            >
+              ×
+            </button>
           </div>
         ))}
+
+        <button type="button" className="cta secondary route-leg-add" onClick={() => navigate(viaAccessPath)}>
+          <Icon name="plus" /> 경유 교통수단 추가
+        </button>
 
         <button type="button" className="manual-route-node" onClick={() => navigate('/people/' + encodeURIComponent(personId) + '/place/destination')}>
           <Icon name="home" />
@@ -101,7 +165,11 @@ export function CommuteManualPage() {
         </button>
       </div>
 
-      <button type="button" className="cta secondary manual-route-add" onClick={() => navigate(addPath)}><Icon name="plus" /> 구간 추가</button>
+      {!route.active ? (
+        <button type="button" className="cta secondary" onClick={() => services.actions.commute.selectSavedRoute(personId, route.id)}>
+          이 경로 사용
+        </button>
+      ) : null}
       <button type="button" className="cta" onClick={() => navigate('/people/' + encodeURIComponent(personId) + '/commute')}>저장</button>
     </section>
   );

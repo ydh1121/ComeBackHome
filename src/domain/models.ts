@@ -12,6 +12,7 @@ export interface CommuteStep { type: CommuteStepType; label: string; }
 export interface TransitAccessPoint { id: EntityId; personId: EntityId; providerId: string; placeKind: PlaceKind; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; selected: boolean; userLabel?: string; busRoutes?: BusRouteOption[]; selectedBusRouteId?: string; }
 export interface BusRouteOption { providerRouteId: string; routeNo: string; directionLabel: string; terminalName?: string; routeType?: string; }
 export interface RoutePreference { id: EntityId; personId: EntityId; originPlaceKind: 'origin'; destinationPlaceKind: 'destination'; viaAccessPointIds: EntityId[]; preferredModes?: TransitMode[]; }
+export interface SavedCommuteRoute { id: EntityId; personId: EntityId; position: number; label: string; originAccessPointId?: EntityId; viaAccessPointIds: EntityId[]; active: boolean; }
 export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; fare?: number; policyLabels?: string[]; matchesPreference?: boolean; steps?: CommuteStep[]; }
 export type ImportResolution = 'KEEP' | 'NEW';
 export type ImportFileKind = 'XLSX' | 'IMAGE';
