@@ -32,3 +32,8 @@ export interface NotificationPermissionProvider { getPermission(): Promise<Notif
 export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; }
 export interface PushSubscriptionTransport { upsert(subscription: WebPushSubscriptionRecord): Promise<void>; remove(endpoint: string): Promise<void>; }
 export interface NotificationTestGateway { sendTestNotification(): Promise<void>; }
+
+export interface PresenceAutomationGateway {
+  getStatus(): Promise<{ configured: boolean }>;
+  validateToken(token: string): Promise<boolean>;
+}
