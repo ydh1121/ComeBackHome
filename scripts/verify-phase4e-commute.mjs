@@ -15,6 +15,8 @@ const repository = await read('../src/application/contracts/repositories.ts');
 const router = await read('../src/app/router.tsx');
 const manifest = await read('../src/application/route-manifest.ts');
 const css = await read('../src/pages/commute-page.css');
+const providerRuntime = await read('../src/providers/runtime/ProviderRuntimeRepositories.ts');
+const selectors = await read('../src/application/selectors/index.ts');
 
 for (const text of ['장소 이름','도로명·건물명 검색','상세주소','onCompositionStart','250','actions.places.save']) if (!place.includes(text)) failures.push('place missing ' + text);
 for (const text of ['경로 설정','경로 추가','savedRoutes','createSavedRoute','selectSavedRoute','자동 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
@@ -41,6 +43,8 @@ for (const path of [
 for (const text of ['places: PlaceActions','commute: CommuteActions','transitSearch: TransitSearchActions','busRoutes: BusRouteActions']) if (!runtime.includes(text)) failures.push('runtime missing ' + text);
 for (const text of ['upsertAccessPoint','listSavedRoutes','createSavedRoute','saveSavedRoute','setActiveSavedRoute','setSelectedBusRoute']) if (!repository.includes(text)) failures.push('repository missing ' + text);
 for (const text of ['class PlaceService','class CommuteService','class TransitSearchService','class BusRouteService','nearby(','listRoutes(']) if (!service.includes(text)) failures.push('service missing ' + text);
+for (const text of ['routeMatchesAccessPoint','configuredPoints.every','matchesPreference: true',"policyLabels: ['설정 경로']"]) if (!providerRuntime.includes(text)) failures.push('saved-route provider matching missing ' + text);
+if (!selectors.includes('Number(b.matchesPreference === true) - Number(a.matchesPreference === true)')) failures.push('route ranking does not prioritize saved-route match');
 if (!manual.includes('aria-label="경유 교통수단 순서 이동"')) failures.push('manual reorder aria label missing');
 if (manifest.includes('/commute/edit') || manifest.includes('/access/bus')) failures.push('prototype route aliases leaked into canonical manifest');
 for (const text of ['.commute-page .route-candidate','.commute-page .transit-row','.commute-page .bus-route-option','.commute-page .kakao-transit-map-shell','.commute-page .saved-route-setting']) if (!css.includes(text)) failures.push('commute styles missing ' + text);
