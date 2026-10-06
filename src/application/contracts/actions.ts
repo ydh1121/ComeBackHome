@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../../domain/common';
-import type { Address, Coordinate, ImportResolution, NotificationRules, Person, Place, PlaceKind, RouteCandidate, TransitAccessPoint, TransitMode } from '../../domain/models';
+import type { Address, Coordinate, ImportResolution, NotificationRules, Person, Place, PlaceKind, RouteCandidate, SavedCommuteRoute, TransitAccessPoint, TransitMode } from '../../domain/models';
 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
@@ -58,6 +58,13 @@ export interface PlaceActions {
 }
 export interface CommuteActions {
   selectRouteCandidate(personId: EntityId, routeCandidateId: EntityId): Promise<void>;
+  createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute>;
+  selectSavedRoute(personId: EntityId, routeId: EntityId): Promise<void>;
+  setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
+  moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void>;
+  addRouteVia(personId: EntityId, routeId: EntityId, accessPointId: EntityId, index?: number): Promise<void>;
+  replaceRouteVia(personId: EntityId, routeId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
+  removeRouteVia(personId: EntityId, routeId: EntityId, index: number): Promise<void>;
   movePreferenceStep(personId: EntityId, fromIndex: number, toIndex: number): Promise<void>;
   addPreferenceStep(personId: EntityId, accessPointId: EntityId, index?: number): Promise<void>;
   replacePreferenceStep(personId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
