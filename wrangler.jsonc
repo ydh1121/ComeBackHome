@@ -14,7 +14,7 @@
     "not_found_handling": "single-page-application"
   },
   "vars": {
-    "PUSH_DELIVERY_ENABLED": "0",
+    "PUSH_DELIVERY_ENABLED": "1",
     "PROVIDER_RUNTIME_ENABLED": "1",
     "MUTATIONS_ENABLED": "1",
     "VAPID_PUBLIC_KEY": "BBzKRsrpKTcyhF859UOU7bp_wVU_ww-CKGVCOTqyETNvautMz1icV7lwqcGYkb9qNOPtpYkRFG24o5fwINu46H8",
