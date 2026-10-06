@@ -70,7 +70,8 @@ export interface CommuteActions {
   replacePreferenceStep(personId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
 }
 export interface TransitSearchActions {
-  search(personId: EntityId, kind: PlaceKind, query: string): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number }>>;
+  search(personId: EntityId, kind: PlaceKind, query: string): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; coordinate?: Coordinate; routeCount?: number }>>;
+  nearby(personId: EntityId, kind: PlaceKind): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; coordinate?: Coordinate; routeCount?: number }>>;
   addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint>;
 }
 export interface BusRouteActions {
