@@ -11,7 +11,7 @@ import type {
   TransitAccessActions,
   TransitAccessFilter,
 } from '../contracts/actions';
-import type { NotificationPermissionProvider, NotificationTestGateway, PushSubscriptionProvider } from '../contracts/providers';
+import type { NotificationPermissionProvider, NotificationTestGateway, PushSubscriptionProvider, PushSubscriptionTransport } from '../contracts/providers';
 import type { CommuteRepository, NotificationRepository, PersonRepository, ScheduleRepository } from '../contracts/repositories';
 
 export class PersonService implements PersonActions {
@@ -106,6 +106,7 @@ export class NotificationService implements NotificationActions {
     private readonly permissionProvider: NotificationPermissionProvider,
     private readonly subscriptionProvider: PushSubscriptionProvider,
     private readonly testGateway: NotificationTestGateway,
+    private readonly subscriptionTransport?: PushSubscriptionTransport,
   ) {}
 
   async requestPermissionFromUserGesture(): Promise<void> {
@@ -117,6 +118,14 @@ export class NotificationService implements NotificationActions {
         return;
       }
       const subscription = await this.subscriptionProvider.subscribe();
+      if (this.subscriptionTransport) {
+        try {
+          await this.subscriptionTransport.upsert(subscription);
+        } catch (error) {
+          await this.subscriptionProvider.unsubscribe().catch(() => undefined);
+          throw error;
+        }
+      }
       await this.repository.setSubscription(subscription);
       await this.repository.setPermission('subscribed');
     } catch {
@@ -127,6 +136,10 @@ export class NotificationService implements NotificationActions {
   }
 
   async disablePushSubscription(): Promise<void> {
+    const current = await this.subscriptionProvider.getCurrent();
+    if (current && this.subscriptionTransport) {
+      await this.subscriptionTransport.remove(current.endpoint);
+    }
     await this.subscriptionProvider.unsubscribe();
     await this.repository.setSubscription(null);
     const permission = await this.permissionProvider.getPermission();

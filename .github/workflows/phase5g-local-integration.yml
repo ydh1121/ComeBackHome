@@ -202,6 +202,9 @@ jobs:
       - name: Verify push client boundary
         run: npm run verify:push-client
 
+      - name: Verify browser push wiring
+        run: npm run verify:push-wiring
+
       - name: Verify backend architecture
         run: npm run verify:backend
 

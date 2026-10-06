@@ -28,6 +28,7 @@ import {
 } from '../providers/http/HttpRepositories';
 import { ReadExcelWorkbookParser } from '../providers/import/ReadExcelWorkbookParser';
 import { ProviderCommuteRepository, ProviderTodayRepository } from '../providers/runtime/ProviderRuntimeRepositories';
+import { createBrowserNotificationRuntime } from './browserNotificationRuntime';
 import { createChangeSignalController } from './changeSignal';
 
 const SELECTED_PERSON_STORAGE_KEY = 'cbh:selected-person-id';
@@ -117,6 +118,7 @@ export async function createHybridApiApplicationServices(
   runtimeStore.subscribe(() => changes.emit());
 
   const client = new HttpJsonClient('/api', () => changes.emit());
+  const browserNotifications = createBrowserNotificationRuntime(client);
   const people = new HttpPersonRepository(client);
   const schedules = new HttpScheduleRepository(client);
   const places = new HttpPlaceRepository(client);
@@ -190,9 +192,10 @@ export async function createHybridApiApplicationServices(
       transitAccess: new TransitAccessService(commute, () => changes.emit()),
       notifications: new NotificationService(
         notifications,
-        new MockNotificationPermissionProvider(),
-        new MockPushSubscriptionProvider(),
+        browserNotifications.permissionProvider,
+        browserNotifications.subscriptionProvider,
         new MockNotificationTestGateway(),
+        browserNotifications.subscriptionTransport,
       ),
       personSelection,
       people: new PersonService(people, personSelection),

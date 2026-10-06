@@ -1,0 +1,127 @@
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { createServer as createViteServer } from 'vite';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const failures = [];
+const expect = (condition, message) => { if (!condition) failures.push(message); };
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+
+const permissionSource = await read('../src/providers/browser/BrowserNotificationPermissionProvider.ts');
+const runtimeSource = await read('../src/app/browserNotificationRuntime.ts');
+const compositionSource = await read('../src/app/composition.ts');
+const serviceSource = await read('../src/application/services/ApplicationActions.ts');
+
+for (const text of [
+  'class BrowserNotificationPermissionProvider',
+  'globalThis.isSecureContext',
+  'Notification.permission',
+  'Notification.requestPermission()',
+]) {
+  expect(permissionSource.includes(text), 'browser notification permission adapter missing ' + text);
+}
+
+for (const text of [
+  'createWebPushClientConfig',
+  'VITE_CBH_VAPID_PUBLIC_KEY',
+  'new BrowserNotificationPermissionProvider()',
+  'new BrowserPushSubscriptionProvider(config)',
+  'new HttpPushSubscriptionTransport(client)',
+]) {
+  expect(runtimeSource.includes(text), 'browser notification runtime missing ' + text);
+}
+expect(!runtimeSource.includes('VAPID_PRIVATE_KEY'), 'browser runtime must not contain VAPID private key');
+expect(!runtimeSource.includes('mailto:'), 'browser runtime must not hard-code VAPID subject');
+
+for (const text of [
+  'createBrowserNotificationRuntime(client)',
+  'browserNotifications.permissionProvider',
+  'browserNotifications.subscriptionProvider',
+  'browserNotifications.subscriptionTransport',
+]) {
+  expect(compositionSource.includes(text), 'hybrid composition missing browser push wiring ' + text);
+}
+
+for (const text of [
+  'private readonly subscriptionTransport?: PushSubscriptionTransport',
+  'await this.subscriptionTransport.upsert(subscription)',
+  'await this.subscriptionTransport.remove(current.endpoint)',
+]) {
+  expect(serviceSource.includes(text), 'NotificationService transport wiring missing ' + text);
+}
+
+const vite = await createViteServer({
+  root,
+  appType: 'custom',
+  logLevel: 'error',
+  server: { middlewareMode: true },
+});
+
+try {
+  const serviceModule = await vite.ssrLoadModule('/src/application/services/ApplicationActions.ts');
+
+  const state = { permission: 'default', subscription: null };
+  const repository = {
+    async getSettings() {
+      return { permission: state.permission, rules: { shiftEnd: true, etaChange: false }, subscription: state.subscription };
+    },
+    async setRules() {},
+    async setPermission(permission) { state.permission = permission; },
+    async setSubscription(subscription) { state.subscription = subscription; },
+  };
+  const permissionProvider = {
+    async getPermission() { return 'granted'; },
+    async requestPermissionFromUserGesture() { return 'granted'; },
+  };
+  let providerSubscription = null;
+  const subscriptionProvider = {
+    async getCurrent() { return providerSubscription; },
+    async subscribe() {
+      providerSubscription = {
+        endpoint: 'https://push.example.invalid/live-wiring',
+        expirationTime: null,
+        keys: { p256dh: 'p256dh', auth: 'auth' },
+      };
+      return structuredClone(providerSubscription);
+    },
+    async unsubscribe() { providerSubscription = null; },
+  };
+  const transportEvents = [];
+  const subscriptionTransport = {
+    async upsert(subscription) { transportEvents.push(['upsert', subscription.endpoint]); },
+    async remove(endpoint) { transportEvents.push(['remove', endpoint]); },
+  };
+  const testGateway = { async sendTestNotification() {} };
+
+  const service = new serviceModule.NotificationService(
+    repository,
+    permissionProvider,
+    subscriptionProvider,
+    testGateway,
+    subscriptionTransport,
+  );
+
+  await service.requestPermissionFromUserGesture();
+  expect(state.permission === 'subscribed', 'granted browser subscription must become subscribed');
+  expect(state.subscription?.endpoint === 'https://push.example.invalid/live-wiring', 'subscription repository state mismatch');
+  expect(
+    transportEvents.some(([kind, endpoint]) => kind === 'upsert' && endpoint === 'https://push.example.invalid/live-wiring'),
+    'server subscription transport upsert was not called',
+  );
+
+  await service.disablePushSubscription();
+  expect(state.subscription == null, 'disabled push must clear repository subscription');
+  expect(
+    transportEvents.some(([kind, endpoint]) => kind === 'remove' && endpoint === 'https://push.example.invalid/live-wiring'),
+    'server subscription transport remove was not called',
+  );
+} finally {
+  await vite.close();
+}
+
+if (failures.length) {
+  console.error(failures.join('\n'));
+  process.exit(1);
+}
+
+console.log('live browser push subscription wiring verification passed');
