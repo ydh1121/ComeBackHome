@@ -5,7 +5,7 @@
   "url": "https://come-back-home-runtime.ydh1121.workers.dev/",
   "clientRuntime": "api",
   "accessProtected": true,
-  "mutationsEnabled": false,
+  "mutationsEnabled": true,
   "providerRuntimeEnabled": false,
   "pushDeliveryEnabled": false,
   "d1Binding": "DB",
