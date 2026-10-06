@@ -21,3 +21,6 @@
 .commute-page .route-leg-add{margin-top:0}
 .commute-page .manual-route-draggable{grid-template-columns:44px minmax(0,1fr) 40px}
 .commute-page .route-via-remove{width:40px;height:44px;border:0;background:transparent;color:#98a2b3;font-size:22px}
+
+.commute-page .kakao-transit-static-map{width:100%;height:100%;object-fit:cover;display:block}
+.commute-page .kakao-static-map-note{position:absolute;left:10px;right:10px;bottom:10px;min-height:32px;border-radius:10px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;padding:6px 10px;font-size:11px;color:#475467;box-shadow:0 2px 8px rgba(16,24,40,.12)}
