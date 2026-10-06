@@ -18,6 +18,7 @@ import {
   HttpTransitRouteProvider,
 } from '../providers/http/HttpDataProviders';
 import { HttpJsonClient } from '../providers/http/HttpJsonClient';
+import { HttpNotificationTestGateway } from '../providers/http/HttpNotificationTestGateway';
 import {
   HttpCommuteRepository,
   HttpNotificationRepository,
@@ -194,7 +195,7 @@ export async function createHybridApiApplicationServices(
         notifications,
         browserNotifications.permissionProvider,
         browserNotifications.subscriptionProvider,
-        new MockNotificationTestGateway(),
+        new HttpNotificationTestGateway(client, browserNotifications.subscriptionProvider),
         browserNotifications.subscriptionTransport,
       ),
       personSelection,
