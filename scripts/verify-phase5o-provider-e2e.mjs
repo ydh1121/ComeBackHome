@@ -133,13 +133,14 @@ try {
   expect(routeResults[1]?.id === 'e2e-route-fast', 'route response order unexpectedly changed at Worker boundary');
   expect(calls.route === 1, 'Kakao route fake source call count mismatch');
 
-  let transitBlocked = '';
-  try {
-    await transitProvider.search('강남역', { x: 127.03, y: 37.49 });
-  } catch (error) {
-    transitBlocked = error instanceof Error ? error.message : String(error);
-  }
-  expect(transitBlocked === 'Seoul provider secure transport is unavailable.', 'transit secure-path degradation mismatch');
+  const transitResults = await transitProvider.search('강남역', { x: 127.03, y: 37.49 });
+  expect(transitResults.length === 1, 'Kakao transit search result count mismatch');
+  expect(transitResults[0]?.mode === 'SUBWAY', 'Kakao transit search mode inference mismatch');
+  expect(transitResults[0]?.coordinate?.x === 127.03, 'Kakao transit search coordinate mapping mismatch');
+
+  const nearbyTransit = await transitProvider.nearby({ x: 127.03, y: 37.49 });
+  expect(nearbyTransit.some((item) => item.mode === 'BUS'), 'nearby transit must include bus candidates');
+  expect(nearbyTransit.some((item) => item.mode === 'SUBWAY'), 'nearby transit must include subway candidates');
 
   let busBlocked = '';
   try {
@@ -156,7 +157,7 @@ try {
     subwayBlocked = error instanceof Error ? error.message : String(error);
   }
   expect(subwayBlocked === 'Seoul provider secure transport is unavailable.', 'subway realtime secure-path degradation mismatch');
-  expect(calls.transit === 0 && calls.bus === 0 && calls.subway === 0, 'blocked Seoul routes must not invoke fake source bundle');
+  expect(calls.transit === 0 && calls.bus === 0 && calls.subway === 0, 'Seoul realtime routes must remain blocked before fake source bundle');
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   const places = new mocks.MockPlaceRepository(store);
@@ -194,7 +195,7 @@ try {
     disabledError = error instanceof Error ? error.message : String(error);
   }
   expect(disabledError === 'Provider runtime is disabled.', 'disabled Worker provider contract mismatch');
-  expect(calls.place === 1, 'disabled Worker provider call reached fake Kakao source');
+  expect(calls.place === 4, 'disabled Worker provider call reached fake Kakao source');
 } finally {
   globalThis.fetch = originalFetch;
   await vite.close();
