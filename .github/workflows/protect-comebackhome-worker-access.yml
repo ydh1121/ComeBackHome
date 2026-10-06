@@ -1,0 +1,153 @@
+name: Protect ComeBackHome Worker With Access
+
+on:
+  push:
+    branches:
+      - activation/runtime-phase1
+    paths:
+      - ".github/workflows/protect-comebackhome-worker-access.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone owner-only Access selector without exposing identity
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          if (!token || !accountId) throw new Error('Cloudflare credentials missing');
+
+          const headers = {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          };
+          const base = 'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/access/apps';
+          const targetName = 'ComeBackHome Runtime';
+          const targetDomain = 'come-back-home-runtime.ydh1121.workers.dev';
+
+          const listResponse = await fetch(base, { headers });
+          const listBody = await listResponse.json();
+          if (!listResponse.ok || listBody.success !== true) {
+            throw new Error('Failed to list Access apps');
+          }
+
+          const hoooo = (listBody.result ?? []).find((app) => app.name === 'HOOOO Staging');
+          if (!hoooo?.id) throw new Error('HOOOO Staging Access template not found');
+
+          const templateResponse = await fetch(base + '/' + hoooo.id, { headers });
+          const templateBody = await templateResponse.json();
+          if (!templateResponse.ok || templateBody.success !== true) {
+            throw new Error('Failed to read HOOOO Access template');
+          }
+
+          const template = templateBody.result;
+          const policies = Array.isArray(template?.policies) ? template.policies : [];
+          if (policies.length !== 1) throw new Error('Expected exactly one HOOOO owner policy');
+          const sourcePolicy = policies[0];
+          const include = Array.isArray(sourcePolicy?.include) ? sourcePolicy.include : [];
+          const includeTypes = include.flatMap((rule) => Object.keys(rule ?? {}));
+          if (
+            sourcePolicy?.decision !== 'allow' ||
+            include.length !== 1 ||
+            includeTypes.length !== 1 ||
+            includeTypes[0] !== 'email' ||
+            (sourcePolicy?.require?.length ?? 0) !== 0 ||
+            (sourcePolicy?.exclude?.length ?? 0) !== 0
+          ) {
+            throw new Error('HOOOO Access template is not the expected single-email owner policy');
+          }
+
+          const appPayload = {
+            type: 'self_hosted',
+            name: targetName,
+            domain: targetDomain,
+            app_launcher_visible: false,
+            session_duration: '24h',
+            policies: [{
+              name: 'Allow ComeBackHome Owner',
+              decision: 'allow',
+              include,
+              require: [],
+              exclude: [],
+              precedence: 1,
+            }],
+          };
+
+          let target = (listBody.result ?? []).find(
+            (app) => app.name === targetName || app.domain === targetDomain,
+          ) ?? null;
+
+          let response;
+          if (target?.id) {
+            response = await fetch(base + '/' + target.id, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify(appPayload),
+            });
+          } else {
+            response = await fetch(base, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(appPayload),
+            });
+          }
+
+          const responseBody = await response.json();
+          if (!response.ok || responseBody.success !== true || !responseBody.result?.id) {
+            throw new Error('Failed to create/update ComeBackHome Access app');
+          }
+
+          target = responseBody.result;
+          const targetPolicies = Array.isArray(target.policies) ? target.policies : [];
+          const targetSelectorTypes = targetPolicies.flatMap((policy) =>
+            Array.isArray(policy?.include)
+              ? policy.include.flatMap((rule) => Object.keys(rule ?? {}))
+              : [],
+          );
+
+          if (
+            target.domain !== targetDomain ||
+            targetPolicies.length !== 1 ||
+            targetPolicies[0]?.decision !== 'allow' ||
+            targetSelectorTypes.length !== 1 ||
+            targetSelectorTypes[0] !== 'email'
+          ) {
+            throw new Error('ComeBackHome Access verification failed');
+          }
+
+          fs.mkdirSync('runtime-evidence', { recursive: true });
+          fs.writeFileSync(
+            'runtime-evidence/cloudflare-access-comebackhome.json',
+            JSON.stringify({
+              applicationId: target.id,
+              name: target.name,
+              domain: target.domain,
+              type: target.type,
+              policyCount: targetPolicies.length,
+              decision: targetPolicies[0]?.decision ?? null,
+              includeSelectorTypes: targetSelectorTypes,
+              identityValuesExposed: false,
+            }, null, 2) + '\n',
+          );
+          NODE
+
+      - name: Commit sanitized Access evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime-evidence/cloudflare-access-comebackhome.json
+          git diff --cached --quiet || git commit -m "chore: record ComeBackHome Access protection"
+          git push
