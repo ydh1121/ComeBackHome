@@ -5,6 +5,7 @@ import type {
   SeoulSubwaySource,
 } from './contracts';
 import {
+  mapKakaoAddressSearch,
   mapKakaoPlaceSearch,
   mapKakaoPublicTransitRoutes,
   mapSeoulBusArrivals,
@@ -45,7 +46,7 @@ export class KakaoMapRequestClient implements KakaoMapSource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
   async searchPlaces(query: string, near?: Coordinate, context?: ProviderRequestContext) {
-    const request: ProviderJsonRequest = {
+    const keywordRequest: ProviderJsonRequest = {
       source: 'kakao-map',
       capability: 'keyword-place-search',
       method: 'GET',
@@ -61,7 +62,21 @@ export class KakaoMapRequestClient implements KakaoMapSource {
       auth: kakaoAuth(),
       security: 'TLS_VERIFIED',
     };
-    return mapKakaoPlaceSearch(await this.transport.getJson(request, context));
+    const keywordResults = mapKakaoPlaceSearch(
+      await this.transport.getJson(keywordRequest, context),
+    );
+    if (keywordResults.length) return keywordResults;
+
+    const addressRequest: ProviderJsonRequest = {
+      source: 'kakao-map',
+      capability: 'address-search',
+      method: 'GET',
+      urlTemplate: 'https://dapi.kakao.com/v2/local/search/address.json',
+      query: { query },
+      auth: kakaoAuth(),
+      security: 'TLS_VERIFIED',
+    };
+    return mapKakaoAddressSearch(await this.transport.getJson(addressRequest, context));
   }
 
   async publicTransitRoutes(origin: Coordinate, destination: Coordinate, context?: ProviderRequestContext) {

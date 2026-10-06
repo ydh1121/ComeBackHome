@@ -290,6 +290,7 @@ jobs:
         run: npm run verify:local-integration
 
       - name: Record main Phase 5G success evidence
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           node --input-type=module <<'NODE'

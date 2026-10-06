@@ -121,6 +121,37 @@ export function mapKakaoPlaceSearch(payload: unknown): PlaceSearchResult[] {
   });
 }
 
+export function mapKakaoAddressSearch(payload: unknown): PlaceSearchResult[] {
+  const root = asRecord(payload);
+  if (!root) return [];
+
+  return asRecords(root.documents).flatMap((item) => {
+    const x = numberValue(item.x);
+    const y = numberValue(item.y);
+    const address = asRecord(item.address);
+    const roadAddressRecord = asRecord(item.road_address);
+    const lotAddress = text(address?.address_name);
+    const roadAddress = text(roadAddressRecord?.address_name) ?? text(item.address_name) ?? lotAddress;
+    if (x == null || y == null || !roadAddress) return [];
+
+    const identity = JSON.stringify({
+      addressName: text(item.address_name) ?? roadAddress,
+      x,
+      y,
+    });
+
+    return [{
+      providerId: 'kakao-address:' + fnv1a(identity),
+      ...(text(roadAddressRecord?.building_name)
+        ? { placeName: text(roadAddressRecord?.building_name) }
+        : {}),
+      roadAddress,
+      ...(lotAddress && lotAddress !== roadAddress ? { lotAddress } : {}),
+      coordinate: { x, y },
+    }];
+  });
+}
+
 export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResult[] {
   const root = asRecord(payload);
   if (!root || text(root.status) !== 'OK') return [];
