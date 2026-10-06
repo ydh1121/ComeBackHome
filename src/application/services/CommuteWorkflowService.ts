@@ -145,6 +145,14 @@ export class TransitSearchService implements TransitSearchActions {
     return results;
   }
 
+  async nearby(personId: EntityId, kind: PlaceKind) {
+    const place = await this.places.get(personId, kind);
+    if (!place?.coordinate) return [];
+    const results = await this.provider.nearby(place.coordinate);
+    this.resultCache.set(this.key(personId, kind), results);
+    return results;
+  }
+
   async addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint> {
     const result = this.resultCache.get(this.key(personId, kind))?.find((item) => item.id === resultId);
     if (!result) throw new Error('Transit search result was not found.');
