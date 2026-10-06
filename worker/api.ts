@@ -1,5 +1,6 @@
 import type { PlaceKind, RoutePreference, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
+import { D1NotificationJobStore } from './repositories/D1NotificationJobStore';
 import { D1NotificationSettingsStore } from './repositories/D1NotificationSettingsStore';
 import { D1PersonRepository } from './repositories/D1PersonRepository';
 import { D1PlaceRepository } from './repositories/D1PlaceRepository';
@@ -7,6 +8,11 @@ import { D1ScheduleRepository } from './repositories/D1ScheduleRepository';
 import { D1SubscriptionStore } from './repositories/D1SubscriptionStore';
 import type { WorkerEnv } from './runtime-types';
 import type { ProviderSourceBundle } from './providers/contracts';
+import {
+  enqueuePresenceEvent,
+  isPresenceEventAuthorized,
+  type PresenceEventType,
+} from './presence-event-ingest';
 
 type JsonObject = Record<string, unknown>;
 
@@ -135,6 +141,40 @@ export async function handleApiRequest(
 
         return json({ error: 'Provider adapter is not configured yet.' }, 501);
       }
+    }
+
+    if (
+      segments.length === 2 &&
+      segments[1] === 'presence-events' &&
+      request.method === 'POST'
+    ) {
+      const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
+      if (!configuredToken) {
+        return json({ error: 'Presence event ingest is not configured.' }, 503);
+      }
+      if (!isPresenceEventAuthorized(request, configuredToken)) {
+        return json({ error: 'Unauthorized.' }, 401);
+      }
+
+      const body = await readObject(request);
+      const rawType = asString(body.type, 'type');
+      if (rawType !== 'LEFT_WORK' && rawType !== 'ARRIVED_HOME') {
+        return json({ error: 'Presence event type is invalid.' }, 400);
+      }
+      const type: PresenceEventType = rawType;
+      const event = await enqueuePresenceEvent(
+        {
+          jobs: new D1NotificationJobStore(env.DB),
+          people: new D1PersonRepository(env.DB),
+          schedules: new D1ScheduleRepository(env.DB),
+        },
+        {
+          eventId: asString(body.eventId, 'eventId'),
+          personId: asString(body.personId, 'personId'),
+          type,
+        },
+      );
+      return json({ event }, 202);
     }
 
     if (segments.length === 2 && segments[1] === 'bootstrap' && request.method === 'GET') {

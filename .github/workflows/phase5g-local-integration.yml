@@ -33,6 +33,7 @@ on:
       - "scripts/verify-worker-notification-eta-source.mjs"
       - "scripts/verify-notification-retry-policy.mjs"
       - "scripts/verify-notification-activation-readiness.mjs"
+      - "scripts/verify-presence-event-ingest.mjs"
       - "scripts/verify-phase5v-*.mjs"
       - "scripts/verify-phase5w-*.mjs"
       - "scripts/verify-phase5x-*.mjs"
@@ -220,6 +221,9 @@ jobs:
 
       - name: Verify notification activation readiness
         run: npm run verify:notification-activation-readiness
+
+      - name: Verify trusted presence-event ingestion
+        run: npm run verify:presence-event-ingest
 
       - name: Verify backend architecture
         run: npm run verify:backend

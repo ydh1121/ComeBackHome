@@ -37,6 +37,7 @@ export interface WorkerEnv {
   VAPID_PRIVATE_KEY?: string;
   WEB_PUSH_TTL_SECONDS?: string;
   NOTIFICATION_RETRY_DELAYS_SECONDS?: string;
+  PRESENCE_EVENT_INGEST_TOKEN?: string;
   PROVIDER_RUNTIME_ENABLED?: string;
   KAKAO_REST_API_KEY?: string;
   SEOUL_SUBWAY_API_KEY?: string;
