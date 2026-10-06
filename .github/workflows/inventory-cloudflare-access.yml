@@ -20,7 +20,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inventory Access apps without identity selectors
+      - name: Inventory Access apps without identity values
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -30,35 +30,63 @@ jobs:
           const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
           if (!token || !accountId) throw new Error('Cloudflare credentials missing');
 
-          const response = await fetch(
-            'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/access/apps',
-            { headers: { Authorization: 'Bearer ' + token } },
-          );
-          const body = await response.json();
-          if (!response.ok || body.success !== true) {
+          const headers = { Authorization: 'Bearer ' + token };
+          const base = 'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/access/apps';
+
+          const listResponse = await fetch(base, { headers });
+          const listBody = await listResponse.json();
+          if (!listResponse.ok || listBody.success !== true) {
             throw new Error('Failed to list Cloudflare Access applications');
           }
 
-          const apps = (body.result ?? [])
-            .filter((app) => {
-              const haystack = String(app.name ?? '') + ' ' + String(app.domain ?? '');
-              return /hoooo|come-back-home/i.test(haystack);
-            })
-            .map((app) => ({
-              id: app.id ?? null,
-              name: app.name ?? null,
-              domain: app.domain ?? null,
-              type: app.type ?? null,
-              policyCount: Array.isArray(app.policies) ? app.policies.length : 0,
-              policies: Array.isArray(app.policies)
-                ? app.policies.map((policy) => ({
+          const matches = (listBody.result ?? []).filter((app) => {
+            const haystack = String(app.name ?? '') + ' ' + String(app.domain ?? '');
+            return /hoooo|come-back-home/i.test(haystack);
+          });
+
+          const apps = [];
+          for (const app of matches) {
+            const detailResponse = await fetch(base + '/' + app.id, { headers });
+            const detailBody = await detailResponse.json();
+            if (!detailResponse.ok || detailBody.success !== true) {
+              throw new Error('Failed to read Access application detail');
+            }
+            const detail = detailBody.result ?? app;
+            apps.push({
+              id: detail.id ?? null,
+              name: detail.name ?? null,
+              domain: detail.domain ?? null,
+              type: detail.type ?? null,
+              destinations: Array.isArray(detail.destinations)
+                ? detail.destinations.map((destination) => ({
+                    type: destination?.type ?? null,
+                    hasWorkerId: Boolean(destination?.worker_id),
+                    hasUri: Boolean(destination?.uri),
+                  }))
+                : [],
+              policyCount: Array.isArray(detail.policies) ? detail.policies.length : 0,
+              policies: Array.isArray(detail.policies)
+                ? detail.policies.map((policy) => ({
                     id: typeof policy === 'string' ? policy : policy?.id ?? null,
                     name: typeof policy === 'object' ? policy?.name ?? null : null,
                     decision: typeof policy === 'object' ? policy?.decision ?? null : null,
                     precedence: typeof policy === 'object' ? policy?.precedence ?? null : null,
+                    includeSelectorTypes:
+                      typeof policy === 'object' && Array.isArray(policy?.include)
+                        ? policy.include.flatMap((rule) => Object.keys(rule ?? {})).sort()
+                        : [],
+                    requireSelectorTypes:
+                      typeof policy === 'object' && Array.isArray(policy?.require)
+                        ? policy.require.flatMap((rule) => Object.keys(rule ?? {})).sort()
+                        : [],
+                    excludeSelectorTypes:
+                      typeof policy === 'object' && Array.isArray(policy?.exclude)
+                        ? policy.exclude.flatMap((rule) => Object.keys(rule ?? {})).sort()
+                        : [],
                   }))
                 : [],
-            }));
+            });
+          }
 
           fs.mkdirSync('runtime-evidence', { recursive: true });
           fs.writeFileSync(
