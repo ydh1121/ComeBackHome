@@ -29,6 +29,10 @@ export function useNotificationSettings(): NotificationLoadState {
   const [state, setState] = useState<NotificationLoadState>({ status: 'loading' });
 
   useEffect(() => {
+    void services.actions.notifications.syncCurrentSubscription().catch(() => undefined);
+  }, [services]);
+
+  useEffect(() => {
     let active = true;
     services.queries.getNotificationSettings()
       .then((settings) => {
