@@ -8,19 +8,22 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 
 const workerEntry = await readFile(new URL('../worker/index.ts', import.meta.url), 'utf8');
 const schedulerSource = await readFile(new URL('../worker/scheduler.ts', import.meta.url), 'utf8');
+const apiSource = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
+const schedulerConfig = JSON.parse(await readFile(new URL('../wrangler.scheduler.jsonc', import.meta.url), 'utf8'));
 
-expect(
-  workerEntry.includes('runScheduledNotificationCycle('),
-  'Worker scheduled entry must point at composite notification cycle',
-);
-expect(
-  workerEntry.includes('readiness.dependencies ?? undefined'),
-  'Worker scheduled entry must inject dependencies only through fail-closed readiness',
-);
-expect(
-  workerEntry.includes('createNotificationActivationReadiness'),
-  'Worker scheduled entry must use activation readiness',
-);
+for (const text of ['invokePagesScheduler', '/api/internal/scheduler-tick', 'SCHEDULER_INVOKE_TOKEN', 'Authorization']) {
+  expect(workerEntry.includes(text), 'minimal scheduler missing ' + text);
+}
+for (const forbidden of ['handleApiRequest', 'createProviderRuntime', 'ASSETS']) {
+  expect(!workerEntry.includes(forbidden), 'minimal scheduler contains application concern ' + forbidden);
+}
+expect(schedulerConfig.name === 'come-back-home-runtime', 'scheduler must reuse existing Worker');
+expect(schedulerConfig.workers_dev === false, 'workers.dev must remain disabled');
+expect(schedulerConfig.preview_urls === false, 'preview URLs must remain disabled');
+expect(schedulerConfig.d1_databases == null, 'scheduler Worker must not bind D1');
+expect(apiSource.includes("segments[2] === 'scheduler-tick'"), 'Pages scheduler endpoint missing');
+expect(apiSource.includes('SCHEDULER_INVOKE_TOKEN'), 'Pages scheduler endpoint auth missing');
+expect(apiSource.includes('runScheduledNotificationCycle('), 'Pages scheduler endpoint must execute composite cycle');
 for (const text of [
   'export async function runScheduledNotificationCycle',
   'planNotificationJobs(dependencies.planner, scheduledTime)',
@@ -40,6 +43,40 @@ const vite = await createViteServer({
 
 try {
   const scheduler = await vite.ssrLoadModule('/worker/scheduler.ts');
+  const api = await vite.ssrLoadModule('/worker/api.ts');
+  const minimalWorker = await vite.ssrLoadModule('/worker/index.ts');
+
+  const denied = await api.handleApiRequest(
+    new Request('https://come-back-home.pages.dev/api/internal/scheduler-tick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledTime: Date.now() }),
+    }),
+    { MUTATIONS_ENABLED: '1', SCHEDULER_INVOKE_TOKEN: 'fixture-secret' },
+    null,
+  );
+  expect(denied.status === 401, 'scheduler endpoint must reject unauthenticated requests');
+
+  const originalFetch = globalThis.fetch;
+  const schedulerRequests = [];
+  try {
+    globalThis.fetch = async (url, init) => {
+      schedulerRequests.push({ url: String(url), init });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    let pending = null;
+    await minimalWorker.default.scheduled(
+      { cron: '* * * * *', scheduledTime: 1234567890 },
+      { PAGES_ORIGIN: 'https://come-back-home.pages.dev', SCHEDULER_INVOKE_TOKEN: 'scheduler-secret' },
+      { waitUntil(promise) { pending = promise; } },
+    );
+    await pending;
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  expect(schedulerRequests.length === 1, 'minimal scheduler must invoke Pages once');
+  expect(schedulerRequests[0]?.url === 'https://come-back-home.pages.dev/api/internal/scheduler-tick', 'scheduler target mismatch');
+  expect(schedulerRequests[0]?.init?.headers?.Authorization === 'Bearer scheduler-secret', 'scheduler auth mismatch');
 
   class MemoryJobs {
     constructor(initial = []) {
