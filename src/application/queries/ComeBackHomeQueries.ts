@@ -43,7 +43,10 @@ export class ComeBackHomeQueries {
       this.repositories.commute.listRouteCandidates(selectedId),
     ]);
 
-    const nextShift = selectNextShift(schedule, referenceDate);
+    const nextShift = selectNextShift(
+      schedule.filter((entry) => entry.date > referenceDate),
+      referenceDate,
+    );
     const route = today?.routeCandidateId
       ? routes.find((candidate) => candidate.id === today.routeCandidateId) ?? null
       : rankRouteCandidates(routes)[0] ?? null;
