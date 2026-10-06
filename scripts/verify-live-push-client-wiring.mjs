@@ -11,6 +11,10 @@ const permissionSource = await read('../src/providers/browser/BrowserNotificatio
 const runtimeSource = await read('../src/app/browserNotificationRuntime.ts');
 const compositionSource = await read('../src/app/composition.ts');
 const serviceSource = await read('../src/application/services/ApplicationActions.ts');
+const testGatewaySource = await read('../src/providers/http/HttpNotificationTestGateway.ts');
+const hookSource = await read('../src/features/notifications/useNotificationSettings.ts');
+const pwaSource = await read('../src/pwa/registerServiceWorker.ts');
+const apiSource = await read('../worker/api.ts');
 
 for (const text of [
   'class BrowserNotificationPermissionProvider',
@@ -44,10 +48,32 @@ for (const text of [
 
 for (const text of [
   'private readonly subscriptionTransport?: PushSubscriptionTransport',
+  'async syncCurrentSubscription(): Promise<void>',
+  'await this.subscriptionProvider.getCurrent()',
   'await this.subscriptionTransport.upsert(subscription)',
+  "await this.repository.setPermission('subscribed')",
   'await this.subscriptionTransport.remove(current.endpoint)',
 ]) {
   expect(serviceSource.includes(text), 'NotificationService transport wiring missing ' + text);
+}
+
+for (const text of [
+  'class HttpNotificationTestGateway',
+  'this.subscriptions.getCurrent()',
+  "this.client.post('/notifications/test'",
+]) {
+  expect(testGatewaySource.includes(text), 'HTTP notification test gateway missing ' + text);
+}
+expect(hookSource.includes('syncCurrentSubscription()'), 'notification settings hook must restore browser subscription');
+expect(pwaSource.includes("document.readyState === 'complete'"), 'late PWA startup registration guard missing');
+for (const text of [
+  "segments[2] === 'test'",
+  "active.find((item) => item.endpoint === endpoint)",
+  'readiness.dependencies.outbox.gateway.send(subscription',
+  "error.kind === 'terminal-subscription'",
+  'subscriptions.deactivateByEndpoint(endpoint)',
+]) {
+  expect(apiSource.includes(text), 'server test notification endpoint missing ' + text);
 }
 
 const vite = await createViteServer({
@@ -59,6 +85,7 @@ const vite = await createViteServer({
 
 try {
   const serviceModule = await vite.ssrLoadModule('/src/application/services/ApplicationActions.ts');
+  const testGatewayModule = await vite.ssrLoadModule('/src/providers/http/HttpNotificationTestGateway.ts');
 
   const state = { permission: 'default', subscription: null };
   const repository = {
@@ -73,7 +100,11 @@ try {
     async getPermission() { return 'granted'; },
     async requestPermissionFromUserGesture() { return 'granted'; },
   };
-  let providerSubscription = null;
+  let providerSubscription = {
+    endpoint: 'https://push.example.invalid/restored',
+    expirationTime: null,
+    keys: { p256dh: 'restored-p256dh', auth: 'restored-auth' },
+  };
   const subscriptionProvider = {
     async getCurrent() { return providerSubscription; },
     async subscribe() {
@@ -101,12 +132,46 @@ try {
     subscriptionTransport,
   );
 
+  await service.syncCurrentSubscription();
+  expect(state.permission === 'subscribed', 'existing browser subscription must restore subscribed state');
+  expect(state.subscription?.endpoint === 'https://push.example.invalid/restored', 'restored subscription repository state mismatch');
+  expect(
+    transportEvents.some(([kind, endpoint]) => kind === 'upsert' && endpoint === 'https://push.example.invalid/restored'),
+    'existing browser subscription must be re-synced to server',
+  );
+
+  await service.disablePushSubscription();
+  expect(state.subscription == null, 'restored push disable must clear repository subscription');
+  expect(
+    transportEvents.some(([kind, endpoint]) => kind === 'remove' && endpoint === 'https://push.example.invalid/restored'),
+    'restored push disable must remove server subscription',
+  );
+
   await service.requestPermissionFromUserGesture();
   expect(state.permission === 'subscribed', 'granted browser subscription must become subscribed');
   expect(state.subscription?.endpoint === 'https://push.example.invalid/live-wiring', 'subscription repository state mismatch');
   expect(
     transportEvents.some(([kind, endpoint]) => kind === 'upsert' && endpoint === 'https://push.example.invalid/live-wiring'),
     'server subscription transport upsert was not called',
+  );
+
+  const testRequests = [];
+  const testClient = {
+    async post(path, body) {
+      testRequests.push({ path, body: structuredClone(body) });
+      return { sent: true };
+    },
+  };
+  const realTestGateway = new testGatewayModule.HttpNotificationTestGateway(
+    testClient,
+    subscriptionProvider,
+  );
+  await realTestGateway.sendTestNotification();
+  expect(testRequests.length === 1, 'real test notification gateway must send one server request');
+  expect(testRequests[0]?.path === '/notifications/test', 'real test notification server path mismatch');
+  expect(
+    testRequests[0]?.body?.endpoint === 'https://push.example.invalid/live-wiring',
+    'real test notification must target current browser subscription',
   );
 
   await service.disablePushSubscription();

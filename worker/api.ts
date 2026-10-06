@@ -15,6 +15,7 @@ import {
   type PresenceEventType,
 } from './presence-event-ingest';
 import { createNotificationActivationReadiness } from './notification-activation-readiness';
+import { PushDeliveryError } from './contracts';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
 type JsonObject = Record<string, unknown>;
@@ -582,6 +583,42 @@ export async function handleApiRequest(
         });
         return json({ settings: updated });
       }
+    }
+
+    if (
+      segments.length === 3 &&
+      segments[1] === 'notifications' &&
+      segments[2] === 'test' &&
+      request.method === 'POST'
+    ) {
+      const body = await readObject(request);
+      const endpoint = asString(body.endpoint, 'endpoint');
+      const readiness = createNotificationActivationReadiness(env, providerRuntime);
+      if (!readiness.ready) {
+        return json({ error: 'Notification runtime is not ready.', missing: readiness.missing }, 503);
+      }
+
+      const subscriptions = readiness.dependencies.outbox.subscriptions;
+      const active = await subscriptions.listActive();
+      const subscription = active.find((item) => item.endpoint === endpoint);
+      if (!subscription) return json({ error: 'Active push subscription was not found.' }, 404);
+
+      try {
+        await readiness.dependencies.outbox.gateway.send(subscription, {
+          title: 'ComeBackHome',
+          body: '테스트 알림입니다.',
+          tag: 'cbh:test',
+          path: '/notifications',
+        });
+      } catch (error) {
+        if (error instanceof PushDeliveryError && error.kind === 'terminal-subscription') {
+          await subscriptions.deactivateByEndpoint(endpoint);
+          return json({ error: 'Push subscription is no longer active.' }, 410);
+        }
+        return json({ error: 'Test push delivery failed.' }, 502);
+      }
+
+      return json({ sent: true });
     }
 
     if (segments.length === 3 && segments[1] === 'push' && segments[2] === 'subscription') {

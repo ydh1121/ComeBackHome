@@ -15,6 +15,7 @@ export interface TransitAccessActions {
   toggleAccess(accessPointId: EntityId, selected: boolean): Promise<void>;
 }
 export interface NotificationActions {
+  syncCurrentSubscription(): Promise<void>;
   requestPermissionFromUserGesture(): Promise<void>;
   disablePushSubscription(): Promise<void>;
   updateRules(rules: NotificationRules): Promise<void>;
