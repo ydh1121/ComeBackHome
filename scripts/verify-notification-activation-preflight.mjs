@@ -6,24 +6,26 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 
-const workerEntry = await readFile(new URL('../worker/index.ts', import.meta.url), 'utf8');
+const pagesEntry = await readFile(new URL('../functions/api/_middleware.ts', import.meta.url), 'utf8');
 const source = await readFile(new URL('../worker/notification-activation-preflight.ts', import.meta.url), 'utf8');
 
 expect(
-  !workerEntry.includes('evaluateNotificationActivationPreflight'),
-  'preflight must not activate or wire the scheduled Worker entry',
+  !pagesEntry.includes('evaluateNotificationActivationPreflight'),
+  'preflight must remain verification-only and not execute on every Pages request',
 );
 for (const token of [
   'PRESENCE_EVENT_INGEST_TOKEN',
   'PUSH_DELIVERY_ENABLED',
   'PROVIDER_RUNTIME_ENABLED',
-  'LIVE_SCHEDULER_WIRING',
   'REMOTE_D1_MIGRATIONS',
-  'CLOUDFLARE_CRON',
   'SAME_ORIGIN_DEPLOYMENT',
+  'PAGES_DIRECT_BINDINGS',
   'valuesExposed: false',
 ]) {
   expect(source.includes(token), 'preflight source missing ' + token);
+}
+for (const obsolete of ['LIVE_SCHEDULER_WIRING', 'CLOUDFLARE_CRON']) {
+  expect(!source.includes(obsolete), 'Pages-only preflight still depends on ' + obsolete);
 }
 
 const vite = await createViteServer({
@@ -51,10 +53,11 @@ try {
   expect(empty.configMissing.includes('VAPID_PRIVATE_KEY'), 'empty config missing VAPID private key');
   expect(empty.configMissing.includes('KAKAO_REST_API_KEY'), 'empty config missing Kakao key');
   expect(empty.operationsPending.includes('PRESENCE_EVENT_INGEST_TOKEN'), 'empty config missing presence ingest token');
-  expect(empty.operationsPending.includes('LIVE_SCHEDULER_WIRING'), 'empty config must preserve scheduler wiring gate');
+  expect(empty.operationsPending.includes('PAGES_DIRECT_BINDINGS'), 'empty config must preserve direct Pages binding gate');
+  expect(!empty.operationsPending.includes('CLOUDFLARE_CRON'), 'Pages-only preflight must not require Cron');
 
   const secretValues = {
-    subject: 'mailto:owner@example.com',
+    subject: 'https://come-back-home.pages.dev/',
     publicKey: 'public-secret-fixture',
     privateKey: 'private-secret-fixture',
     kakao: 'kakao-secret-fixture',
@@ -76,16 +79,15 @@ try {
   const blockedByOperations = module.evaluateNotificationActivationPreflight(env);
   expect(blockedByOperations.status === 'BLOCKED', 'complete values alone must not bypass operational gates');
   expect(blockedByOperations.configMissing.length === 0, 'complete values should clear config requirements');
-  expect(blockedByOperations.operationsPending.includes('LIVE_SCHEDULER_WIRING'), 'scheduler wiring must remain pending');
   expect(blockedByOperations.operationsPending.includes('REMOTE_D1_MIGRATIONS'), 'remote migration gate must remain pending');
+  expect(blockedByOperations.operationsPending.includes('PAGES_DIRECT_BINDINGS'), 'Pages direct binding gate must remain pending');
 
   const ready = module.evaluateNotificationActivationPreflight(env, {
-    schedulerWired: true,
     remoteD1MigrationsApplied: true,
-    cronConfigured: true,
     sameOriginDeploymentConfigured: true,
+    pagesDirectBindingsConfigured: true,
   });
-  expect(ready.status === 'READY', 'all explicit config and operational gates should produce READY');
+  expect(ready.status === 'READY', 'all Pages config and operational gates should produce READY');
   expect(ready.configMissing.length === 0, 'ready preflight cannot have config gaps');
   expect(ready.operationsPending.length === 0, 'ready preflight cannot have pending operations');
 
