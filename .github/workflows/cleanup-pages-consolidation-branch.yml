@@ -1,0 +1,40 @@
+name: One-Time Pages Consolidation Branch Cleanup
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cleanup-pages-consolidation-branch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify PR 41 merge and delete migration branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY}"
+          merged="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/$repo/pulls/41" |             node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>process.stdout.write(String(JSON.parse(s).merged)))")"
+          test "$merged" = "true"
+
+          if git ls-remote --exit-code --heads origin refs/heads/migrate/pages-native-backend >/dev/null 2>&1; then
+            git push origin --delete migrate/pages-native-backend
+          fi
+
+          if git ls-remote --exit-code --heads origin refs/heads/migrate/pages-native-backend >/dev/null 2>&1; then
+            echo "migration branch still exists" >&2
+            exit 1
+          fi
