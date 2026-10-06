@@ -46,30 +46,31 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
 
-      - name: Build API runtime with provider disabled
+      - name: Build D1 API runtime with provider disabled
         run: npm run build
 
       - name: Deploy isolated Worker
         run: npx wrangler deploy --config wrangler.jsonc
 
-      - name: Verify read-only health
+      - name: Verify anonymous traffic is blocked by Access
         shell: bash
         run: |
-          body="$(curl --fail --silent --show-error "$WORKER_ORIGIN/api/health")"
-          test "$body" = '{"ok":true}'
+          status="$(curl --silent --show-error             --dump-header /tmp/access-headers.txt             --output /tmp/access-body.txt             --write-out "%{http_code}"             --max-time 20             "$WORKER_ORIGIN/api/health")"
 
-      - name: Verify public mutations are blocked
-        shell: bash
-        run: |
-          status="$(curl --silent --show-error             --output /tmp/mutation-body.json             --write-out "%{http_code}"             --request POST             --header "Content-Type: application/json"             --data '{"name":"must-not-write","relation":"blocked"}'             "$WORKER_ORIGIN/api/people")"
-          test "$status" = "503"
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const body = JSON.parse(fs.readFileSync('/tmp/mutation-body.json', 'utf8'));
-          if (body.error !== 'API mutations are temporarily disabled.') {
-            throw new Error('Unexpected mutation gate response');
-          }
-          NODE
+          if [ "$status" = "200" ]; then
+            echo "Access protection failed: anonymous health request returned 200"
+            exit 1
+          fi
+
+          if [ "$status" != "302" ] && [ "$status" != "403" ]; then
+            echo "Unexpected Access response status: $status"
+            cat /tmp/access-headers.txt
+            exit 1
+          fi
+
+          if [ "$status" = "302" ]; then
+            grep -Eqi 'location:.*(cloudflareaccess\.com|/cdn-cgi/access/)' /tmp/access-headers.txt
+          fi
 
       - name: Record deployed Worker endpoint
         shell: bash
@@ -112,6 +113,7 @@ jobs:
               workersDevEnabled,
               url,
               clientRuntime: 'api',
+              accessProtected: true,
               mutationsEnabled: false,
               providerRuntimeEnabled: false,
               pushDeliveryEnabled: false,
