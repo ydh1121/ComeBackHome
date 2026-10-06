@@ -65,7 +65,10 @@ export class MockCommuteRepository implements CommuteRepository {
   }
   async saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
     this.store.mutate((state) => {
-      if (route.active) state.savedRoutes.filter((candidate) => candidate.personId === route.personId).forEach((candidate) => { candidate.active = false; });
+      if (route.active) {
+        state.savedRoutes.filter((candidate) => candidate.personId === route.personId).forEach((candidate) => { candidate.active = false; });
+        delete state.preferredRouteCandidateIds[route.personId];
+      }
       const index = state.savedRoutes.findIndex((candidate) => candidate.id === route.id);
       if (index >= 0) state.savedRoutes[index] = clone(route);
       else state.savedRoutes.push(clone(route));
