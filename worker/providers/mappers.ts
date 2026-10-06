@@ -210,6 +210,22 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
       }];
     });
 
+    const transitIndexes = identitySteps.flatMap((step, index) =>
+      step.type === 'BUS' || step.type === 'SUBWAY' ? [index] : []
+    );
+    const firstTransitIndex = transitIndexes[0] ?? -1;
+    const lastTransitIndex = transitIndexes[transitIndexes.length - 1] ?? -1;
+    const accessSeconds = firstTransitIndex >= 0
+      ? identitySteps.slice(0, firstTransitIndex)
+          .filter((step) => step.type === 'WALKING')
+          .reduce((sum, step) => sum + step.time, 0)
+      : 0;
+    const egressSeconds = lastTransitIndex >= 0
+      ? identitySteps.slice(lastTransitIndex + 1)
+          .filter((step) => step.type === 'WALKING')
+          .reduce((sum, step) => sum + step.time, 0)
+      : 0;
+
     const fareRecord = asRecord(properties.fare);
     const fare = nonNegativeInteger(fareRecord?.value);
     const totalMinutes = Math.ceil(totalSeconds / 60);
@@ -226,6 +242,8 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
       totalMinutes,
       transferCount: transfers,
       ...(walkingSeconds > 0 ? { walkMinutes: Math.ceil(walkingSeconds / 60) } : {}),
+      ...(accessSeconds > 0 ? { accessMinutes: Math.ceil(accessSeconds / 60) } : {}),
+      ...(egressSeconds > 0 ? { egressMinutes: Math.ceil(egressSeconds / 60) } : {}),
       ...(fare != null ? { fare } : {}),
       ...(steps.length ? { steps } : {}),
       ...(busLegs.length ? { busLegs } : {}),
