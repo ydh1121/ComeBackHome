@@ -5,12 +5,19 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 
 const raw = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
 const config = JSON.parse(raw);
+const schedulerConfig = JSON.parse(
+  await readFile(new URL('../wrangler.scheduler.jsonc', import.meta.url), 'utf8'),
+);
 const pagesFunction = await readFile(
   new URL('../functions/api/_middleware.ts', import.meta.url),
   'utf8',
 );
 const pagesWorkflow = await readFile(
   new URL('../.github/workflows/configure-pages-runtime.yml', import.meta.url),
+  'utf8',
+);
+const schedulerEntry = await readFile(
+  new URL('../worker/index.ts', import.meta.url),
   'utf8',
 );
 
@@ -54,6 +61,18 @@ expect(
   'canonical Pages origin missing',
 );
 
+expect(schedulerConfig.name === 'come-back-home-runtime', 'scheduler must reuse existing Worker identity');
+expect(schedulerConfig.main === './worker/index.ts', 'scheduler Worker entry mismatch');
+expect(schedulerConfig.workers_dev === false, 'scheduler workers.dev must be disabled');
+expect(schedulerConfig.preview_urls === false, 'scheduler preview URLs must be disabled');
+expect(schedulerConfig.vars?.PAGES_ORIGIN === 'https://come-back-home.pages.dev', 'scheduler must target canonical Pages');
+expect(Array.isArray(schedulerConfig.triggers?.crons) && schedulerConfig.triggers.crons[0] === '* * * * *', 'scheduler Cron mismatch');
+expect(schedulerConfig.d1_databases == null, 'scheduler Worker must not bind D1');
+expect(!schedulerEntry.includes('handleApiRequest'), 'scheduler Worker must not host application API');
+expect(!schedulerEntry.includes('createProviderRuntime'), 'scheduler Worker must not host provider runtime');
+expect(!schedulerEntry.includes('ASSETS'), 'scheduler Worker must not serve SPA assets');
+expect(schedulerEntry.includes('/api/internal/scheduler-tick'), 'scheduler Worker must invoke canonical Pages tick');
+
 const providerRuntimeEnabled = config.vars?.PROVIDER_RUNTIME_ENABLED;
 const pushDeliveryEnabled = config.vars?.PUSH_DELIVERY_ENABLED;
 expect(providerRuntimeEnabled === '1', 'canonical Pages provider runtime must be enabled');
@@ -87,4 +106,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('Pages-only backend configuration verification passed');
+console.log('Pages + minimal private scheduler configuration verification passed');
