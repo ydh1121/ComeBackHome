@@ -1,11 +1,13 @@
 name: Deploy Parallel Worker Runtime
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - activation/runtime-phase1
     paths:
       - ".github/workflows/deploy-parallel-worker-runtime.yml"
+      - "runtime-activation/deploy.trigger"
       - "wrangler.jsonc"
       - "worker/**"
       - "src/**"
