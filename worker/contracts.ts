@@ -2,20 +2,19 @@ import type { WebPushSubscriptionRecord } from '../src/domain/models';
 
 export const BACKEND_ARCHITECTURE = {
   deploymentName: 'come-back-home',
-  runtime: 'cloudflare-workers',
-  frontend: 'workers-static-assets',
+  runtime: 'cloudflare-pages-functions',
+  frontend: 'cloudflare-pages',
   apiPrefix: '/api',
   database: 'cloudflare-d1',
   databaseName: 'come-back-home-db',
   databaseBinding: 'DB',
   databaseLocationHint: 'apac',
-  scheduler: 'cron-trigger',
-  schedulerExpression: '* * * * *',
+  scheduler: 'event-driven',
   persistedTimestampZone: 'UTC',
   productTimezone: 'Asia/Seoul',
-  queue: 'deferred',
+  queue: 'not-used',
   durableObjects: 'not-used',
-  access: 'cloudflare-access-private-app',
+  access: 'canonical-pages-origin',
 } as const;
 
 export type NotificationJobStatus = 'pending' | 'processing' | 'sent' | 'retry' | 'failed' | 'cancelled';
