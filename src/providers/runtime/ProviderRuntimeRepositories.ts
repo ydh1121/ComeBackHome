@@ -4,6 +4,7 @@ import type {
   PlaceKind,
   RouteCandidate,
   RoutePreference,
+  SavedCommuteRoute,
   TodaySnapshot,
   TransitAccessPoint,
 } from '../../domain/models';
@@ -111,6 +112,22 @@ export class ProviderCommuteRepository implements CommuteRepository {
 
   saveRoutePreference(preference: RoutePreference): Promise<void> {
     return this.persisted.saveRoutePreference(preference);
+  }
+
+  listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> {
+    return this.persisted.listSavedRoutes(personId);
+  }
+
+  createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    return this.persisted.createSavedRoute(personId);
+  }
+
+  saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
+    return this.persisted.saveSavedRoute(route);
+  }
+
+  setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    return this.persisted.setActiveSavedRoute(personId, routeId);
   }
 
   async listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> {
