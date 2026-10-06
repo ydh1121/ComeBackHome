@@ -21,10 +21,7 @@ expect(
   config.assets?.not_found_handling === 'single-page-application',
   'Worker SPA fallback mismatch',
 );
-expect(
-  config.vars?.MUTATIONS_ENABLED === '0',
-  'Worker staging config must keep public API mutations disabled',
-);
+
 expect(
   config.vars?.PUSH_DELIVERY_ENABLED === '0',
   'Worker staging config must keep push delivery disabled',
@@ -33,6 +30,32 @@ expect(
   config.vars?.PROVIDER_RUNTIME_ENABLED === '0',
   'Worker staging config must keep provider runtime disabled',
 );
+
+if (config.vars?.MUTATIONS_ENABLED === '1') {
+  const access = JSON.parse(
+    await readFile(new URL('../runtime-evidence/cloudflare-access-comebackhome.json', import.meta.url), 'utf8'),
+  );
+  expect(access.name === 'ComeBackHome Runtime', 'protected mutation mode requires ComeBackHome Access app');
+  expect(
+    access.domain === 'come-back-home-runtime.ydh1121.workers.dev',
+    'protected mutation mode Access domain mismatch',
+  );
+  expect(access.type === 'self_hosted', 'protected mutation mode Access type mismatch');
+  expect(access.policyCount === 1, 'protected mutation mode requires exactly one owner policy');
+  expect(access.decision === 'allow', 'protected mutation mode requires allow policy');
+  expect(
+    Array.isArray(access.includeSelectorTypes) &&
+    access.includeSelectorTypes.length === 1 &&
+    access.includeSelectorTypes[0] === 'email',
+    'protected mutation mode requires one email selector',
+  );
+  expect(access.identityValuesExposed === false, 'Access evidence must not expose identity values');
+} else {
+  expect(
+    config.vars?.MUTATIONS_ENABLED === '0',
+    'MUTATIONS_ENABLED must be 0 or 1',
+  );
+}
 
 if (config.d1_databases != null) {
   expect(

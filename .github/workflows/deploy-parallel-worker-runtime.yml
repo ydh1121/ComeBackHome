@@ -105,6 +105,7 @@ jobs:
           const url = 'https://come-back-home-runtime.' + subdomain + '.workers.dev/';
 
           fs.mkdirSync('runtime-evidence', { recursive: true });
+          const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
           fs.writeFileSync(
             'runtime-evidence/cloudflare-worker-runtime.json',
             JSON.stringify({
@@ -114,11 +115,11 @@ jobs:
               url,
               clientRuntime: 'api',
               accessProtected: true,
-              mutationsEnabled: false,
-              providerRuntimeEnabled: false,
-              pushDeliveryEnabled: false,
+              mutationsEnabled: config.vars?.MUTATIONS_ENABLED === '1',
+              providerRuntimeEnabled: config.vars?.PROVIDER_RUNTIME_ENABLED === '1',
+              pushDeliveryEnabled: config.vars?.PUSH_DELIVERY_ENABLED === '1',
               d1Binding: 'DB',
-              cronConfigured: false,
+              cronConfigured: Array.isArray(config.triggers?.crons),
             }, null, 2) + '\n',
           );
           NODE

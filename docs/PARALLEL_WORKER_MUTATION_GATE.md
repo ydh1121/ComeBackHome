@@ -1,15 +1,24 @@
 # Parallel Worker Mutation Gate
 
-Status: ACTIVE ON PARALLEL WORKER
+Status: ACCESS-PROTECTED MUTATIONS ENABLED
 
-The parallel Worker is publicly reachable on workers.dev while Cloudflare Access is not yet configured.
+The parallel Worker is protected by Cloudflare Access before Worker/API execution.
 
-To prevent anonymous writes to the new D1 database during migration, the Worker uses:
+Current runtime setting:
 
-- MUTATIONS_ENABLED=0
+- MUTATIONS_ENABLED=1
 
-When this value is 0, all non-GET/HEAD/OPTIONS API requests return HTTP 503 before touching D1. Read-only health/bootstrap/provider-status routes remain available for migration verification.
+This enables authenticated product writes on the parallel Worker only because the Access perimeter has been created and independently verified to intercept anonymous requests.
 
-The gate covers people, schedules, places, commute preferences, notification settings, push subscriptions and trusted presence-event POSTs.
+Defense in depth remains available in code: when MUTATIONS_ENABLED=0, all non-GET/HEAD/OPTIONS API requests return HTTP 503 before touching D1.
 
-Do not change MUTATIONS_ENABLED to 1 until the private access perimeter is verified.
+Protection evidence required before MUTATIONS_ENABLED=1:
+
+- Access application: ComeBackHome Runtime
+- exact domain: come-back-home-runtime.ydh1121.workers.dev
+- self_hosted type
+- exactly one allow policy
+- exactly one email include selector
+- no identity value committed to source/evidence
+
+Provider runtime and push delivery remain disabled, no Cron is configured, and existing Pages production remains unchanged.
