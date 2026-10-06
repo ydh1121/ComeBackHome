@@ -25,6 +25,7 @@ for (const key of [
   'VAPID_PRIVATE_KEY',
   'WEB_PUSH_TTL_SECONDS',
   'NOTIFICATION_RETRY_DELAYS_SECONDS',
+  'KAKAO_REST_API_KEY',
   'PROVIDER_RUNTIME',
 ]) {
   expect(readinessSource.includes("'" + key + "'"), 'readiness requirement missing ' + key);
@@ -69,6 +70,7 @@ try {
     'VAPID_PRIVATE_KEY',
     'WEB_PUSH_TTL_SECONDS',
     'NOTIFICATION_RETRY_DELAYS_SECONDS',
+    'KAKAO_REST_API_KEY',
     'PROVIDER_RUNTIME',
   ]) {
     expect(empty.missing.includes(key), 'empty readiness missing list lost ' + key);
@@ -81,6 +83,7 @@ try {
     VAPID_PRIVATE_KEY: 'private-key',
     WEB_PUSH_TTL_SECONDS: '-1',
     NOTIFICATION_RETRY_DELAYS_SECONDS: '30,invalid',
+    KAKAO_REST_API_KEY: 'kakao-key',
   }, providers);
   expect(invalid.ready === false, 'invalid numeric activation config must fail closed');
   expect(invalid.missing.includes('WEB_PUSH_TTL_SECONDS'), 'invalid TTL must remain missing');
@@ -93,6 +96,7 @@ try {
     VAPID_PRIVATE_KEY: 'private-key',
     WEB_PUSH_TTL_SECONDS: '300',
     NOTIFICATION_RETRY_DELAYS_SECONDS: '30,90,300',
+    KAKAO_REST_API_KEY: 'kakao-key',
   }, providers);
   expect(ready.ready === true, 'complete activation config must compose dependencies');
   expect(ready.missing.length === 0, 'ready activation config must have no missing requirements');

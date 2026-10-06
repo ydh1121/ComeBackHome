@@ -14,6 +14,7 @@ export type NotificationActivationRequirement =
   | 'VAPID_PRIVATE_KEY'
   | 'WEB_PUSH_TTL_SECONDS'
   | 'NOTIFICATION_RETRY_DELAYS_SECONDS'
+  | 'KAKAO_REST_API_KEY'
   | 'PROVIDER_RUNTIME';
 
 export type NotificationActivationReadiness =
@@ -49,6 +50,31 @@ function parseRetryDelays(value: string): number[] | null {
   return parsed;
 }
 
+export interface NotificationActivationConfigInspection {
+  missing: NotificationActivationRequirement[];
+}
+
+export function inspectNotificationActivationConfig(
+  env: WorkerEnv,
+  providerRuntimeAvailable: boolean,
+): NotificationActivationConfigInspection {
+  const ttlRaw = clean(env.WEB_PUSH_TTL_SECONDS);
+  const retryRaw = clean(env.NOTIFICATION_RETRY_DELAYS_SECONDS);
+  const missing: NotificationActivationRequirement[] = [];
+
+  if (!clean(env.VAPID_SUBJECT)) missing.push('VAPID_SUBJECT');
+  if (!clean(env.VAPID_PUBLIC_KEY)) missing.push('VAPID_PUBLIC_KEY');
+  if (!clean(env.VAPID_PRIVATE_KEY)) missing.push('VAPID_PRIVATE_KEY');
+  if (!ttlRaw || parseTtl(ttlRaw) == null) missing.push('WEB_PUSH_TTL_SECONDS');
+  if (!retryRaw || !parseRetryDelays(retryRaw)?.length) {
+    missing.push('NOTIFICATION_RETRY_DELAYS_SECONDS');
+  }
+  if (!clean(env.KAKAO_REST_API_KEY)) missing.push('KAKAO_REST_API_KEY');
+  if (!providerRuntimeAvailable) missing.push('PROVIDER_RUNTIME');
+
+  return { missing };
+}
+
 export function createNotificationActivationReadiness(
   env: WorkerEnv,
   providers: ProviderSourceBundle | null,
@@ -61,16 +87,18 @@ export function createNotificationActivationReadiness(
   const ttlSeconds = ttlRaw ? parseTtl(ttlRaw) : null;
   const retryDelaysSeconds = retryRaw ? parseRetryDelays(retryRaw) : null;
 
-  const missing: NotificationActivationRequirement[] = [];
-  if (!subject) missing.push('VAPID_SUBJECT');
-  if (!publicKey) missing.push('VAPID_PUBLIC_KEY');
-  if (!privateKey) missing.push('VAPID_PRIVATE_KEY');
-  if (ttlSeconds == null) missing.push('WEB_PUSH_TTL_SECONDS');
-  if (!retryDelaysSeconds?.length) missing.push('NOTIFICATION_RETRY_DELAYS_SECONDS');
-  if (!providers) missing.push('PROVIDER_RUNTIME');
+  const inspection = inspectNotificationActivationConfig(env, providers != null);
 
-  if (missing.length || !subject || !publicKey || !privateKey || ttlSeconds == null || !retryDelaysSeconds || !providers) {
-    return { ready: false, missing, dependencies: null };
+  if (
+    inspection.missing.length ||
+    !subject ||
+    !publicKey ||
+    !privateKey ||
+    ttlSeconds == null ||
+    !retryDelaysSeconds ||
+    !providers
+  ) {
+    return { ready: false, missing: inspection.missing, dependencies: null };
   }
 
   const etaSource = createD1ProviderNotificationEtaSource(env.DB, providers);
