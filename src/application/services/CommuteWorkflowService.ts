@@ -1,7 +1,7 @@
 import type { EntityId } from '../../domain/common';
-import type { PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
+import type { BusRouteOption, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
 import type { BusRouteActions, CommuteActions, PlaceActions, PlaceInput, TransitSearchActions } from '../contracts/actions';
-import type { PlaceSearchProvider, TransitAccessSearchProvider, TransitSearchResult } from '../contracts/providers';
+import type { PlaceSearchProvider, TransitAccessSearchProvider, TransitRouteProvider, TransitSearchResult } from '../contracts/providers';
 import type { CommuteRepository, PlaceRepository } from '../contracts/repositories';
 
 export class PlaceService implements PlaceActions {
@@ -179,11 +179,56 @@ export class TransitSearchService implements TransitSearchActions {
   }
 }
 
+function normalizeStopName(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[()\[\]{}]/g, ' ')
+    .replace(/정류장|정류소/g, '')
+    .replace(/\s+/g, '');
+}
+
 export class BusRouteService implements BusRouteActions {
-  constructor(private readonly commute: CommuteRepository) {}
+  constructor(
+    private readonly commute: CommuteRepository,
+    private readonly places: PlaceRepository,
+    private readonly routeProvider?: TransitRouteProvider | null,
+  ) {}
+
+  async listRoutes(personId: EntityId, kind: PlaceKind, accessPointId: EntityId): Promise<BusRouteOption[]> {
+    const point = (await this.commute.listAccessPoints(personId, kind))
+      .find((candidate) => candidate.id === accessPointId);
+    if (!point || point.mode !== 'BUS') return [];
+    if (!this.routeProvider) return point.busRoutes ?? [];
+
+    const [origin, destination] = await Promise.all([
+      this.places.get(personId, 'origin'),
+      this.places.get(personId, 'destination'),
+    ]);
+    if (!origin?.coordinate || !destination?.coordinate) return point.busRoutes ?? [];
+
+    const routes = await this.routeProvider.search(origin.coordinate, destination.coordinate);
+    const target = normalizeStopName(point.name);
+    const options = routes.flatMap((route) =>
+      (route.busLegs ?? []).flatMap((leg) => {
+        const matches = leg.stopNames.some((stop) => {
+          const normalized = normalizeStopName(stop);
+          return normalized === target || normalized.includes(target) || target.includes(normalized);
+        });
+        return matches ? leg.routes : [];
+      }),
+    );
+
+    const unique = new Map<string, BusRouteOption>();
+    for (const option of [...options, ...(point.busRoutes ?? [])]) {
+      if (!unique.has(option.providerRouteId)) unique.set(option.providerRouteId, option);
+    }
+    return [...unique.values()];
+  }
+
   setAlias(accessPointId: EntityId, userLabel: string) {
     return this.commute.setAccessPointAlias(accessPointId, userLabel.trim());
   }
+
   async selectRoute(accessPointId: EntityId, providerRouteId: string) {
     await this.commute.setSelectedBusRoute(accessPointId, providerRouteId);
     await this.commute.setAccessPointSelected(accessPointId, true);
