@@ -7,7 +7,7 @@ import { BusRouteService, CommuteService, PlaceService, TransitSearchService } f
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import type { AppRuntimeMode, ProviderRuntimeMode } from '../config/runtime';
 import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
-import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPushSubscriptionProvider } from '../mocks/providers';
+import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPresenceAutomationGateway, MockPushSubscriptionProvider } from '../mocks/providers';
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
 import {
@@ -19,6 +19,7 @@ import {
 } from '../providers/http/HttpDataProviders';
 import { HttpJsonClient } from '../providers/http/HttpJsonClient';
 import { HttpNotificationTestGateway } from '../providers/http/HttpNotificationTestGateway';
+import { HttpPresenceAutomationGateway } from '../providers/http/HttpPresenceAutomationGateway';
 import {
   HttpCommuteRepository,
   HttpNotificationRepository,
@@ -111,6 +112,7 @@ export function createMockApplicationServices(): ApplicationServices {
       importFiles: importFileSelection,
       importMatch: importWorkflow,
       importReview: importWorkflow,
+      presenceAutomation: new MockPresenceAutomationGateway(),
     },
     changes: {
       subscribe: (listener) => store.subscribe(listener),
@@ -223,6 +225,7 @@ export async function createHybridApiApplicationServices(
       importFiles: importFileSelection,
       importMatch: importWorkflow,
       importReview: importWorkflow,
+      presenceAutomation: new HttpPresenceAutomationGateway(),
     },
     changes,
   };
