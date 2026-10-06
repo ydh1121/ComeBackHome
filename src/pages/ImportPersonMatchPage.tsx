@@ -2,7 +2,6 @@ import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { useImportWorkflow } from '../features/import/useImportWorkflow';
 import { BackButton } from '../shared/components/BackButton';
-import { Icon } from '../shared/components/Icon';
 import './import-page.css';
 
 export function ImportPersonMatchPage() {
@@ -19,8 +18,9 @@ export function ImportPersonMatchPage() {
   }
 
   const batch = workflow.batch;
-  const allMatched = batch.detectedPeople.length > 0 &&
-    batch.detectedPeople.every((detected) => detected.matchedPersonId != null);
+  const allResolved = batch.detectedPeople.length > 0 &&
+    batch.detectedPeople.every((detected) => detected.ignored === true || detected.matchedPersonId != null);
+  const includedCount = batch.detectedPeople.filter((detected) => detected.ignored !== true && detected.matchedPersonId != null).length;
 
   return (
     <section className="import-page" data-route={'/import/' + batchId + '/people'} data-page="ImportPersonMatchPage" data-state="MATCH_REQUIRED">
@@ -29,30 +29,46 @@ export function ImportPersonMatchPage() {
 
       <div className="mapping-list">
         {batch.detectedPeople.map((detected) => {
-          const matched = workflow.people.find((person) => person.id === detected.matchedPersonId);
+          const value = detected.ignored === true ? '__ignore__' : detected.matchedPersonId ?? '';
           return (
             <div className="mapping-row" key={detected.id}>
               <div>
                 <b>{detected.sourceName}</b>
                 <div className="row-sub">인식 신뢰도 {Math.round(detected.confidence * 100)}%</div>
               </div>
-              <button
-                type="button"
-                className="mapping-select"
-                onClick={() => services.actions.importMatch.cyclePersonMatch(batch.id, detected.id)}
+              <select
+                className="mapping-native-select"
+                aria-label={detected.sourceName + ' 일정 대상 연결'}
+                value={value}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  if (next === '__ignore__') {
+                    void services.actions.importMatch.setPersonIgnored(batch.id, detected.id, true);
+                    return;
+                  }
+                  void services.actions.importMatch.setPersonMatch(
+                    batch.id,
+                    detected.id,
+                    next || null,
+                  );
+                }}
               >
-                <span>{matched?.name ?? '연결 안 됨'}</span>
-                <Icon name="chevron-down" />
-              </button>
+                <option value="">연결 안 됨</option>
+                {workflow.people.map((person) => (
+                  <option value={person.id} key={person.id}>{person.name}{person.relation ? ' · ' + person.relation : ''}</option>
+                ))}
+                <option value="__ignore__">가져오지 않음</option>
+              </select>
             </div>
           );
         })}
       </div>
 
+      <div className="mapping-summary">가져올 사람 {includedCount}명</div>
       <button
         type="button"
         className="cta"
-        disabled={!allMatched}
+        disabled={!allResolved || includedCount === 0}
         onClick={() => navigate('/import/' + encodeURIComponent(batch.id) + '/structure')}
       >
         다음
