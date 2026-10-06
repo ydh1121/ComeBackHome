@@ -53,3 +53,9 @@ export interface ScheduledControllerLike {
 export interface ExecutionContextLike {
   waitUntil(promise: Promise<unknown>): void;
 }
+
+
+export interface SchedulerWorkerEnv {
+  PAGES_ORIGIN?: string;
+  SCHEDULER_INVOKE_TOKEN?: string;
+}
