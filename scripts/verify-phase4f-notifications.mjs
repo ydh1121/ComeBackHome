@@ -11,7 +11,7 @@ const manifest = await read('../src/application/route-manifest.ts');
 const providers = await read('../src/mocks/providers.ts');
 const css = await read('../src/pages/notification-page.css');
 
-for (const text of ['알림','퇴근할 때','도착 시간이 크게 바뀔 때','테스트 알림','requestPermissionFromUserGesture','updateRules','sendTestNotification']) {
+for (const text of ['알림','예정 퇴근 시간에','도착 시간이 크게 바뀔 때','실제 퇴근을 감지했을 때','집 도착을 감지했을 때','테스트 알림','requestPermissionFromUserGesture','updateRules','sendTestNotification']) {
   if (!page.includes(text)) failures.push('notification page missing ' + text);
 }
 for (const text of ['PERMISSION_DEFAULT','PERMISSION_DENIED','PERMISSION_GRANTED','SUBSCRIBED','PERMISSION_ERROR']) {

@@ -79,6 +79,15 @@ try {
   ];
   const jobs = [];
 
+  let rules = {
+    shiftEndEnabled: true,
+    etaChangeEnabled: false,
+    leftWorkEnabled: true,
+    homeArrivalEnabled: true,
+    timezone: 'Asia/Seoul',
+    updatedAt: '2026-10-06T00:00:00.000Z',
+  };
+
   const dependencies = {
     jobs: {
       async enqueueOnce(job) { jobs.push(structuredClone(job)); },
@@ -99,6 +108,10 @@ try {
       async upsert() {},
       async upsertMany() {},
     },
+    settings: {
+      async get() { return structuredClone(rules); },
+      async updateRules(next) { rules = { ...rules, ...next }; return structuredClone(rules); },
+    },
   };
 
   const left = await module.enqueuePresenceEvent(
@@ -111,6 +124,7 @@ try {
     new Date('2026-10-06T13:01:00.000Z'),
   );
   expect(left.type === 'LEFT_WORK', 'LEFT_WORK result type mismatch');
+  expect(left.queued === true, 'LEFT_WORK enabled event must queue');
   expect(jobs[0]?.type === 'presence-left-work', 'LEFT_WORK job type mismatch');
   expect(jobs[0]?.payload?.title === '여자친구 퇴근', 'LEFT_WORK title mismatch');
   expect(jobs[0]?.payload?.body?.includes('다음 출근 10/8 09:30'), 'LEFT_WORK payload lost next work');
@@ -129,9 +143,24 @@ try {
     new Date('2026-10-06T14:05:00.000Z'),
   );
   expect(arrived.type === 'ARRIVED_HOME', 'ARRIVED_HOME result type mismatch');
+  expect(arrived.queued === true, 'ARRIVED_HOME enabled event must queue');
   expect(jobs[1]?.type === 'presence-arrived-home', 'ARRIVED_HOME job type mismatch');
   expect(jobs[1]?.payload?.title === '여자친구 집 도착', 'ARRIVED_HOME title mismatch');
   expect(jobs[1]?.payload?.body?.includes('다음 출근 10/8 09:30'), 'ARRIVED_HOME payload lost next work');
+
+  rules = { ...rules, homeArrivalEnabled: false };
+  const beforeDisabled = jobs.length;
+  const disabledArrival = await module.enqueuePresenceEvent(
+    dependencies,
+    {
+      eventId: 'shortcut-20261006T231000',
+      personId: person.id,
+      type: 'ARRIVED_HOME',
+    },
+    new Date('2026-10-06T14:10:00.000Z'),
+  );
+  expect(disabledArrival.queued === false, 'disabled home-arrival rule must not queue');
+  expect(jobs.length === beforeDisabled, 'disabled home-arrival event created a job');
 
   let invalidIdBlocked = false;
   try {

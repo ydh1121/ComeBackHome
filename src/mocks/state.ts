@@ -106,7 +106,7 @@ export const MOCK_FIXTURE: MockState = {
     committed: false,
   }],
   committedImportBatchIds: [],
-  notifications: { permission: 'default', rules: { shiftEnd: true, etaChange: false }, subscription: null },
+  notifications: { permission: 'default', rules: { shiftEnd: true, etaChange: false, leftWork: true, homeArrival: true }, subscription: null },
 };
 
 export class MockStateStore {

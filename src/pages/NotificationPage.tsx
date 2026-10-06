@@ -40,7 +40,7 @@ export function NotificationPage() {
     }
   };
 
-  const updateRule = async (key: 'shiftEnd' | 'etaChange', value: boolean) => {
+  const updateRule = async (key: 'shiftEnd' | 'etaChange' | 'leftWork' | 'homeArrival', value: boolean) => {
     await services.actions.notifications.updateRules({
       ...settings.rules,
       [key]: value,
@@ -88,7 +88,7 @@ export function NotificationPage() {
           aria-pressed={settings.rules.shiftEnd}
           onClick={() => updateRule('shiftEnd', !settings.rules.shiftEnd)}
         >
-          <b>퇴근할 때</b>
+          <b>예정 퇴근 시간에</b>
           <span className={'switch' + (settings.rules.shiftEnd ? ' on' : '')} aria-hidden="true" />
         </button>
         <button
@@ -99,6 +99,24 @@ export function NotificationPage() {
         >
           <b>도착 시간이 크게 바뀔 때</b>
           <span className={'switch' + (settings.rules.etaChange ? ' on' : '')} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="rule"
+          aria-pressed={settings.rules.leftWork}
+          onClick={() => updateRule('leftWork', !settings.rules.leftWork)}
+        >
+          <b>실제 퇴근을 감지했을 때</b>
+          <span className={'switch' + (settings.rules.leftWork ? ' on' : '')} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="rule"
+          aria-pressed={settings.rules.homeArrival}
+          onClick={() => updateRule('homeArrival', !settings.rules.homeArrival)}
+        >
+          <b>집 도착을 감지했을 때</b>
+          <span className={'switch' + (settings.rules.homeArrival ? ' on' : '')} aria-hidden="true" />
         </button>
       </div>
 

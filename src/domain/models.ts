@@ -28,7 +28,7 @@ export interface ImportBatch {
   reviewItems: ImportReviewItem[];
   committed: boolean;
 }
-export interface NotificationRules { shiftEnd: boolean; etaChange: boolean; }
+export interface NotificationRules { shiftEnd: boolean; etaChange: boolean; leftWork: boolean; homeArrival: boolean; }
 export interface WebPushSubscriptionRecord {
   endpoint: string;
   expirationTime: number | null;

@@ -51,13 +51,15 @@ export interface NotificationJob {
 export interface NotificationSettingsRecord {
   shiftEndEnabled: boolean;
   etaChangeEnabled: boolean;
+  leftWorkEnabled: boolean;
+  homeArrivalEnabled: boolean;
   timezone: string;
   updatedAt: string;
 }
 
 export interface NotificationSettingsStore {
   get(): Promise<NotificationSettingsRecord>;
-  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled'>): Promise<NotificationSettingsRecord>;
+  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled'>): Promise<NotificationSettingsRecord>;
 }
 
 export interface SubscriptionStore {

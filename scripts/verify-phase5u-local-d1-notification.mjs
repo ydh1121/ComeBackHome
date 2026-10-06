@@ -237,7 +237,7 @@ try {
   console.log(JSON.stringify({
     result: 'PASS',
     localD1: true,
-    migrations: ['0001_initial.sql', '0002_notification_planner_state.sql'],
+    migrations: ['0001_initial.sql', '0002_notification_planner_state.sql', '0003_presence_notification_settings.sql'],
     sentJobs: finalState.jobs.filter((job) => job.status === 'sent').length,
     pendingJobs: finalState.jobs.filter((job) => job.status === 'pending').length,
     plannerStateRows: finalState.plannerState.length,

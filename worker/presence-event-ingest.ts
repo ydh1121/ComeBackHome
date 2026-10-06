@@ -1,6 +1,7 @@
 import type {
   NotificationJobStore,
   NotificationPayload,
+  NotificationSettingsStore,
 } from './contracts';
 import type {
   PersonRepository,
@@ -20,6 +21,7 @@ export interface PresenceEventDependencies {
   jobs: NotificationJobStore;
   people: PersonRepository;
   schedules: ScheduleRepository;
+  settings: NotificationSettingsStore;
 }
 
 export interface PresenceEventResult {
@@ -27,6 +29,7 @@ export interface PresenceEventResult {
   personId: string;
   type: PresenceEventType;
   acceptedAt: string;
+  queued: boolean;
 }
 
 const PRODUCT_TIMEZONE = 'Asia/Seoul';
@@ -111,6 +114,21 @@ export async function enqueuePresenceEvent(
   if (!person) throw new Error('Person was not found.');
 
   const acceptedAt = now.toISOString();
+  const settings = await dependencies.settings.get();
+  const enabled = input.type === 'LEFT_WORK'
+    ? settings.leftWorkEnabled
+    : settings.homeArrivalEnabled;
+
+  if (!enabled) {
+    return {
+      eventId,
+      personId,
+      type: input.type,
+      acceptedAt,
+      queued: false,
+    };
+  }
+
   const schedules = await dependencies.schedules.list(personId);
   const futureWork = nextWork(schedules, seoulDate(now));
   const payload = payloadFor(person, input.type, futureWork);
@@ -131,5 +149,6 @@ export async function enqueuePresenceEvent(
     personId,
     type: input.type,
     acceptedAt,
+    queued: true,
   };
 }

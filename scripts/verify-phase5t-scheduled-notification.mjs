@@ -175,6 +175,8 @@ try {
           return {
             shiftEndEnabled: true,
             etaChangeEnabled: true,
+            leftWorkEnabled: true,
+            homeArrivalEnabled: true,
             timezone: 'Asia/Seoul',
             updatedAt: '2026-10-05T00:00:00.000Z',
           };

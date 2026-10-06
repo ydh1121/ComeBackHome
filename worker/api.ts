@@ -167,6 +167,7 @@ export async function handleApiRequest(
           jobs: new D1NotificationJobStore(env.DB),
           people: new D1PersonRepository(env.DB),
           schedules: new D1ScheduleRepository(env.DB),
+          settings: new D1NotificationSettingsStore(env.DB),
         },
         {
           eventId: asString(body.eventId, 'eventId'),
@@ -391,6 +392,8 @@ export async function handleApiRequest(
         const updated = await settings.updateRules({
           shiftEndEnabled: asBoolean(body.shiftEndEnabled, 'shiftEndEnabled'),
           etaChangeEnabled: asBoolean(body.etaChangeEnabled, 'etaChangeEnabled'),
+          leftWorkEnabled: asBoolean(body.leftWorkEnabled, 'leftWorkEnabled'),
+          homeArrivalEnabled: asBoolean(body.homeArrivalEnabled, 'homeArrivalEnabled'),
         });
         return json({ settings: updated });
       }

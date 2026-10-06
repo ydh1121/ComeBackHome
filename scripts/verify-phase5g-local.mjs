@@ -337,11 +337,18 @@ try {
   const runtimeCandidates = await services.repositories.commute.listRouteCandidates(personId);
   assert(Array.isArray(runtimeCandidates), 'route candidates must remain runtime-provider data');
 
-  await services.repositories.notifications.setRules({ shiftEnd: false, etaChange: true });
+  await services.repositories.notifications.setRules({
+    shiftEnd: false,
+    etaChange: true,
+    leftWork: true,
+    homeArrival: true,
+  });
   await services.repositories.notifications.setPermission('granted');
   const notificationSettings = await services.repositories.notifications.getSettings();
   assert(notificationSettings.rules.shiftEnd === false, 'notification shift-end rule round-trip failed');
   assert(notificationSettings.rules.etaChange === true, 'notification ETA rule round-trip failed');
+  assert(notificationSettings.rules.leftWork === true, 'notification actual-leave rule round-trip failed');
+  assert(notificationSettings.rules.homeArrival === true, 'notification home-arrival rule round-trip failed');
   assert(notificationSettings.permission === 'granted', 'browser notification permission must remain local runtime state');
 
   const workbookBytes = Buffer.from(SAMPLE_IMPORT_WORKBOOK_BASE64, 'base64');
@@ -383,6 +390,8 @@ try {
   const finalBootstrap = await requestJson('/api/bootstrap');
   assert(finalBootstrap.people.some((person) => person.id === personId), 'bootstrap did not expose persisted person after mutations');
   assert(finalBootstrap.notificationSettings?.etaChangeEnabled === true, 'bootstrap notification state did not reflect D1 mutation');
+  assert(finalBootstrap.notificationSettings?.leftWorkEnabled === true, 'bootstrap actual-leave rule missing');
+  assert(finalBootstrap.notificationSettings?.homeArrivalEnabled === true, 'bootstrap home-arrival rule missing');
 
   const appResponse = await originalFetch(origin + '/');
   const appHtml = await appResponse.text();

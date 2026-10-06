@@ -232,6 +232,8 @@ export class HybridCommuteRepository implements CommuteRepository {
 interface ServerNotificationSettings {
   shiftEndEnabled: boolean;
   etaChangeEnabled: boolean;
+  leftWorkEnabled: boolean;
+  homeArrivalEnabled: boolean;
   timezone: string;
   updatedAt: string;
 }
@@ -255,6 +257,8 @@ export class HttpNotificationRepository implements NotificationRepository {
       rules: {
         shiftEnd: settings.shiftEndEnabled,
         etaChange: settings.etaChangeEnabled,
+        leftWork: settings.leftWorkEnabled,
+        homeArrival: settings.homeArrivalEnabled,
       },
     };
   }
@@ -263,6 +267,8 @@ export class HttpNotificationRepository implements NotificationRepository {
     await this.client.put('/notifications/settings', {
       shiftEndEnabled: rules.shiftEnd,
       etaChangeEnabled: rules.etaChange,
+      leftWorkEnabled: rules.leftWork,
+      homeArrivalEnabled: rules.homeArrival,
     });
   }
 
