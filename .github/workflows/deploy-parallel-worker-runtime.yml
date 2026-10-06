@@ -1,0 +1,53 @@
+name: Deploy Parallel Worker Runtime
+
+on:
+  push:
+    branches:
+      - activation/runtime-phase1
+    paths:
+      - ".github/workflows/deploy-parallel-worker-runtime.yml"
+      - "wrangler.jsonc"
+      - "worker/**"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comebackhome-parallel-worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      VITE_CBH_RUNTIME: mock
+      VITE_CBH_PROVIDER_RUNTIME: mock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify credentials exist
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Build mock runtime
+        run: npm run build
+
+      - name: Deploy isolated Worker
+        run: npx wrangler deploy --config wrangler.jsonc
