@@ -3,6 +3,15 @@ import type { ImportResolution } from '../../domain/models';
 import type { ImportMatchActions, ImportReviewActions } from '../contracts/actions';
 import type { ImportRepository, PersonRepository } from '../contracts/repositories';
 
+function normalizeImportedTime(value: string | null): string | null {
+  if (value == null || value === '') return null;
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(value);
+  if (!match) throw new Error('Imported time is invalid.');
+  const hour = Number(match[1]);
+  if (hour > 23) throw new Error('Imported time is invalid.');
+  return String(hour).padStart(2, '0') + ':' + match[2];
+}
+
 export class ImportWorkflowService implements ImportMatchActions, ImportReviewActions {
   constructor(
     private readonly imports: ImportRepository,
@@ -25,5 +34,19 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
 
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {
     return this.imports.setResolution(batchId, reviewItemId, resolution);
+  }
+
+  setImportedTime(
+    batchId: EntityId,
+    reviewItemId: EntityId,
+    field: 'start' | 'end',
+    value: string | null,
+  ): Promise<void> {
+    return this.imports.setImportedTime(
+      batchId,
+      reviewItemId,
+      field,
+      normalizeImportedTime(value),
+    );
   }
 }

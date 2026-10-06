@@ -243,6 +243,22 @@ try {
     'normal schedule-family clock values must remain accepted',
   );
 
+  const incompleteLayout = buildScheduleImageLayoutFixture({ targetRow: 3 });
+  incompleteLayout.tokens = incompleteLayout.tokens.filter((item) => {
+    const cy = item.y + item.height / 2;
+    return !(item.text === '11' && Math.abs(cy - targetRowCenter) < 2);
+  });
+  const incompleteParsed = imageModule.parseScheduleImageLayout(incompleteLayout);
+  const incompleteReview = incompleteParsed.reviewCandidates?.find(
+    (item) =>
+      item.sourcePersonName === '테스트직원' &&
+      item.date === '2026-08-21',
+  );
+  expect(
+    incompleteReview?.start == null && incompleteReview?.end === '23:30',
+    'one-sided image schedule evidence must be preserved as an import review candidate',
+  );
+
   const parsed = imageModule.parseScheduleImageLayout(refined);
   expect(
     parsed.detectedPeople.some((person) => person.sourceName === '직원a'),

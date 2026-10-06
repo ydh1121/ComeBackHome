@@ -14,10 +14,13 @@ const commitSource = await read('../src/application/use-cases/commitImportReview
 for (const text of [
   'batch.reviewItems.map',
   'const allReviewed',
-  'item.personId != null && item.resolution != null',
+  "item.resolution === 'KEEP'",
+  "item.resolution === 'NEW' && importedTimeComplete(item)",
   "disabled={!allReviewed || saveState === 'saving'}",
   "disabled={!item.existing || !item.personId}",
-  "disabled={!item.personId}",
+  "disabled={!item.personId || !importedComplete}",
+  'services.actions.importReview.setImportedTime',
+  'type="time"',
 ]) {
   expect(reviewSource.includes(text), 'multi-item review UI missing ' + text);
 }
@@ -27,6 +30,7 @@ expect(matchSource.includes("matched?.name ?? '연결 안 됨'"), 'unmatched per
 expect(matchSource.includes('disabled={!allMatched}'), 'person match next CTA must block unresolved people');
 expect(commitSource.includes("Import contains unresolved people."), 'unresolved person commit guard missing');
 expect(commitSource.includes("Import contains unreviewed schedules."), 'unreviewed schedule commit guard missing');
+expect(commitSource.includes("Import contains incomplete schedule times."), 'incomplete imported time commit guard missing');
 
 const vite = await createViteServer({
   root,
@@ -37,8 +41,61 @@ const vite = await createViteServer({
 
 try {
   const commitModule = await vite.ssrLoadModule('/src/application/use-cases/commitImportReview.ts');
+  const selectionModule = await vite.ssrLoadModule('/src/application/services/WorkbookImportFileSelectionAction.ts');
   const reposModule = await vite.ssrLoadModule('/src/mocks/repositories.ts');
   const stateModule = await vite.ssrLoadModule('/src/mocks/state.ts');
+
+  const selectionStore = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  selectionStore.mutate((state) => {
+    state.importBatches = [];
+  });
+  const selectionImports = new reposModule.MockImportRepository(selectionStore);
+  const selectionPeople = new reposModule.MockPersonRepository(selectionStore);
+  const selectionSchedules = new reposModule.MockScheduleRepository(selectionStore);
+  const selection = new selectionModule.WorkbookImportFileSelectionAction(
+    selectionImports,
+    selectionPeople,
+    selectionSchedules,
+    {
+      async parse() {
+        return {
+          detectedPeople: [{ sourceName: '여자친구', confidence: 0.92 }],
+          scheduleCandidates: [],
+          reviewCandidates: [{
+            sourcePersonName: '여자친구',
+            date: '2099-01-31',
+            start: '09:00',
+            end: null,
+            sourceRow: 2,
+            confidence: 0.91,
+          }],
+          structure: {
+            sheet: '근무표',
+            headerRow: 1,
+            personColumn: 'A',
+            dateColumn: 'B',
+            shiftColumn: 'C:D',
+            needsReview: true,
+          },
+          confidence: 0.91,
+        };
+      },
+    },
+  );
+  const selectionBatchId = await selection.accept([{
+    kind: 'WORKBOOK',
+    file: {
+      name: 'incomplete-review.xlsx',
+      async arrayBuffer() { return new ArrayBuffer(0); },
+    },
+  }]);
+  const selectionBatch = await selectionImports.getBatch(selectionBatchId);
+  expect(
+    selectionBatch?.reviewItems.length === 1 &&
+      selectionBatch.reviewItems[0]?.imported.start === '09:00' &&
+      selectionBatch.reviewItems[0]?.imported.end == null,
+    'one-sided parser review candidate must survive into ImportReviewItem',
+  );
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   store.mutate((state) => {
@@ -80,7 +137,7 @@ try {
           detectedPersonId: 'phase5q-person',
           personId: 'mock-person-1',
           date: '2099-02-02',
-          imported: { start: '10:00', end: '19:00' },
+          imported: { start: '10:00', end: null },
           resolution: null,
         },
       ],
@@ -113,6 +170,17 @@ try {
   expect(await schedules.getByDate('mock-person-1', '2099-02-01') === null, 'partial review must not mutate first schedule');
 
   await imports.setResolution('phase5q-batch', 'phase5q-review-2', 'NEW');
+
+  let incompleteBlocked = false;
+  try {
+    await commit.execute('phase5q-batch');
+  } catch (error) {
+    incompleteBlocked = error instanceof Error &&
+      error.message === 'Import contains incomplete schedule times.';
+  }
+  expect(incompleteBlocked, 'incomplete NEW schedule must remain blocked');
+
+  await imports.setImportedTime('phase5q-batch', 'phase5q-review-2', 'end', '19:00');
   await commit.execute('phase5q-batch');
 
   const first = await schedules.getByDate('mock-person-1', '2099-02-01');

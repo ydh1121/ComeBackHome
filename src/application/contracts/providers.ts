@@ -12,7 +12,8 @@ export interface RealtimeBusProvider { arrivals(stopProviderId: string, routePro
 export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
 export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
-export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; structure: ImportStructure; confidence: number; }
+export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; sourceRow: number; confidence: number; }
+export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; reviewCandidates?: ParsedScheduleReviewCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageTextToken { text: string; x: number; y: number; width: number; height: number; confidence: number; }
 export interface ImageTextLayout { width: number; height: number; tokens: ImageTextToken[]; }

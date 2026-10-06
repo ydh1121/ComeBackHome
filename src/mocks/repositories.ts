@@ -113,6 +113,12 @@ export class MockImportRepository implements ImportRepository {
       if (item) item.resolution = resolution;
     });
   }
+  async setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void> {
+    this.store.mutate((state) => {
+      const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
+      if (item) item.imported[field] = value;
+    });
+  }
   async markCommitted(batchId: EntityId): Promise<void> {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);

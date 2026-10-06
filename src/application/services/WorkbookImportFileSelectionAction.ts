@@ -105,27 +105,63 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       detectedPersonId: string;
       personId: string | null;
       date: string;
-      start: string;
-      end: string;
+      start: string | null;
+      end: string | null;
+      confidence: number;
     }>();
     let duplicateCandidate = false;
 
+    const registerCandidate = (candidate: {
+      sourcePersonName: string;
+      date: string;
+      start: string | null;
+      end: string | null;
+      confidence: number;
+    }) => {
+      if (!candidate.start && !candidate.end) return;
+      const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
+      if (!detected) return;
+
+      const key = normalizeName(candidate.sourcePersonName) + '|' + candidate.date;
+      const next = {
+        detectedPersonId: detected.id,
+        personId: detected.matchedPersonId,
+        date: candidate.date,
+        start: candidate.start,
+        end: candidate.end,
+        confidence: candidate.confidence,
+      };
+      const existing = candidateByKey.get(key);
+      if (!existing) {
+        candidateByKey.set(key, next);
+        return;
+      }
+
+      duplicateCandidate = true;
+      const existingComplete = existing.start != null && existing.end != null;
+      const nextComplete = next.start != null && next.end != null;
+      const existingEvidence = Number(existing.start != null) + Number(existing.end != null);
+      const nextEvidence = Number(next.start != null) + Number(next.end != null);
+
+      if (
+        (!existingComplete && nextComplete) ||
+        (
+          existingComplete === nextComplete &&
+          (
+            nextEvidence > existingEvidence ||
+            (nextEvidence === existingEvidence && next.confidence > existing.confidence)
+          )
+        )
+      ) {
+        candidateByKey.set(key, next);
+      }
+    };
+
     for (const parsed of parsedResults) {
-      for (const candidate of parsed.scheduleCandidates) {
-        const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
-        if (!detected) continue;
-        const key = normalizeName(candidate.sourcePersonName) + '|' + candidate.date;
-        if (candidateByKey.has(key)) {
-          duplicateCandidate = true;
-          continue;
-        }
-        candidateByKey.set(key, {
-          detectedPersonId: detected.id,
-          personId: detected.matchedPersonId,
-          date: candidate.date,
-          start: candidate.start,
-          end: candidate.end,
-        });
+      for (const candidate of parsed.scheduleCandidates) registerCandidate(candidate);
+      for (const candidate of parsed.reviewCandidates ?? []) {
+        if ((candidate.start == null) === (candidate.end == null)) continue;
+        registerCandidate(candidate);
       }
     }
 

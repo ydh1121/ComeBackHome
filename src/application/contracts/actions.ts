@@ -5,7 +5,10 @@ export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
 export interface ImportMatchActions { cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>; }
-export interface ImportReviewActions { setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>; }
+export interface ImportReviewActions {
+  setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
+  setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
+}
 export type TransitAccessFilter = 'all' | Lowercase<TransitMode>;
 export interface TransitAccessActions {
   setFilter(kind: PlaceKind, filter: TransitAccessFilter): void;

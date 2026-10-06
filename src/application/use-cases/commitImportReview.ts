@@ -17,19 +17,29 @@ export class CommitImportReview implements CommitImportReviewAction {
     const unreviewed = batch.reviewItems.filter((item) => item.resolution == null);
     if (unreviewed.length) throw new Error('Import contains unreviewed schedules.');
 
+    const incomplete = batch.reviewItems.filter(
+      (item) =>
+        item.resolution === 'NEW' &&
+        (item.imported.start == null || item.imported.end == null),
+    );
+    if (incomplete.length) throw new Error('Import contains incomplete schedule times.');
+
     const entries = [];
     for (const item of batch.reviewItems) {
       if (item.resolution === 'KEEP') continue;
       const personId = item.personId;
       if (!personId) continue;
+      const start = item.imported.start;
+      const end = item.imported.end;
+      if (!start || !end) throw new Error('Import contains incomplete schedule times.');
       const current = await this.schedules.getByDate(personId, item.date);
       entries.push({
         id: current?.id ?? crypto.randomUUID(),
         personId,
         date: item.date,
         enabled: true,
-        start: item.imported.start,
-        end: item.imported.end,
+        start,
+        end,
       });
     }
     await this.schedules.upsertMany(entries);

@@ -22,8 +22,16 @@ export function ImportReviewPage() {
   }
 
   const batch = workflow.batch;
+  const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
+    item.imported.start != null && item.imported.end != null;
   const allReviewed = batch.reviewItems.length > 0 &&
-    batch.reviewItems.every((item) => item.personId != null && item.resolution != null);
+    batch.reviewItems.every((item) =>
+      item.personId != null &&
+      (
+        item.resolution === 'KEEP' ||
+        (item.resolution === 'NEW' && importedTimeComplete(item))
+      )
+    );
 
   const save = async () => {
     if (!allReviewed) return;
@@ -45,6 +53,7 @@ export function ImportReviewPage() {
         <div className="import-review-list">
           {batch.reviewItems.map((item) => {
             const person = workflow.people.find((candidate) => candidate.id === item.personId);
+            const importedComplete = importedTimeComplete(item);
             return (
               <div className="import-review-item" key={item.id}>
                 <div className="import-review-head">
@@ -53,6 +62,44 @@ export function ImportReviewPage() {
                     {person?.name ?? '사람 연결 필요'}
                   </div>
                 </div>
+
+                {!importedComplete ? (
+                  <div className="review-time-editor" data-state="INCOMPLETE_TIME">
+                    <label className="review-time-field">
+                      <span>출근</span>
+                      <input
+                        className="review-time-input"
+                        type="time"
+                        value={item.imported.start ?? ''}
+                        onChange={(event) => {
+                          void services.actions.importReview.setImportedTime(
+                            batch.id,
+                            item.id,
+                            'start',
+                            event.currentTarget.value || null,
+                          );
+                        }}
+                      />
+                    </label>
+                    <span className="review-time-separator">–</span>
+                    <label className="review-time-field">
+                      <span>퇴근</span>
+                      <input
+                        className="review-time-input"
+                        type="time"
+                        value={item.imported.end ?? ''}
+                        onChange={(event) => {
+                          void services.actions.importReview.setImportedTime(
+                            batch.id,
+                            item.id,
+                            'end',
+                            event.currentTarget.value || null,
+                          );
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : null}
 
                 <div className="review-choice-list">
                   <button
@@ -71,11 +118,11 @@ export function ImportReviewPage() {
                     type="button"
                     className={'review-choice' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
-                    disabled={!item.personId}
+                    disabled={!item.personId || !importedComplete}
                     onClick={() => services.actions.importReview.setResolution(batch.id, item.id, 'NEW')}
                   >
                     <span className="review-choice-label">가져온 일정</span>
-                    <strong className="review-choice-time">{item.imported.start}–{item.imported.end}</strong>
+                    <strong className="review-choice-time">{item.imported.start ?? '입력 필요'}–{item.imported.end ?? '입력 필요'}</strong>
                     <span className="review-choice-check">{item.resolution === 'NEW' ? <Icon name="check" /> : null}</span>
                   </button>
                 </div>

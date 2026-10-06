@@ -6,6 +6,7 @@ import type {
   ParsedImport,
   ParsedImportPerson,
   ParsedScheduleCandidate,
+  ParsedScheduleReviewCandidate,
 } from '../../application/contracts/providers';
 import {
   END_LABELS as END_ALIASES,
@@ -951,6 +952,7 @@ function dateBlockMatrixStrategy(
   }));
 
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
+  const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
 
   for (const person of personRows) {
     const rowTokens = tokens.filter((token) =>
@@ -984,7 +986,24 @@ function dateBlockMatrixStrategy(
         }
       }
 
-      if (!start || !end) continue;
+      if (!start || !end) {
+        if (start || end) {
+          const knownConfidence = start?.confidence ?? end?.confidence ?? 0;
+          reviewCandidates.push({
+            sourcePersonName: person.sourceName,
+            date: block.date,
+            start: start?.value ?? null,
+            end: end?.value ?? null,
+            sourceRow: person.sourceRow,
+            confidence: Math.min(
+              person.confidence,
+              block.confidence,
+              knownConfidence,
+            ),
+          });
+        }
+        continue;
+      }
 
       scheduleCandidates.push({
         sourcePersonName: person.sourceName,
@@ -1002,9 +1021,14 @@ function dateBlockMatrixStrategy(
     }
   }
 
-  if (!scheduleCandidates.length) return null;
+  if (!scheduleCandidates.length && !reviewCandidates.length) return null;
 
-  const candidateConfidence = average(scheduleCandidates.map((item) => item.confidence));
+  const confidenceCandidates = scheduleCandidates.length
+    ? scheduleCandidates
+    : reviewCandidates;
+  const candidateConfidence = average(
+    confidenceCandidates.map((item) => item.confidence),
+  );
   const semanticAnchorScore = Math.min(
     1,
     0.55 +
@@ -1019,6 +1043,7 @@ function dateBlockMatrixStrategy(
     parsed: {
       detectedPeople,
       scheduleCandidates,
+      ...(reviewCandidates.length ? { reviewCandidates } : {}),
       structure: {
         sheet: usedCalendarStrip
           ? '이미지 근무표 / date-block-matrix + calendar-strip'
