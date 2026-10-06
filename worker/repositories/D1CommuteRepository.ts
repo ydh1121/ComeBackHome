@@ -1,6 +1,6 @@
 import type { CommuteRepository } from '../../src/application/contracts/repositories';
 import type { EntityId } from '../../src/domain/common';
-import type { PlaceKind, RouteCandidate, RoutePreference, TransitAccessPoint } from '../../src/domain/models';
+import type { PlaceKind, RouteCandidate, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../src/domain/models';
 import type { D1DatabaseLike, D1PreparedStatementLike } from '../runtime-types';
 import { asBoolean, asInteger, batchOrThrow, utcNow } from './d1-helpers';
 
@@ -24,6 +24,20 @@ interface RoutePreferenceRow {
 }
 
 interface RouteStepRow {
+  access_point_id: string;
+}
+
+interface SavedRouteRow {
+  id: string;
+  person_id: string;
+  position: number;
+  label: string;
+  origin_access_point_id: string | null;
+  active: number;
+}
+
+interface SavedRouteViaRow {
+  route_id: string;
   access_point_id: string;
 }
 
@@ -145,6 +159,123 @@ export class D1CommuteRepository implements CommuteRepository {
     ];
 
     await batchOrThrow(this.db, statements);
+  }
+
+  async listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> {
+    const routeResult = await this.db.prepare(
+      `SELECT id, person_id, position, label, origin_access_point_id, active
+      FROM saved_commute_routes
+      WHERE person_id = ?1
+      ORDER BY position ASC, id ASC`,
+    ).bind(personId).all<SavedRouteRow>();
+
+    const viaResult = await this.db.prepare(
+      `SELECT route_id, access_point_id
+      FROM saved_commute_route_vias
+      WHERE route_id IN (
+        SELECT id FROM saved_commute_routes WHERE person_id = ?1
+      )
+      ORDER BY route_id ASC, position ASC`,
+    ).bind(personId).all<SavedRouteViaRow>();
+
+    const viasByRoute = new Map<string, string[]>();
+    for (const row of viaResult.results) {
+      const ids = viasByRoute.get(row.route_id) ?? [];
+      ids.push(row.access_point_id);
+      viasByRoute.set(row.route_id, ids);
+    }
+
+    return routeResult.results.map((row) => ({
+      id: row.id,
+      personId: row.person_id,
+      position: row.position,
+      label: row.label,
+      ...(row.origin_access_point_id ? { originAccessPointId: row.origin_access_point_id } : {}),
+      viaAccessPointIds: viasByRoute.get(row.id) ?? [],
+      active: asBoolean(row.active),
+    }));
+  }
+
+  async createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    const routes = await this.listSavedRoutes(personId);
+    const position = Math.max(0, ...routes.map((route) => route.position)) + 1;
+    const route: SavedCommuteRoute = {
+      id: crypto.randomUUID(),
+      personId,
+      position,
+      label: '경로 ' + position,
+      viaAccessPointIds: [],
+      active: routes.length === 0,
+    };
+    await this.saveSavedRoute(route);
+    return route;
+  }
+
+  async saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
+    const now = utcNow();
+    const statements: D1PreparedStatementLike[] = [];
+
+    if (route.active) {
+      statements.push(
+        this.db.prepare(
+          'UPDATE saved_commute_routes SET active = 0, updated_at = ?2 WHERE person_id = ?1',
+        ).bind(route.personId, now),
+      );
+    }
+
+    statements.push(
+      this.db.prepare(
+        `INSERT INTO saved_commute_routes (
+          id, person_id, position, label, origin_access_point_id, active, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
+        ON CONFLICT(id) DO UPDATE SET
+          position = excluded.position,
+          label = excluded.label,
+          origin_access_point_id = excluded.origin_access_point_id,
+          active = excluded.active,
+          updated_at = excluded.updated_at`,
+      ).bind(
+        route.id,
+        route.personId,
+        route.position,
+        route.label,
+        route.originAccessPointId ?? null,
+        asInteger(route.active),
+        now,
+      ),
+      this.db.prepare(
+        'DELETE FROM saved_commute_route_vias WHERE route_id = ?1',
+      ).bind(route.id),
+      ...route.viaAccessPointIds.map((accessPointId, position) => this.db.prepare(
+        `INSERT INTO saved_commute_route_vias (route_id, position, access_point_id)
+        VALUES (?1, ?2, ?3)`,
+      ).bind(route.id, position, accessPointId)),
+    );
+
+    if (route.active) {
+      statements.push(
+        this.db.prepare(
+          `INSERT INTO commute_preferences (person_id, preferred_route_candidate_id, updated_at)
+          VALUES (?1, NULL, ?2)
+          ON CONFLICT(person_id) DO UPDATE SET updated_at = excluded.updated_at`,
+        ).bind(route.personId, now),
+        this.db.prepare(
+          'DELETE FROM commute_preference_steps WHERE person_id = ?1',
+        ).bind(route.personId),
+        ...route.viaAccessPointIds.map((accessPointId, position) => this.db.prepare(
+          `INSERT INTO commute_preference_steps (person_id, position, access_point_id)
+          VALUES (?1, ?2, ?3)`,
+        ).bind(route.personId, position, accessPointId)),
+      );
+    }
+
+    await batchOrThrow(this.db, statements);
+  }
+
+  async setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    const route = (await this.listSavedRoutes(personId)).find((candidate) => candidate.id === routeId);
+    if (!route) throw new Error('Saved commute route was not found.');
+    await this.saveSavedRoute({ ...route, active: true });
   }
 
   async listRouteCandidates(_personId: EntityId): Promise<RouteCandidate[]> {
