@@ -34,6 +34,23 @@ jobs:
             throw new Error('Pages API health failed: HTTP ' + health.status);
           }
 
+          const providerStatus = await fetch(origin + '/api/providers/status', {
+            headers: { Accept: 'application/json' },
+          });
+          const providerStatusBody = await providerStatus.json().catch(() => null);
+          if (!providerStatus.ok || providerStatusBody?.enabled !== true) {
+            throw new Error('Pages provider runtime is not enabled');
+          }
+
+          const schedulerProbe = await fetch(origin + '/api/internal/scheduler-tick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduledTime: Date.now() }),
+          });
+          if (schedulerProbe.status !== 401) {
+            throw new Error('Scheduler endpoint must reject unauthenticated requests');
+          }
+
           const nearbyUrl = new URL(origin + '/api/providers/transit-nearby');
           nearbyUrl.searchParams.set('x', String(publicCoordinate.x));
           nearbyUrl.searchParams.set('y', String(publicCoordinate.y));
@@ -74,6 +91,8 @@ jobs:
           console.log(JSON.stringify({
             pagesRootReachable: true,
             sameOriginHealth: true,
+            providerRuntimeEnabled: true,
+            schedulerEndpointProtected: true,
             nearbyTransitCount: results.length,
             nearbyModes: modes,
             markerCandidates: firstMarkers.length,
