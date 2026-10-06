@@ -307,40 +307,58 @@ jobs:
             '/pages/projects/' + projectName + '/deployments';
           const headers = { Authorization: 'Bearer ' + token };
 
-          const list = async () => {
+          const listPreviewPage = async () => {
             const url = new URL(base);
-            url.searchParams.set('per_page', '100');
+            url.searchParams.set('env', 'preview');
+            url.searchParams.set('page', '1');
+            url.searchParams.set('per_page', '20');
             const response = await fetch(url, { headers });
-            const body = await response.json();
-            if (!response.ok || body.success !== true) {
-              throw new Error('Failed to list Pages deployments for cleanup');
+            const text = await response.text();
+            let body = null;
+            try { body = text ? JSON.parse(text) : null; } catch {}
+            if (!response.ok || body?.success !== true) {
+              throw new Error(
+                'Failed to list preview deployments: HTTP ' +
+                response.status +
+                ' body=' +
+                text.slice(0, 300),
+              );
             }
             return Array.isArray(body.result) ? body.result : [];
           };
 
-          const before = await list();
-          const previews = before.filter((item) => item?.environment !== 'production');
+          let deleted = 0;
+          for (let pass = 0; pass < 100; pass += 1) {
+            const previews = await listPreviewPage();
+            if (previews.length === 0) break;
 
-          for (const deployment of previews) {
-            if (!deployment?.id) continue;
-            const url = new URL(base + '/' + deployment.id);
-            url.searchParams.set('force', 'true');
-            const response = await fetch(url, { method: 'DELETE', headers });
-            const body = await response.json().catch(() => null);
-            if (!response.ok || body?.success !== true) {
-              throw new Error('Failed to delete stale Pages preview deployment');
+            for (const deployment of previews) {
+              if (!deployment?.id) continue;
+              const url = new URL(base + '/' + deployment.id);
+              url.searchParams.set('force', 'true');
+              const response = await fetch(url, { method: 'DELETE', headers });
+              const text = await response.text();
+              let body = null;
+              try { body = text ? JSON.parse(text) : null; } catch {}
+              if (!response.ok || body?.success !== true) {
+                throw new Error(
+                  'Failed to delete preview deployment: HTTP ' +
+                  response.status +
+                  ' body=' +
+                  text.slice(0, 300),
+                );
+              }
+              deleted += 1;
             }
           }
 
-          const remaining = (await list()).filter(
-            (item) => item?.environment !== 'production',
-          );
+          const remaining = await listPreviewPage();
           if (remaining.length !== 0) {
             throw new Error('Pages preview deployments remain after cleanup');
           }
 
           console.log(JSON.stringify({
-            deletedPreviewDeployments: previews.length,
+            deletedPreviewDeployments: deleted,
             remainingPreviewDeployments: 0,
             valuesExposed: false,
           }));
