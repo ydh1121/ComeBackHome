@@ -294,3 +294,54 @@ jobs:
             valuesExposed: false,
           }));
           NODE
+
+      - name: Clean stale Pages preview deployments
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const projectName = process.env.PAGES_PROJECT;
+          const base =
+            'https://api.cloudflare.com/client/v4/accounts/' + accountId +
+            '/pages/projects/' + projectName + '/deployments';
+          const headers = { Authorization: 'Bearer ' + token };
+
+          const list = async () => {
+            const url = new URL(base);
+            url.searchParams.set('per_page', '100');
+            const response = await fetch(url, { headers });
+            const body = await response.json();
+            if (!response.ok || body.success !== true) {
+              throw new Error('Failed to list Pages deployments for cleanup');
+            }
+            return Array.isArray(body.result) ? body.result : [];
+          };
+
+          const before = await list();
+          const previews = before.filter((item) => item?.environment !== 'production');
+
+          for (const deployment of previews) {
+            if (!deployment?.id) continue;
+            const url = new URL(base + '/' + deployment.id);
+            url.searchParams.set('force', 'true');
+            const response = await fetch(url, { method: 'DELETE', headers });
+            const body = await response.json().catch(() => null);
+            if (!response.ok || body?.success !== true) {
+              throw new Error('Failed to delete stale Pages preview deployment');
+            }
+          }
+
+          const remaining = (await list()).filter(
+            (item) => item?.environment !== 'production',
+          );
+          if (remaining.length !== 0) {
+            throw new Error('Pages preview deployments remain after cleanup');
+          }
+
+          console.log(JSON.stringify({
+            deletedPreviewDeployments: previews.length,
+            remainingPreviewDeployments: 0,
+            valuesExposed: false,
+          }));
+          NODE
