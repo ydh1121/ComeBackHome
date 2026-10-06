@@ -4,6 +4,7 @@
   "workersDevEnabled": true,
   "url": "https://come-back-home-runtime.ydh1121.workers.dev/",
   "clientRuntime": "api",
+  "accessProtected": true,
   "mutationsEnabled": false,
   "providerRuntimeEnabled": false,
   "pushDeliveryEnabled": false,
