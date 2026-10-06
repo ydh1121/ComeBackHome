@@ -10,16 +10,16 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 const networkSource = await readFile(new URL('../worker/providers/network-transport.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../worker/providers/runtime.ts', import.meta.url), 'utf8');
 const workerApi = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
-const workerIndex = await readFile(new URL('../worker/index.ts', import.meta.url), 'utf8');
+const pagesEntry = await readFile(new URL('../functions/api/_middleware.ts', import.meta.url), 'utf8');
 const localConfig = JSON.parse(await readFile(new URL('../wrangler.local.jsonc', import.meta.url), 'utf8'));
 
 expect(networkSource.includes('class SecureProviderJsonTransport'), 'secure network transport missing');
 expect(networkSource.includes('assertProviderActivationReady'), 'security gate is not enforced by network transport');
 expect(networkSource.includes("url.protocol !== 'https:'"), 'final HTTPS assertion missing');
 expect(runtimeSource.includes("env.PROVIDER_RUNTIME_ENABLED !== '1'"), 'provider runtime disable gate missing');
-expect(workerIndex.includes('createProviderRuntime'), 'Worker provider runtime wiring missing');
-expect(workerApi.includes("providerRuntime.kakao.searchPlaces"), 'Kakao place Worker wiring missing');
-expect(workerApi.includes("providerRuntime.kakao.publicTransitRoutes"), 'Kakao route Worker wiring missing');
+expect(pagesEntry.includes('createProviderRuntime'), 'Pages provider runtime wiring missing');
+expect(workerApi.includes("providerRuntime.kakao.searchPlaces"), 'Kakao place Pages wiring missing');
+expect(workerApi.includes("providerRuntime.kakao.publicTransitRoutes"), 'Kakao route Pages wiring missing');
 expect(workerApi.includes('Seoul provider secure transport is unavailable.'), 'Seoul secure-path block missing');
 expect(localConfig.vars?.PROVIDER_RUNTIME_ENABLED === '0', 'local provider runtime must remain disabled');
 
