@@ -85,6 +85,7 @@ const vite = await createViteServer({
 
 try {
   const serviceModule = await vite.ssrLoadModule('/src/application/services/ApplicationActions.ts');
+  const testGatewayModule = await vite.ssrLoadModule('/src/providers/http/HttpNotificationTestGateway.ts');
 
   const state = { permission: 'default', subscription: null };
   const repository = {
