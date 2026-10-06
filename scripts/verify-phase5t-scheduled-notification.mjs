@@ -11,7 +11,7 @@ const schedulerSource = await readFile(new URL('../worker/scheduler.ts', import.
 const apiSource = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
 const schedulerConfig = JSON.parse(await readFile(new URL('../wrangler.scheduler.jsonc', import.meta.url), 'utf8'));
 
-for (const text of ['invokePagesScheduler', '/api/internal/scheduler-tick', 'SCHEDULER_INVOKE_TOKEN', 'Authorization']) {
+for (const text of ['invokePagesScheduler', '/api/internal/scheduler-tick', 'PRESENCE_EVENT_INGEST_TOKEN', 'Authorization']) {
   expect(workerEntry.includes(text), 'minimal scheduler missing ' + text);
 }
 for (const forbidden of ['handleApiRequest', 'createProviderRuntime', 'ASSETS']) {
@@ -22,7 +22,7 @@ expect(schedulerConfig.workers_dev === false, 'workers.dev must remain disabled'
 expect(schedulerConfig.preview_urls === false, 'preview URLs must remain disabled');
 expect(schedulerConfig.d1_databases == null, 'scheduler Worker must not bind D1');
 expect(apiSource.includes("segments[2] === 'scheduler-tick'"), 'Pages scheduler endpoint missing');
-expect(apiSource.includes('SCHEDULER_INVOKE_TOKEN'), 'Pages scheduler endpoint auth missing');
+expect(apiSource.includes('PRESENCE_EVENT_INGEST_TOKEN'), 'Pages scheduler endpoint auth missing');
 expect(apiSource.includes('runScheduledNotificationCycle('), 'Pages scheduler endpoint must execute composite cycle');
 for (const text of [
   'export async function runScheduledNotificationCycle',
@@ -52,7 +52,7 @@ try {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduledTime: Date.now() }),
     }),
-    { MUTATIONS_ENABLED: '1', SCHEDULER_INVOKE_TOKEN: 'fixture-secret' },
+    { MUTATIONS_ENABLED: '1', PRESENCE_EVENT_INGEST_TOKEN: 'fixture-secret' },
     null,
   );
   expect(denied.status === 401, 'scheduler endpoint must reject unauthenticated requests');
@@ -67,7 +67,7 @@ try {
     let pending = null;
     await minimalWorker.default.scheduled(
       { cron: '* * * * *', scheduledTime: 1234567890 },
-      { PAGES_ORIGIN: 'https://come-back-home.pages.dev', SCHEDULER_INVOKE_TOKEN: 'scheduler-secret' },
+      { PAGES_ORIGIN: 'https://come-back-home.pages.dev', PRESENCE_EVENT_INGEST_TOKEN: 'scheduler-secret' },
       { waitUntil(promise) { pending = promise; } },
     );
     await pending;
