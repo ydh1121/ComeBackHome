@@ -205,6 +205,8 @@ export class ProviderCommuteRepository implements CommuteRepository {
             totalMinutes: result.totalMinutes,
             transferCount: result.transferCount,
             walkMinutes: result.walkMinutes ?? 0,
+            ...(result.accessMinutes == null ? {} : { accessMinutes: result.accessMinutes }),
+            ...(result.egressMinutes == null ? {} : { egressMinutes: result.egressMinutes }),
             ...(result.fare == null ? {} : { fare: result.fare }),
             ...(result.steps ? { steps: result.steps } : {}),
             ...(matchesPreference
