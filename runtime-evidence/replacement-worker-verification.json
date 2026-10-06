@@ -23,7 +23,7 @@
     "VAPID_SUBJECT",
     "WEB_PUSH_TTL_SECONDS"
   ],
-  "currentDeploymentId": "fe9bf1c8-4e15-4e9f-abd0-b01dc568cce5",
+  "currentDeploymentId": "345f2e28-d332-4cce-8bc4-d8fd5e2d51e3",
   "deploymentVersionCount": 1,
   "deploymentTrafficPercent": 100,
   "d1": {
@@ -42,19 +42,18 @@
   },
   "pagesFallback": {
     "reachable": true,
-    "apiAccessible": false,
-    "apiStatus": 403,
-    "productionBranch": null,
-    "productionDeploymentsEnabled": null,
-    "previewDeploymentSetting": null
+    "apiAccessible": true,
+    "apiStatus": 200,
+    "productionBranch": "main",
+    "productionDeploymentsEnabled": true,
+    "previewDeploymentSetting": "all"
   },
   "cutover": {
     "automatedReplacementChecks": "PASS",
     "authenticatedOwnerProductTest": "PENDING",
-    "pagesControlApiAccessible": false,
+    "pagesControlApiAccessible": true,
     "blockedReasons": [
-      "AUTHENTICATED_OWNER_PRODUCT_TEST",
-      "PAGES_API_PERMISSION"
+      "AUTHENTICATED_OWNER_PRODUCT_TEST"
     ],
     "pagesTrafficCutoverPerformed": false
   },
