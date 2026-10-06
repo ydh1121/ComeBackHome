@@ -257,7 +257,9 @@ export class D1CommuteRepository implements CommuteRepository {
         this.db.prepare(
           `INSERT INTO commute_preferences (person_id, preferred_route_candidate_id, updated_at)
           VALUES (?1, NULL, ?2)
-          ON CONFLICT(person_id) DO UPDATE SET updated_at = excluded.updated_at`,
+          ON CONFLICT(person_id) DO UPDATE SET
+            preferred_route_candidate_id = NULL,
+            updated_at = excluded.updated_at`,
         ).bind(route.personId, now),
         this.db.prepare(
           'DELETE FROM commute_preference_steps WHERE person_id = ?1',
