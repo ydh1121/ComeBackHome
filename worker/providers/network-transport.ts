@@ -3,6 +3,7 @@ import { assertProviderActivationReady, type ProviderSecretPresenceResolver } fr
 import type {
   ProviderAuthReference,
   ProviderJsonRequest,
+  ProviderBinaryResponse,
   ProviderJsonTransport,
   ProviderSecretName,
 } from './transport';
@@ -64,10 +65,11 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
     private readonly secrets: ProviderSecretResolver,
   ) {}
 
-  async getJson(
+  private async request(
     request: ProviderJsonRequest,
-    context?: ProviderRequestContext,
-  ): Promise<unknown> {
+    context: ProviderRequestContext | undefined,
+    accept: string,
+  ): Promise<Response> {
     assertProviderActivationReady(request, this.secrets);
 
     const secret = this.secrets.resolve(request.auth.secretName);
@@ -77,10 +79,11 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
 
     const materialized = replacePathParams(request.urlTemplate, request.pathParams);
     const url = new URL(materialized);
-    const headers = new Headers({ Accept: 'application/json' });
+    const headers = new Headers({ Accept: accept });
 
-    for (const [name, value] of Object.entries(request.query ?? {})) {
-      url.searchParams.set(name, value);
+    for (const [name, raw] of Object.entries(request.query ?? {})) {
+      const values = Array.isArray(raw) ? raw : [raw];
+      for (const value of values) url.searchParams.append(name, value);
     }
 
     applySecret(url, headers, request.auth, secret);
@@ -104,7 +107,25 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
       );
     }
 
-    return response.json();
+    return response;
+  }
+
+  async getJson(
+    request: ProviderJsonRequest,
+    context?: ProviderRequestContext,
+  ): Promise<unknown> {
+    return (await this.request(request, context, 'application/json')).json();
+  }
+
+  async getBytes(
+    request: ProviderJsonRequest,
+    context?: ProviderRequestContext,
+  ): Promise<ProviderBinaryResponse> {
+    const response = await this.request(request, context, 'image/png');
+    return {
+      body: await response.arrayBuffer(),
+      contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+    };
   }
 }
 
