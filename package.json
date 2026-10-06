@@ -64,7 +64,8 @@
     "verify:worker-migration-config": "node scripts/verify-worker-migration-config.mjs",
     "cf:worker:preview": "npm run build && wrangler preview --config wrangler.jsonc",
     "cf:worker:deploy": "npm run build && wrangler deploy --config wrangler.jsonc",
-    "verify:staging-mutation-gate": "node scripts/verify-staging-mutation-gate.mjs"
+    "verify:staging-mutation-gate": "node scripts/verify-staging-mutation-gate.mjs",
+    "prebuild": "npm run prepare:ocr-assets"
   },
   "dependencies": {
     "react": "19.3.0",
