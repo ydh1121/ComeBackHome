@@ -4,7 +4,11 @@ import type { Address, Coordinate, ImportResolution, NotificationRules, Person, 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
-export interface ImportMatchActions { cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>; }
+export interface ImportMatchActions {
+  cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>;
+  setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
+  setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
+}
 export interface ImportReviewActions {
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
