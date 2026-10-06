@@ -201,9 +201,26 @@ jobs:
             throw new Error('Existing Pages fallback does not look like ComeBackHome');
           }
 
-          const pagesProject = await cf('/pages/projects/come-back-home');
-          if (pagesProject?.production_branch !== 'main') {
-            throw new Error('Pages production branch is not main');
+          let pagesProject = null;
+          let pagesApiAccessible = false;
+          let pagesApiStatus = null;
+          {
+            const response = await fetch(
+              'https://api.cloudflare.com/client/v4/accounts/' + accountId +
+                '/pages/projects/come-back-home',
+              { headers },
+            );
+            pagesApiStatus = response.status;
+            const body = await response.json();
+            if (response.ok && body.success === true) {
+              pagesProject = body.result;
+              pagesApiAccessible = true;
+              if (pagesProject?.production_branch !== 'main') {
+                throw new Error('Pages production branch is not main');
+              }
+            } else if (response.status !== 403) {
+              throw new Error('Unexpected Pages project API status ' + response.status);
+            }
           }
 
           const kakaoHeaders = {
@@ -242,6 +259,10 @@ jobs:
           }
 
           const pagesSource = pagesProject?.source?.config ?? {};
+          const cutoverBlockedReasons = [
+            'AUTHENTICATED_OWNER_PRODUCT_TEST',
+            ...(pagesApiAccessible ? [] : ['PAGES_API_PERMISSION']),
+          ];
           const evidence = {
             workerName: 'come-back-home-runtime',
             workersDevEnabled: true,
@@ -273,6 +294,8 @@ jobs:
             },
             pagesFallback: {
               reachable: true,
+              apiAccessible: pagesApiAccessible,
+              apiStatus: pagesApiStatus,
               productionBranch: pagesProject?.production_branch ?? null,
               productionDeploymentsEnabled:
                 pagesSource.production_deployments_enabled ?? pagesSource.deployments_enabled ?? null,
@@ -281,6 +304,8 @@ jobs:
             cutover: {
               automatedReplacementChecks: 'PASS',
               authenticatedOwnerProductTest: 'PENDING',
+              pagesControlApiAccessible: pagesApiAccessible,
+              blockedReasons: cutoverBlockedReasons,
               pagesTrafficCutoverPerformed: false,
             },
             valuesExposed: false,
@@ -300,6 +325,8 @@ jobs:
             activePushSubscriptions: evidence.d1.activePushSubscriptions,
             kakaoRouteCount: evidence.providerProbe.routeCount,
             pagesFallbackReachable: evidence.pagesFallback.reachable,
+            pagesApiAccessible: evidence.pagesFallback.apiAccessible,
+            cutoverBlockedReasons: evidence.cutover.blockedReasons,
             valuesExposed: false,
           }));
           NODE
