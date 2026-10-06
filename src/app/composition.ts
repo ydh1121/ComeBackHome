@@ -28,6 +28,14 @@ import {
   HybridCommuteRepository,
 } from '../providers/http/HttpRepositories';
 import { ReadExcelWorkbookParser } from '../providers/import/ReadExcelWorkbookParser';
+import { AdaptiveScheduleImageRecognizer } from '../providers/import/StructuredTableImageScheduleRecognizer';
+import {
+  BrowserScheduleOcrPreprocessor,
+  TesseractJsWorkerFactory,
+  TesseractScheduleImageTextExtractor,
+} from '../providers/import/TesseractScheduleImageTextExtractor';
+import { SAME_ORIGIN_TESSERACT_ASSETS } from '../providers/import/ocrRuntimeConfig';
+import { BrowserImportRepository } from '../providers/browser/BrowserImportRepository';
 import { ProviderCommuteRepository, ProviderTodayRepository } from '../providers/runtime/ProviderRuntimeRepositories';
 import { createBrowserNotificationRuntime } from './browserNotificationRuntime';
 import { createChangeSignalController } from './changeSignal';
@@ -131,7 +139,7 @@ export async function createHybridApiApplicationServices(
   const commute = providerMode === 'api' && routeProvider
     ? new ProviderCommuteRepository(persistedCommute, places, routeProvider)
     : new HybridCommuteRepository(persistedCommute, runtimeCommute);
-  const imports = new MockImportRepository(runtimeStore);
+  const imports = new BrowserImportRepository(() => changes.emit());
   const notifications = new HttpNotificationRepository(client, () => changes.emit());
   const today = providerMode === 'api' && realtimeBusProvider && realtimeSubwayProvider
     ? new ProviderTodayRepository(
@@ -173,11 +181,18 @@ export async function createHybridApiApplicationServices(
   const transitSearchProvider = providerMode === 'api'
     ? new HttpTransitAccessSearchProvider(client)
     : new MockTransitAccessSearchProvider();
+  const imageRecognizer = new AdaptiveScheduleImageRecognizer(
+    new TesseractScheduleImageTextExtractor(
+      new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
+      new BrowserScheduleOcrPreprocessor(),
+    ),
+  );
   const importFileSelection = new WorkbookImportFileSelectionAction(
     imports,
     people,
     schedules,
     new ReadExcelWorkbookParser(),
+    imageRecognizer,
   );
 
   return {
