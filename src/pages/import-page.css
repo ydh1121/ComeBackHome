@@ -39,6 +39,16 @@
   color: #667085;
 }
 
+.import-page .import-workbook-button {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--cbh-blue, #255cff);
+  font-weight: 800;
+  margin: -4px 0 12px;
+}
+
 .import-page .import-file-input {
   position: absolute;
   width: 1px;
