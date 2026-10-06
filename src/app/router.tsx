@@ -17,6 +17,7 @@ import { TransitSearchPage } from '../pages/TransitSearchPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
 import { NotificationPage } from '../pages/NotificationPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { PresenceAutomationPage } from '../pages/PresenceAutomationPage';
 import { QaStateMatrixPage } from '../pages/QaStateMatrixPage';
 import { QaFlowMapPage } from '../pages/QaFlowMapPage';
 import { QaDesktopDropPage } from '../pages/QaDesktopDropPage';
@@ -49,6 +50,7 @@ function componentFor(path: string) {
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;
   if (path === '/notifications') return NotificationPage;
   if (path === '/settings') return SettingsPage;
+  if (path === '/settings/presence') return PresenceAutomationPage;
   return ImplementationBoundaryPage;
 }
 
