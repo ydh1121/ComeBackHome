@@ -1,0 +1,12 @@
+{
+  "canonicalRuntime": "worker",
+  "canonicalWorkerUrl": "https://come-back-home-runtime.ydh1121.workers.dev/",
+  "pagesOriginRetainedAsFallback": true,
+  "pagesOrigin": "https://come-back-home.pages.dev/",
+  "pagesProductionAutomaticDeploymentsEnabled": false,
+  "pagesPreviewDeploymentSetting": "none",
+  "authenticatedOwnerProductTestConfirmed": true,
+  "accessAnonymousBlockedAfterCutover": true,
+  "pagesDeleted": false,
+  "valuesExposed": false
+}
