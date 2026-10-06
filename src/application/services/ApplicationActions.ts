@@ -133,6 +133,34 @@ export class NotificationService implements NotificationActions {
     private readonly subscriptionTransport?: PushSubscriptionTransport,
   ) {}
 
+  async syncCurrentSubscription(): Promise<void> {
+    try {
+      const permission = await this.permissionProvider.getPermission();
+      if (permission !== 'granted') {
+        await this.repository.setSubscription(null);
+        await this.repository.setPermission(permission);
+        return;
+      }
+
+      const subscription = await this.subscriptionProvider.getCurrent();
+      if (!subscription) {
+        await this.repository.setSubscription(null);
+        await this.repository.setPermission('granted');
+        return;
+      }
+
+      if (this.subscriptionTransport) {
+        await this.subscriptionTransport.upsert(subscription);
+      }
+      await this.repository.setSubscription(subscription);
+      await this.repository.setPermission('subscribed');
+    } catch {
+      await this.repository.setSubscription(null);
+      await this.repository.setPermission('error');
+      throw new Error('Notification subscription sync failed.');
+    }
+  }
+
   async requestPermissionFromUserGesture(): Promise<void> {
     try {
       const permission = await this.permissionProvider.requestPermissionFromUserGesture();
