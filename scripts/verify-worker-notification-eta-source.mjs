@@ -60,12 +60,13 @@ try {
     async setPreferredRouteCandidateId() {},
   };
   let routeCalls = 0;
+  const routeContexts = [];
   const providers = {
     kakao: {
       async searchPlaces() { return []; },
       async publicTransitRoutes(_origin, _destination, context) {
         routeCalls += 1;
-        expect(context?.fetchedAt === '2026-10-06T12:00:00.000Z', 'provider context timestamp mismatch');
+        routeContexts.push(context?.fetchedAt ?? null);
         return [
           { id: 'route-fast', totalMinutes: 25, transferCount: 2, walkMinutes: 5 },
           { id: 'route-preferred', totalMinutes: 40, transferCount: 1, walkMinutes: 3 },
@@ -91,10 +92,12 @@ try {
   expect(beforeShiftEnd?.arrivalAt === '2026-10-06T13:40:00.000Z', 'ETA must depart from scheduled 22:00 KST before shift end');
   expect(beforeShiftEnd?.confidence === 'FALLBACK', 'route-only ETA must stay FALLBACK');
   expect(routeCalls === 1, 'provider route should be called once');
+  expect(routeContexts[0] === '2026-10-06T12:00:00.000Z', 'first provider context timestamp mismatch');
 
   commute.getPreferredRouteCandidateId = async () => 'missing-route';
   const afterShiftEnd = await source.get('person-1', new Date('2026-10-06T14:00:00.000Z'));
   expect(afterShiftEnd?.arrivalAt === '2026-10-06T14:25:00.000Z', 'missing preferred route must deterministically choose fastest route after shift end');
+  expect(routeContexts[1] === '2026-10-06T14:00:00.000Z', 'second provider context timestamp mismatch');
 
   const noCoordinates = new etaModule.ProviderNotificationEtaSource({
     schedules,
