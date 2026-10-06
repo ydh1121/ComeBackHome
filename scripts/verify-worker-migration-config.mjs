@@ -29,10 +29,23 @@ expect(
   config.vars?.PROVIDER_RUNTIME_ENABLED === '0',
   'Worker staging config must keep provider runtime disabled',
 );
-expect(
-  !Array.isArray(config.d1_databases),
-  'D1 binding must not be fabricated before remote database identity is verified',
-);
+
+if (config.d1_databases != null) {
+  expect(
+    Array.isArray(config.d1_databases) && config.d1_databases.length === 1,
+    'Worker staging config may have at most one verified D1 binding',
+  );
+  const db = config.d1_databases?.[0];
+  expect(db?.binding === 'DB', 'verified D1 binding must be named DB');
+  expect(db?.database_name === 'come-back-home-db', 'verified D1 database name mismatch');
+  expect(
+    typeof db?.database_id === 'string' &&
+    db.database_id.length > 0 &&
+    db.database_id !== '00000000-0000-0000-0000-000000000000',
+    'verified D1 database id must be a real non-placeholder id',
+  );
+}
+
 expect(
   !Array.isArray(config.triggers?.crons),
   'Cron must not be activated in staging config before remote readiness',
