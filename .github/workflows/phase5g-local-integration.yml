@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
       - "wrangler.local.jsonc"
+      - "wrangler.jsonc"
       - "package.json"
       - "db/migrations/**"
       - "worker/**"
@@ -35,6 +36,7 @@ on:
       - "scripts/verify-notification-activation-readiness.mjs"
       - "scripts/verify-notification-activation-preflight.mjs"
       - "scripts/verify-cloudflare-env-contract.mjs"
+      - "scripts/verify-worker-migration-config.mjs"
       - ".env.example"
       - "docs/CLOUDFLARE_ENVIRONMENT_CONTRACT.md"
       - "scripts/verify-presence-event-ingest.mjs"
@@ -231,6 +233,9 @@ jobs:
 
       - name: Verify Cloudflare environment contract
         run: npm run verify:cloudflare-env-contract
+
+      - name: Verify Worker migration staging config
+        run: npm run verify:worker-migration-config
 
       - name: Verify trusted presence-event ingestion
         run: npm run verify:presence-event-ingest
