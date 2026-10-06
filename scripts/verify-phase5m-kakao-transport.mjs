@@ -37,9 +37,41 @@ try {
   const calls = [];
   const placeFixture = await fixture('kakao-place.json');
   const routeFixture = await fixture('kakao-public-transit.json');
+  const addressQuery = '서울특별시 문성로32길 20-4';
+  const addressFixture = {
+    meta: { total_count: 1, pageable_count: 1, is_end: true },
+    documents: [{
+      address_name: '서울 관악구 문성로32길 20-4',
+      address_type: 'ROAD_ADDR',
+      x: '126.915',
+      y: '37.475',
+      address: {
+        address_name: '서울 관악구 신림동 000-0',
+        x: '126.915',
+        y: '37.475',
+      },
+      road_address: {
+        address_name: '서울 관악구 문성로32길 20-4',
+        building_name: '',
+        x: '126.915',
+        y: '37.475',
+      },
+    }],
+  };
   const fakeFetch = async (input, init) => {
     calls.push({ input, init });
-    const body = String(input).includes('/v2/routing/publictraffic') ? routeFixture : placeFixture;
+    const url = new URL(String(input));
+    let body = placeFixture;
+    if (url.pathname === '/v2/routing/publictraffic') {
+      body = routeFixture;
+    } else if (url.pathname === '/v2/local/search/address.json') {
+      body = addressFixture;
+    } else if (
+      url.pathname === '/v2/local/search/keyword.json' &&
+      url.searchParams.get('query') === addressQuery
+    ) {
+      body = { meta: { total_count: 0, pageable_count: 0, is_end: true }, documents: [] };
+    }
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -62,13 +94,25 @@ try {
   expect(enabledRuntime !== null, 'enabled fixture runtime did not construct');
 
   const places = await enabledRuntime.kakao.searchPlaces('카카오프렌즈', { x: 127.06, y: 37.51 });
+  const addressPlaces = await enabledRuntime.kakao.searchPlaces(addressQuery);
   const routes = await enabledRuntime.kakao.publicTransitRoutes(
     { x: 127.11119217, y: 37.39477123 },
     { x: 127.12628814, y: 37.41993056 },
   );
   expect(places[0]?.providerId === '26338954', 'Kakao place network transport mapping mismatch');
+  expect(addressPlaces.length === 1, 'Kakao address fallback must return an address result');
+  expect(addressPlaces[0]?.providerId?.startsWith('kakao-address:'), 'Kakao address fallback provider id mismatch');
+  expect(addressPlaces[0]?.roadAddress === '서울 관악구 문성로32길 20-4', 'Kakao address fallback road address mismatch');
   expect(routes[0]?.totalMinutes === 15, 'Kakao route network transport mapping mismatch');
-  expect(calls.length === 2, 'Kakao fake fetch call count mismatch');
+  expect(calls.length === 4, 'Kakao fake fetch call count mismatch');
+
+  const fallbackKeywordUrl = new URL(calls[1].input);
+  const fallbackAddressUrl = new URL(calls[2].input);
+  expect(fallbackKeywordUrl.pathname === '/v2/local/search/keyword.json', 'address fallback must try keyword search first');
+  expect(fallbackAddressUrl.pathname === '/v2/local/search/address.json', 'empty keyword result must fall back to address search');
+  expect(fallbackAddressUrl.searchParams.get('query') === addressQuery, 'Kakao address fallback query mismatch');
+  const fallbackAuthorization = new Headers(calls[2].init?.headers).get('Authorization');
+  expect(fallbackAuthorization === 'KakaoAK ' + fakeSecretValue, 'Kakao address fallback Authorization mismatch');
 
   const placeCall = calls[0];
   const placeUrl = new URL(placeCall.input);
