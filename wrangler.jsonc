@@ -16,7 +16,11 @@
   "vars": {
     "PUSH_DELIVERY_ENABLED": "0",
     "PROVIDER_RUNTIME_ENABLED": "0",
-    "MUTATIONS_ENABLED": "1"
+    "MUTATIONS_ENABLED": "1",
+    "VAPID_PUBLIC_KEY": "BBzKRsrpKTcyhF859UOU7bp_wVU_ww-CKGVCOTqyETNvautMz1icV7lwqcGYkb9qNOPtpYkRFG24o5fwINu46H8",
+    "VAPID_SUBJECT": "https://come-back-home-runtime.ydh1121.workers.dev/",
+    "WEB_PUSH_TTL_SECONDS": "300",
+    "NOTIFICATION_RETRY_DELAYS_SECONDS": "30,90,300"
   },
   "d1_databases": [
     {
