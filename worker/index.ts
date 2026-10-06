@@ -4,7 +4,7 @@ const CANONICAL_PAGES_ORIGIN = 'https://come-back-home.pages.dev';
 
 export async function invokePagesScheduler(env: SchedulerWorkerEnv, scheduledTime: number): Promise<void> {
   const origin = (env.PAGES_ORIGIN ?? '').trim().replace(/\/$/, '');
-  const token = (env.SCHEDULER_INVOKE_TOKEN ?? '').trim();
+  const token = (env.PRESENCE_EVENT_INGEST_TOKEN ?? '').trim();
   if (origin !== CANONICAL_PAGES_ORIGIN) throw new Error('Scheduler target must be canonical Pages.');
   if (!token) throw new Error('Scheduler authentication is unavailable.');
   const response = await fetch(origin + '/api/internal/scheduler-tick', {
