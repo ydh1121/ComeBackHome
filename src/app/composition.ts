@@ -8,7 +8,7 @@ import { CommitImportReview } from '../application/use-cases/commitImportReview'
 import type { AppRuntimeMode, ProviderRuntimeMode } from '../config/runtime';
 import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
 import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPresenceAutomationGateway, MockPushSubscriptionProvider } from '../mocks/providers';
-import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
+import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockPresenceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
 import {
   HttpPlaceSearchProvider,
@@ -20,6 +20,7 @@ import {
 import { HttpJsonClient } from '../providers/http/HttpJsonClient';
 import { HttpNotificationTestGateway } from '../providers/http/HttpNotificationTestGateway';
 import { HttpPresenceAutomationGateway } from '../providers/http/HttpPresenceAutomationGateway';
+import { HttpPresenceRepository } from '../providers/http/HttpPresenceRepository';
 import {
   HttpCommuteRepository,
   HttpNotificationRepository,
@@ -65,6 +66,7 @@ export function createMockApplicationServices(): ApplicationServices {
     people: new MockPersonRepository(store),
     schedules: new MockScheduleRepository(store),
     places: new MockPlaceRepository(store),
+    presence: new MockPresenceRepository(),
     commute: new MockCommuteRepository(store),
     imports: new MockImportRepository(store),
     notifications: new MockNotificationRepository(store),
@@ -133,6 +135,7 @@ export async function createHybridApiApplicationServices(
   const people = new HttpPersonRepository(client);
   const schedules = new HttpScheduleRepository(client);
   const places = new HttpPlaceRepository(client);
+  const presence = new HttpPresenceRepository(client);
   const persistedCommute = new HttpCommuteRepository(client);
   const runtimeCommute = new MockCommuteRepository(runtimeStore);
   const routeProvider = providerMode === 'api' ? new HttpTransitRouteProvider(client) : null;
@@ -147,6 +150,7 @@ export async function createHybridApiApplicationServices(
     ? new ProviderTodayRepository(
         schedules,
         commute,
+        presence,
         realtimeBusProvider,
         realtimeSubwayProvider,
       )
@@ -156,6 +160,7 @@ export async function createHybridApiApplicationServices(
     people,
     schedules,
     places,
+    presence,
     commute,
     imports,
     notifications,
