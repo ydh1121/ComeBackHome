@@ -10,6 +10,11 @@ on:
         options:
           - "false"
           - "true"
+  push:
+    branches:
+      - main
+    paths:
+      - "runtime-activation/pages-cutover.trigger"
 
 permissions:
   contents: write
@@ -27,14 +32,19 @@ jobs:
       WORKER_ORIGIN: https://come-back-home-runtime.ydh1121.workers.dev
       PAGES_ORIGIN: https://come-back-home.pages.dev
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Require main and authenticated owner verification
         shell: bash
         run: |
           test "$GITHUB_REF_NAME" = "main"
-          test "${{ inputs.authenticated_owner_product_test }}" = "true"
-
-      - name: Checkout
-        uses: actions/checkout@v4
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            test "${{ inputs.authenticated_owner_product_test }}" = "true"
+          else
+            test -f runtime-activation/pages-cutover.trigger
+            grep -Fxq "authenticated_owner_product_test=true" runtime-activation/pages-cutover.trigger
+          fi
 
       - name: Verify replacement evidence is cutover-ready
         shell: bash
@@ -86,7 +96,7 @@ jobs:
           const beforeBody = await beforeResponse.json();
           if (!beforeResponse.ok || beforeBody.success !== true) {
             throw new Error(
-              'Pages project read failed; token must include Pages project read/write permission',
+              'Pages project read failed; CLOUDFLARE_API_TOKEN must include Cloudflare Pages Write permission',
             );
           }
           if (beforeBody.result?.production_branch !== 'main') {
