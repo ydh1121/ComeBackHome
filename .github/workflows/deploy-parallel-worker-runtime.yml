@@ -13,7 +13,7 @@ on:
       - "package-lock.json"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: comebackhome-parallel-worker-deploy
@@ -50,3 +50,60 @@ jobs:
 
       - name: Deploy isolated Worker
         run: npx wrangler deploy --config wrangler.jsonc
+
+      - name: Record deployed Worker endpoint
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const headers = { Authorization: 'Bearer ' + token };
+
+          const accountResponse = await fetch(
+            'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/workers/subdomain',
+            { headers },
+          );
+          const accountBody = await accountResponse.json();
+          if (!accountResponse.ok || accountBody.success !== true || !accountBody.result?.subdomain) {
+            throw new Error('Failed to read Workers account subdomain');
+          }
+
+          const scriptResponse = await fetch(
+            'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/workers/scripts/come-back-home-runtime/subdomain',
+            { headers },
+          );
+          const scriptBody = await scriptResponse.json();
+          if (!scriptResponse.ok || scriptBody.success !== true) {
+            throw new Error('Failed to read Worker script subdomain state');
+          }
+
+          const subdomain = accountBody.result.subdomain;
+          const workersDevEnabled = Boolean(scriptBody.result?.enabled ?? scriptBody.result?.previews_enabled ?? true);
+          const url = 'https://come-back-home-runtime.' + subdomain + '.workers.dev/';
+
+          fs.mkdirSync('runtime-evidence', { recursive: true });
+          fs.writeFileSync(
+            'runtime-evidence/cloudflare-worker-runtime.json',
+            JSON.stringify({
+              workerName: 'come-back-home-runtime',
+              accountSubdomain: subdomain,
+              workersDevEnabled,
+              url,
+              clientRuntime: 'mock',
+              providerRuntimeEnabled: false,
+              pushDeliveryEnabled: false,
+              d1Binding: 'DB',
+              cronConfigured: false,
+            }, null, 2) + '\n',
+          );
+          NODE
+
+      - name: Commit deployment evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime-evidence/cloudflare-worker-runtime.json
+          git diff --cached --quiet || git commit -m "chore: record parallel Worker deployment"
+          git push
