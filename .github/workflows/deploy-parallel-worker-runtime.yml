@@ -168,6 +168,7 @@ jobs:
             'runtime-evidence/cloudflare-worker-runtime.json',
             JSON.stringify({
               workerName: 'come-back-home-runtime',
+              sourceCommit: process.env.GITHUB_SHA ?? null,
               accountSubdomain: subdomain,
               workersDevEnabled,
               previewUrlsEnabled,
