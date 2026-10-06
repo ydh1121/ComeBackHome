@@ -15,10 +15,15 @@ export interface ProviderJsonRequest {
   capability: string;
   method: 'GET';
   urlTemplate: string;
-  query?: Record<string, string>;
+  query?: Record<string, string | string[]>;
   pathParams?: Record<string, string>;
   auth: ProviderAuthReference;
   security: ProviderRequestSecurity;
+}
+
+export interface ProviderBinaryResponse {
+  body: ArrayBuffer;
+  contentType: string;
 }
 
 export interface ProviderJsonTransport {
@@ -26,4 +31,8 @@ export interface ProviderJsonTransport {
     request: ProviderJsonRequest,
     context?: ProviderRequestContext,
   ): Promise<unknown>;
+  getBytes(
+    request: ProviderJsonRequest,
+    context?: ProviderRequestContext,
+  ): Promise<ProviderBinaryResponse>;
 }
