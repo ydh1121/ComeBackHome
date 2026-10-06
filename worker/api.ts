@@ -15,7 +15,7 @@ import {
   type PresenceEventType,
 } from './presence-event-ingest';
 import { createNotificationActivationReadiness } from './notification-activation-readiness';
-import { processNotificationOutbox } from './scheduler';
+import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
 type JsonObject = Record<string, unknown>;
 
@@ -121,6 +121,24 @@ export async function handleApiRequest(
   }
 
   try {
+    if (
+      segments.length === 3 &&
+      segments[1] === 'internal' &&
+      segments[2] === 'scheduler-tick' &&
+      request.method === 'POST'
+    ) {
+      const configuredToken = env.SCHEDULER_INVOKE_TOKEN?.trim();
+      if (!configuredToken) return json({ error: 'Scheduler invocation is not configured.' }, 503);
+      if (request.headers.get('Authorization') !== 'Bearer ' + configuredToken) return json({ error: 'Unauthorized.' }, 401);
+      const body = await readObject(request);
+      const scheduledTime = Number(body.scheduledTime);
+      if (!Number.isFinite(scheduledTime) || scheduledTime <= 0) return json({ error: 'scheduledTime is invalid.' }, 400);
+      const readiness = createNotificationActivationReadiness(env, providerRuntime);
+      if (!readiness.ready) return json({ error: 'Scheduled notification runtime is not ready.', missing: readiness.missing }, 503);
+      const result = await runScheduledNotificationCycle(env, scheduledTime, readiness.dependencies);
+      return json({ result });
+    }
+
     if (segments.length === 2 && segments[1] === 'health' && request.method === 'GET') {
       const row = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
       return json({ ok: row?.ok === 1 });
