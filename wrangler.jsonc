@@ -4,6 +4,7 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-10-06",
   "preview_urls": false,
+  "workers_dev": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -18,7 +19,7 @@
     "PROVIDER_RUNTIME_ENABLED": "1",
     "MUTATIONS_ENABLED": "1",
     "VAPID_PUBLIC_KEY": "BBzKRsrpKTcyhF859UOU7bp_wVU_ww-CKGVCOTqyETNvautMz1icV7lwqcGYkb9qNOPtpYkRFG24o5fwINu46H8",
-    "VAPID_SUBJECT": "https://come-back-home-runtime.ydh1121.workers.dev/",
+    "VAPID_SUBJECT": "https://come-back-home.pages.dev/",
     "WEB_PUSH_TTL_SECONDS": "300",
     "NOTIFICATION_RETRY_DELAYS_SECONDS": "30,90,300"
   },
