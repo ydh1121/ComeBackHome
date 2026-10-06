@@ -79,7 +79,12 @@ export function SchedulePage() {
         <ScheduleCalendar entries={entries} monthMode onSelect={openDay} />
       </> : null}
 
-      <button type="button" className="cta schedule-edit-cta" onClick={() => navigate('/schedule/edit')}>일정 편집</button>
+      <div className="schedule-primary-actions">
+        <button type="button" className="cta schedule-import-cta" onClick={() => navigate('/import')}>
+          <Icon name="upload" /> 근무표 이미지 가져오기
+        </button>
+        <button type="button" className="cta secondary schedule-edit-cta" onClick={() => navigate('/schedule/edit')}>직접 일정 편집</button>
+      </div>
     </section>
   );
 }
