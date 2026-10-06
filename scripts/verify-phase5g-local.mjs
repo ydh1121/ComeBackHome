@@ -180,6 +180,28 @@ try {
   assert(providerStatus.enabled === false, 'local provider runtime must remain disabled');
   assert(providerStatus.source === 'unconfigured', 'disabled provider status source mismatch');
 
+  const disabledPresenceResponse = await originalFetch(origin + '/api/presence-events', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer local-fixture-should-not-work',
+    },
+    body: JSON.stringify({
+      eventId: 'local-disabled-presence-event',
+      personId: 'not-created-yet',
+      type: 'ARRIVED_HOME',
+    }),
+  });
+  const disabledPresencePayload = await disabledPresenceResponse.json();
+  assert(
+    disabledPresenceResponse.status === 503,
+    'presence-event endpoint must fail closed with HTTP 503 when no ingest token is configured',
+  );
+  assert(
+    disabledPresencePayload?.error === 'Presence event ingest is not configured.',
+    'presence-event disabled contract mismatch',
+  );
+
   for (const path of [
     '/api/providers/place-search?q=phase5h',
     '/api/providers/transit-search?q=phase5h&x=127&y=37.5',
@@ -389,6 +411,7 @@ try {
       'provider API mode requires API persistence runtime',
       'same-origin provider transport fail-closed boundary',
       'route and realtime provider endpoints fail closed by default',
+      'presence-event ingest endpoint fails closed by default',
     ],
   }, null, 2));
 } finally {
