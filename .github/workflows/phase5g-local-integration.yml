@@ -34,6 +34,9 @@ on:
       - "scripts/verify-notification-retry-policy.mjs"
       - "scripts/verify-notification-activation-readiness.mjs"
       - "scripts/verify-notification-activation-preflight.mjs"
+      - "scripts/verify-cloudflare-env-contract.mjs"
+      - ".env.example"
+      - "docs/CLOUDFLARE_ENVIRONMENT_CONTRACT.md"
       - "scripts/verify-presence-event-ingest.mjs"
       - "scripts/verify-phase5v-*.mjs"
       - "scripts/verify-phase5w-*.mjs"
@@ -225,6 +228,9 @@ jobs:
 
       - name: Verify notification activation preflight
         run: npm run verify:notification-activation-preflight
+
+      - name: Verify Cloudflare environment contract
+        run: npm run verify:cloudflare-env-contract
 
       - name: Verify trusted presence-event ingestion
         run: npm run verify:presence-event-ingest
