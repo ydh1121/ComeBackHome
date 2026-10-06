@@ -15,7 +15,8 @@
   },
   "vars": {
     "PUSH_DELIVERY_ENABLED": "0",
-    "PROVIDER_RUNTIME_ENABLED": "0"
+    "PROVIDER_RUNTIME_ENABLED": "0",
+    "MUTATIONS_ENABLED": "0"
   },
   "d1_databases": [
     {

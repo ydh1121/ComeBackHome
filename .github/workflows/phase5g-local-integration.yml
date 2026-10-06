@@ -37,6 +37,7 @@ on:
       - "scripts/verify-notification-activation-preflight.mjs"
       - "scripts/verify-cloudflare-env-contract.mjs"
       - "scripts/verify-worker-migration-config.mjs"
+      - "scripts/verify-staging-mutation-gate.mjs"
       - ".env.example"
       - "docs/CLOUDFLARE_ENVIRONMENT_CONTRACT.md"
       - "scripts/verify-presence-event-ingest.mjs"
@@ -236,6 +237,9 @@ jobs:
 
       - name: Verify Worker migration staging config
         run: npm run verify:worker-migration-config
+
+      - name: Verify staging mutation gate
+        run: npm run verify:staging-mutation-gate
 
       - name: Verify trusted presence-event ingestion
         run: npm run verify:presence-event-ingest

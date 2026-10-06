@@ -22,6 +22,10 @@ expect(
   'Worker SPA fallback mismatch',
 );
 expect(
+  config.vars?.MUTATIONS_ENABLED === '0',
+  'Worker staging config must keep public API mutations disabled',
+);
+expect(
   config.vars?.PUSH_DELIVERY_ENABLED === '0',
   'Worker staging config must keep push delivery disabled',
 );

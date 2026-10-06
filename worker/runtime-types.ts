@@ -31,6 +31,7 @@ export interface StaticAssetFetcher {
 export interface WorkerEnv {
   DB: D1DatabaseLike;
   ASSETS?: StaticAssetFetcher;
+  MUTATIONS_ENABLED?: string;
   PUSH_DELIVERY_ENABLED?: string;
   VAPID_SUBJECT?: string;
   VAPID_PUBLIC_KEY?: string;

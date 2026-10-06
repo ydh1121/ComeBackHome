@@ -66,6 +66,11 @@ export async function handleApiRequest(
   const segments = url.pathname.split('/').filter(Boolean);
   if (segments[0] !== 'api') return json({ error: 'Not found.' }, 404);
 
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
+  if (isMutation && env.MUTATIONS_ENABLED === '0') {
+    return json({ error: 'API mutations are temporarily disabled.' }, 503);
+  }
+
   try {
     if (segments.length === 2 && segments[1] === 'health' && request.method === 'GET') {
       const row = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
