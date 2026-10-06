@@ -46,6 +46,16 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
 
+      - name: Load public VAPID build key
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
+          const publicKey = config.vars?.VAPID_PUBLIC_KEY ?? '';
+          fs.appendFileSync(process.env.GITHUB_ENV, 'VITE_CBH_VAPID_PUBLIC_KEY=' + publicKey + '\n');
+          NODE
+
       - name: Build D1 API runtime with provider disabled
         run: npm run build
 
