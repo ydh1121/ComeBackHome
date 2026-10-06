@@ -131,6 +131,21 @@ try {
     subscriptionTransport,
   );
 
+  await service.syncCurrentSubscription();
+  expect(state.permission === 'subscribed', 'existing browser subscription must restore subscribed state');
+  expect(state.subscription?.endpoint === 'https://push.example.invalid/restored', 'restored subscription repository state mismatch');
+  expect(
+    transportEvents.some(([kind, endpoint]) => kind === 'upsert' && endpoint === 'https://push.example.invalid/restored'),
+    'existing browser subscription must be re-synced to server',
+  );
+
+  await service.disablePushSubscription();
+  expect(state.subscription == null, 'restored push disable must clear repository subscription');
+  expect(
+    transportEvents.some(([kind, endpoint]) => kind === 'remove' && endpoint === 'https://push.example.invalid/restored'),
+    'restored push disable must remove server subscription',
+  );
+
   await service.requestPermissionFromUserGesture();
   expect(state.permission === 'subscribed', 'granted browser subscription must become subscribed');
   expect(state.subscription?.endpoint === 'https://push.example.invalid/live-wiring', 'subscription repository state mismatch');
