@@ -7,7 +7,7 @@
   "accessProtected": true,
   "mutationsEnabled": true,
   "providerRuntimeEnabled": true,
-  "pushDeliveryEnabled": false,
+  "pushDeliveryEnabled": true,
   "d1Binding": "DB",
   "cronConfigured": false
 }
