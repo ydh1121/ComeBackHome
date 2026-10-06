@@ -51,6 +51,53 @@ jobs:
             throw new Error('Scheduler endpoint must reject unauthenticated requests');
           }
 
+          const settingsResponse = await fetch(origin + '/api/notifications/settings', {
+            headers: { Accept: 'application/json' },
+          });
+          const settingsBody = await settingsResponse.json().catch(() => null);
+          const currentSettings = settingsBody?.settings;
+          if (!settingsResponse.ok || !currentSettings) {
+            throw new Error('Pages notification settings read failed');
+          }
+
+          const settingsWrite = await fetch(origin + '/api/notifications/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shiftEndEnabled: currentSettings.shiftEndEnabled === true,
+              etaChangeEnabled: currentSettings.etaChangeEnabled === true,
+              leftWorkEnabled: currentSettings.leftWorkEnabled === true,
+              homeArrivalEnabled: currentSettings.homeArrivalEnabled === true,
+            }),
+          });
+          const settingsWriteBody = await settingsWrite.json().catch(() => null);
+          if (!settingsWrite.ok || !settingsWriteBody?.settings) {
+            throw new Error('Pages notification settings same-value write failed');
+          }
+          for (const key of [
+            'shiftEndEnabled',
+            'etaChangeEnabled',
+            'leftWorkEnabled',
+            'homeArrivalEnabled',
+          ]) {
+            if (settingsWriteBody.settings[key] !== currentSettings[key]) {
+              throw new Error('Pages notification settings round-trip mismatch: ' + key);
+            }
+          }
+
+          const presenceProbe = await fetch(origin + '/api/presence-events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventId: 'canonical-presence-auth-probe',
+              personId: 'auth-probe-only',
+              type: 'LEFT_WORK',
+            }),
+          });
+          if (presenceProbe.status !== 401) {
+            throw new Error('Presence endpoint must reject unauthenticated requests');
+          }
+
           const nearbyUrl = new URL(origin + '/api/providers/transit-nearby');
           nearbyUrl.searchParams.set('x', String(publicCoordinate.x));
           nearbyUrl.searchParams.set('y', String(publicCoordinate.y));
@@ -93,6 +140,8 @@ jobs:
             sameOriginHealth: true,
             providerRuntimeEnabled: true,
             schedulerEndpointProtected: true,
+            notificationSettingsRoundTrip: true,
+            presenceEndpointProtected: true,
             nearbyTransitCount: results.length,
             nearbyModes: modes,
             markerCandidates: firstMarkers.length,
