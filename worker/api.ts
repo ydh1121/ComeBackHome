@@ -275,6 +275,31 @@ export async function handleApiRequest(
     }
 
     if (
+      segments.length === 3 &&
+      segments[1] === 'presence-events' &&
+      segments[2] === 'status' &&
+      request.method === 'GET'
+    ) {
+      return json({
+        configured: Boolean(env.PRESENCE_EVENT_INGEST_TOKEN?.trim()),
+      });
+    }
+
+    if (
+      segments.length === 3 &&
+      segments[1] === 'presence-events' &&
+      segments[2] === 'validate' &&
+      request.method === 'POST'
+    ) {
+      const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
+      if (!configuredToken) return json({ error: 'Presence event ingest is not configured.' }, 503);
+      if (!isPresenceEventAuthorized(request, configuredToken)) {
+        return json({ error: 'Unauthorized.' }, 401);
+      }
+      return json({ valid: true });
+    }
+
+    if (
       segments.length === 2 &&
       segments[1] === 'presence-events' &&
       request.method === 'POST'
