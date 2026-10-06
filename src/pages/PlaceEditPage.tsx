@@ -69,6 +69,9 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
   if (placeState.status === 'error') return <section className="commute-page"><div className="commute-message">장소 정보를 불러오지 못했습니다.</div></section>;
 
   const current = placeState.place;
+  const resolvedCurrentLocation =
+    current?.coordinate != null && current.address.road === query.trim();
+  const hasResolvedLocation = selected != null || resolvedCurrentLocation;
   const isOrigin = kind === 'origin';
   const title = isOrigin ? '출발지 수정' : '도착지 수정';
 
@@ -79,7 +82,7 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
   };
 
   const save = async () => {
-    if (form.state === 'SAVING') return;
+    if (form.state === 'SAVING' || !hasResolvedLocation) return;
     await form.save(() => services.actions.places.save(personId, kind, {
       label,
       address: {
@@ -156,7 +159,10 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
         <input className="input" value={detail} onChange={(event) => { setDetail(event.target.value); form.markDirty(); }} placeholder="층, 호수 등 (선택)" />
       </label>
 
-      <button type="button" className="cta" disabled={form.state === 'SAVING' || !query.trim()} onClick={save}>{form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}</button>
+      {!hasResolvedLocation && query.trim().length >= 2 ? (
+        <div className="search-inline-status" role="status">검색 결과에서 정확한 주소를 선택해야 저장할 수 있습니다.</div>
+      ) : null}
+      <button type="button" className="cta" disabled={form.state === 'SAVING' || !hasResolvedLocation} onClick={save}>{form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}</button>
     </section>
   );
 }
