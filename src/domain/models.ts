@@ -36,5 +36,11 @@ export interface WebPushSubscriptionRecord {
   keys: { p256dh: string; auth: string };
 }
 export interface NotificationSettings { permission: PermissionState; rules: NotificationRules; subscription?: WebPushSubscriptionRecord | null; }
-export interface EtaSnapshot { personId: EntityId; status: 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
+export interface PresenceState {
+  personId: EntityId;
+  workDate: ISODate;
+  leftWorkAt?: ISODateTime;
+  arrivedHomeAt?: ISODateTime;
+}
+export interface EtaSnapshot { personId: EntityId; status: 'ACTUAL' | 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
 export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; routeCandidateId?: EntityId; }
