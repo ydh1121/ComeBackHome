@@ -1,0 +1,85 @@
+name: Verify Pages Transit Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-pages-transit-runtime.yml"
+      - "runtime-activation/pages-transit-smoke.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Pages same-origin transit runtime
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const origin = 'https://come-back-home.pages.dev';
+          const publicCoordinate = { x: 127.0276, y: 37.4979 };
+
+          const root = await fetch(origin + '/', { redirect: 'follow' });
+          if (!root.ok) throw new Error('Pages root failed: HTTP ' + root.status);
+
+          const health = await fetch(origin + '/api/health', {
+            headers: { Accept: 'application/json' },
+          });
+          const healthBody = await health.json().catch(() => null);
+          if (!health.ok || healthBody?.ok !== true) {
+            throw new Error('Pages API health failed: HTTP ' + health.status);
+          }
+
+          const nearbyUrl = new URL(origin + '/api/providers/transit-nearby');
+          nearbyUrl.searchParams.set('x', String(publicCoordinate.x));
+          nearbyUrl.searchParams.set('y', String(publicCoordinate.y));
+          const nearby = await fetch(nearbyUrl, {
+            headers: { Accept: 'application/json' },
+          });
+          const nearbyBody = await nearby.json().catch(() => null);
+          const results = Array.isArray(nearbyBody?.results) ? nearbyBody.results : [];
+          if (!nearby.ok || results.length === 0) {
+            throw new Error('Pages nearby transit failed: HTTP ' + nearby.status + ' count=' + results.length);
+          }
+          const modes = [...new Set(results.map((item) => item?.mode).filter(Boolean))];
+          if (!modes.includes('BUS') && !modes.includes('SUBWAY')) {
+            throw new Error('Nearby transit returned no supported mode');
+          }
+
+          const firstMarkers = results
+            .filter((item) => Number.isFinite(item?.coordinate?.x) && Number.isFinite(item?.coordinate?.y))
+            .slice(0, 4);
+          const mapUrl = new URL(origin + '/api/providers/static-map');
+          mapUrl.searchParams.set('centerX', String(publicCoordinate.x));
+          mapUrl.searchParams.set('centerY', String(publicCoordinate.y));
+          for (const item of firstMarkers) {
+            mapUrl.searchParams.append('marker', item.coordinate.x + ',' + item.coordinate.y);
+          }
+
+          const mapResponse = await fetch(mapUrl);
+          const contentType = mapResponse.headers.get('content-type') ?? '';
+          const mapBytes = (await mapResponse.arrayBuffer()).byteLength;
+          if (!mapResponse.ok || !contentType.startsWith('image/') || mapBytes < 1000) {
+            throw new Error(
+              'Pages static map failed: HTTP ' + mapResponse.status +
+              ' contentType=' + contentType +
+              ' bytes=' + mapBytes
+            );
+          }
+
+          console.log(JSON.stringify({
+            pagesRootReachable: true,
+            sameOriginHealth: true,
+            nearbyTransitCount: results.length,
+            nearbyModes: modes,
+            markerCandidates: firstMarkers.length,
+            staticMapContentType: contentType,
+            staticMapBytes: mapBytes,
+            publicTestCoordinateOnly: true,
+            valuesExposed: false,
+          }));
+          NODE
