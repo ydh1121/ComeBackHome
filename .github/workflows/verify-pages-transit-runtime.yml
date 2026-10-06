@@ -98,6 +98,17 @@ jobs:
             throw new Error('Presence endpoint must reject unauthenticated requests');
           }
 
+          const pushTestProbe = await fetch(origin + '/api/notifications/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              endpoint: 'https://push.example.invalid/canonical-missing-probe',
+            }),
+          });
+          if (pushTestProbe.status !== 404) {
+            throw new Error('Test push endpoint deployment mismatch: HTTP ' + pushTestProbe.status);
+          }
+
           const nearbyUrl = new URL(origin + '/api/providers/transit-nearby');
           nearbyUrl.searchParams.set('x', String(publicCoordinate.x));
           nearbyUrl.searchParams.set('y', String(publicCoordinate.y));
@@ -142,6 +153,7 @@ jobs:
             schedulerEndpointProtected: true,
             notificationSettingsRoundTrip: true,
             presenceEndpointProtected: true,
+            realTestPushEndpointDeployed: true,
             nearbyTransitCount: results.length,
             nearbyModes: modes,
             markerCandidates: firstMarkers.length,
