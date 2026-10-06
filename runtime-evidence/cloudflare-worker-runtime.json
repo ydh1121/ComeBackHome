@@ -6,7 +6,7 @@
   "clientRuntime": "api",
   "accessProtected": true,
   "mutationsEnabled": true,
-  "providerRuntimeEnabled": false,
+  "providerRuntimeEnabled": true,
   "pushDeliveryEnabled": false,
   "d1Binding": "DB",
   "cronConfigured": false
