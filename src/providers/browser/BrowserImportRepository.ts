@@ -45,8 +45,11 @@ function writeState(state: BrowserImportState): void {
 export class BrowserImportRepository implements ImportRepository {
   private state = readState();
 
+  constructor(private readonly onChange: () => void = () => undefined) {}
+
   private persist(): void {
     writeState(this.state);
+    this.onChange();
   }
 
   async getCurrentBatch(): Promise<ImportBatch | null> {
