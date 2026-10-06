@@ -17,7 +17,7 @@ const browserImports = await read('../src/providers/browser/BrowserImportReposit
 for (const text of ['type="file"','근무표 이미지 추가','엑셀 파일 가져오기','인식 결과 보기','services.actions.importFiles.accept']) {
   if (!root.includes(text)) failures.push('root missing ' + text);
 }
-for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','services.actions.importMatch.cyclePersonMatch']) {
+for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','가져오지 않음','setPersonIgnored','setPersonMatch']) {
   if (!people.includes(text)) failures.push('people missing ' + text);
 }
 for (const text of ['표 구조 확인','머리글 행','근무시간 열','자동 인식이 확실하지 않을 때만']) {
@@ -41,6 +41,8 @@ if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v1'")) failures.
 if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근무표 이미지 가져오기')) failures.push('schedule-to-image-import entry missing');
 if (!commit.includes('schedules.upsertMany(entries)')) failures.push('schedule batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
+if (!commit.includes('ignoredDetectedIds') || !commit.includes('includedItems')) failures.push('ignored roster people must be excluded from commit');
+if (!review.includes('visibleReviewItems') || !review.includes('ignoredDetectedIds')) failures.push('ignored roster people must be excluded from review');
 if (!commit.includes("item.resolution === 'KEEP'")) failures.push('KEEP commit rule missing');
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
 if (!css.includes('.import-page .upload')) failures.push('upload style missing');
