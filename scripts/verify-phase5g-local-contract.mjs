@@ -9,13 +9,15 @@ const pkg = JSON.parse(await read('../package.json'));
 const integration = await read('./verify-phase5g-local.mjs');
 const gitignore = await read('../.gitignore');
 const migration = await read('../db/migrations/0001_initial.sql');
+const localEntry = await read('../worker/testing/phase5g-local-app.ts');
+const schedulerEntry = await read('../worker/index.ts');
 
 const expect = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
 expect(config.name === 'come-back-home', 'local Wrangler name must remain come-back-home');
-expect(config.main === './worker/index.ts', 'local Wrangler main must target worker/index.ts');
+expect(config.main === './worker/testing/phase5g-local-app.ts', 'local Wrangler main must target the test-only Pages application harness');
 expect(config.assets?.directory === './dist', 'static assets directory must be ./dist');
 expect(config.assets?.binding === 'ASSETS', 'static assets binding must be ASSETS');
 expect(Array.isArray(config.assets?.run_worker_first), 'run_worker_first must be an explicit route list');
@@ -31,6 +33,10 @@ expect(d1?.database_id === '00000000-0000-0000-0000-000000000000', 'local config
 expect(d1?.preview_database_id === 'comebackhome-local', 'local preview database id is missing');
 expect(d1?.migrations_dir === 'db/migrations', 'D1 migrations_dir must be db/migrations');
 expect(config.vars?.PUSH_DELIVERY_ENABLED === '0', 'local push delivery must stay disabled');
+expect(localEntry.includes('handleApiRequest'), 'local Pages harness must execute application API');
+expect(localEntry.includes('ASSETS'), 'local Pages harness must preserve SPA asset verification');
+expect(!schedulerEntry.includes('handleApiRequest'), 'production scheduler Worker must not host application API');
+expect(!schedulerEntry.includes('ASSETS'), 'production scheduler Worker must not serve SPA assets');
 
 for (const [name, required] of [
   ['cf:local:migrate', ['wrangler d1 migrations apply come-back-home-db', '--local', '--config wrangler.local.jsonc']],
