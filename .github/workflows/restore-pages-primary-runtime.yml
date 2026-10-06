@@ -148,7 +148,7 @@ jobs:
           }));
           NODE
 
-      - name: Trigger production Pages deployment from main
+      - name: Resolve or trigger production Pages deployment
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -157,28 +157,68 @@ jobs:
           const token = process.env.CLOUDFLARE_API_TOKEN;
           const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
           const projectName = process.env.PAGES_PROJECT;
+          const sourceCommit = process.env.GITHUB_SHA ?? '';
           const deployUrl =
             'https://api.cloudflare.com/client/v4/accounts/' + accountId +
             '/pages/projects/' + projectName + '/deployments';
+          const authHeaders = { Authorization: 'Bearer ' + token };
 
-          const form = new FormData();
-          form.set('branch', 'main');
-          form.set('commit_hash', process.env.GITHUB_SHA ?? '');
-          form.set('commit_dirty', 'false');
-          form.set('commit_message', 'Restore Pages primary runtime');
+          const listUrl = new URL(deployUrl);
+          listUrl.searchParams.set('env', 'production');
+          listUrl.searchParams.set('per_page', '20');
 
-          const response = await fetch(deployUrl, {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + token },
-            body: form,
-          });
-          const body = await response.json();
-          if (!response.ok || body.success !== true || !body.result?.id) {
-            throw new Error('Failed to trigger Pages production deployment');
+          const listResponse = await fetch(listUrl, { headers: authHeaders });
+          const listBody = await listResponse.json();
+          if (!listResponse.ok || listBody.success !== true) {
+            throw new Error('Failed to list Pages production deployments');
           }
 
-          fs.appendFileSync(process.env.GITHUB_ENV, 'PAGES_DEPLOYMENT_ID=' + body.result.id + '\n');
-          console.log('Pages deployment triggered');
+          const deployments = Array.isArray(listBody.result) ? listBody.result : [];
+          let deployment = deployments.find(
+            (item) => item?.deployment_trigger?.metadata?.commit_hash === sourceCommit,
+          ) ?? null;
+
+          if (!deployment) {
+            const form = new FormData();
+            form.set('branch', 'main');
+            form.set('commit_hash', sourceCommit);
+            form.set('commit_dirty', 'false');
+            form.set('commit_message', 'Restore Pages primary runtime');
+
+            const response = await fetch(deployUrl, {
+              method: 'POST',
+              headers: authHeaders,
+              body: form,
+            });
+            const responseText = await response.text();
+            let body = null;
+            try {
+              body = responseText ? JSON.parse(responseText) : null;
+            } catch {
+              body = null;
+            }
+
+            if (!response.ok || body?.success !== true || !body?.result?.id) {
+              throw new Error(
+                'Failed to trigger Pages production deployment: HTTP ' +
+                response.status +
+                ' body=' +
+                responseText.slice(0, 160),
+              );
+            }
+            deployment = body.result;
+          }
+
+          fs.appendFileSync(
+            process.env.GITHUB_ENV,
+            'PAGES_DEPLOYMENT_ID=' + deployment.id + '\n',
+          );
+          console.log(JSON.stringify({
+            deploymentId: deployment.id,
+            reusedExistingDeployment:
+              deployment?.deployment_trigger?.metadata?.commit_hash === sourceCommit,
+            valuesExposed: false,
+          }));
           NODE
 
       - name: Wait for Pages production deployment
