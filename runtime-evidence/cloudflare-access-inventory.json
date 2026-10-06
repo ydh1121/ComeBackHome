@@ -5,13 +5,25 @@
       "name": "HOOOO Staging",
       "domain": null,
       "type": "self_hosted",
+      "destinations": [
+        {
+          "type": "worker",
+          "hasWorkerId": true,
+          "hasUri": false
+        }
+      ],
       "policyCount": 1,
       "policies": [
         {
           "id": "bbc3edf3-ae9d-476e-8084-8e0a9beaf1a3",
           "name": "Allow HOOOO Staging Owner",
           "decision": "allow",
-          "precedence": 1
+          "precedence": 1,
+          "includeSelectorTypes": [
+            "email"
+          ],
+          "requireSelectorTypes": [],
+          "excludeSelectorTypes": []
         }
       ]
     }
