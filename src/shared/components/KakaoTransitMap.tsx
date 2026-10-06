@@ -71,14 +71,14 @@ export function KakaoTransitMap({
   onSelect,
 }: KakaoTransitMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'missing-key' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'static'>('loading');
   const appKey = String(import.meta.env.VITE_CBH_KAKAO_JAVASCRIPT_KEY ?? '').trim();
 
   useEffect(() => {
     let active = true;
     if (!containerRef.current) return () => { active = false; };
     if (!appKey) {
-      setState('missing-key');
+      setState('static');
       return () => { active = false; };
     }
 
@@ -125,7 +125,7 @@ export function KakaoTransitMap({
         setState('ready');
       })
       .catch(() => {
-        if (active) setState('error');
+        if (active) setState('static');
       });
 
     return () => {
@@ -134,12 +134,30 @@ export function KakaoTransitMap({
     };
   }, [appKey, center.x, center.y, centerLabel, points, selectedId, onSelect]);
 
+  const markerPoints = [
+    ...points.filter((point) => point.id === selectedId),
+    ...points.filter((point) => point.id !== selectedId),
+  ].slice(0, 4);
+  const staticParams = new URLSearchParams({
+    centerX: String(center.x),
+    centerY: String(center.y),
+  });
+  for (const point of markerPoints) {
+    staticParams.append('marker', point.coordinate.x + ',' + point.coordinate.y);
+  }
+  const staticMapUrl = '/api/providers/static-map?' + staticParams.toString();
+
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
-      <div ref={containerRef} className="kakao-transit-map" aria-label="카카오 지도 주변 교통 선택" />
+      {state === 'static' ? (
+        <>
+          <img className="kakao-transit-static-map" src={staticMapUrl} alt={centerLabel + ' 주변 카카오 지도'} />
+          <div className="kakao-static-map-note">카카오 지도 · 가까운 후보는 아래 목록에서 선택</div>
+        </>
+      ) : (
+        <div ref={containerRef} className="kakao-transit-map" aria-label="카카오 지도 주변 교통 선택" />
+      )}
       {state === 'loading' ? <div className="kakao-map-status">카카오 지도를 불러오는 중</div> : null}
-      {state === 'missing-key' ? <div className="kakao-map-status">카카오 지도 JavaScript 키 연결 필요</div> : null}
-      {state === 'error' ? <div className="kakao-map-status">카카오 지도를 불러오지 못했습니다.</div> : null}
     </div>
   );
 }
