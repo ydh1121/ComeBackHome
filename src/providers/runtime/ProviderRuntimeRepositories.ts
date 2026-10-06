@@ -35,6 +35,7 @@ export const systemRuntimeClock: RuntimeClock = {
 
 function compareRoutes(left: RouteCandidate, right: RouteCandidate): number {
   return (
+    Number(right.matchesPreference === true) - Number(left.matchesPreference === true) ||
     left.totalMinutes - right.totalMinutes ||
     left.transferCount - right.transferCount ||
     left.walkMinutes - right.walkMinutes ||
@@ -77,6 +78,43 @@ function freshnessMinutes(observedAt: string, now: Date): number | undefined {
   const observed = Date.parse(observedAt);
   if (!Number.isFinite(observed)) return undefined;
   return Math.max(0, Math.floor((now.getTime() - observed) / 60_000));
+}
+
+function normalizeTransitEvidence(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[()\[\]{}]/g, ' ')
+    .replace(/정류장|정류소/g, '')
+    .replace(/\s+/g, '');
+}
+
+function routeMatchesAccessPoint(
+  route: import('../../application/contracts/providers').TransitRouteResult,
+  point: TransitAccessPoint,
+): boolean {
+  if (point.mode === 'BUS' && point.selectedBusRouteId) {
+    const routeIdMatch = (route.busLegs ?? []).some((leg) =>
+      leg.routes.some((candidate) => candidate.providerRouteId === point.selectedBusRouteId)
+    );
+    if (routeIdMatch) return true;
+  }
+
+  const target = normalizeTransitEvidence(point.userLabel || point.name);
+  if (!target) return false;
+
+  const stopMatch = (route.busLegs ?? []).some((leg) =>
+    leg.stopNames.some((name) => {
+      const normalized = normalizeTransitEvidence(name);
+      return normalized === target || normalized.includes(target) || target.includes(normalized);
+    })
+  );
+  if (stopMatch) return true;
+
+  return (route.steps ?? []).some((step) => {
+    const normalized = normalizeTransitEvidence(step.label);
+    return normalized.includes(target) || target.includes(normalized);
+  });
 }
 
 export class ProviderCommuteRepository implements CommuteRepository {
@@ -131,24 +169,49 @@ export class ProviderCommuteRepository implements CommuteRepository {
   }
 
   async listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> {
-    const [origin, destination] = await Promise.all([
+    const [origin, destination, savedRoutes, originPoints, destinationPoints] = await Promise.all([
       this.places.get(personId, 'origin'),
       this.places.get(personId, 'destination'),
+      this.persisted.listSavedRoutes(personId),
+      this.persisted.listAccessPoints(personId, 'origin'),
+      this.persisted.listAccessPoints(personId, 'destination'),
     ]);
     if (!origin?.coordinate || !destination?.coordinate) return [];
+
+    const activeSavedRoute = savedRoutes.find((route) => route.active) ?? savedRoutes[0] ?? null;
+    const pointsById = new Map(
+      [...originPoints, ...destinationPoints].map((point) => [point.id, point]),
+    );
+    const configuredPointIds = activeSavedRoute
+      ? [
+          ...(activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : []),
+          ...activeSavedRoute.viaAccessPointIds,
+        ]
+      : [];
+    const configuredPoints = configuredPointIds
+      .map((id) => pointsById.get(id))
+      .filter((point): point is TransitAccessPoint => point != null);
 
     try {
       const results = await this.routeProvider.search(origin.coordinate, destination.coordinate);
       return results
-        .map((result): RouteCandidate => ({
-          id: result.id,
-          personId,
-          totalMinutes: result.totalMinutes,
-          transferCount: result.transferCount,
-          walkMinutes: result.walkMinutes ?? 0,
-          ...(result.fare == null ? {} : { fare: result.fare }),
-          ...(result.steps ? { steps: result.steps } : {}),
-        }))
+        .map((result): RouteCandidate => {
+          const matchesPreference =
+            configuredPoints.length > 0 &&
+            configuredPoints.every((point) => routeMatchesAccessPoint(result, point));
+          return {
+            id: result.id,
+            personId,
+            totalMinutes: result.totalMinutes,
+            transferCount: result.transferCount,
+            walkMinutes: result.walkMinutes ?? 0,
+            ...(result.fare == null ? {} : { fare: result.fare }),
+            ...(result.steps ? { steps: result.steps } : {}),
+            ...(matchesPreference
+              ? { matchesPreference: true, policyLabels: ['설정 경로'] }
+              : {}),
+          };
+        })
         .sort(compareRoutes);
     } catch {
       return [];
