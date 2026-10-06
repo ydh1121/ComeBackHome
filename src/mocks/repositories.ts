@@ -1,5 +1,5 @@
 import type { EntityId, ISODate } from '../domain/common';
-import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
+import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
 import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
@@ -55,6 +55,25 @@ export class MockCommuteRepository implements CommuteRepository {
   async setSelectedBusRoute(accessPointId: EntityId, providerRouteId: string): Promise<void> { this.store.mutate((state) => { const point = state.accessPoints.find((candidate) => candidate.id === accessPointId); if (point?.busRoutes?.some((route) => route.providerRouteId === providerRouteId)) point.selectedBusRouteId = providerRouteId; }); }
   async getRoutePreference(personId: EntityId): Promise<RoutePreference | null> { return clone(this.store.read().routePreferences.find((preference) => preference.personId === personId) ?? null); }
   async saveRoutePreference(preference: RoutePreference): Promise<void> { this.store.mutate((state) => { const index = state.routePreferences.findIndex((candidate) => candidate.id === preference.id || candidate.personId === preference.personId); if (index >= 0) state.routePreferences[index] = clone(preference); else state.routePreferences.push(clone(preference)); }); }
+  async listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> { return clone(this.store.read().savedRoutes.filter((route) => route.personId === personId).sort((a, b) => a.position - b.position)); }
+  async createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    const routes = this.store.read().savedRoutes.filter((route) => route.personId === personId);
+    const position = Math.max(0, ...routes.map((route) => route.position)) + 1;
+    const route: SavedCommuteRoute = { id: crypto.randomUUID(), personId, position, label: '경로 ' + position, viaAccessPointIds: [], active: routes.length === 0 };
+    this.store.mutate((state) => state.savedRoutes.push(clone(route)));
+    return clone(route);
+  }
+  async saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
+    this.store.mutate((state) => {
+      if (route.active) state.savedRoutes.filter((candidate) => candidate.personId === route.personId).forEach((candidate) => { candidate.active = false; });
+      const index = state.savedRoutes.findIndex((candidate) => candidate.id === route.id);
+      if (index >= 0) state.savedRoutes[index] = clone(route);
+      else state.savedRoutes.push(clone(route));
+    });
+  }
+  async setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    this.store.mutate((state) => state.savedRoutes.filter((route) => route.personId === personId).forEach((route) => { route.active = route.id === routeId; }));
+  }
   async listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> { return clone(this.store.read().routeCandidates.filter((candidate) => candidate.personId === personId)); }
   async getPreferredRouteCandidateId(personId: EntityId): Promise<EntityId | null> { return this.store.read().preferredRouteCandidateIds[personId] ?? null; }
   async setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void> { this.store.mutate((state) => { state.preferredRouteCandidateIds[personId] = routeCandidateId; }); }
