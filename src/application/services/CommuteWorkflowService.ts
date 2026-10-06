@@ -1,5 +1,5 @@
 import type { EntityId } from '../../domain/common';
-import type { PlaceKind, RoutePreference, TransitAccessPoint } from '../../domain/models';
+import type { PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
 import type { BusRouteActions, CommuteActions, PlaceActions, PlaceInput, TransitSearchActions } from '../contracts/actions';
 import type { PlaceSearchProvider, TransitAccessSearchProvider, TransitSearchResult } from '../contracts/providers';
 import type { CommuteRepository, PlaceRepository } from '../contracts/repositories';
@@ -38,6 +38,53 @@ export class CommuteService implements CommuteActions {
     return this.commute.setPreferredRouteCandidateId(personId, routeCandidateId);
   }
 
+  createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
+    return this.commute.createSavedRoute(personId);
+  }
+
+  selectSavedRoute(personId: EntityId, routeId: EntityId): Promise<void> {
+    return this.commute.setActiveSavedRoute(personId, routeId);
+  }
+
+  async setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    await this.commute.saveSavedRoute({ ...route, originAccessPointId: accessPointId });
+  }
+
+  async moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = [...route.viaAccessPointIds];
+    if (fromIndex < 0 || fromIndex >= ids.length) return;
+    const [item] = ids.splice(fromIndex, 1);
+    const target = Math.max(0, Math.min(toIndex, ids.length));
+    ids.splice(target, 0, item);
+    await this.commute.saveSavedRoute({ ...route, viaAccessPointIds: ids });
+  }
+
+  async addRouteVia(personId: EntityId, routeId: EntityId, accessPointId: EntityId, index?: number): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = route.viaAccessPointIds.filter((id) => id !== accessPointId);
+    const target = index == null ? ids.length : Math.max(0, Math.min(index, ids.length));
+    ids.splice(target, 0, accessPointId);
+    await this.commute.saveSavedRoute({ ...route, viaAccessPointIds: ids });
+  }
+
+  async replaceRouteVia(personId: EntityId, routeId: EntityId, index: number, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = [...route.viaAccessPointIds];
+    if (index < 0 || index >= ids.length) return;
+    ids[index] = accessPointId;
+    await this.commute.saveSavedRoute({ ...route, viaAccessPointIds: ids });
+  }
+
+  async removeRouteVia(personId: EntityId, routeId: EntityId, index: number): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = [...route.viaAccessPointIds];
+    if (index < 0 || index >= ids.length) return;
+    ids.splice(index, 1);
+    await this.commute.saveSavedRoute({ ...route, viaAccessPointIds: ids });
+  }
+
   async movePreferenceStep(personId: EntityId, fromIndex: number, toIndex: number): Promise<void> {
     const preference = await this.ensurePreference(personId);
     const ids = [...preference.viaAccessPointIds];
@@ -62,6 +109,12 @@ export class CommuteService implements CommuteActions {
     if (index < 0 || index >= ids.length) return;
     ids[index] = accessPointId;
     await this.commute.saveRoutePreference({ ...preference, viaAccessPointIds: ids });
+  }
+
+  private async requireSavedRoute(personId: EntityId, routeId: EntityId): Promise<SavedCommuteRoute> {
+    const route = (await this.commute.listSavedRoutes(personId)).find((candidate) => candidate.id === routeId);
+    if (!route) throw new Error('Saved commute route was not found.');
+    return route;
   }
 
   private async ensurePreference(personId: EntityId): Promise<RoutePreference> {
