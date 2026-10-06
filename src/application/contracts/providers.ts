@@ -5,7 +5,7 @@ export interface PlaceSearchResult { providerId: string; placeName?: string; roa
 export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; coordinate?: Coordinate; busRoutes?: BusRouteOption[]; }
 export interface Arrival { providerVehicleId?: string; minutes: number; observedAt: string; }
 export interface TransitBusLeg { stopNames: string[]; routes: BusRouteOption[]; }
-export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
+export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; accessMinutes?: number; egressMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
 export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearchResult[]>; }
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]>; }
 export interface TransitAccessSearchProvider { search(query: string, near: Coordinate): Promise<TransitSearchResult[]>; nearby(near: Coordinate): Promise<TransitSearchResult[]>; }
