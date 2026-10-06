@@ -5,6 +5,7 @@ import { D1NotificationJobStore } from './repositories/D1NotificationJobStore';
 import { D1NotificationSettingsStore } from './repositories/D1NotificationSettingsStore';
 import { D1PersonRepository } from './repositories/D1PersonRepository';
 import { D1PlaceRepository } from './repositories/D1PlaceRepository';
+import { D1PresenceRepository } from './repositories/D1PresenceRepository';
 import { D1ScheduleRepository } from './repositories/D1ScheduleRepository';
 import { D1SubscriptionStore } from './repositories/D1SubscriptionStore';
 import type { WorkerEnv } from './runtime-types';
@@ -324,6 +325,7 @@ export async function handleApiRequest(
           people: new D1PersonRepository(env.DB),
           schedules: new D1ScheduleRepository(env.DB),
           settings: new D1NotificationSettingsStore(env.DB),
+          presence: new D1PresenceRepository(env.DB),
         },
         {
           eventId: asString(body.eventId, 'eventId'),
@@ -390,6 +392,11 @@ export async function handleApiRequest(
           });
           return json({ person });
         }
+      }
+
+      if (segments.length === 4 && segments[3] === 'presence' && request.method === 'GET') {
+        const presence = new D1PresenceRepository(env.DB);
+        return json({ presence: await presence.get(personId) });
       }
 
       if (segments[3] === 'schedules') {
