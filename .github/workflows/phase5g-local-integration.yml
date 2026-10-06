@@ -8,6 +8,7 @@ on:
       - ".github/workflows/phase5g-local-integration.yml"
       - "wrangler.local.jsonc"
       - "wrangler.jsonc"
+      - "wrangler.scheduler.jsonc"
       - "package.json"
       - "db/migrations/**"
       - "worker/**"
@@ -86,6 +87,7 @@ on:
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
       - "wrangler.jsonc"
+      - "wrangler.scheduler.jsonc"
       - "functions/**"
       - "wrangler.local.jsonc"
       - "package.json"
