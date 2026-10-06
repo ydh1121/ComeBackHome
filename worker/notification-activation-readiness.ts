@@ -62,7 +62,8 @@ export function inspectNotificationActivationConfig(
   const retryRaw = clean(env.NOTIFICATION_RETRY_DELAYS_SECONDS);
   const missing: NotificationActivationRequirement[] = [];
 
-  if (!clean(env.VAPID_SUBJECT)) missing.push('VAPID_SUBJECT');
+  const subject = clean(env.VAPID_SUBJECT);
+  if (!subject || !/^(mailto:|https:\/\/)/i.test(subject)) missing.push('VAPID_SUBJECT');
   if (!clean(env.VAPID_PUBLIC_KEY)) missing.push('VAPID_PUBLIC_KEY');
   if (!clean(env.VAPID_PRIVATE_KEY)) missing.push('VAPID_PRIVATE_KEY');
   if (!ttlRaw || parseTtl(ttlRaw) == null) missing.push('WEB_PUSH_TTL_SECONDS');

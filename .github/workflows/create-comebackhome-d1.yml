@@ -1,0 +1,105 @@
+name: Create or Bind ComeBackHome D1
+
+on:
+  push:
+    branches:
+      - activation/runtime-phase1
+    paths:
+      - ".github/workflows/create-comebackhome-d1.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  create-bind:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Create or reuse D1 and update binding
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          if (!token || !accountId) throw new Error('Cloudflare credentials missing');
+
+          const base = 'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/d1/database';
+          const headers = {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          };
+
+          const listResponse = await fetch(base, { headers });
+          const listBody = await listResponse.json();
+          if (!listResponse.ok || listBody.success !== true) {
+            throw new Error('Failed to list D1 databases');
+          }
+
+          const name = 'come-back-home-db';
+          let database = (listBody.result ?? []).find((item) => item.name === name) ?? null;
+          let createdNow = false;
+
+          if (!database) {
+            const createResponse = await fetch(base, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                name,
+                primary_location_hint: 'apac',
+              }),
+            });
+            const createBody = await createResponse.json();
+            if (!createResponse.ok || createBody.success !== true || !createBody.result?.uuid) {
+              throw new Error('Failed to create ComeBackHome D1 database');
+            }
+            database = createBody.result;
+            createdNow = true;
+          }
+
+          const databaseId = database.uuid ?? database.id;
+          if (!databaseId) throw new Error('D1 database id missing');
+
+          const wranglerPath = 'wrangler.jsonc';
+          const config = JSON.parse(fs.readFileSync(wranglerPath, 'utf8'));
+          config.d1_databases = [{
+            binding: 'DB',
+            database_name: name,
+            database_id: databaseId,
+            migrations_dir: 'db/migrations',
+          }];
+          fs.writeFileSync(wranglerPath, JSON.stringify(config, null, 2) + '\n');
+
+          fs.mkdirSync('runtime-evidence', { recursive: true });
+          fs.writeFileSync(
+            'runtime-evidence/cloudflare-d1-inventory.json',
+            JSON.stringify({
+              databaseName: name,
+              exists: true,
+              databaseId,
+              createdAt: database.created_at ?? null,
+              createdNow,
+              primaryLocationHint: 'apac',
+              binding: 'DB',
+            }, null, 2) + '\n',
+          );
+          NODE
+
+      - name: Commit verified D1 binding
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add wrangler.jsonc runtime-evidence/cloudflare-d1-inventory.json
+          git diff --cached --quiet || git commit -m "chore: bind ComeBackHome D1"
+          git push

@@ -41,7 +41,19 @@ These values are non-secret runtime configuration:
 
 The public VAPID key is intentionally not secret.
 
-## Build-time value
+## Build-time values
+
+VITE_CBH_RUNTIME and VITE_CBH_PROVIDER_RUNTIME control which client runtime is compiled into the production bundle.
+
+Safe pre-activation values:
+
+- VITE_CBH_RUNTIME=mock
+- VITE_CBH_PROVIDER_RUNTIME=mock
+
+Production API/provider activation values, only after Worker + D1 + provider readiness is complete:
+
+- VITE_CBH_RUNTIME=api
+- VITE_CBH_PROVIDER_RUNTIME=api
 
 VITE_CBH_VAPID_PUBLIC_KEY is a Vite build-time public value.
 
@@ -55,6 +67,8 @@ Before explicit live activation approval:
 
 - PROVIDER_RUNTIME_ENABLED=0
 - PUSH_DELIVERY_ENABLED=0
+- VITE_CBH_RUNTIME=mock
+- VITE_CBH_PROVIDER_RUNTIME=mock
 
 All other values may be prepared in advance without enabling provider calls or Web Push delivery.
 

@@ -1,0 +1,14 @@
+{
+  "workerName": "come-back-home-runtime",
+  "accountSubdomain": "ydh1121",
+  "workersDevEnabled": true,
+  "previewUrlsEnabled": false,
+  "url": "https://come-back-home-runtime.ydh1121.workers.dev/",
+  "clientRuntime": "api",
+  "accessProtected": true,
+  "mutationsEnabled": true,
+  "providerRuntimeEnabled": true,
+  "pushDeliveryEnabled": true,
+  "d1Binding": "DB",
+  "cronConfigured": true
+}

@@ -1,0 +1,104 @@
+name: Inventory Reusable Cloudflare Access
+
+on:
+  push:
+    branches:
+      - activation/runtime-phase1
+    paths:
+      - ".github/workflows/inventory-cloudflare-access.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inventory Access apps without identity values
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          if (!token || !accountId) throw new Error('Cloudflare credentials missing');
+
+          const headers = { Authorization: 'Bearer ' + token };
+          const base = 'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/access/apps';
+
+          const listResponse = await fetch(base, { headers });
+          const listBody = await listResponse.json();
+          if (!listResponse.ok || listBody.success !== true) {
+            throw new Error('Failed to list Cloudflare Access applications');
+          }
+
+          const matches = (listBody.result ?? []).filter((app) => {
+            const haystack = String(app.name ?? '') + ' ' + String(app.domain ?? '');
+            return /hoooo|come-back-home/i.test(haystack);
+          });
+
+          const apps = [];
+          for (const app of matches) {
+            const detailResponse = await fetch(base + '/' + app.id, { headers });
+            const detailBody = await detailResponse.json();
+            if (!detailResponse.ok || detailBody.success !== true) {
+              throw new Error('Failed to read Access application detail');
+            }
+            const detail = detailBody.result ?? app;
+            apps.push({
+              id: detail.id ?? null,
+              name: detail.name ?? null,
+              domain: detail.domain ?? null,
+              type: detail.type ?? null,
+              destinations: Array.isArray(detail.destinations)
+                ? detail.destinations.map((destination) => ({
+                    type: destination?.type ?? null,
+                    hasWorkerId: Boolean(destination?.worker_id),
+                    hasUri: Boolean(destination?.uri),
+                  }))
+                : [],
+              policyCount: Array.isArray(detail.policies) ? detail.policies.length : 0,
+              policies: Array.isArray(detail.policies)
+                ? detail.policies.map((policy) => ({
+                    id: typeof policy === 'string' ? policy : policy?.id ?? null,
+                    name: typeof policy === 'object' ? policy?.name ?? null : null,
+                    decision: typeof policy === 'object' ? policy?.decision ?? null : null,
+                    precedence: typeof policy === 'object' ? policy?.precedence ?? null : null,
+                    includeSelectorTypes:
+                      typeof policy === 'object' && Array.isArray(policy?.include)
+                        ? policy.include.flatMap((rule) => Object.keys(rule ?? {})).sort()
+                        : [],
+                    requireSelectorTypes:
+                      typeof policy === 'object' && Array.isArray(policy?.require)
+                        ? policy.require.flatMap((rule) => Object.keys(rule ?? {})).sort()
+                        : [],
+                    excludeSelectorTypes:
+                      typeof policy === 'object' && Array.isArray(policy?.exclude)
+                        ? policy.exclude.flatMap((rule) => Object.keys(rule ?? {})).sort()
+                        : [],
+                  }))
+                : [],
+            });
+          }
+
+          fs.mkdirSync('runtime-evidence', { recursive: true });
+          fs.writeFileSync(
+            'runtime-evidence/cloudflare-access-inventory.json',
+            JSON.stringify({ matchedApps: apps }, null, 2) + '\n',
+          );
+          NODE
+
+      - name: Commit sanitized Access evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime-evidence/cloudflare-access-inventory.json
+          git diff --cached --quiet || git commit -m "chore: record sanitized Access inventory"
+          git push

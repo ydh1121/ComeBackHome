@@ -1,0 +1,61 @@
+{
+  "workerName": "come-back-home-runtime",
+  "workersDevEnabled": true,
+  "previewUrlsEnabled": false,
+  "accessAnonymousBlocked": true,
+  "mutationsEnabled": true,
+  "providerRuntimeEnabled": true,
+  "pushDeliveryEnabled": true,
+  "cron": "* * * * *",
+  "cronMatchesRemote": true,
+  "requiredWorkerSecretNamesPresent": true,
+  "remoteBindingNames": [
+    "ASSETS",
+    "DB",
+    "KAKAO_REST_API_KEY",
+    "MUTATIONS_ENABLED",
+    "NOTIFICATION_RETRY_DELAYS_SECONDS",
+    "PRESENCE_EVENT_INGEST_TOKEN",
+    "PROVIDER_RUNTIME_ENABLED",
+    "PUSH_DELIVERY_ENABLED",
+    "VAPID_PRIVATE_KEY",
+    "VAPID_PUBLIC_KEY",
+    "VAPID_SUBJECT",
+    "WEB_PUSH_TTL_SECONDS"
+  ],
+  "currentDeploymentId": "345f2e28-d332-4cce-8bc4-d8fd5e2d51e3",
+  "deploymentVersionCount": 1,
+  "deploymentTrafficPercent": 100,
+  "d1": {
+    "people": 1,
+    "schedules": 0,
+    "pushSubscriptions": 0,
+    "activePushSubscriptions": 0,
+    "notificationJobs": 0,
+    "liveJobs": 0,
+    "notificationSettings": 1
+  },
+  "providerProbe": {
+    "placeResultCount": 15,
+    "routeCount": 15,
+    "minimumTransitSeconds": 1479
+  },
+  "pagesFallback": {
+    "reachable": true,
+    "apiAccessible": true,
+    "apiStatus": 200,
+    "productionBranch": "main",
+    "productionDeploymentsEnabled": true,
+    "previewDeploymentSetting": "all"
+  },
+  "cutover": {
+    "automatedReplacementChecks": "PASS",
+    "authenticatedOwnerProductTest": "PENDING",
+    "pagesControlApiAccessible": true,
+    "blockedReasons": [
+      "AUTHENTICATED_OWNER_PRODUCT_TEST"
+    ],
+    "pagesTrafficCutoverPerformed": false
+  },
+  "valuesExposed": false
+}

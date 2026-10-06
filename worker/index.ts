@@ -1,5 +1,6 @@
 import { handleApiRequest } from './api';
 import { runScheduledNotificationCycle } from './scheduler';
+import { createNotificationActivationReadiness } from './notification-activation-readiness';
 import { createProviderRuntime } from './providers/runtime';
 import type { ExecutionContextLike, ScheduledControllerLike, WorkerEnv } from './runtime-types';
 
@@ -27,6 +28,14 @@ export default {
     env: WorkerEnv,
     ctx: ExecutionContextLike,
   ): Promise<void> {
-    ctx.waitUntil(runScheduledNotificationCycle(env, controller.scheduledTime).then(() => undefined));
+    const providerRuntime = createProviderRuntime(env, globalThis.fetch.bind(globalThis));
+    const readiness = createNotificationActivationReadiness(env, providerRuntime);
+    ctx.waitUntil(
+      runScheduledNotificationCycle(
+        env,
+        controller.scheduledTime,
+        readiness.dependencies ?? undefined,
+      ).then(() => undefined),
+    );
   },
 };

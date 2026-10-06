@@ -12,12 +12,16 @@ const readinessSource = await readFile(
 );
 
 expect(
-  workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime)'),
-  'Worker scheduled entry must remain fail-closed without live dependency injection',
+  workerEntry.includes('createNotificationActivationReadiness'),
+  'Worker scheduled entry must compose activation readiness after runtime activation approval',
 );
 expect(
-  !workerEntry.includes('createNotificationActivationReadiness'),
-  'readiness factory must not be wired into Worker entry before activation approval',
+  workerEntry.includes('readiness.dependencies ?? undefined'),
+  'Worker scheduled entry must pass only fail-closed readiness dependencies',
+);
+expect(
+  workerEntry.includes('createProviderRuntime(env, globalThis.fetch.bind(globalThis))'),
+  'Worker scheduled entry must compose provider runtime from Worker env',
 );
 for (const key of [
   'VAPID_SUBJECT',
@@ -88,6 +92,19 @@ try {
   expect(invalid.ready === false, 'invalid numeric activation config must fail closed');
   expect(invalid.missing.includes('WEB_PUSH_TTL_SECONDS'), 'invalid TTL must remain missing');
   expect(invalid.missing.includes('NOTIFICATION_RETRY_DELAYS_SECONDS'), 'invalid retry schedule must remain missing');
+
+  const invalidSubject = module.createNotificationActivationReadiness({
+    DB: db,
+    VAPID_SUBJECT: 'owner@example.com',
+    VAPID_PUBLIC_KEY: 'public-key',
+    VAPID_PRIVATE_KEY: 'private-key',
+    WEB_PUSH_TTL_SECONDS: '300',
+    NOTIFICATION_RETRY_DELAYS_SECONDS: '30,90,300',
+    KAKAO_REST_API_KEY: 'kakao-key',
+  }, providers);
+  expect(invalidSubject.ready === false, 'invalid VAPID subject must fail closed');
+  expect(invalidSubject.dependencies == null, 'invalid VAPID subject must not compose dependencies');
+  expect(invalidSubject.missing.includes('VAPID_SUBJECT'), 'invalid VAPID subject must remain missing');
 
   const ready = module.createNotificationActivationReadiness({
     DB: db,

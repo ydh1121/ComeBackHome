@@ -10,12 +10,16 @@ const workerEntry = await readFile(new URL('../worker/index.ts', import.meta.url
 const schedulerSource = await readFile(new URL('../worker/scheduler.ts', import.meta.url), 'utf8');
 
 expect(
-  workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime)'),
-  'Worker scheduled entry must point at fail-closed composite cycle',
+  workerEntry.includes('runScheduledNotificationCycle('),
+  'Worker scheduled entry must point at composite notification cycle',
 );
 expect(
-  !workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime,'),
-  'Worker scheduled entry must not inject live notification dependencies yet',
+  workerEntry.includes('readiness.dependencies ?? undefined'),
+  'Worker scheduled entry must inject dependencies only through fail-closed readiness',
+);
+expect(
+  workerEntry.includes('createNotificationActivationReadiness'),
+  'Worker scheduled entry must use activation readiness',
 );
 for (const text of [
   'export async function runScheduledNotificationCycle',
