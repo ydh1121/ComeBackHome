@@ -75,6 +75,7 @@ export interface TransitSearchActions {
   addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint>;
 }
 export interface BusRouteActions {
+  listRoutes(personId: EntityId, kind: PlaceKind, accessPointId: EntityId): Promise<import('../../domain/models').BusRouteOption[]>;
   setAlias(accessPointId: EntityId, userLabel: string): Promise<void>;
   selectRoute(accessPointId: EntityId, providerRouteId: string): Promise<void>;
 }
