@@ -14,6 +14,8 @@ import {
   isPresenceEventAuthorized,
   type PresenceEventType,
 } from './presence-event-ingest';
+import { createNotificationActivationReadiness } from './notification-activation-readiness';
+import { processNotificationOutbox } from './scheduler';
 
 type JsonObject = Record<string, unknown>;
 
@@ -285,7 +287,19 @@ export async function handleApiRequest(
           type,
         },
       );
-      return json({ event }, 202);
+
+      let delivery = null;
+      if (event.queued) {
+        const readiness = createNotificationActivationReadiness(env, providerRuntime);
+        if (readiness.ready) {
+          delivery = await processNotificationOutbox(
+            readiness.dependencies.outbox,
+            Date.now(),
+          );
+        }
+      }
+
+      return json({ event, delivery }, 202);
     }
 
     if (segments.length === 2 && segments[1] === 'bootstrap' && request.method === 'GET') {
