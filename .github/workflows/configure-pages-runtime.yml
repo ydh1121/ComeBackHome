@@ -92,7 +92,7 @@ jobs:
             d1_databases: {
               DB: { id: db.database_id },
             },
-            services: {},
+            services: { CBH_RUNTIME: null },
             compatibility_flags: ['nodejs_compat'],
           };
 
