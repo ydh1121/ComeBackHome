@@ -164,42 +164,18 @@ export async function handleApiRequest(
             if (![centerX, centerY].every(Number.isFinite)) {
               return json({ error: 'centerX/centerY are required.' }, 400);
             }
-            if (!env.KAKAO_REST_API_KEY) {
-              return json({ error: 'Kakao REST API key is unavailable.' }, 503);
-            }
 
-            const target = new URL('https://dapi.kakao.com/v2/maps/staticmap');
-            target.searchParams.set('center', centerX + ',' + centerY);
-            target.searchParams.set('size', '640x420');
-            target.searchParams.set('format', 'png');
-            target.searchParams.set('scale', '1');
-            target.searchParams.set('lv', '4');
-            target.searchParams.set('coord', 'WGS84');
-            target.searchParams.set('logo_pos', 'BOTTOM_RIGHT');
-            target.searchParams.append('markers', 'location:' + centerX + ',' + centerY + '|option:false');
-
-            const markerValues = url.searchParams.getAll('marker').slice(0, 4);
-            for (const marker of markerValues) {
+            const markers = url.searchParams.getAll('marker').slice(0, 4).flatMap((marker) => {
               const [xRaw, yRaw] = marker.split(',');
               const x = Number(xRaw);
               const y = Number(yRaw);
-              if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-              target.searchParams.append('markers', 'location:' + x + ',' + y + '|option:false');
-            }
-
-            const response = await fetch(target.toString(), {
-              headers: {
-                Authorization: 'KakaoAK ' + env.KAKAO_REST_API_KEY,
-                Accept: 'image/png',
-              },
+              return Number.isFinite(x) && Number.isFinite(y) ? [{ x, y }] : [];
             });
-            if (!response.ok) {
-              return json({ error: 'Kakao static map request failed: HTTP ' + response.status }, 502);
-            }
-            return new Response(response.body, {
+            const image = await providerRuntime.kakao.staticMap({ x: centerX, y: centerY }, markers);
+            return new Response(image.body, {
               status: 200,
               headers: {
-                'Content-Type': response.headers.get('content-type') ?? 'image/png',
+                'Content-Type': image.contentType,
                 'Cache-Control': 'no-store',
               },
             });
