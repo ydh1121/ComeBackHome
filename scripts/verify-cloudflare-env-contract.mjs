@@ -17,6 +17,8 @@ const required = [
   'NOTIFICATION_RETRY_DELAYS_SECONDS',
   'PROVIDER_RUNTIME_ENABLED',
   'PUSH_DELIVERY_ENABLED',
+  'VITE_CBH_RUNTIME',
+  'VITE_CBH_PROVIDER_RUNTIME',
   'VITE_CBH_VAPID_PUBLIC_KEY',
 ];
 
@@ -41,6 +43,14 @@ expect(
 expect(
   /^PUSH_DELIVERY_ENABLED=0$/m.test(env),
   '.env.example must keep push delivery disabled',
+);
+expect(
+  /^VITE_CBH_RUNTIME=mock$/m.test(env),
+  '.env.example must keep client runtime on mock before activation',
+);
+expect(
+  /^VITE_CBH_PROVIDER_RUNTIME=mock$/m.test(env),
+  '.env.example must keep client provider runtime on mock before activation',
 );
 expect(
   /^VITE_CBH_VAPID_PUBLIC_KEY=$/m.test(env),
