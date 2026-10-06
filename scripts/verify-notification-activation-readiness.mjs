@@ -5,23 +5,24 @@ import { createServer as createViteServer } from 'vite';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
-const workerEntry = await readFile(new URL('../worker/index.ts', import.meta.url), 'utf8');
+const pagesEntry = await readFile(new URL('../functions/api/_middleware.ts', import.meta.url), 'utf8');
+const apiSource = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
 const readinessSource = await readFile(
   new URL('../worker/notification-activation-readiness.ts', import.meta.url),
   'utf8',
 );
 
 expect(
-  workerEntry.includes('createNotificationActivationReadiness'),
-  'Worker scheduled entry must compose activation readiness after runtime activation approval',
+  pagesEntry.includes('createProviderRuntime'),
+  'Pages entry must compose provider runtime from Pages env',
 );
 expect(
-  workerEntry.includes('readiness.dependencies ?? undefined'),
-  'Worker scheduled entry must pass only fail-closed readiness dependencies',
+  apiSource.includes('createNotificationActivationReadiness'),
+  'Pages API must compose notification activation readiness before delivery',
 );
 expect(
-  workerEntry.includes('createProviderRuntime(env, globalThis.fetch.bind(globalThis))'),
-  'Worker scheduled entry must compose provider runtime from Worker env',
+  apiSource.includes('readiness.dependencies.outbox'),
+  'Pages API must pass only fail-closed outbox dependencies to delivery',
 );
 for (const key of [
   'VAPID_SUBJECT',
