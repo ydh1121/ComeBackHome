@@ -248,9 +248,24 @@ jobs:
             headers: { Accept: 'application/json' },
             redirect: 'manual',
           });
-          const healthBody = await healthResponse.json().catch(() => null);
+          const healthText = await healthResponse.text();
+          let healthBody = null;
+          try {
+            healthBody = JSON.parse(healthText);
+          } catch {
+            healthBody = null;
+          }
           if (!healthResponse.ok || healthBody?.ok !== true) {
-            throw new Error('Pages same-origin API proxy failed: HTTP ' + healthResponse.status);
+            const contentType = healthResponse.headers.get('content-type') ?? 'unknown';
+            const preview = healthText.slice(0, 120).replace(/\s+/g, ' ');
+            throw new Error(
+              'Pages same-origin API proxy failed: HTTP ' +
+              healthResponse.status +
+              ' content-type=' +
+              contentType +
+              ' body=' +
+              preview,
+            );
           }
 
           console.log(JSON.stringify({
