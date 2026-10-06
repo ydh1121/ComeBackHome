@@ -8,16 +8,14 @@ export type NotificationOperationalRequirement =
   | 'PRESENCE_EVENT_INGEST_TOKEN'
   | 'PUSH_DELIVERY_ENABLED'
   | 'PROVIDER_RUNTIME_ENABLED'
-  | 'LIVE_SCHEDULER_WIRING'
   | 'REMOTE_D1_MIGRATIONS'
-  | 'CLOUDFLARE_CRON'
-  | 'SAME_ORIGIN_DEPLOYMENT';
+  | 'SAME_ORIGIN_DEPLOYMENT'
+  | 'PAGES_DIRECT_BINDINGS';
 
 export interface NotificationActivationPreflightOptions {
-  schedulerWired?: boolean;
   remoteD1MigrationsApplied?: boolean;
-  cronConfigured?: boolean;
   sameOriginDeploymentConfigured?: boolean;
+  pagesDirectBindingsConfigured?: boolean;
 }
 
 export interface NotificationActivationPreflight {
@@ -55,17 +53,14 @@ export function evaluateNotificationActivationPreflight(
   if (!providerRuntimeEnabled) {
     operationsPending.push('PROVIDER_RUNTIME_ENABLED');
   }
-  if (options.schedulerWired !== true) {
-    operationsPending.push('LIVE_SCHEDULER_WIRING');
-  }
   if (options.remoteD1MigrationsApplied !== true) {
     operationsPending.push('REMOTE_D1_MIGRATIONS');
   }
-  if (options.cronConfigured !== true) {
-    operationsPending.push('CLOUDFLARE_CRON');
-  }
   if (options.sameOriginDeploymentConfigured !== true) {
     operationsPending.push('SAME_ORIGIN_DEPLOYMENT');
+  }
+  if (options.pagesDirectBindingsConfigured !== true) {
+    operationsPending.push('PAGES_DIRECT_BINDINGS');
   }
 
   return {
