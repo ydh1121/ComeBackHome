@@ -1,6 +1,6 @@
 import type { EntityId, ISODate } from '../domain/common';
-import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
-import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
+import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, PresenceState, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
+import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, PresenceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
 
@@ -31,6 +31,45 @@ export class MockScheduleRepository implements ScheduleRepository {
       else draft.push(clone(entry));
     }
     this.store.mutate((state) => { state.schedules = draft; });
+  }
+}
+
+
+export class MockPresenceRepository implements PresenceRepository {
+  private readonly state = new Map<string, PresenceState>();
+  private readonly events = new Set<string>();
+
+  async get(personId: EntityId): Promise<PresenceState | null> {
+    return clone(this.state.get(personId) ?? null);
+  }
+
+  async record(input: {
+    eventId: string;
+    personId: EntityId;
+    type: 'LEFT_WORK' | 'ARRIVED_HOME';
+    acceptedAt: string;
+    workDate: ISODate;
+  }): Promise<{ state: PresenceState; duplicate: boolean }> {
+    if (this.events.has(input.eventId)) {
+      const current = this.state.get(input.personId);
+      if (!current) throw new Error('Presence event exists without current state.');
+      return { state: clone(current), duplicate: true };
+    }
+    this.events.add(input.eventId);
+    const current = this.state.get(input.personId);
+    const sameDate = current?.workDate === input.workDate;
+    const next: PresenceState = {
+      personId: input.personId,
+      workDate: input.workDate,
+      ...(input.type === 'LEFT_WORK'
+        ? { leftWorkAt: input.acceptedAt }
+        : sameDate && current?.leftWorkAt
+          ? { leftWorkAt: current.leftWorkAt }
+          : {}),
+      ...(input.type === 'ARRIVED_HOME' ? { arrivedHomeAt: input.acceptedAt } : {}),
+    };
+    this.state.set(input.personId, next);
+    return { state: clone(next), duplicate: false };
   }
 }
 
