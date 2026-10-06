@@ -8,7 +8,8 @@ const config = JSON.parse(raw);
 
 expect(config.name === 'come-back-home-runtime', 'production Worker staging name mismatch');
 expect(config.main === './worker/index.ts', 'Worker entry mismatch');
-expect(config.preview_urls === false, 'Worker preview URLs must be disabled for the protected runtime');
+expect(config.preview_urls === false, 'Worker preview URLs must be disabled for the backend-only runtime');
+expect(config.workers_dev === false, 'Public workers.dev route must be disabled for the backend-only runtime');
 expect(config.assets?.directory === './dist', 'Worker static asset directory mismatch');
 expect(config.assets?.binding === 'ASSETS', 'Worker asset binding mismatch');
 expect(
@@ -76,24 +77,27 @@ if (pushDeliveryEnabled === '1') {
 }
 
 if (config.vars?.MUTATIONS_ENABLED === '1') {
-  const access = JSON.parse(
-    await readFile(new URL('../runtime-evidence/cloudflare-access-comebackhome.json', import.meta.url), 'utf8'),
+  const pagesProxy = await readFile(
+    new URL('../functions/api/_middleware.js', import.meta.url),
+    'utf8',
   );
-  expect(access.name === 'ComeBackHome Runtime', 'protected mutation mode requires ComeBackHome Access app');
+  const pagesRestoreWorkflow = await readFile(
+    new URL('../.github/workflows/restore-pages-primary-runtime.yml', import.meta.url),
+    'utf8',
+  );
   expect(
-    access.domain === 'come-back-home-runtime.ydh1121.workers.dev',
-    'protected mutation mode Access domain mismatch',
+    pagesProxy.includes('CBH_RUNTIME') && pagesProxy.includes('service.fetch(context.request)'),
+    'mutation runtime requires the Pages same-origin Worker service binding proxy',
   );
-  expect(access.type === 'self_hosted', 'protected mutation mode Access type mismatch');
-  expect(access.policyCount === 1, 'protected mutation mode requires exactly one owner policy');
-  expect(access.decision === 'allow', 'protected mutation mode requires allow policy');
   expect(
-    Array.isArray(access.includeSelectorTypes) &&
-    access.includeSelectorTypes.length === 1 &&
-    access.includeSelectorTypes[0] === 'email',
-    'protected mutation mode requires one email selector',
+    pagesRestoreWorkflow.includes("CBH_RUNTIME") &&
+      pagesRestoreWorkflow.includes("service: 'come-back-home-runtime'"),
+    'mutation runtime requires Pages CBH_RUNTIME service binding configuration',
   );
-  expect(access.identityValuesExposed === false, 'Access evidence must not expose identity values');
+  expect(
+    pagesRestoreWorkflow.includes('https://come-back-home.pages.dev'),
+    'mutation runtime requires the canonical Pages user origin',
+  );
 } else {
   expect(
     config.vars?.MUTATIONS_ENABLED === '0',
