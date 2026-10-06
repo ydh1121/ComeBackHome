@@ -16,5 +16,13 @@
   "vars": {
     "PUSH_DELIVERY_ENABLED": "0",
     "PROVIDER_RUNTIME_ENABLED": "0"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "come-back-home-db",
+      "database_id": "5b5d6397-042c-465b-8411-9e67555eaeb4",
+      "migrations_dir": "db/migrations"
+    }
+  ]
 }

@@ -1,6 +1,9 @@
 {
   "databaseName": "come-back-home-db",
-  "exists": false,
-  "databaseId": null,
-  "createdAt": null
+  "exists": true,
+  "databaseId": "5b5d6397-042c-465b-8411-9e67555eaeb4",
+  "createdAt": "2026-10-06T06:43:11.489Z",
+  "createdNow": true,
+  "primaryLocationHint": "apac",
+  "binding": "DB"
 }
