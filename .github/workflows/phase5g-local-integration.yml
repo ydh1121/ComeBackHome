@@ -14,6 +14,10 @@ on:
       - "worker/**"
       - "src/app/**"
       - "src/config/runtime.ts"
+      - "src/application/services/**"
+      - "src/features/schedule/**"
+      - "src/pages/Schedule*.tsx"
+      - "scripts/verify-phase4b-schedule.mjs"
       - "src/application/contracts/**"
       - "src/providers/http/**"
       - "scripts/verify-phase5g-local*.mjs"
@@ -95,6 +99,10 @@ on:
       - "worker/**"
       - "src/app/**"
       - "src/config/runtime.ts"
+      - "src/application/services/**"
+      - "src/features/schedule/**"
+      - "src/pages/Schedule*.tsx"
+      - "scripts/verify-phase4b-schedule.mjs"
       - "src/providers/http/**"
       - "scripts/verify-phase5g-local*.mjs"
       - "scripts/verify-phase5h-*.mjs"
@@ -202,6 +210,9 @@ jobs:
 
       - name: Verify provider E2E
         run: npm run verify:provider-e2e
+
+      - name: Verify schedule workflow
+        run: npm run verify:schedule
 
       - name: Verify import workflow
         run: npm run verify:import

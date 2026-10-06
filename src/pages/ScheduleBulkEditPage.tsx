@@ -3,12 +3,20 @@ import type { ScheduleEntry } from '../domain/models';
 import { useNavigate } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { ScheduleRangePicker } from '../features/schedule/ScheduleRangePicker';
+import { isIsoDate } from '../features/schedule/date-format';
 import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { BackButton } from '../shared/components/BackButton';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import './schedule-page.css';
 
 const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+
+function currentLocalIsoDate(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return now.getFullYear() + '-' + month + '-' + day;
+}
 
 export function ScheduleBulkEditPage() {
   const navigate = useNavigate();
@@ -31,12 +39,14 @@ interface BulkFormProps {
 
 function BulkForm({ entries, onApply }: BulkFormProps) {
   const first = entries[0];
-  const [from, setFrom] = useState(first?.date ?? '');
-  const [to, setTo] = useState(entries[entries.length - 1]?.date ?? first?.date ?? '');
+  const fallbackDate = first?.date ?? currentLocalIsoDate();
+  const [from, setFrom] = useState(fallbackDate);
+  const [to, setTo] = useState(entries[entries.length - 1]?.date ?? fallbackDate);
   const [weekdays, setWeekdays] = useState<number[]>([0,1,2,3,4,5,6]);
   const [start, setStart] = useState(first?.start ?? '');
   const [end, setEnd] = useState(first?.end ?? '');
   const form = useFormRuntimeState();
+  const canApply = isIsoDate(from) && isIsoDate(to) && from <= to && weekdays.length > 0 && Boolean(start) && Boolean(end);
 
   const toggleWeekday = (day: number) => {
     setWeekdays((current) => current.includes(day)
@@ -67,7 +77,7 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
           <label className="form-field"><span className="form-label">퇴근</span><input className="input" type="time" value={end} onChange={(event) => { setEnd(event.target.value); form.markDirty(); }} /></label>
         </div>
       </div>
-      <button type="button" className="cta" disabled={form.state === 'SAVING'} onClick={() => form.save(() => onApply({ from, to, weekdays, start, end }))}>{form.state === 'SAVING' ? '적용 중' : form.state === 'SAVED' ? '적용됨' : '적용'}</button>
+      <button type="button" className="cta" disabled={form.state === 'SAVING' || !canApply} onClick={() => form.save(() => onApply({ from, to, weekdays, start, end }))}>{form.state === 'SAVING' ? '적용 중' : form.state === 'SAVED' ? '적용됨' : '적용'}</button>
     </section>
   );
 }

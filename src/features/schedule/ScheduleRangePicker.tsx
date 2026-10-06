@@ -14,7 +14,7 @@ interface Props {
 
 export function ScheduleRangePicker({ entries, from, to, onChange }: Props) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>('wheel');
+  const [mode, setMode] = useState<Mode>(() => entries.length ? 'wheel' : 'calendar');
   const [step, setStep] = useState<'start' | 'end'>('start');
   const [fromText, setFromText] = useState(from);
   const [toText, setToText] = useState(to);

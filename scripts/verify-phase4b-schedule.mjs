@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
+import { createServer as createViteServer } from 'vite';
+import { fileURLToPath } from 'node:url';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
+const expect = (condition, message) => { if (!condition) failures.push(message); };
 const overview = await read('../src/pages/SchedulePage.tsx');
 const bulk = await read('../src/pages/ScheduleBulkEditPage.tsx');
 const day = await read('../src/pages/ScheduleDayEditPage.tsx');
@@ -25,6 +29,10 @@ for (const text of ['스크롤로 선택','직접 입력','달력에서 선택']
 
 if (!actions.includes('class ScheduleService')) failures.push('ScheduleService missing');
 if (!actions.includes('saveDay(') || !actions.includes('applyBulk(')) failures.push('schedule mutations missing');
+if (!actions.includes('enumerateScheduleDates')) failures.push('bulk schedule date materialization missing');
+if (!bulk.includes('currentLocalIsoDate')) failures.push('empty schedule date fallback missing');
+if (!bulk.includes('!canApply')) failures.push('bulk empty-input apply guard missing');
+if (!range.includes("entries.length ? 'wheel' : 'calendar'")) failures.push('empty schedule range picker must default to calendar');
 if (!router.includes("path === '/schedule'")) failures.push('schedule route missing');
 if (!router.includes("path === '/schedule/edit'")) failures.push('bulk route missing');
 if (!router.includes("path === '/schedule/:date/edit'")) failures.push('day route missing');
@@ -35,6 +43,69 @@ if (!css.includes('.schedule-page .range-picker-v13')) failures.push('range styl
 for (const [name, source] of [['overview', overview], ['bulk', bulk], ['day', day]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
   if (source.includes('contracts/repositories')) failures.push(name + ' imports repositories');
+}
+
+const vite = await createViteServer({
+  root,
+  appType: 'custom',
+  logLevel: 'error',
+  server: { middlewareMode: true },
+});
+
+try {
+  const { ScheduleService } = await vite.ssrLoadModule('/src/application/services/ApplicationActions.ts');
+
+  let emptyBatch = [];
+  const emptyRepository = {
+    async list() { return []; },
+    async getByDate() { return null; },
+    async upsert() {},
+    async upsertMany(entries) { emptyBatch = structuredClone(entries); },
+  };
+  const selection = { getSelectedPersonId() { return 'person-1'; }, select() {} };
+  const emptyService = new ScheduleService(emptyRepository, selection);
+  await emptyService.applyBulk({
+    from: '2026-10-07',
+    to: '2026-10-10',
+    weekdays: [3, 5],
+    start: '09:00',
+    end: '18:00',
+  });
+
+  expect(emptyBatch.length === 2, 'empty schedule bulk input must create selected dates');
+  expect(emptyBatch.map((entry) => entry.date).join(',') === '2026-10-07,2026-10-09', 'bulk weekday materialization mismatch');
+  expect(emptyBatch.every((entry) => entry.personId === 'person-1' && entry.enabled === true), 'bulk-created schedule identity/state mismatch');
+  expect(emptyBatch.every((entry) => entry.start === '09:00' && entry.end === '18:00'), 'bulk-created schedule time mismatch');
+
+  const existingEntry = {
+    id: 'existing-1',
+    personId: 'person-1',
+    date: '2026-10-08',
+    enabled: false,
+    start: '08:00',
+    end: '17:00',
+  };
+  let mixedBatch = [];
+  const mixedRepository = {
+    async list() { return [structuredClone(existingEntry)]; },
+    async getByDate() { return null; },
+    async upsert() {},
+    async upsertMany(entries) { mixedBatch = structuredClone(entries); },
+  };
+  const mixedService = new ScheduleService(mixedRepository, selection);
+  await mixedService.applyBulk({
+    from: '2026-10-07',
+    to: '2026-10-08',
+    weekdays: [3, 4],
+    start: '10:00',
+    end: '19:00',
+  });
+
+  expect(mixedBatch.length === 2, 'mixed bulk input must include new and existing dates');
+  expect(mixedBatch.find((entry) => entry.date === '2026-10-08')?.id === 'existing-1', 'existing schedule id must be preserved');
+  expect(mixedBatch.every((entry) => entry.start === '10:00' && entry.end === '19:00'), 'mixed bulk time update mismatch');
+} finally {
+  await vite.close();
 }
 
 if (failures.length) {

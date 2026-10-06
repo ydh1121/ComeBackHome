@@ -48,6 +48,22 @@ export class PersonSelectionService implements PersonSelectionActions {
   }
 }
 
+function enumerateScheduleDates(from: string, to: string): string[] {
+  const start = Date.parse(from + 'T00:00:00Z');
+  const end = Date.parse(to + 'T00:00:00Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || !Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+    throw new Error('Schedule range is invalid.');
+  }
+
+  const dayMs = 86_400_000;
+  const dayCount = Math.floor((end - start) / dayMs) + 1;
+  if (dayCount > 366) throw new Error('Schedule range is too large.');
+
+  return Array.from({ length: dayCount }, (_, index) =>
+    new Date(start + index * dayMs).toISOString().slice(0, 10),
+  );
+}
+
 export class ScheduleService implements ScheduleActions {
   constructor(
     private readonly schedules: ScheduleRepository,
@@ -71,21 +87,29 @@ export class ScheduleService implements ScheduleActions {
   async applyBulk(rule: ScheduleBulkRule): Promise<void> {
     const personId = this.selection.getSelectedPersonId();
     if (!personId) throw new Error('Selected person is required.');
+
     const entries = await this.schedules.list(personId);
+    const byDate = new Map(entries.map((entry) => [entry.date, entry]));
     const weekdays = new Set(rule.weekdays);
+    const targetDates = enumerateScheduleDates(rule.from, rule.to)
+      .filter((date) => weekdays.size === 0 || weekdays.has(new Date(date + 'T00:00:00Z').getUTCDay()));
 
-    const updated = entries.flatMap((entry) => {
-      const weekday = new Date(entry.date + 'T00:00:00Z').getUTCDay();
-      const inRange = entry.date >= rule.from && entry.date <= rule.to;
-      const daySelected = weekdays.size === 0 || weekdays.has(weekday);
-      if (!inRange || !daySelected) return [];
+    const updated = targetDates.map((date) => {
+      const current = byDate.get(date);
+      const start = rule.start || current?.start || '';
+      const end = rule.end || current?.end || '';
+      if (!start || !end) {
+        throw new Error('Bulk schedule start and end times are required when creating dates.');
+      }
 
-      return [{
-        ...entry,
+      return {
+        id: current?.id ?? crypto.randomUUID(),
+        personId,
+        date,
         enabled: true,
-        start: rule.start || entry.start,
-        end: rule.end || entry.end,
-      }];
+        start,
+        end,
+      };
     });
 
     await this.schedules.upsertMany(updated);
