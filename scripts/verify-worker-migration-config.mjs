@@ -117,10 +117,19 @@ if (config.d1_databases != null) {
   );
 }
 
-expect(
-  !Array.isArray(config.triggers?.crons),
-  'Cron must not be activated in staging config before remote readiness',
-);
+const cronSchedules = config.triggers?.crons;
+if (cronSchedules != null) {
+  expect(
+    Array.isArray(cronSchedules) &&
+      cronSchedules.length === 1 &&
+      cronSchedules[0] === '* * * * *',
+    'Cron must be absent or use the canonical one-minute schedule only',
+  );
+  if (Array.isArray(cronSchedules) && cronSchedules.length > 0) {
+    expect(providerRuntimeEnabled === '1', 'Cron activation requires provider runtime enabled');
+    expect(pushDeliveryEnabled === '1', 'Cron activation requires push delivery enabled');
+  }
+}
 
 if (failures.length) {
   console.error(failures.join('\n'));
