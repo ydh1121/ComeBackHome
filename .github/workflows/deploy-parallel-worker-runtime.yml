@@ -61,6 +61,44 @@ jobs:
       - name: Build D1 API runtime with provider enabled
         run: npm run build
 
+      - name: Verify browser VAPID public key parity
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
+          const expected = config.vars?.VAPID_PUBLIC_KEY ?? '';
+          if (!/^[A-Za-z0-9_-]{80,100}$/.test(expected)) {
+            throw new Error('Worker public VAPID key is missing or invalid');
+          }
+
+          const files = [];
+          const walk = (dir) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) walk(full);
+              else files.push(full);
+            }
+          };
+          walk('dist');
+
+          const matched = files.some((file) => {
+            try {
+              return fs.readFileSync(file, 'utf8').includes(expected);
+            } catch {
+              return false;
+            }
+          });
+
+          if (!matched) {
+            throw new Error('Built browser assets do not contain the Worker public VAPID key');
+          }
+
+          console.log('Browser/Worker VAPID public key parity verified without exposing key material');
+          NODE
+
       - name: Deploy isolated Worker
         run: npx wrangler deploy --config wrangler.jsonc
 
