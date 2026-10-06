@@ -372,16 +372,14 @@ export async function handleApiRequest(
             const route: SavedCommuteRoute = {
               ...current,
               label: typeof body.label === 'string' && body.label.trim() ? body.label.trim() : current.label,
-              ...(typeof body.originAccessPointId === 'string' && body.originAccessPointId.trim()
-                ? { originAccessPointId: body.originAccessPointId.trim() }
-                : body.originAccessPointId === null
-                  ? { originAccessPointId: undefined }
-                  : current.originAccessPointId
-                    ? { originAccessPointId: current.originAccessPointId }
-                    : {}),
               viaAccessPointIds,
               active: typeof body.active === 'boolean' ? body.active : current.active,
             };
+            if (typeof body.originAccessPointId === 'string' && body.originAccessPointId.trim()) {
+              route.originAccessPointId = body.originAccessPointId.trim();
+            } else if (body.originAccessPointId === null) {
+              delete route.originAccessPointId;
+            }
             await commute.saveSavedRoute(route);
             return json({ route });
           }
