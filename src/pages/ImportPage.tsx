@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import type { ImportInputFile } from '../application/contracts/actions';
@@ -22,7 +22,9 @@ export function ImportPage() {
   const navigate = useNavigate();
   const services = useApplicationServices();
   const workflow = useImportWorkflow();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const workbookInputRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   if (workflow.status === 'loading') {
     return <section className="import-page" data-page="ImportPage" data-state="LOADING"><div className="import-message">가져오기 정보를 불러오는 중</div></section>;
@@ -35,26 +37,47 @@ export function ImportPage() {
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    await services.actions.importFiles.accept(Array.from(files).map(classifyFile));
-    if (inputRef.current) inputRef.current.value = '';
+    setImportError(null);
+    try {
+      await services.actions.importFiles.accept(Array.from(files).map(classifyFile));
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : '근무표를 인식하지 못했습니다.');
+    } finally {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      if (workbookInputRef.current) workbookInputRef.current.value = '';
+    }
   };
 
   return (
     <section className="import-page" data-route="/import" data-page="ImportPage" data-state="FILES_SELECTED">
       <h1 className="page-title">가져오기</h1>
 
-      <button type="button" className="upload" onClick={() => inputRef.current?.click()}>
+      <button type="button" className="upload" onClick={() => imageInputRef.current?.click()}>
         <Icon name="upload" />
-        <span><b>파일 선택</b><span className="meta">엑셀 또는 이미지</span></span>
+        <span><b>근무표 이미지 추가</b><span className="meta">사진 · 스크린샷 여러 장 가능</span></span>
       </button>
       <input
-        ref={inputRef}
+        ref={imageInputRef}
         className="import-file-input"
         type="file"
-        accept=".xlsx,.xls,image/*"
+        accept="image/*"
         multiple
         onChange={(event) => onFiles(event.target.files)}
       />
+
+      <button type="button" className="import-workbook-button" onClick={() => workbookInputRef.current?.click()}>
+        엑셀 파일 가져오기
+      </button>
+      <input
+        ref={workbookInputRef}
+        className="import-file-input"
+        type="file"
+        accept=".xlsx,.xls"
+        multiple
+        onChange={(event) => onFiles(event.target.files)}
+      />
+
+      {importError ? <div className="import-error" role="alert">{importError}</div> : null}
 
       <div className="import-file-list">
         {batch.files.map((file) => (
