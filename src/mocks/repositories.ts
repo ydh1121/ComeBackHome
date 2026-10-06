@@ -126,6 +126,23 @@ export class MockImportRepository implements ImportRepository {
       }
     });
   }
+  async setDetectedPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void> {
+    this.store.mutate((state) => {
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
+      if (!person || !batch) return;
+      person.ignored = ignored;
+      if (ignored) person.matchedPersonId = null;
+      for (const item of batch.reviewItems) {
+        if (item.detectedPersonId !== detectedPersonId) continue;
+        if (ignored) {
+          item.personId = null;
+          item.resolution = null;
+        }
+      }
+    });
+  }
+
   async setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {
     this.store.mutate((state) => {
       const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
