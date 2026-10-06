@@ -1,5 +1,5 @@
 import type { BusRouteActions, CommitImportReviewAction, CommuteActions, ImportFileSelectionAction, ImportMatchActions, ImportReviewActions, NotificationActions, PersonActions, PersonSelectionActions, PlaceActions, ScheduleActions, TransitAccessActions, TransitSearchActions } from './actions';
-import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from './repositories';
+import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, PresenceRepository, ScheduleRepository, TodayRepository } from './repositories';
 import type { ComeBackHomeQueries } from '../queries/ComeBackHomeQueries';
 import type { PresenceAutomationGateway } from './providers';
 
@@ -7,6 +7,7 @@ export interface RepositoryBundle {
   people: PersonRepository;
   schedules: ScheduleRepository;
   places: PlaceRepository;
+  presence: PresenceRepository;
   commute: CommuteRepository;
   imports: ImportRepository;
   notifications: NotificationRepository;
