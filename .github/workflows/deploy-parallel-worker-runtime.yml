@@ -151,7 +151,14 @@ jobs:
           }
 
           const subdomain = accountBody.result.subdomain;
-          const workersDevEnabled = Boolean(scriptBody.result?.enabled ?? scriptBody.result?.previews_enabled ?? true);
+          const workersDevEnabled = scriptBody.result?.enabled === true;
+          const previewUrlsEnabled = scriptBody.result?.previews_enabled === true;
+          if (!workersDevEnabled) {
+            throw new Error('Production workers.dev route must remain enabled before cutover');
+          }
+          if (previewUrlsEnabled) {
+            throw new Error('Preview URLs must be disabled before replacement Worker verification');
+          }
           const url = 'https://come-back-home-runtime.' + subdomain + '.workers.dev/';
 
           fs.mkdirSync('runtime-evidence', { recursive: true });
@@ -162,6 +169,7 @@ jobs:
               workerName: 'come-back-home-runtime',
               accountSubdomain: subdomain,
               workersDevEnabled,
+              previewUrlsEnabled,
               url,
               clientRuntime: 'api',
               accessProtected: true,

@@ -8,7 +8,7 @@ const config = JSON.parse(raw);
 
 expect(config.name === 'come-back-home-runtime', 'production Worker staging name mismatch');
 expect(config.main === './worker/index.ts', 'Worker entry mismatch');
-expect(config.preview_urls === true, 'Worker preview URLs must be enabled');
+expect(config.preview_urls === false, 'Worker preview URLs must be disabled for the protected runtime');
 expect(config.assets?.directory === './dist', 'Worker static asset directory mismatch');
 expect(config.assets?.binding === 'ASSETS', 'Worker asset binding mismatch');
 expect(
