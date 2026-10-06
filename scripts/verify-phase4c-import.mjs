@@ -11,8 +11,10 @@ const router = await read('../src/app/router.tsx');
 const runtime = await read('../src/application/contracts/runtime.ts');
 const composition = await read('../src/app/composition.ts');
 const commit = await read('../src/application/use-cases/commitImportReview.ts');
+const schedulePage = await read('../src/pages/SchedulePage.tsx');
+const browserImports = await read('../src/providers/browser/BrowserImportRepository.ts');
 
-for (const text of ['type="file"','엑셀 또는 이미지','인식 결과 보기','services.actions.importFiles.accept']) {
+for (const text of ['type="file"','근무표 이미지 추가','엑셀 파일 가져오기','인식 결과 보기','services.actions.importFiles.accept']) {
   if (!root.includes(text)) failures.push('root missing ' + text);
 }
 for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','services.actions.importMatch.cyclePersonMatch']) {
@@ -32,6 +34,11 @@ if (!runtime.includes('importMatch: ImportMatchActions')) failures.push('match a
 if (!runtime.includes('importReview: ImportReviewActions')) failures.push('review action missing');
 if (!composition.includes('new WorkbookImportFileSelectionAction')) failures.push('real workbook file action not composed');
 if (!composition.includes('new ReadExcelWorkbookParser')) failures.push('real workbook parser not composed');
+if (!composition.includes('new AdaptiveScheduleImageRecognizer')) failures.push('production image recognizer not composed');
+if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.push('production OCR extractor not composed');
+if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
+if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v1'")) failures.push('browser import persistence missing');
+if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근무표 이미지 가져오기')) failures.push('schedule-to-image-import entry missing');
 if (!commit.includes('schedules.upsertMany(entries)')) failures.push('schedule batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
 if (!commit.includes("item.resolution === 'KEEP'")) failures.push('KEEP commit rule missing');
