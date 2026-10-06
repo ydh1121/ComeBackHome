@@ -3,7 +3,7 @@
   "accountSubdomain": "ydh1121",
   "workersDevEnabled": true,
   "url": "https://come-back-home-runtime.ydh1121.workers.dev/",
-  "clientRuntime": "mock",
+  "clientRuntime": "api",
   "providerRuntimeEnabled": false,
   "pushDeliveryEnabled": false,
   "d1Binding": "DB",
