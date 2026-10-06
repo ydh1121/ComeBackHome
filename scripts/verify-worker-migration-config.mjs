@@ -22,14 +22,58 @@ expect(
   'Worker SPA fallback mismatch',
 );
 
+const providerRuntimeEnabled = config.vars?.PROVIDER_RUNTIME_ENABLED;
+const pushDeliveryEnabled = config.vars?.PUSH_DELIVERY_ENABLED;
+
 expect(
-  config.vars?.PUSH_DELIVERY_ENABLED === '0',
-  'Worker staging config must keep push delivery disabled',
+  providerRuntimeEnabled === '0' || providerRuntimeEnabled === '1',
+  'PROVIDER_RUNTIME_ENABLED must be 0 or 1',
 );
 expect(
-  config.vars?.PROVIDER_RUNTIME_ENABLED === '0',
-  'Worker staging config must keep provider runtime disabled',
+  pushDeliveryEnabled === '0' || pushDeliveryEnabled === '1',
+  'PUSH_DELIVERY_ENABLED must be 0 or 1',
 );
+
+let secretInventory = null;
+if (providerRuntimeEnabled === '1' || pushDeliveryEnabled === '1') {
+  secretInventory = JSON.parse(
+    await readFile(new URL('../runtime-evidence/cloudflare-worker-secret-inventory.json', import.meta.url), 'utf8'),
+  );
+  expect(secretInventory.valuesExposed === false, 'Worker secret evidence must never expose values');
+  expect(Array.isArray(secretInventory.secretNames), 'Worker secret inventory must contain secret names');
+}
+
+if (providerRuntimeEnabled === '1') {
+  expect(
+    secretInventory?.secretNames?.includes('KAKAO_REST_API_KEY'),
+    'provider activation requires verified KAKAO_REST_API_KEY Worker secret',
+  );
+}
+
+if (pushDeliveryEnabled === '1') {
+  expect(providerRuntimeEnabled === '1', 'push activation requires provider runtime enabled first');
+  expect(
+    secretInventory?.secretNames?.includes('VAPID_PRIVATE_KEY'),
+    'push activation requires verified VAPID_PRIVATE_KEY Worker secret',
+  );
+  expect(
+    /^[A-Za-z0-9_-]{80,100}$/.test(config.vars?.VAPID_PUBLIC_KEY ?? ''),
+    'push activation requires a valid public VAPID key',
+  );
+  expect(
+    typeof config.vars?.VAPID_SUBJECT === 'string' && config.vars.VAPID_SUBJECT.length > 0,
+    'push activation requires VAPID_SUBJECT',
+  );
+  expect(
+    /^\d+$/.test(config.vars?.WEB_PUSH_TTL_SECONDS ?? '') &&
+      Number(config.vars.WEB_PUSH_TTL_SECONDS) > 0,
+    'push activation requires positive WEB_PUSH_TTL_SECONDS',
+  );
+  expect(
+    /^\d+(,\d+)*$/.test(config.vars?.NOTIFICATION_RETRY_DELAYS_SECONDS ?? ''),
+    'push activation requires retry delays',
+  );
+}
 
 if (config.vars?.MUTATIONS_ENABLED === '1') {
   const access = JSON.parse(
