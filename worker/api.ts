@@ -127,7 +127,7 @@ export async function handleApiRequest(
       segments[2] === 'scheduler-tick' &&
       request.method === 'POST'
     ) {
-      const configuredToken = env.SCHEDULER_INVOKE_TOKEN?.trim();
+      const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
       if (!configuredToken) return json({ error: 'Scheduler invocation is not configured.' }, 503);
       if (request.headers.get('Authorization') !== 'Bearer ' + configuredToken) return json({ error: 'Unauthorized.' }, 401);
       const body = await readObject(request);
