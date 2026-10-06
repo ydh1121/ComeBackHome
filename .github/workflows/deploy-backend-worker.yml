@@ -1,0 +1,100 @@
+name: Deploy Minimal Scheduler Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-backend-worker.yml"
+      - "wrangler.scheduler.jsonc"
+      - "worker/index.ts"
+      - "worker/runtime-types.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comebackhome-minimal-scheduler-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PRESENCE_EVENT_INGEST_TOKEN: ${{ secrets.PRESENCE_EVENT_INGEST_TOKEN }}
+      PAGES_ORIGIN: https://come-back-home.pages.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify scheduler-only source
+        run: |
+          npm run typecheck:worker
+          npm run verify:scheduled-notification
+
+      - name: Verify credentials
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$PRESENCE_EVENT_INGEST_TOKEN"
+
+      - name: Deploy scheduler-only Worker
+        run: npx wrangler deploy --config wrangler.scheduler.jsonc
+
+      - name: Verify private Worker surface and Cron
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const headers = { Authorization: 'Bearer ' + token };
+          const base = 'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/workers/scripts/come-back-home-runtime';
+          const subdomainResponse = await fetch(base + '/subdomain', { headers });
+          const subdomainBody = await subdomainResponse.json();
+          if (!subdomainResponse.ok || subdomainBody.success !== true) throw new Error('Failed to read scheduler Worker public surface');
+          if (subdomainBody.result?.enabled === true) throw new Error('workers.dev must remain disabled');
+          if (subdomainBody.result?.previews_enabled === true) throw new Error('Worker preview URLs must remain disabled');
+          const scheduleResponse = await fetch(base + '/schedules', { headers });
+          const scheduleBody = await scheduleResponse.json();
+          if (!scheduleResponse.ok || scheduleBody.success !== true) throw new Error('Failed to read scheduler Worker Cron');
+          const rows = Array.isArray(scheduleBody.result) ? scheduleBody.result : Array.isArray(scheduleBody.result?.schedules) ? scheduleBody.result.schedules : [];
+          const crons = rows.map((item) => item?.cron).filter(Boolean).sort();
+          if (JSON.stringify(crons) !== JSON.stringify(['* * * * *'])) throw new Error('Scheduler Worker Cron mismatch');
+          console.log(JSON.stringify({ role: 'scheduler-only', workersDevEnabled: false, previewUrlsEnabled: false, cron: '* * * * *', valuesExposed: false }));
+          NODE
+
+      - name: Verify scheduler to canonical Pages
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          let lastStatus = 0;
+          for (let attempt = 0; attempt < 60; attempt += 1) {
+            const response = await fetch(process.env.PAGES_ORIGIN + '/api/internal/scheduler-tick', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + process.env.PRESENCE_EVENT_INGEST_TOKEN, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scheduledTime: Date.now() }),
+            });
+            lastStatus = response.status;
+            if (response.ok) {
+              const body = await response.json().catch(() => null);
+              if (body?.result?.status !== 'processed') throw new Error('Scheduler endpoint returned unexpected status');
+              console.log(JSON.stringify({ canonicalPagesSchedulerTick: true, valuesExposed: false }));
+              process.exit(0);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10000));
+          }
+          throw new Error('Canonical Pages scheduler endpoint did not become ready; last HTTP ' + lastStatus);
+          NODE
