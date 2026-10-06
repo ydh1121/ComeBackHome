@@ -45,7 +45,9 @@ for (const text of [
   'handleApiRequest(request, env, providerRuntime)',
   'env.ASSETS.fetch(request)',
   'async scheduled(',
-  'ctx.waitUntil(runScheduledNotificationCycle',
+  'createNotificationActivationReadiness',
+  'readiness.dependencies ?? undefined',
+  'ctx.waitUntil(',
 ]) {
   if (!workerEntry.includes(text)) failures.push('Worker entrypoint missing ' + text);
 }
@@ -64,7 +66,9 @@ for (const text of [
 ]) {
   if (!scheduler.includes(text)) failures.push('safe scheduler/outbox contract missing ' + text);
 }
-if (!workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime)')) failures.push('production scheduled entry must use fail-closed composite cycle without live dependencies');
+if (!workerEntry.includes('createProviderRuntime(env, globalThis.fetch.bind(globalThis))')) failures.push('production scheduled entry must compose provider runtime');
+if (!workerEntry.includes('createNotificationActivationReadiness(env, providerRuntime)')) failures.push('production scheduled entry must compose fail-closed readiness');
+if (!workerEntry.includes('readiness.dependencies ?? undefined')) failures.push('production scheduled entry must pass dependencies only through readiness');
 if (workerEntry.includes('phase5u-local')) failures.push('production Worker imports Phase5U test harness');
 
 for (const text of [
