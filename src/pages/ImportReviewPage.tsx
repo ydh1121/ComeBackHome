@@ -22,10 +22,14 @@ export function ImportReviewPage() {
   }
 
   const batch = workflow.batch;
+  const ignoredDetectedIds = new Set(
+    batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
+  );
+  const visibleReviewItems = batch.reviewItems.filter((item) => !ignoredDetectedIds.has(item.detectedPersonId));
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
     item.imported.start != null && item.imported.end != null;
-  const allReviewed = batch.reviewItems.length > 0 &&
-    batch.reviewItems.every((item) =>
+  const allReviewed = visibleReviewItems.length > 0 &&
+    visibleReviewItems.every((item) =>
       item.personId != null &&
       (
         item.resolution === 'KEEP' ||
@@ -49,9 +53,9 @@ export function ImportReviewPage() {
       <BackButton fallbackTo={'/import/' + encodeURIComponent(batch.id) + '/structure'} />
       <h1 className="page-title">일정 확인</h1>
 
-      {batch.reviewItems.length ? (
+      {visibleReviewItems.length ? (
         <div className="import-review-list">
-          {batch.reviewItems.map((item) => {
+          {visibleReviewItems.map((item) => {
             const person = workflow.people.find((candidate) => candidate.id === item.personId);
             const importedComplete = importedTimeComplete(item);
             return (
