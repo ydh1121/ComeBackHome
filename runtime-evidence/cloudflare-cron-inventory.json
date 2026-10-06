@@ -1,7 +1,11 @@
 {
   "workerName": "come-back-home-runtime",
-  "expectedCrons": [],
-  "actualCrons": [],
+  "expectedCrons": [
+    "* * * * *"
+  ],
+  "actualCrons": [
+    "* * * * *"
+  ],
   "matches": true,
   "valuesExposed": false
 }

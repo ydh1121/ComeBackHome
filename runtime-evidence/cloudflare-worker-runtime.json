@@ -9,5 +9,5 @@
   "providerRuntimeEnabled": true,
   "pushDeliveryEnabled": true,
   "d1Binding": "DB",
-  "cronConfigured": false
+  "cronConfigured": true
 }
