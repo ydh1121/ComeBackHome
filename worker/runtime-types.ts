@@ -57,5 +57,5 @@ export interface ExecutionContextLike {
 
 export interface SchedulerWorkerEnv {
   PAGES_ORIGIN?: string;
-  SCHEDULER_INVOKE_TOKEN?: string;
+  PRESENCE_EVENT_INGEST_TOKEN?: string;
 }
