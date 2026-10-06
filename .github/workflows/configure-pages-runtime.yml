@@ -1,4 +1,4 @@
-name: Restore Pages Primary Runtime
+name: Configure Pages Runtime
 
 on:
   workflow_dispatch:
@@ -6,15 +6,14 @@ on:
     branches:
       - main
     paths:
-      - ".github/workflows/restore-pages-primary-runtime.yml"
-      - "runtime-activation/pages-primary.trigger"
+      - ".github/workflows/configure-pages-runtime.yml"
       - "functions/api/**"
 
 permissions:
   contents: read
 
 concurrency:
-  group: comebackhome-pages-primary-restore
+  group: comebackhome-pages-runtime-config
   cancel-in-progress: false
 
 jobs:
@@ -35,7 +34,7 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
 
-      - name: Restore Pages production config and backend binding
+      - name: Configure Pages production and backend binding
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -108,7 +107,7 @@ jobs:
           });
           const patchBody = await patchResponse.json();
           if (!patchResponse.ok || patchBody.success !== true) {
-            throw new Error('Failed to restore Pages production configuration');
+            throw new Error('Failed to configure Pages production');
           }
 
           const readbackResponse = await fetch(projectUrl, { headers: authHeaders });
@@ -183,7 +182,7 @@ jobs:
             form.set('branch', 'main');
             form.set('commit_hash', sourceCommit);
             form.set('commit_dirty', 'false');
-            form.set('commit_message', 'Restore Pages primary runtime');
+            form.set('commit_message', 'Configure Pages runtime');
 
             const response = await fetch(deployUrl, {
               method: 'POST',

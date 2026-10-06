@@ -1,14 +1,12 @@
-name: Deploy Parallel Worker Runtime
+name: Deploy Backend Worker
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - activation/runtime-phase1
       - main
     paths:
-      - ".github/workflows/deploy-parallel-worker-runtime.yml"
-      - "runtime-activation/deploy.trigger"
+      - ".github/workflows/deploy-backend-worker.yml"
       - "wrangler.jsonc"
       - "worker/**"
       - "src/**"
@@ -19,7 +17,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: comebackhome-parallel-worker-deploy
+  group: comebackhome-backend-worker-deploy
   cancel-in-progress: false
 
 jobs:
@@ -226,6 +224,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add runtime-evidence/cloudflare-worker-runtime.json runtime-evidence/cloudflare-cron-inventory.json
-          git diff --cached --quiet || git commit -m "chore: record parallel Worker deployment"
+          git diff --cached --quiet || git commit -m "chore: record backend Worker deployment"
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"

@@ -81,8 +81,8 @@ if (config.vars?.MUTATIONS_ENABLED === '1') {
     new URL('../functions/api/_middleware.js', import.meta.url),
     'utf8',
   );
-  const pagesRestoreWorkflow = await readFile(
-    new URL('../.github/workflows/restore-pages-primary-runtime.yml', import.meta.url),
+  const pagesRuntimeWorkflow = await readFile(
+    new URL('../.github/workflows/configure-pages-runtime.yml', import.meta.url),
     'utf8',
   );
   expect(
@@ -90,12 +90,12 @@ if (config.vars?.MUTATIONS_ENABLED === '1') {
     'mutation runtime requires the Pages same-origin Worker service binding proxy',
   );
   expect(
-    pagesRestoreWorkflow.includes("CBH_RUNTIME") &&
-      pagesRestoreWorkflow.includes("service: 'come-back-home-runtime'"),
+    pagesRuntimeWorkflow.includes("CBH_RUNTIME") &&
+      pagesRuntimeWorkflow.includes("service: 'come-back-home-runtime'"),
     'mutation runtime requires Pages CBH_RUNTIME service binding configuration',
   );
   expect(
-    pagesRestoreWorkflow.includes('https://come-back-home.pages.dev'),
+    pagesRuntimeWorkflow.includes('https://come-back-home.pages.dev'),
     'mutation runtime requires the canonical Pages user origin',
   );
 } else {
