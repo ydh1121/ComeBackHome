@@ -1,26 +1,44 @@
-# ComeBackHome Backend Architecture — Phase 5D
+# ComeBackHome Backend Architecture
 
-Status: DECIDED / NOT DEPLOYED
+Status: CANONICAL / PAGES + MINIMAL PRIVATE SCHEDULER
 
-## Selected stack
+## Canonical application runtime
 
-- Cloudflare Worker: one deployable application named `come-back-home`
-- Workers Static Assets: React/Vite SPA hosting
-- Worker fetch handler: same-origin `/api/*`
-- Cloudflare D1: relational persistence
-- D1 planned name: `come-back-home-db`
-- D1 binding: `DB`
-- D1 location hint when created later: `apac`
-- Cron Trigger: `* * * * *` (every minute, UTC scheduler)
-- Product timezone: `Asia/Seoul`
-- Cloudflare Access: private perimeter protection when deployment is authorized
-- Workers Builds: GitHub-connected CI/CD when deployment is authorized
+- Sole user-facing origin: `https://come-back-home.pages.dev/`
+- Canonical Cloudflare Pages project: `come-back-home`
+- Frontend: Cloudflare Pages
+- Backend API: Pages Functions under same-origin `/api/*`
+- Database: Cloudflare D1 `come-back-home-db`, direct Pages binding `DB`
+- Provider calls: executed directly by Pages Functions
+- Web Push signing and delivery: executed directly by Pages Functions
+- Presence event handling: Pages Functions
+- Notification planner/outbox business logic: Pages Functions
+- Production preview deployments: disabled
+- Service Binding to the old application backend: none
 
-## Why one Worker instead of Pages + a second Worker
+The browser uses only the canonical Pages origin.
 
-The project is still pre-deployment. A single Worker can serve the React SPA as static assets, handle same-origin API routes, bind D1, and own the scheduled handler. This avoids a Pages Functions API plus a separate scheduler Worker and removes cross-service routing/CORS complexity.
+## Minimal private scheduler
 
-The existing product route manifest remains client-side React Router authority. Worker routing is limited to server API paths and scheduled execution.
+Cloudflare Pages Functions do not expose the Cron `scheduled()` execution surface required for scheduled shift-end and periodic ETA-change detection.
+
+The existing `come-back-home-runtime` Worker is retained only as a private scheduler trigger:
+
+```text
+Cloudflare Cron
+  -> come-back-home-runtime scheduled()
+  -> authenticated POST https://come-back-home.pages.dev/api/internal/scheduler-tick
+  -> Pages Functions
+  -> D1 + notification planner + Kakao ETA + Web Push
+```
+
+The Worker does not serve the SPA, expose the normal application API, bind D1, execute Kakao application logic, or become a user-facing URL. `workers_dev=false` and `preview_urls=false` remain mandatory.
+
+## Scheduler authentication
+
+`/api/internal/scheduler-tick` is server-only and uses the existing server-to-server bearer authentication contract. The value is never sent to browser code or emitted in logs.
+
+The scheduler invokes the existing planner/outbox path. Existing notification dedupe keys and D1 outbox semantics remain authoritative, so repeated Cron ticks do not duplicate the same planned notification.
 
 ## Persistence scope
 
@@ -29,94 +47,44 @@ Persist:
 - origin/destination places
 - schedules
 - selected transit access points
-- manual commute preference ordering
+- multiple saved commute routes and via transit legs
 - notification settings
 - Web Push subscriptions
 - notification jobs/outbox
 
-Do not persist initially:
-- realtime bus/subway arrival values
-- transient route candidates
-- computed ETA snapshots
-- search results
-- import preview files/batches after commit
+Provider-derived search results, live route candidates and map responses remain runtime data.
 
-Those runtime values remain provider-derived and replaceable.
+## Notification model
 
-## Notification scheduling
+Scheduled notifications:
+- scheduled shift-end
+- periodic ETA-change detection
 
-Use a D1 outbox table rather than a Queue in v1.
+Event-driven notifications:
+- `LEFT_WORK`
+- `ARRIVED_HOME`
 
-A one-minute Cron Trigger:
-1. selects jobs whose `status` is pending/retry and whose `next_attempt_at` is due;
-2. claims a bounded batch;
-3. sends a visible Web Push notification to active subscriptions;
-4. marks success as sent;
-5. records bounded retry state for transient failures;
-6. deactivates invalid subscriptions when the future delivery adapter reports a terminal subscription failure.
+Both paths use Pages-owned application logic and the same D1 notification contracts.
 
-Every logical notification uses a unique `dedupe_key` so repeated cron execution cannot create duplicate jobs.
+## Secrets and bindings
 
-All persisted timestamps are UTC ISO strings. Schedule dates/times are interpreted in `Asia/Seoul`.
+Pages Production owns:
+- `DB`
+- `KAKAO_REST_API_KEY`
+- `VAPID_PRIVATE_KEY`
+- `PRESENCE_EVENT_INGEST_TOKEN`
+- public VAPID/runtime configuration
 
-## Why no Queue yet
+Scheduler Worker owns only:
+- `PAGES_ORIGIN=https://come-back-home.pages.dev`
+- the server-to-server invocation secret already present on the existing Worker
+- the one-minute Cron trigger
 
-Cloudflare Queues are useful for guaranteed asynchronous delivery and retries, but this app has personal-use traffic and one-minute polling. A D1 outbox with idempotent jobs is simpler and sufficient.
+No client bundle receives server-only secret values.
 
-Add Queues only if:
-- push delivery volume grows materially;
-- provider work needs decoupling;
-- retry traffic becomes significant;
-- cron execution duration becomes operationally noisy.
+## Deployment authority
 
-If Queues are added later, preserve the D1 `dedupe_key` as the idempotency key because queue delivery is at-least-once.
-
-## Why no Durable Objects
-
-There is no current need for:
-- websocket sessions;
-- strongly serialized per-user mutation streams;
-- leader election;
-- high-contention counters.
-
-D1 is the appropriate source of truth for this application.
-
-## API boundary
-
-Same-origin API namespace: `/api/*`.
-
-Planned contract groups:
-- `/api/bootstrap`
-- `/api/people`
-- `/api/schedules`
-- `/api/places`
-- `/api/commute`
-- `/api/notifications/settings`
-- `/api/push/subscription`
-
-The exact REST shapes are deferred to the implementation phase. The Worker must translate HTTP payloads into existing application/domain models rather than exposing D1 row shapes directly.
-
-## Security boundary
-
-When deployment is authorized:
-- protect `come-back-home` with Cloudflare Access as a private application;
-- allow only explicitly approved user email identities;
-- keep push signing private material in Worker secrets, never client code or D1;
-- expose only the public push configuration to the browser;
-- keep D1 reachable only through bindings.
-
-No authentication table is required for the initial personal-use version while Access remains the perimeter identity layer.
-
-## Deployment guard
-
-Phase 5D does not:
-- create a D1 database;
-- apply migrations;
-- create a Worker;
-- configure Cron;
-- configure Access;
-- set push keys;
-- activate browser push;
-- deploy to Cloudflare.
-
-Those operations require a later explicit deployment/activation phase.
+GitHub `main` is the only canonical source branch after migration cleanup.
+Cloudflare Pages project `come-back-home` is the only application deployment target.
+The retained `come-back-home-runtime` resource is private scheduler infrastructure only, not a canonical product or application backend.
+No additional Worker, Pages, staging, preview or fallback project is allowed without a new explicit user decision.

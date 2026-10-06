@@ -14,6 +14,8 @@ import {
   isPresenceEventAuthorized,
   type PresenceEventType,
 } from './presence-event-ingest';
+import { createNotificationActivationReadiness } from './notification-activation-readiness';
+import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
 type JsonObject = Record<string, unknown>;
 
@@ -119,6 +121,24 @@ export async function handleApiRequest(
   }
 
   try {
+    if (
+      segments.length === 3 &&
+      segments[1] === 'internal' &&
+      segments[2] === 'scheduler-tick' &&
+      request.method === 'POST'
+    ) {
+      const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
+      if (!configuredToken) return json({ error: 'Scheduler invocation is not configured.' }, 503);
+      if (request.headers.get('Authorization') !== 'Bearer ' + configuredToken) return json({ error: 'Unauthorized.' }, 401);
+      const body = await readObject(request);
+      const scheduledTime = Number(body.scheduledTime);
+      if (!Number.isFinite(scheduledTime) || scheduledTime <= 0) return json({ error: 'scheduledTime is invalid.' }, 400);
+      const readiness = createNotificationActivationReadiness(env, providerRuntime);
+      if (!readiness.ready) return json({ error: 'Scheduled notification runtime is not ready.', missing: readiness.missing }, 503);
+      const result = await runScheduledNotificationCycle(env, scheduledTime, readiness.dependencies);
+      return json({ result });
+    }
+
     if (segments.length === 2 && segments[1] === 'health' && request.method === 'GET') {
       const row = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
       return json({ ok: row?.ok === 1 });
@@ -285,7 +305,19 @@ export async function handleApiRequest(
           type,
         },
       );
-      return json({ event }, 202);
+
+      let delivery = null;
+      if (event.queued) {
+        const readiness = createNotificationActivationReadiness(env, providerRuntime);
+        if (readiness.ready) {
+          delivery = await processNotificationOutbox(
+            readiness.dependencies.outbox,
+            Date.now(),
+          );
+        }
+      }
+
+      return json({ event, delivery }, 202);
     }
 
     if (segments.length === 2 && segments[1] === 'bootstrap' && request.method === 'GET') {

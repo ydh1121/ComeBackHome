@@ -1,41 +1,26 @@
-import { handleApiRequest } from './api';
-import { runScheduledNotificationCycle } from './scheduler';
-import { createNotificationActivationReadiness } from './notification-activation-readiness';
-import { createProviderRuntime } from './providers/runtime';
-import type { ExecutionContextLike, ScheduledControllerLike, WorkerEnv } from './runtime-types';
+import type { ExecutionContextLike, ScheduledControllerLike, SchedulerWorkerEnv } from './runtime-types';
+
+const CANONICAL_PAGES_ORIGIN = 'https://come-back-home.pages.dev';
+
+export async function invokePagesScheduler(env: SchedulerWorkerEnv, scheduledTime: number): Promise<void> {
+  const origin = (env.PAGES_ORIGIN ?? '').trim().replace(/\/$/, '');
+  const token = (env.PRESENCE_EVENT_INGEST_TOKEN ?? '').trim();
+  if (origin !== CANONICAL_PAGES_ORIGIN) throw new Error('Scheduler target must be canonical Pages.');
+  if (!token) throw new Error('Scheduler authentication is unavailable.');
+  const response = await fetch(origin + '/api/internal/scheduler-tick', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ scheduledTime }),
+  });
+  if (!response.ok) throw new Error('Canonical Pages scheduler tick failed with HTTP ' + response.status + '.');
+}
 
 export default {
-  async fetch(request: Request, env: WorkerEnv, _ctx: ExecutionContextLike): Promise<Response> {
-    const url = new URL(request.url);
-
-    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
-      const providerRuntime = createProviderRuntime(env, globalThis.fetch.bind(globalThis));
-      return handleApiRequest(request, env, providerRuntime);
-    }
-
-    if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
-    }
-
-    return new Response('Static asset binding is not configured.', {
-      status: 503,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
-  },
-
-  async scheduled(
-    controller: ScheduledControllerLike,
-    env: WorkerEnv,
-    ctx: ExecutionContextLike,
-  ): Promise<void> {
-    const providerRuntime = createProviderRuntime(env, globalThis.fetch.bind(globalThis));
-    const readiness = createNotificationActivationReadiness(env, providerRuntime);
-    ctx.waitUntil(
-      runScheduledNotificationCycle(
-        env,
-        controller.scheduledTime,
-        readiness.dependencies ?? undefined,
-      ).then(() => undefined),
-    );
+  async scheduled(controller: ScheduledControllerLike, env: SchedulerWorkerEnv, ctx: ExecutionContextLike): Promise<void> {
+    ctx.waitUntil(invokePagesScheduler(env, controller.scheduledTime));
   },
 };

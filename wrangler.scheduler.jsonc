@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "come-back-home-runtime",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-06",
+  "preview_urls": false,
+  "workers_dev": false,
+  "vars": {
+    "PAGES_ORIGIN": "https://come-back-home.pages.dev"
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}

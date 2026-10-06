@@ -1,23 +1,15 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "come-back-home-runtime",
-  "main": "./worker/index.ts",
+  "name": "come-back-home",
+  "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-10-06",
-  "preview_urls": false,
-  "workers_dev": false,
-  "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS",
-    "run_worker_first": [
-      "/api",
-      "/api/*"
-    ],
-    "not_found_handling": "single-page-application"
-  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "vars": {
+    "MUTATIONS_ENABLED": "1",
     "PUSH_DELIVERY_ENABLED": "1",
     "PROVIDER_RUNTIME_ENABLED": "1",
-    "MUTATIONS_ENABLED": "1",
     "VAPID_PUBLIC_KEY": "BBzKRsrpKTcyhF859UOU7bp_wVU_ww-CKGVCOTqyETNvautMz1icV7lwqcGYkb9qNOPtpYkRFG24o5fwINu46H8",
     "VAPID_SUBJECT": "https://come-back-home.pages.dev/",
     "WEB_PUSH_TTL_SECONDS": "300",
@@ -30,10 +22,5 @@
       "database_id": "5b5d6397-042c-465b-8411-9e67555eaeb4",
       "migrations_dir": "db/migrations"
     }
-  ],
-  "triggers": {
-    "crons": [
-      "* * * * *"
-    ]
-  }
+  ]
 }
