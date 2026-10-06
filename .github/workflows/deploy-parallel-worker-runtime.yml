@@ -28,7 +28,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       VITE_CBH_RUNTIME: api
-      VITE_CBH_PROVIDER_RUNTIME: mock
+      VITE_CBH_PROVIDER_RUNTIME: api
       WORKER_ORIGIN: https://come-back-home-runtime.ydh1121.workers.dev
     steps:
       - name: Checkout
@@ -58,7 +58,7 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_ENV, 'VITE_CBH_VAPID_PUBLIC_KEY=' + publicKey + '\n');
           NODE
 
-      - name: Build D1 API runtime with provider disabled
+      - name: Build D1 API runtime with provider enabled
         run: npm run build
 
       - name: Deploy isolated Worker
