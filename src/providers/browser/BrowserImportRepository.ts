@@ -114,6 +114,26 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setDetectedPersonIgnored(
+    batchId: EntityId,
+    detectedPersonId: EntityId,
+    ignored: boolean,
+  ): Promise<void> {
+    const batch = this.requireBatch(batchId);
+    const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
+    if (!person) throw new Error('Detected person was not found.');
+    person.ignored = ignored;
+    if (ignored) person.matchedPersonId = null;
+    for (const item of batch.reviewItems) {
+      if (item.detectedPersonId !== detectedPersonId) continue;
+      if (ignored) {
+        item.personId = null;
+        item.resolution = null;
+      }
+    }
+    this.persist();
+  }
+
   async setResolution(
     batchId: EntityId,
     reviewItemId: EntityId,
