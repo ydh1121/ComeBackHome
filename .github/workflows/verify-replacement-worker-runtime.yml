@@ -131,7 +131,9 @@ jobs:
           }
 
           const deployments = await cf('/workers/scripts/come-back-home-runtime/deployments');
-          const deploymentList = Array.isArray(deployments) ? deployments : [];
+          const deploymentList = Array.isArray(deployments?.deployments)
+            ? deployments.deployments
+            : [];
           if (!deploymentList.length) throw new Error('Worker has no deployment');
           const currentDeployment = deploymentList[0];
           const deploymentVersions = Array.isArray(currentDeployment?.versions)
