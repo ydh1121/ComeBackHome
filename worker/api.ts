@@ -1,4 +1,5 @@
-import type { PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
+import type { Coordinate, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
+import type { PlaceSearchResult, TransitSearchResult } from '../src/application/contracts/providers';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
 import { D1NotificationJobStore } from './repositories/D1NotificationJobStore';
 import { D1NotificationSettingsStore } from './repositories/D1NotificationSettingsStore';
@@ -57,6 +58,52 @@ function errorResponse(error: unknown): Response {
   return json({ error: message }, 400);
 }
 
+function coordinateDistanceMeters(left: Coordinate, right: Coordinate): number {
+  const earthRadius = 6_371_000;
+  const toRadians = (value: number) => value * Math.PI / 180;
+  const lat1 = toRadians(left.y);
+  const lat2 = toRadians(right.y);
+  const deltaLat = toRadians(right.y - left.y);
+  const deltaLng = toRadians(right.x - left.x);
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+  return Math.round(earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function placeToTransit(
+  place: PlaceSearchResult,
+  near: Coordinate,
+  forcedMode?: 'BUS' | 'SUBWAY',
+): TransitSearchResult {
+  const descriptor = [place.placeName, place.category].filter(Boolean).join(' ');
+  const mode =
+    forcedMode ??
+    (/지하철|전철|역(?:\s|$)/.test(descriptor) ? 'SUBWAY' : 'BUS');
+  const distanceM = coordinateDistanceMeters(near, place.coordinate);
+  return {
+    id: 'kakao-transit:' + mode.toLowerCase() + ':' + place.providerId,
+    providerId: place.providerId,
+    mode,
+    name: place.placeName ?? place.roadAddress,
+    coordinate: place.coordinate,
+    distanceM,
+    walkMinutes: Math.max(1, Math.ceil(distanceM / 75)),
+  };
+}
+
+function dedupeTransit(results: TransitSearchResult[]): TransitSearchResult[] {
+  const seen = new Set<string>();
+  return results
+    .filter((item) => {
+      const key = item.mode + ':' + item.providerId;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => (left.distanceM ?? Number.MAX_SAFE_INTEGER) - (right.distanceM ?? Number.MAX_SAFE_INTEGER));
+}
+
 export async function handleApiRequest(
   request: Request,
   env: WorkerEnv,
@@ -92,6 +139,7 @@ export async function handleApiRequest(
         (
           segments[2] === 'place-search' ||
           segments[2] === 'transit-search' ||
+          segments[2] === 'transit-nearby' ||
           segments[2] === 'routes' ||
           segments[2] === 'bus-arrivals' ||
           segments[2] === 'subway-arrivals'
@@ -102,7 +150,6 @@ export async function handleApiRequest(
         }
 
         if (
-          segments[2] === 'transit-search' ||
           segments[2] === 'bus-arrivals' ||
           segments[2] === 'subway-arrivals'
         ) {
@@ -118,6 +165,40 @@ export async function handleApiRequest(
             const y = Number(url.searchParams.get('y'));
             const near = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
             return json({ results: await providerRuntime.kakao.searchPlaces(query, near) });
+          }
+
+          if (segments[2] === 'transit-nearby') {
+            const x = Number(url.searchParams.get('x'));
+            const y = Number(url.searchParams.get('y'));
+            if (![x, y].every(Number.isFinite)) {
+              return json({ error: 'x/y are required.' }, 400);
+            }
+            const near = { x, y };
+            const [busPlaces, subwayPlaces] = await Promise.all([
+              providerRuntime.kakao.searchPlaces('버스정류장', near),
+              providerRuntime.kakao.searchPlaces('지하철역', near),
+            ]);
+            return json({
+              results: dedupeTransit([
+                ...busPlaces.map((place) => placeToTransit(place, near, 'BUS')),
+                ...subwayPlaces.map((place) => placeToTransit(place, near, 'SUBWAY')),
+              ]).slice(0, 30),
+            });
+          }
+
+          if (segments[2] === 'transit-search') {
+            const query = url.searchParams.get('q')?.trim();
+            const x = Number(url.searchParams.get('x'));
+            const y = Number(url.searchParams.get('y'));
+            if (!query) return json({ error: 'q is required.' }, 400);
+            if (![x, y].every(Number.isFinite)) {
+              return json({ error: 'x/y are required.' }, 400);
+            }
+            const near = { x, y };
+            const places = await providerRuntime.kakao.searchPlaces(query, near);
+            return json({
+              results: dedupeTransit(places.map((place) => placeToTransit(place, near))).slice(0, 30),
+            });
           }
 
           if (segments[2] === 'routes') {
