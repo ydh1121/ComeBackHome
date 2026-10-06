@@ -85,6 +85,8 @@ on:
       - main
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
+      - "wrangler.jsonc"
+      - "functions/**"
       - "wrangler.local.jsonc"
       - "package.json"
       - "db/migrations/**"
@@ -166,8 +168,11 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Typecheck Worker
+      - name: Typecheck shared server code
         run: npm run typecheck:worker
+
+      - name: Build Pages Functions bundle
+        run: npx wrangler pages functions build functions --outdir .tmp-pages-functions
 
       - name: Verify local-only contract
         run: npm run verify:local-contract
@@ -217,10 +222,10 @@ jobs:
       - name: Verify browser push wiring
         run: npm run verify:push-wiring
 
-      - name: Verify Worker web-push gateway
+      - name: Verify Web Push gateway
         run: npm run verify:web-push-gateway
 
-      - name: Verify Worker notification ETA source
+      - name: Verify notification ETA source
         run: npm run verify:notification-eta-source
 
       - name: Verify notification retry policy
@@ -235,7 +240,7 @@ jobs:
       - name: Verify Cloudflare environment contract
         run: npm run verify:cloudflare-env-contract
 
-      - name: Verify Worker migration staging config
+      - name: Verify canonical Pages runtime config
         run: npm run verify:worker-migration-config
 
       - name: Verify staging mutation gate
@@ -247,7 +252,7 @@ jobs:
       - name: Verify backend architecture
         run: npm run verify:backend
 
-      - name: Verify Worker adapters
+      - name: Verify Pages server adapters
         run: npm run verify:worker
 
       - name: Verify notification outbox
