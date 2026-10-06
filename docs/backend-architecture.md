@@ -1,21 +1,44 @@
 # ComeBackHome Backend Architecture
 
-Status: CANONICAL / PAGES-ONLY
+Status: CANONICAL / PAGES + MINIMAL PRIVATE SCHEDULER
 
-## Canonical runtime
+## Canonical application runtime
 
-- User and application origin: `https://come-back-home.pages.dev/`
+- Sole user-facing origin: `https://come-back-home.pages.dev/`
+- Canonical Cloudflare Pages project: `come-back-home`
 - Frontend: Cloudflare Pages
 - Backend API: Pages Functions under same-origin `/api/*`
-- Database: Cloudflare D1 `come-back-home-db`, binding `DB`
+- Database: Cloudflare D1 `come-back-home-db`, direct Pages binding `DB`
 - Provider calls: executed directly by Pages Functions
 - Web Push signing and delivery: executed directly by Pages Functions
+- Presence event handling: Pages Functions
+- Notification planner/outbox business logic: Pages Functions
 - Production preview deployments: disabled
-- Separate application Worker: none
-- Service Binding to a backend Worker: none
-- Public or private `workers.dev` application endpoint: none
+- Service Binding to the old application backend: none
 
-The previous `come-back-home-runtime` Worker was a temporary migration surface and is not part of the canonical architecture.
+The browser uses only the canonical Pages origin.
+
+## Minimal private scheduler
+
+Cloudflare Pages Functions do not expose the Cron `scheduled()` execution surface required for scheduled shift-end and periodic ETA-change detection.
+
+The existing `come-back-home-runtime` Worker is retained only as a private scheduler trigger:
+
+```text
+Cloudflare Cron
+  -> come-back-home-runtime scheduled()
+  -> authenticated POST https://come-back-home.pages.dev/api/internal/scheduler-tick
+  -> Pages Functions
+  -> D1 + notification planner + Kakao ETA + Web Push
+```
+
+The Worker does not serve the SPA, expose the normal application API, bind D1, execute Kakao application logic, or become a user-facing URL. `workers_dev=false` and `preview_urls=false` remain mandatory.
+
+## Scheduler authentication
+
+`/api/internal/scheduler-tick` is server-only and uses the existing server-to-server bearer authentication contract. The value is never sent to browser code or emitted in logs.
+
+The scheduler invokes the existing planner/outbox path. Existing notification dedupe keys and D1 outbox semantics remain authoritative, so repeated Cron ticks do not duplicate the same planned notification.
 
 ## Persistence scope
 
@@ -33,31 +56,35 @@ Provider-derived search results, live route candidates and map responses remain 
 
 ## Notification model
 
-Core product notifications are event-driven.
+Scheduled notifications:
+- scheduled shift-end
+- periodic ETA-change detection
 
-`LEFT_WORK` and `ARRIVED_HOME` events are accepted by the same-origin Pages API. The API creates the notification payload, including the next workday information, and immediately processes the Web Push outbox in the same Pages request.
+Event-driven notifications:
+- `LEFT_WORK`
+- `ARRIVED_HOME`
 
-There is no standalone Cron Worker in the canonical architecture. Worker-only periodic shift-end/ETA polling is not used while the product is constrained to one canonical Pages application surface.
-
-## API boundary
-
-Canonical API namespace: `https://come-back-home.pages.dev/api/*`.
-
-Pages Functions translate HTTP requests into the existing application/domain models and access D1 only through the direct `DB` binding.
+Both paths use Pages-owned application logic and the same D1 notification contracts.
 
 ## Secrets and bindings
 
 Pages Production owns:
-- `DB` D1 binding
+- `DB`
 - `KAKAO_REST_API_KEY`
 - `VAPID_PRIVATE_KEY`
 - `PRESENCE_EVENT_INGEST_TOKEN`
 - public VAPID/runtime configuration
 
+Scheduler Worker owns only:
+- `PAGES_ORIGIN=https://come-back-home.pages.dev`
+- the server-to-server invocation secret already present on the existing Worker
+- the one-minute Cron trigger
+
 No client bundle receives server-only secret values.
 
 ## Deployment authority
 
-GitHub `main` is the only source branch.
+GitHub `main` is the only canonical source branch after migration cleanup.
 Cloudflare Pages project `come-back-home` is the only application deployment target.
-No alternate Worker deployment is allowed without an explicit new user decision.
+The retained `come-back-home-runtime` resource is private scheduler infrastructure only, not a canonical product or application backend.
+No additional Worker, Pages, staging, preview or fallback project is allowed without a new explicit user decision.
