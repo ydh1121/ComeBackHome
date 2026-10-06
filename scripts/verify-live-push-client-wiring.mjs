@@ -99,7 +99,11 @@ try {
     async getPermission() { return 'granted'; },
     async requestPermissionFromUserGesture() { return 'granted'; },
   };
-  let providerSubscription = null;
+  let providerSubscription = {
+    endpoint: 'https://push.example.invalid/restored',
+    expirationTime: null,
+    keys: { p256dh: 'restored-p256dh', auth: 'restored-auth' },
+  };
   const subscriptionProvider = {
     async getCurrent() { return providerSubscription; },
     async subscribe() {
