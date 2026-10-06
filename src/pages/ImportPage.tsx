@@ -29,11 +29,12 @@ export function ImportPage() {
   if (workflow.status === 'loading') {
     return <section className="import-page" data-page="ImportPage" data-state="LOADING"><div className="import-message">가져오기 정보를 불러오는 중</div></section>;
   }
-  if (workflow.status === 'error' || !workflow.batch) {
+  if (workflow.status === 'error') {
     return <section className="import-page" data-page="ImportPage" data-state="ERROR"><div className="import-message">가져오기 정보를 불러오지 못했습니다.</div></section>;
   }
 
   const batch = workflow.batch;
+  const files = batch?.files ?? [];
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -80,7 +81,7 @@ export function ImportPage() {
       {importError ? <div className="import-error" role="alert">{importError}</div> : null}
 
       <div className="import-file-list">
-        {batch.files.map((file) => (
+        {files.map((file) => (
           <div className="file-row" key={file.id}>
             <div className="file-icon file-icon-text">{file.kind === 'XLSX' ? '엑셀' : '이미지'}</div>
             <div className="grow">
@@ -97,8 +98,8 @@ export function ImportPage() {
       <button
         type="button"
         className="cta"
-        disabled={!batch.files.length}
-        onClick={() => navigate('/import/' + encodeURIComponent(batch.id) + '/people')}
+        disabled={!batch || !files.length}
+        onClick={() => batch && navigate('/import/' + encodeURIComponent(batch.id) + '/people')}
       >
         인식 결과 보기
       </button>
