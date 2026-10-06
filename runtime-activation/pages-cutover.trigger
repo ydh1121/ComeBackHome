@@ -1,1 +1,2 @@
 authenticated_owner_product_test=true
+trigger=resume-after-main-merge
