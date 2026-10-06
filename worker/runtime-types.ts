@@ -32,6 +32,11 @@ export interface WorkerEnv {
   DB: D1DatabaseLike;
   ASSETS?: StaticAssetFetcher;
   PUSH_DELIVERY_ENABLED?: string;
+  VAPID_SUBJECT?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  WEB_PUSH_TTL_SECONDS?: string;
+  NOTIFICATION_RETRY_DELAYS_SECONDS?: string;
   PROVIDER_RUNTIME_ENABLED?: string;
   KAKAO_REST_API_KEY?: string;
   SEOUL_SUBWAY_API_KEY?: string;

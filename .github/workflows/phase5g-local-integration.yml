@@ -32,6 +32,7 @@ on:
       - "scripts/verify-web-push-gateway.mjs"
       - "scripts/verify-worker-notification-eta-source.mjs"
       - "scripts/verify-notification-retry-policy.mjs"
+      - "scripts/verify-notification-activation-readiness.mjs"
       - "scripts/verify-phase5v-*.mjs"
       - "scripts/verify-phase5w-*.mjs"
       - "scripts/verify-phase5x-*.mjs"
@@ -216,6 +217,9 @@ jobs:
 
       - name: Verify notification retry policy
         run: npm run verify:notification-retry-policy
+
+      - name: Verify notification activation readiness
+        run: npm run verify:notification-activation-readiness
 
       - name: Verify backend architecture
         run: npm run verify:backend
