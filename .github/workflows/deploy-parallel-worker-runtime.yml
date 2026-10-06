@@ -247,4 +247,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add runtime-evidence/cloudflare-worker-runtime.json runtime-evidence/cloudflare-cron-inventory.json
           git diff --cached --quiet || git commit -m "chore: record parallel Worker deployment"
-          git push
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
