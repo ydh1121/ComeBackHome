@@ -155,6 +155,25 @@ try {
     'server subscription transport upsert was not called',
   );
 
+  const testRequests = [];
+  const testClient = {
+    async post(path, body) {
+      testRequests.push({ path, body: structuredClone(body) });
+      return { sent: true };
+    },
+  };
+  const realTestGateway = new testGatewayModule.HttpNotificationTestGateway(
+    testClient,
+    subscriptionProvider,
+  );
+  await realTestGateway.sendTestNotification();
+  expect(testRequests.length === 1, 'real test notification gateway must send one server request');
+  expect(testRequests[0]?.path === '/notifications/test', 'real test notification server path mismatch');
+  expect(
+    testRequests[0]?.body?.endpoint === 'https://push.example.invalid/live-wiring',
+    'real test notification must target current browser subscription',
+  );
+
   await service.disablePushSubscription();
   expect(state.subscription == null, 'disabled push must clear repository subscription');
   expect(
