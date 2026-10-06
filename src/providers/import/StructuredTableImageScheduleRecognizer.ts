@@ -654,8 +654,9 @@ function inferDateBlockMatrixGeometry(
       if (!names.length) return null;
       const sourceName = names.map((token) => token.normalized).join('');
       const confidence = average(names.map((token) => token.confidence));
-      const labelHeight = median(
-        names.map((token) => token.height).filter((height) => height > 0),
+      const labelHeight = Math.max(
+        0,
+        ...names.map((token) => token.height).filter((height) => height > 0),
       );
       const labelSide =
         average(names.map((token) => token.cx)) < gridLeft
@@ -698,7 +699,7 @@ function inferDateBlockMatrixGeometry(
       .map((row) => row.labelHeight)
       .filter((height) => height > 0),
   );
-  const minimumPersonLabelHeight = Math.max(1, typicalLabelHeight * 0.75);
+  const minimumPersonLabelHeight = Math.max(1, typicalLabelHeight * 0.8);
 
   // Keep small auxiliary/header-like rows as structural boundaries so they do
   // not contaminate the first employee row, but do not treat them as people.

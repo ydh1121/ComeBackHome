@@ -169,6 +169,51 @@ try {
     'normal-height structural row must still receive a focused name probe when its OCR label is unusable',
   );
 
+  const fragmentedNameLayout = buildScheduleImageLayoutFixture({ targetRow: 3 });
+  const targetLabel = fragmentedNameLayout.tokens.find(
+    (item) => item.text === '테스트직원',
+  );
+  if (!targetLabel) throw new Error('fragmented-name fixture target is missing');
+  fragmentedNameLayout.tokens = fragmentedNameLayout.tokens.filter(
+    (item) => item !== targetLabel,
+  );
+  const fragmentY = targetLabel.y + targetLabel.height / 2;
+  fragmentedNameLayout.tokens.push(
+    {
+      ...targetLabel,
+      text: '신',
+      x: targetLabel.x,
+      width: targetLabel.width * 0.28,
+      y: fragmentY - 5,
+      height: 10,
+      confidence: 0.92,
+    },
+    {
+      ...targetLabel,
+      text: '이',
+      x: targetLabel.x + targetLabel.width * 0.31,
+      width: targetLabel.width * 0.2,
+      y: fragmentY - 8,
+      height: 16,
+      confidence: 0.83,
+    },
+    {
+      ...targetLabel,
+      text: '본',
+      x: targetLabel.x + targetLabel.width * 0.57,
+      width: targetLabel.width * 0.22,
+      y: fragmentY - 4.5,
+      height: 9,
+      confidence: 0.96,
+    },
+  );
+  const fragmentedProbes =
+    imageModule.inferSchedulePersonLabelProbeRegions(fragmentedNameLayout);
+  expect(
+    fragmentedProbes.length === 6,
+    'fragmented employee name must remain person-probe eligible when at least one glyph has normal row height',
+  );
+
   const unsafeAnchorLayout =
     buildSparseCalendarDateScheduleLayoutFixture({ targetRow: 3 });
   const unsafeAnchorProbes =
