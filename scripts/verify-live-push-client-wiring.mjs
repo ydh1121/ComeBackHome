@@ -48,10 +48,32 @@ for (const text of [
 
 for (const text of [
   'private readonly subscriptionTransport?: PushSubscriptionTransport',
+  'async syncCurrentSubscription(): Promise<void>',
+  'await this.subscriptionProvider.getCurrent()',
   'await this.subscriptionTransport.upsert(subscription)',
+  "await this.repository.setPermission('subscribed')",
   'await this.subscriptionTransport.remove(current.endpoint)',
 ]) {
   expect(serviceSource.includes(text), 'NotificationService transport wiring missing ' + text);
+}
+
+for (const text of [
+  'class HttpNotificationTestGateway',
+  'this.subscriptions.getCurrent()',
+  "this.client.post('/notifications/test'",
+]) {
+  expect(testGatewaySource.includes(text), 'HTTP notification test gateway missing ' + text);
+}
+expect(hookSource.includes('syncCurrentSubscription()'), 'notification settings hook must restore browser subscription');
+expect(pwaSource.includes("document.readyState === 'complete'"), 'late PWA startup registration guard missing');
+for (const text of [
+  "segments[2] === 'test'",
+  "active.find((item) => item.endpoint === endpoint)",
+  'readiness.dependencies.outbox.gateway.send(subscription',
+  "error.kind === 'terminal-subscription'",
+  'subscriptions.deactivateByEndpoint(endpoint)',
+]) {
+  expect(apiSource.includes(text), 'server test notification endpoint missing ' + text);
 }
 
 const vite = await createViteServer({
