@@ -102,6 +102,8 @@ async function seed(env: WorkerEnv): Promise<Response> {
   await settings.updateRules({
     shiftEndEnabled: true,
     etaChangeEnabled: true,
+    leftWorkEnabled: true,
+    homeArrivalEnabled: true,
   });
 
   const subscription = await subscriptions.upsert({
