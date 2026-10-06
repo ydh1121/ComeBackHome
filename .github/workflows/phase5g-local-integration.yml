@@ -172,7 +172,7 @@ jobs:
         run: npm run typecheck:worker
 
       - name: Build Pages Functions bundle
-        run: npx wrangler pages functions build functions --outdir .tmp-pages-functions
+        run: npx wrangler pages functions build functions --outdir .tmp-pages-functions --compatibility-date 2026-10-06 --compatibility-flags nodejs_compat
 
       - name: Verify local-only contract
         run: npm run verify:local-contract
