@@ -1,4 +1,4 @@
-import type { PlaceKind, RoutePreference, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
+import type { PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
 import { D1NotificationJobStore } from './repositories/D1NotificationJobStore';
 import { D1NotificationSettingsStore } from './repositories/D1NotificationSettingsStore';
@@ -318,12 +318,13 @@ export async function handleApiRequest(
 
         if (segments.length === 4 && request.method === 'GET') {
           const kind = asPlaceKind(url.searchParams.get('kind') ?? 'origin');
-          const [accessPoints, routePreference, preferredRouteCandidateId] = await Promise.all([
+          const [accessPoints, routePreference, savedRoutes, preferredRouteCandidateId] = await Promise.all([
             commute.listAccessPoints(personId, kind),
             commute.getRoutePreference(personId),
+            commute.listSavedRoutes(personId),
             commute.getPreferredRouteCandidateId(personId),
           ]);
-          return json({ accessPoints, routePreference, preferredRouteCandidateId });
+          return json({ accessPoints, routePreference, savedRoutes, preferredRouteCandidateId });
         }
 
         if (segments[4] === 'preference' && segments.length === 5 && request.method === 'PUT') {
@@ -340,6 +341,50 @@ export async function handleApiRequest(
           };
           await commute.saveRoutePreference(preference);
           return json({ routePreference: preference });
+        }
+
+        if (segments[4] === 'routes' && segments.length === 5 && request.method === 'POST') {
+          const route = await commute.createSavedRoute(personId);
+          return json({ route }, 201);
+        }
+
+        if (segments[4] === 'routes' && segments[5] && segments.length === 6) {
+          const routeId = decodeURIComponent(segments[5]);
+          const routes = await commute.listSavedRoutes(personId);
+          const current = routes.find((route) => route.id === routeId);
+          if (!current) return json({ error: 'Saved commute route was not found.' }, 404);
+
+          if (request.method === 'PATCH') {
+            const body = await readObject(request);
+            if (body.active === true) {
+              await commute.setActiveSavedRoute(personId, routeId);
+              const route = (await commute.listSavedRoutes(personId)).find((candidate) => candidate.id === routeId);
+              return json({ route });
+            }
+            return json({ route: current });
+          }
+
+          if (request.method === 'PUT') {
+            const body = await readObject(request);
+            const viaAccessPointIds = Array.isArray(body.viaAccessPointIds)
+              ? body.viaAccessPointIds.filter((value): value is string => typeof value === 'string')
+              : current.viaAccessPointIds;
+            const route: SavedCommuteRoute = {
+              ...current,
+              label: typeof body.label === 'string' && body.label.trim() ? body.label.trim() : current.label,
+              ...(typeof body.originAccessPointId === 'string' && body.originAccessPointId.trim()
+                ? { originAccessPointId: body.originAccessPointId.trim() }
+                : body.originAccessPointId === null
+                  ? { originAccessPointId: undefined }
+                  : current.originAccessPointId
+                    ? { originAccessPointId: current.originAccessPointId }
+                    : {}),
+              viaAccessPointIds,
+              active: typeof body.active === 'boolean' ? body.active : current.active,
+            };
+            await commute.saveSavedRoute(route);
+            return json({ route });
+          }
         }
 
         if (segments[4] === 'access' && segments[5] && segments.length === 6 && request.method === 'PUT') {
