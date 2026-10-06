@@ -30,7 +30,6 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       VITE_CBH_RUNTIME: api
       VITE_CBH_PROVIDER_RUNTIME: api
-      WORKER_ORIGIN: https://come-back-home-runtime.ydh1121.workers.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,27 +102,7 @@ jobs:
       - name: Deploy isolated Worker
         run: npx wrangler deploy --config wrangler.jsonc
 
-      - name: Verify anonymous traffic is blocked by Access
-        shell: bash
-        run: |
-          status="$(curl --silent --show-error             --dump-header /tmp/access-headers.txt             --output /tmp/access-body.txt             --write-out "%{http_code}"             --max-time 20             "$WORKER_ORIGIN/api/health")"
-
-          if [ "$status" = "200" ]; then
-            echo "Access protection failed: anonymous health request returned 200"
-            exit 1
-          fi
-
-          if [ "$status" != "302" ] && [ "$status" != "403" ]; then
-            echo "Unexpected Access response status: $status"
-            cat /tmp/access-headers.txt
-            exit 1
-          fi
-
-          if [ "$status" = "302" ]; then
-            grep -Eqi 'location:.*(cloudflareaccess\.com|/cdn-cgi/access/)' /tmp/access-headers.txt
-          fi
-
-      - name: Record deployed Worker endpoint
+      - name: Record backend Worker deployment state
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -154,13 +133,12 @@ jobs:
           const subdomain = accountBody.result.subdomain;
           const workersDevEnabled = scriptBody.result?.enabled === true;
           const previewUrlsEnabled = scriptBody.result?.previews_enabled === true;
-          if (!workersDevEnabled) {
-            throw new Error('Production workers.dev route must remain enabled before cutover');
+          if (workersDevEnabled) {
+            throw new Error('Public workers.dev route must remain disabled for the backend-only Worker');
           }
           if (previewUrlsEnabled) {
-            throw new Error('Preview URLs must be disabled before replacement Worker verification');
+            throw new Error('Preview URLs must remain disabled for the backend-only Worker');
           }
-          const url = 'https://come-back-home-runtime.' + subdomain + '.workers.dev/';
 
           fs.mkdirSync('runtime-evidence', { recursive: true });
           const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
@@ -172,9 +150,11 @@ jobs:
               accountSubdomain: subdomain,
               workersDevEnabled,
               previewUrlsEnabled,
-              url,
+              url: null,
               clientRuntime: 'api',
-              accessProtected: true,
+              publicWorkersDevDisabled: true,
+              serviceBindingOnly: true,
+              accessProtected: false,
               mutationsEnabled: config.vars?.MUTATIONS_ENABLED === '1',
               providerRuntimeEnabled: config.vars?.PROVIDER_RUNTIME_ENABLED === '1',
               pushDeliveryEnabled: config.vars?.PUSH_DELIVERY_ENABLED === '1',
