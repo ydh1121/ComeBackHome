@@ -41,6 +41,8 @@ export function TransitSearchPage() {
   const services = useApplicationServices();
   const [params] = useSearchParams();
   const routeEdit = params.get('routeEdit');
+  const routeId = params.get('routeId');
+  const routeRole = params.get('routeRole');
   const routeIndex = Number(params.get('index') ?? '-1');
   const composing = useRef(false);
   const [query, setQuery] = useState('');
@@ -75,28 +77,52 @@ export function TransitSearchPage() {
     };
   }, [services, personId, kind, query, online]);
 
-  const routeMode = routeEdit === 'insert' || routeEdit === 'replace';
+  const savedRouteMode = Boolean(routeId && (routeRole === 'origin' || routeRole === 'via'));
+  const legacyRouteMode = routeEdit === 'insert' || routeEdit === 'replace';
+  const routeMode = savedRouteMode || legacyRouteMode;
   const placeLabel = kind === 'origin' ? '출발지' : '도착지';
-  const context = routeEdit === 'insert'
-    ? '내 경로 ' + (Math.max(0, routeIndex) + 1) + '번째 위치에 추가'
-    : routeEdit === 'replace'
-      ? '선택한 구간 교체'
-      : placeLabel + ' 주변 교통에 추가';
+  const context = savedRouteMode
+    ? routeRole === 'origin'
+      ? '출발 교통수단 직접 검색'
+      : routeEdit === 'replace'
+        ? '선택한 경유 교통수단 교체'
+        : '경유 교통수단 직접 검색'
+    : routeEdit === 'insert'
+      ? '내 경로 ' + (Math.max(0, routeIndex) + 1) + '번째 위치에 추가'
+      : routeEdit === 'replace'
+        ? '선택한 구간 교체'
+        : placeLabel + ' 주변 교통에 추가';
 
   const commit = async () => {
     if (!selectedId) return;
     const point = await services.actions.transitSearch.addAccessPoint(personId, kind, selectedId);
-    if (routeEdit === 'insert') await services.actions.commute.addPreferenceStep(personId, point.id, Math.max(0, routeIndex));
-    if (routeEdit === 'replace') await services.actions.commute.replacePreferenceStep(personId, Math.max(0, routeIndex), point.id);
 
-    if (routeMode) navigate('/people/' + encodeURIComponent(personId) + '/commute/manual', { replace: true });
-    else navigate('/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access', { replace: true });
+    if (routeId && routeRole === 'origin') {
+      await services.actions.commute.setRouteOriginAccess(personId, routeId, point.id);
+    } else if (routeId && routeRole === 'via') {
+      if (routeEdit === 'replace') {
+        await services.actions.commute.replaceRouteVia(personId, routeId, Math.max(0, routeIndex), point.id);
+      } else {
+        await services.actions.commute.addRouteVia(personId, routeId, point.id, routeIndex >= 0 ? routeIndex : undefined);
+      }
+    } else {
+      if (routeEdit === 'insert') await services.actions.commute.addPreferenceStep(personId, point.id, Math.max(0, routeIndex));
+      if (routeEdit === 'replace') await services.actions.commute.replacePreferenceStep(personId, Math.max(0, routeIndex), point.id);
+    }
+
+    if (routeId) {
+      navigate('/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(routeId), { replace: true });
+    } else if (routeMode) {
+      navigate('/people/' + encodeURIComponent(personId) + '/commute/manual', { replace: true });
+    } else {
+      navigate('/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access', { replace: true });
+    }
   };
 
   return (
     <section className="commute-page" data-page="TransitSearchPage" data-state={!online ? 'OFFLINE' : query.trim() ? 'SEARCH_RESULT' : 'SEARCH_IDLE'}>
-      <BackButton fallbackTo={routeMode ? '/people/' + encodeURIComponent(personId) + '/commute/manual' : '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access'} />
-      <h1 className="page-title">교통 추가</h1>
+      <BackButton fallbackTo={routeId ? '/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(routeId) : routeMode ? '/people/' + encodeURIComponent(personId) + '/commute/manual' : '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access'} />
+      <h1 className="page-title">{savedRouteMode ? '정류장·역 직접 검색' : '교통 추가'}</h1>
       <div className="transit-context">{context}</div>
 
       <div className="form-field">
@@ -105,7 +131,7 @@ export function TransitSearchPage() {
           <input
             aria-label="교통 검색"
             value={query}
-            placeholder="역·정류장명 검색"
+            placeholder="정류장명·번호 또는 역 이름"
             autoComplete="off"
             onCompositionStart={() => { composing.current = true; }}
             onCompositionEnd={(event) => {
@@ -137,7 +163,7 @@ export function TransitSearchPage() {
             </button>
           )) : <div className="search-inline-status">검색 결과가 없습니다.</div>}
         </div>
-      ) : <div className="search-inline-status">역이나 정류장 이름을 검색하세요.</div>}
+      ) : <div className="search-inline-status">지도에서 찾기 어려운 경우 정류장명·번호 또는 역 이름을 검색하세요.</div>}
 
       {online && selectedId ? <div className="transit-search-actions"><button type="button" className="cta" onClick={commit}>{routeMode ? '이 구간 사용' : '교통 추가'}</button></div> : null}
     </section>
