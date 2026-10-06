@@ -12,12 +12,16 @@ const readinessSource = await readFile(
 );
 
 expect(
-  workerEntry.includes('runScheduledNotificationCycle(env, controller.scheduledTime)'),
-  'Worker scheduled entry must remain fail-closed without live dependency injection',
+  workerEntry.includes('createNotificationActivationReadiness'),
+  'Worker scheduled entry must compose activation readiness after runtime activation approval',
 );
 expect(
-  !workerEntry.includes('createNotificationActivationReadiness'),
-  'readiness factory must not be wired into Worker entry before activation approval',
+  workerEntry.includes('readiness.dependencies ?? undefined'),
+  'Worker scheduled entry must pass only fail-closed readiness dependencies',
+);
+expect(
+  workerEntry.includes('createProviderRuntime(env, globalThis.fetch.bind(globalThis))'),
+  'Worker scheduled entry must compose provider runtime from Worker env',
 );
 for (const key of [
   'VAPID_SUBJECT',
