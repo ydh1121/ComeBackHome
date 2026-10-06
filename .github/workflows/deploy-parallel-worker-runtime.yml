@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - activation/runtime-phase1
+      - main
     paths:
       - ".github/workflows/deploy-parallel-worker-runtime.yml"
       - "runtime-activation/deploy.trigger"
