@@ -88,7 +88,7 @@ try {
     'OCR evaluation page must expose one-file QA export',
   );
   assert(
-    mainSource.includes('comebackhome-private-ocr-eval/v2'),
+    mainSource.includes('comebackhome-private-ocr-eval/v3'),
     'OCR evaluation page must emit the batch QA bundle schema',
   );
   assert(
@@ -109,8 +109,8 @@ try {
     'OCR evaluation page must use the project Tesseract extractor',
   );
   assert(
-    mainSource.includes('parseScheduleImageLayout'),
-    'OCR evaluation page must use the adaptive schedule parser',
+    mainSource.includes('StructureFirstScheduleImageRecognizer'),
+    'OCR evaluation page must use the structure-first schedule recognizer',
   );
   assert(
     mainSource.includes('externalImageUpload: 0'),
@@ -138,8 +138,8 @@ try {
     'Production app composition must activate the local OCR extractor',
   );
   assert(
-    composition.includes('AdaptiveScheduleImageRecognizer'),
-    'Production app composition must connect OCR to the schedule recognizer',
+    composition.includes('StructureFirstScheduleImageRecognizer'),
+    'Production app composition must connect OCR to the structure-first schedule recognizer',
   );
   assert(
     !composition.includes('tools/ocr-eval'),
