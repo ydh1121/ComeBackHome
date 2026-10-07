@@ -18,6 +18,6 @@
     "saved_commute_routes",
     "saved_commute_route_vias"
   ],
-  "migrationCount": 4,
-  "tableCount": 15
+  "migrationCount": 6,
+  "tableCount": 17
 }
