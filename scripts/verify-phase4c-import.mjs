@@ -37,8 +37,9 @@ if (!composition.includes('new ReadExcelWorkbookParser')) failures.push('real wo
 if (!composition.includes('new AdaptiveScheduleImageRecognizer')) failures.push('production image recognizer not composed');
 if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.push('production OCR extractor not composed');
 if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
-if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v1'")) failures.push('browser import persistence missing');
-if (!browserImports.includes('this.state.batches.filter((batch) => batch.committed)')) failures.push('new upload must replace stale unfinished import draft');
+if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v2'")) failures.push('browser import persistence version missing');
+if (!browserImports.includes("LEGACY_STORAGE_KEYS = ['cbh:import-batches:v1']")) failures.push('legacy import storage cleanup missing');
+if (!browserImports.includes('this.state.batches = []')) failures.push('new upload must hard reset all prior browser import batches');
 if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근무표 이미지 가져오기')) failures.push('schedule-to-image-import entry missing');
 if (!commit.includes('await this.schedules.upsertMany(entries)')) failures.push('multi-person schedule atomic batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
@@ -48,6 +49,7 @@ if (!commit.includes("item.resolution === 'KEEP'") || !commit.includes("item.res
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
 if (!css.includes('.import-page .upload')) failures.push('upload style missing');
 if (!css.includes('.import-page .review-choice')) failures.push('review style missing');
+if (!root.includes('import-file-diagnostic')) failures.push('failed OCR diagnostic rendering missing');
 
 for (const [name, source] of [['root', root], ['people', people], ['structure', structure], ['review', review]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
