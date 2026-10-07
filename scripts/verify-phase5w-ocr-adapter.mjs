@@ -30,8 +30,12 @@ expect(
   'production composition must activate the local-first OCR extractor',
 );
 expect(
-  compositionSource.includes('AdaptiveScheduleImageRecognizer'),
-  'production composition must connect OCR to the schedule image recognizer',
+  compositionSource.includes('StructureFirstScheduleImageRecognizer'),
+  'production composition must connect OCR to the structure-first schedule image recognizer',
+);
+expect(
+  compositionSource.includes('BrowserScheduleTableStructureDetector'),
+  'production composition must connect pixel table structure detection',
 );
 expect(
   !extractorSource.includes('https://cdn.'),
