@@ -6,7 +6,8 @@ import type {
 } from '../../domain/models';
 import type { ImportRepository } from '../../application/contracts/repositories';
 
-const STORAGE_KEY = 'cbh:import-batches:v1';
+const STORAGE_KEY = 'cbh:import-batches:v2';
+const LEGACY_STORAGE_KEYS = ['cbh:import-batches:v1'];
 
 interface BrowserImportState {
   batches: ImportBatch[];
@@ -22,6 +23,7 @@ function clone<T>(value: T): T {
 
 function readState(): BrowserImportState {
   try {
+    for (const legacyKey of LEGACY_STORAGE_KEYS) localStorage.removeItem(legacyKey);
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyState();
     const parsed = JSON.parse(raw) as Partial<BrowserImportState>;
@@ -65,7 +67,7 @@ export class BrowserImportRepository implements ImportRepository {
     // A new file selection starts a new draft. Keeping an older unfinished
     // draft as "current" caused subsequent uploads to surface stale OCR data
     // until localStorage was manually cleared.
-    this.state.batches = this.state.batches.filter((batch) => batch.committed);
+    this.state.batches = [];
     const batch: ImportBatch = {
       id: crypto.randomUUID(),
       files: [],
