@@ -118,8 +118,8 @@ function trimNearbyTransitByDistance(results: TransitSearchResult[]): TransitSea
     const nearest = group[0].distanceM ?? 0;
     // Subway candidates should stay tighter than generic place search.
     // When a station is already close, avoid leaking adjacent districts/stations.
-    const baseRadius = mode === 'BUS' ? 450 : 550;
-    const delta = mode === 'BUS' ? 450 : 450;
+    const baseRadius = mode === 'BUS' ? 450 : 450;
+    const delta = mode === 'BUS' ? 450 : 250;
     const normalCap = mode === 'BUS' ? 800 : 900;
     const threshold = nearest <= normalCap
       ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
