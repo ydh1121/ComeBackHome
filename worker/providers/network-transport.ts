@@ -44,13 +44,17 @@ function applySecret(
 
   if (auth.placement === 'query') {
     url.searchParams.set(auth.target, value);
-    return;
   }
+}
 
-  url.pathname = url.pathname.replace(
-    auth.target,
-    encodeURIComponent(secret),
-  );
+function applyPathSecret(
+  urlTemplate: string,
+  auth: ProviderAuthReference,
+  secret: string,
+): string {
+  return auth.placement === 'path'
+    ? urlTemplate.replace(auth.target, encodeURIComponent(secret))
+    : urlTemplate;
 }
 
 function assertNoUnresolvedPathTokens(url: URL): void {
@@ -77,7 +81,11 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
       throw new Error('Provider activation blocked: MISSING_SECRET');
     }
 
-    const materialized = replacePathParams(request.urlTemplate, request.pathParams);
+    const materialized = applyPathSecret(
+      replacePathParams(request.urlTemplate, request.pathParams),
+      request.auth,
+      secret,
+    );
     const url = new URL(materialized);
     const headers = new Headers({ Accept: accept });
 
