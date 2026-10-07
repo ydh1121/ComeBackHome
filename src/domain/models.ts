@@ -20,7 +20,8 @@ export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
 export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; message?: string; }
 export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; ignored?: boolean; }
 export interface ImportStructure { sheet: string; headerRow: number; personColumn: string; dateColumn: string; shiftColumn: string; needsReview: boolean; }
-export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'start'|'end'>; imported: { start: string | null; end: string | null }; resolution: ImportResolution | null; }
+export type ImportRecognitionState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
+export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'enabled'|'start'|'end'>; imported: { enabled: boolean; start: string | null; end: string | null }; recognitionState?: ImportRecognitionState; resolution: ImportResolution | null; }
 export interface ImportBatch {
   id: EntityId;
   files: ImportFileRecord[];
