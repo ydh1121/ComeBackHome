@@ -17,7 +17,10 @@ export class CommitImportReview implements CommitImportReviewAction {
     const includedItems = batch.reviewItems.filter(
       (item) => !ignoredDetectedIds.has(item.detectedPersonId),
     );
-    if (!includedItems.length) throw new Error('Import contains no selected schedules.');
+    if (!includedItems.length) {
+      await this.imports.markCommitted(batchId);
+      return;
+    }
 
     const unresolved = includedItems.filter((item) => item.personId == null);
     if (unresolved.length) throw new Error('Import contains unresolved people.');
@@ -34,7 +37,7 @@ export class CommitImportReview implements CommitImportReviewAction {
 
     const entries = [];
     for (const item of includedItems) {
-      if (item.resolution === 'KEEP') continue;
+      if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
       const personId = item.personId;
       if (!personId) continue;
       const start = item.imported.start;
