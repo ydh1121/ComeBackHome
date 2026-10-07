@@ -256,7 +256,7 @@ try {
 
   assert(services.runtime.mode === 'hybrid-api', 'hybrid mode metadata mismatch');
   assert(services.runtime.persistence === 'worker-api', 'hybrid persistence metadata mismatch');
-  assert(services.runtime.providerData === 'mock', 'hybrid provider metadata mismatch');
+  assert(services.runtime.providerData === 'disabled', 'hybrid provider disabled metadata mismatch');
   assert(services.actions.personSelection.getSelectedPersonId() === personId, 'API bootstrap did not select the first persisted person');
 
   const people = await services.repositories.people.list();
