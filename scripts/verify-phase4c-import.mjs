@@ -34,7 +34,8 @@ if (!runtime.includes('importMatch: ImportMatchActions')) failures.push('match a
 if (!runtime.includes('importReview: ImportReviewActions')) failures.push('review action missing');
 if (!composition.includes('new WorkbookImportFileSelectionAction')) failures.push('real workbook file action not composed');
 if (!composition.includes('new ReadExcelWorkbookParser')) failures.push('real workbook parser not composed');
-if (!composition.includes('new AdaptiveScheduleImageRecognizer')) failures.push('production image recognizer not composed');
+if (!composition.includes('new StructureFirstScheduleImageRecognizer')) failures.push('structure-first production image recognizer not composed');
+if (!composition.includes('new BrowserScheduleTableStructureDetector')) failures.push('pixel table structure detector not composed');
 if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.push('production OCR extractor not composed');
 if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
 if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v2'")) failures.push('browser import persistence version missing');
