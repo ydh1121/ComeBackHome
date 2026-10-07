@@ -9,6 +9,7 @@ import type {
   TransitAccessPoint,
 } from '../../domain/models';
 import type {
+  Arrival,
   RealtimeBusProvider,
   RealtimeSubwayProvider,
   TransitRouteProvider,
