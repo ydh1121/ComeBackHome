@@ -202,8 +202,12 @@ try {
     'Production composition must include the local OCR extractor',
   );
   assert(
-    source.includes('AdaptiveScheduleImageRecognizer'),
-    'Production composition must include the image schedule recognizer',
+    source.includes('StructureFirstScheduleImageRecognizer'),
+    'Production composition must include the structure-first image schedule recognizer',
+  );
+  assert(
+    source.includes('BrowserScheduleTableStructureDetector'),
+    'Production composition must include the pixel table structure detector',
   );
   assert(
     packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets',
