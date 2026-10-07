@@ -31,6 +31,7 @@ export class CommitImportReview implements CommitImportReviewAction {
     const incomplete = includedItems.filter(
       (item) =>
         item.resolution === 'NEW' &&
+        item.imported.enabled !== false &&
         (item.imported.start == null || item.imported.end == null),
     );
     if (incomplete.length) throw new Error('Import contains incomplete schedule times.');
@@ -40,15 +41,18 @@ export class CommitImportReview implements CommitImportReviewAction {
       if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
       const personId = item.personId;
       if (!personId) continue;
-      const start = item.imported.start;
-      const end = item.imported.end;
-      if (!start || !end) throw new Error('Import contains incomplete schedule times.');
       const current = await this.schedules.getByDate(personId, item.date);
+      const enabled = item.imported.enabled !== false;
+      const start = item.imported.start ?? current?.start ?? '00:00';
+      const end = item.imported.end ?? current?.end ?? '00:00';
+      if (enabled && (!item.imported.start || !item.imported.end)) {
+        throw new Error('Import contains incomplete schedule times.');
+      }
       entries.push({
         id: current?.id ?? crypto.randomUUID(),
         personId,
         date: item.date,
-        enabled: true,
+        enabled,
         start,
         end,
       });
