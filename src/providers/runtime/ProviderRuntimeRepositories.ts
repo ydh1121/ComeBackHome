@@ -188,18 +188,83 @@ export class ProviderCommuteRepository implements CommuteRepository {
       .map((id) => pointsById.get(id))
       .filter((point): point is TransitAccessPoint => point != null);
 
+    const originSearchTargets = originConfiguredPoints
+      .filter((point) => point.coordinate != null)
+      .map((point) => ({ coordinate: point.coordinate!, fromSelectedAccess: true }));
+    const destinationSearchTargets = destinationConfiguredPoints
+      .filter((point) => point.coordinate != null)
+      .map((point) => ({ coordinate: point.coordinate!, fromSelectedAccess: true }));
+
+    const resolvedOriginTargets = originSearchTargets.length
+      ? originSearchTargets
+      : [{ coordinate: origin.coordinate, fromSelectedAccess: false }];
+    const resolvedDestinationTargets = destinationSearchTargets.length
+      ? destinationSearchTargets
+      : [{ coordinate: destination.coordinate, fromSelectedAccess: false }];
+
+    const searchPairs = resolvedOriginTargets.flatMap((originTarget) =>
+      resolvedDestinationTargets.map((destinationTarget) => ({
+        originTarget,
+        destinationTarget,
+      }))
+    );
+
     try {
-      const results = await this.routeProvider.search(origin.coordinate, destination.coordinate);
-      return results
-        .map((result): RouteCandidate => {
+      const pairResults = await Promise.all(
+        searchPairs.map(async ({ originTarget, destinationTarget }) => {
+          try {
+            const results = await this.routeProvider.search(
+              originTarget.coordinate,
+              destinationTarget.coordinate,
+            );
+            return results.map((result) => ({
+              result,
+              originFromSelectedAccess: originTarget.fromSelectedAccess,
+              destinationFromSelectedAccess: destinationTarget.fromSelectedAccess,
+            }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+
+      const deduped = new Map<string, {
+        result: import('../../application/contracts/providers').TransitRouteResult;
+        originFromSelectedAccess: boolean;
+        destinationFromSelectedAccess: boolean;
+      }>();
+
+      for (const item of pairResults.flat()) {
+        const existing = deduped.get(item.result.id);
+        const itemEndpointScore =
+          Number(item.originFromSelectedAccess) + Number(item.destinationFromSelectedAccess);
+        const existingEndpointScore = existing
+          ? Number(existing.originFromSelectedAccess) + Number(existing.destinationFromSelectedAccess)
+          : -1;
+        if (
+          !existing ||
+          itemEndpointScore > existingEndpointScore ||
+          (
+            itemEndpointScore === existingEndpointScore &&
+            item.result.totalMinutes < existing.result.totalMinutes
+          )
+        ) {
+          deduped.set(item.result.id, item);
+        }
+      }
+
+      return [...deduped.values()]
+        .map(({ result, originFromSelectedAccess, destinationFromSelectedAccess }): RouteCandidate => {
           const originConfigured = originConfiguredPoints.length > 0;
           const destinationConfigured = destinationConfiguredPoints.length > 0;
           const viaConfigured = viaConfiguredPoints.length > 0;
           const originMatch =
             !originConfigured ||
+            originFromSelectedAccess ||
             originConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
           const destinationMatch =
             !destinationConfigured ||
+            destinationFromSelectedAccess ||
             destinationConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
           const viaMatch =
             !viaConfigured ||
