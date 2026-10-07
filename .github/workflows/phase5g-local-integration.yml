@@ -312,6 +312,9 @@ jobs:
       - name: Verify schedule image pattern refinement
         run: npm run verify:ocr-pattern-refinement
 
+      - name: Verify structure-first raster schedule recognition
+        run: npm run verify:ocr-structure-first
+
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
 
