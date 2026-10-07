@@ -33,6 +33,7 @@ interface SavedRouteRow {
   position: number;
   label: string;
   origin_access_point_id: string | null;
+  destination_access_point_id: string | null;
   active: number;
 }
 
@@ -163,7 +164,7 @@ export class D1CommuteRepository implements CommuteRepository {
 
   async listSavedRoutes(personId: EntityId): Promise<SavedCommuteRoute[]> {
     const routeResult = await this.db.prepare(
-      `SELECT id, person_id, position, label, origin_access_point_id, active
+      `SELECT id, person_id, position, label, origin_access_point_id, destination_access_point_id, active
       FROM saved_commute_routes
       WHERE person_id = ?1
       ORDER BY position ASC, id ASC`,
@@ -191,6 +192,7 @@ export class D1CommuteRepository implements CommuteRepository {
       position: row.position,
       label: row.label,
       ...(row.origin_access_point_id ? { originAccessPointId: row.origin_access_point_id } : {}),
+      ...(row.destination_access_point_id ? { destinationAccessPointId: row.destination_access_point_id } : {}),
       viaAccessPointIds: viasByRoute.get(row.id) ?? [],
       active: asBoolean(row.active),
     }));
@@ -226,12 +228,13 @@ export class D1CommuteRepository implements CommuteRepository {
     statements.push(
       this.db.prepare(
         `INSERT INTO saved_commute_routes (
-          id, person_id, position, label, origin_access_point_id, active, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
+          id, person_id, position, label, origin_access_point_id, destination_access_point_id, active, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
         ON CONFLICT(id) DO UPDATE SET
           position = excluded.position,
           label = excluded.label,
           origin_access_point_id = excluded.origin_access_point_id,
+          destination_access_point_id = excluded.destination_access_point_id,
           active = excluded.active,
           updated_at = excluded.updated_at`,
       ).bind(
@@ -240,6 +243,7 @@ export class D1CommuteRepository implements CommuteRepository {
         route.position,
         route.label,
         route.originAccessPointId ?? null,
+        route.destinationAccessPointId ?? null,
         asInteger(route.active),
         now,
       ),
