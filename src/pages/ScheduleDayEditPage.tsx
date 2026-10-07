@@ -85,6 +85,8 @@ export function ScheduleDayEditPage() {
         <b>근무일</b><span className={'switch' + (enabled ? ' on' : '')} />
       </button>
       <TimeRangeWheelPicker
+        startLabel="출근"
+        endLabel="퇴근"
         start={start || null}
         end={end || null}
         onChange={(kind, value) => {
