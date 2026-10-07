@@ -219,23 +219,18 @@ function parseScheduleDateEvidence(value: string, context: CalendarContext): str
     ].join('-'));
   }
 
-  const normalized = raw
-    .replace(/[.]/g, '-')
-    .replace(/\//g, '-')
-    .replace(/월/g, '-')
-    .replace(/일/g, '');
-
-  const monthDay = /^(\d{1,2})-(\d{1,2})$/.exec(normalized);
+  const monthDay =
+    /^(\d{1,2})\/(\d{1,2})(?:일)?$/.exec(raw) ??
+    /^(\d{1,2})월(\d{1,2})(?:일)?$/.exec(raw);
   if (!monthDay || context.year == null) return null;
 
   const month = Number(monthDay[1]);
   const day = Number(monthDay[2]);
-  const candidate = [
+  return parseScheduleDate([
     String(context.year),
     String(month).padStart(2, '0'),
     String(day).padStart(2, '0'),
-  ].join('-');
-  return parseScheduleDate(candidate);
+  ].join('-'));
 }
 
 function parseTimeEvidence(value: string): string[] {
