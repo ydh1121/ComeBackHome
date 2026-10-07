@@ -13,7 +13,11 @@ if (!rootNode) throw new Error('ComeBackHome root element was not found.');
 const root: HTMLElement = rootNode;
 
 async function start(): Promise<void> {
-  const services = await createApplicationServices(resolveRuntimeMode(), resolveProviderRuntimeMode());
+  const runtimeMode = resolveRuntimeMode();
+  const providerMode = resolveProviderRuntimeMode();
+  const services = import.meta.env.DEV && runtimeMode === 'mock'
+    ? (await import('./app/mockComposition')).createMockApplicationServices()
+    : await createApplicationServices(runtimeMode, providerMode);
 
   createRoot(root).render(
     <StrictMode>
