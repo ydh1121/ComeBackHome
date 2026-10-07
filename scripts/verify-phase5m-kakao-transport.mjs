@@ -20,7 +20,8 @@ expect(runtimeSource.includes("env.PROVIDER_RUNTIME_ENABLED !== '1'"), 'provider
 expect(pagesEntry.includes('createProviderRuntime'), 'Pages provider runtime wiring missing');
 expect(workerApi.includes("providerRuntime.kakao.searchPlaces"), 'Kakao place Pages wiring missing');
 expect(workerApi.includes("providerRuntime.kakao.publicTransitRoutes"), 'Kakao route Pages wiring missing');
-expect(workerApi.includes('Seoul provider secure transport is unavailable.'), 'Seoul secure-path block missing');
+expect(workerApi.includes('providerRuntime.seoulBus.arrivals'), 'Seoul bus runtime path missing');
+expect(workerApi.includes('providerRuntime.seoulSubway.arrivals'), 'Seoul subway runtime path missing');
 expect(localConfig.vars?.PROVIDER_RUNTIME_ENABLED === '0', 'local provider runtime must remain disabled');
 
 const vite = await createViteServer({
