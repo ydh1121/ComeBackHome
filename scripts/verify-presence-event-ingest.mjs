@@ -102,7 +102,34 @@ try {
     updatedAt: '2026-10-06T00:00:00.000Z',
   };
 
+  const presenceEvents = new Set();
+  let presenceState = null;
+
   const dependencies = {
+    presence: {
+      async get(id) {
+        return id === person.id && presenceState ? structuredClone(presenceState) : null;
+      },
+      async record(input) {
+        if (presenceEvents.has(input.eventId)) {
+          if (!presenceState) throw new Error('presence state missing for duplicate');
+          return { state: structuredClone(presenceState), duplicate: true };
+        }
+        presenceEvents.add(input.eventId);
+        const sameDate = presenceState?.workDate === input.workDate;
+        presenceState = {
+          personId: input.personId,
+          workDate: input.workDate,
+          ...(input.type === 'LEFT_WORK'
+            ? { leftWorkAt: input.acceptedAt }
+            : sameDate && presenceState?.leftWorkAt
+              ? { leftWorkAt: presenceState.leftWorkAt }
+              : {}),
+          ...(input.type === 'ARRIVED_HOME' ? { arrivedHomeAt: input.acceptedAt } : {}),
+        };
+        return { state: structuredClone(presenceState), duplicate: false };
+      },
+    },
     jobs: {
       async enqueueOnce(job) { jobs.push(structuredClone(job)); },
       async claimDue() { return []; },
@@ -138,6 +165,7 @@ try {
     new Date('2026-10-06T13:01:00.000Z'),
   );
   expect(left.type === 'LEFT_WORK', 'LEFT_WORK result type mismatch');
+  expect(presenceState?.leftWorkAt === '2026-10-06T13:01:00.000Z', 'LEFT_WORK actual state was not recorded');
   expect(left.queued === true, 'LEFT_WORK enabled event must queue');
   expect(jobs[0]?.type === 'presence-left-work', 'LEFT_WORK job type mismatch');
   expect(jobs[0]?.payload?.title === '여자친구 퇴근', 'LEFT_WORK title mismatch');
@@ -157,6 +185,8 @@ try {
     new Date('2026-10-06T14:05:00.000Z'),
   );
   expect(arrived.type === 'ARRIVED_HOME', 'ARRIVED_HOME result type mismatch');
+  expect(presenceState?.arrivedHomeAt === '2026-10-06T14:05:00.000Z', 'ARRIVED_HOME actual state was not recorded');
+  expect(presenceState?.leftWorkAt === '2026-10-06T13:01:00.000Z', 'ARRIVED_HOME must preserve same-day LEFT_WORK state');
   expect(arrived.queued === true, 'ARRIVED_HOME enabled event must queue');
   expect(jobs[1]?.type === 'presence-arrived-home', 'ARRIVED_HOME job type mismatch');
   expect(jobs[1]?.payload?.title === '여자친구 집 도착', 'ARRIVED_HOME title mismatch');
@@ -175,6 +205,21 @@ try {
   );
   expect(disabledArrival.queued === false, 'disabled home-arrival rule must not queue');
   expect(jobs.length === beforeDisabled, 'disabled home-arrival event created a job');
+  expect(presenceState?.arrivedHomeAt === '2026-10-06T14:10:00.000Z', 'disabled alert rule must not suppress actual presence state');
+
+  const beforeDuplicate = jobs.length;
+  const duplicateArrival = await module.enqueuePresenceEvent(
+    dependencies,
+    {
+      eventId: 'shortcut-20261006T231000',
+      personId: person.id,
+      type: 'ARRIVED_HOME',
+    },
+    new Date('2026-10-06T14:11:00.000Z'),
+  );
+  expect(duplicateArrival.queued === false, 'duplicate presence event must not queue');
+  expect(jobs.length === beforeDuplicate, 'duplicate presence event created another job');
+  expect(presenceState?.arrivedHomeAt === '2026-10-06T14:10:00.000Z', 'duplicate presence event must not overwrite accepted state');
 
   let invalidIdBlocked = false;
   try {
