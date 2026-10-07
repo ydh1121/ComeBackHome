@@ -58,7 +58,6 @@ const required = [
   'src/pages/CommuteRoutePage.tsx',
   'src/pages/CommuteManualPage.tsx',
   'src/pages/TransitAccessPage.tsx',
-  'src/pages/TransitSearchPage.tsx',
   'src/pages/BusRoutePage.tsx',
   'src/pages/NotificationPage.tsx',
   'src/pages/SettingsPage.tsx',
