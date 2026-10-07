@@ -158,6 +158,81 @@ function clusterProjectionPeaks(scores: number[]): Array<{ position: number; sco
     .sort((left, right) => left.position - right.position);
 }
 
+function weakContentRowBands(raster: ScheduleRasterPlane): ScheduleStructureBand[] {
+  const scores = new Array<number>(raster.height).fill(0);
+
+  for (let y = 0; y < raster.height; y += 1) {
+    let edges = 0;
+    let samples = 0;
+    for (let x = 1; x < raster.width; x += 1) {
+      const left = raster.luminance[y * raster.width + x - 1];
+      const current = raster.luminance[y * raster.width + x];
+      if (Math.abs(current - left) >= 26) edges += 1;
+      samples += 1;
+    }
+    scores[y] = samples ? edges / samples : 0;
+  }
+
+  const q75 = percentile(scores, 0.75);
+  const q92 = percentile(scores, 0.92);
+  const threshold = Math.max(0.008, q75 * 1.3, q92 * 0.48);
+  const clusters: Array<{ start: number; end: number; center: number }> = [];
+  let start: number | null = null;
+
+  for (let y = 0; y < scores.length; y += 1) {
+    if (scores[y] >= threshold) {
+      if (start == null) start = y;
+      continue;
+    }
+    if (start != null) {
+      const end = y - 1;
+      if (end - start + 1 >= 2) {
+        clusters.push({ start, end, center: (start + end) / 2 });
+      }
+      start = null;
+    }
+  }
+  if (start != null) {
+    const end = scores.length - 1;
+    if (end - start + 1 >= 2) clusters.push({ start, end, center: (start + end) / 2 });
+  }
+
+  const merged: Array<{ start: number; end: number; center: number }> = [];
+  for (const cluster of clusters) {
+    const previous = merged[merged.length - 1];
+    if (previous && cluster.start - previous.end <= 6) {
+      previous.end = cluster.end;
+      previous.center = (previous.start + previous.end) / 2;
+    } else {
+      merged.push({ ...cluster });
+    }
+  }
+  if (!merged.length) return [];
+
+  const centers = merged.map((item) => item.center);
+  const gaps = centers.slice(1).map((value, index) => value - centers[index]).filter((value) => value > 8);
+  const typicalGap = median(gaps) || 36;
+
+  return merged.map((item, index) => {
+    const top = index === 0
+      ? Math.max(0, item.center - typicalGap / 2)
+      : (merged[index - 1].center + item.center) / 2;
+    const bottom = index === merged.length - 1
+      ? Math.min(raster.height, item.center + typicalGap / 2)
+      : (item.center + merged[index + 1].center) / 2;
+    return {
+      index,
+      bounds: {
+        x: 0,
+        y: Math.max(0, top),
+        width: raster.width,
+        height: Math.max(1, bottom - top),
+      },
+      confidence: 0.45,
+    };
+  });
+}
+
 function bandsFromLines(
   positions: number[],
   maximum: number,
@@ -221,7 +296,7 @@ export function detectScheduleTableStructureFromRaster(
 
   const rowBands = hasHorizontalGrid
     ? bandsFromLines(horizontalPositions, raster.height, left, tableBounds.width, 'row')
-    : [];
+    : weakContentRowBands(raster);
   const columnBands = hasVerticalGrid
     ? bandsFromLines(verticalPositions, raster.width, top, tableBounds.height, 'column')
     : [];
@@ -242,13 +317,15 @@ export function detectScheduleTableStructureFromRaster(
         ? 'PIXEL_PARTIAL'
         : 'WEAK_PIXEL';
 
+  const weakRowEvidence = !hasHorizontalGrid && rowBands.length >= 3 ? 0.12 : 0;
   const confidence = clamp(
     (hasHorizontalGrid ? 0.2 : 0) +
     (hasVerticalGrid ? 0.2 : 0) +
-    horizontalContinuity * 0.18 +
-    verticalContinuity * 0.18 +
-    repeatedRowSpacing * 0.12 +
-    repeatedColumnSpacing * 0.12,
+    weakRowEvidence +
+    horizontalContinuity * 0.16 +
+    verticalContinuity * 0.16 +
+    repeatedRowSpacing * 0.1 +
+    repeatedColumnSpacing * 0.1,
   );
 
   return {
