@@ -25,7 +25,6 @@ const expectedRoutes = [
   '/people/:personId/commute/manual',
   '/people/:personId/commute/routes/:routeId',
   '/people/:personId/commute/:placeKind/access',
-  '/people/:personId/commute/:placeKind/access/search',
   '/people/:personId/commute/:placeKind/access/:accessId/bus-routes',
   '/notifications',
   '/settings',
@@ -40,7 +39,6 @@ const [
   composition,
   commuteManual,
   transitAccess,
-  transitSearch,
   commuteService,
   commuteRuntime,
   providerContracts,
@@ -61,7 +59,6 @@ const [
   read('../src/app/composition.ts'),
   read('../src/pages/CommuteManualPage.tsx'),
   read('../src/pages/TransitAccessPage.tsx'),
-  read('../src/pages/TransitSearchPage.tsx'),
   read('../src/application/services/CommuteWorkflowService.ts'),
   read('../src/providers/runtime/ProviderRuntimeRepositories.ts'),
   read('../src/application/contracts/providers.ts'),
@@ -93,23 +90,33 @@ expect(runtimeConfig.includes("import.meta.env.DEV ? 'mock' : 'api'"), 'producti
 expect(composition.includes("providerData: providerMode === 'api' ? 'worker-api' : 'disabled'"), 'provider-disabled runtime still uses mock data');
 
 for (const token of [
-  'destinationAccessPointId',
+  'destinationAccessPointIds',
+  'originAccessPointIds',
   'moveRouteVia',
   'removeRouteVia',
+  'removeRouteOriginAccess',
+  'removeRouteDestinationAccess',
 ]) expect(commuteManual.includes(token), 'saved-route editor missing: ' + token);
 expect(
   transitAccess.includes("routeRole === 'destination'") &&
-  transitAccess.includes('setRouteDestinationAccess'),
-  'saved-route destination nearby flow is incomplete',
+  transitAccess.includes('addRouteDestinationAccess') &&
+  transitAccess.includes('removeRouteDestinationAccess') &&
+  transitAccess.includes('actions.transitSearch.search') &&
+  transitAccess.includes('type="search"'),
+  'saved-route destination inline multi-search flow is incomplete',
 );
-expect(
-  transitSearch.includes("routeRole === 'destination'") &&
-  transitSearch.includes('setRouteDestinationAccess'),
-  'saved-route destination search flow is incomplete',
-);
-expect(commuteService.includes('setRouteDestinationAccess'), 'saved-route destination persistence action missing');
+for (const token of [
+  'addRouteOriginAccess',
+  'removeRouteOriginAccess',
+  'addRouteDestinationAccess',
+  'removeRouteDestinationAccess',
+]) expect(commuteService.includes(token), 'saved-route multi-access persistence action missing: ' + token);
 
-expect(commuteRuntime.includes('activeSavedRoute.destinationAccessPointId'), 'destination transit does not affect provider route matching');
+expect(
+  commuteRuntime.includes('destinationAccessPointIds') &&
+  commuteRuntime.includes('destinationConfiguredPoints.some'),
+  'destination transit set does not affect provider route matching',
+);
 expect(commuteRuntime.includes('selectedAccess.providerId'), 'persisted transit provider ID does not reach realtime ETA');
 expect(providerContracts.includes('arrivals(providerStationId: string'), 'subway realtime contract does not carry providerStationId');
 expect(workerApi.includes("stations.find((candidate) => candidate.providerId === providerStationId)"), 'persisted subway station ID is not verified at the Worker realtime boundary');
@@ -167,6 +174,7 @@ const expectedMigrations = [
   '0004_saved_commute_routes.sql',
   '0005_presence_state.sql',
   '0006_saved_route_destination_access.sql',
+  '0007_multi_access_route_sets.sql',
 ];
 expect(
   JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),
