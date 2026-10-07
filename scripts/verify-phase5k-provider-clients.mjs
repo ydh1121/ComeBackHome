@@ -86,6 +86,18 @@ const fakeTransport = {
     if (!fixtureByCapability.has(request.capability)) {
       throw new Error('Fixture missing for ' + request.capability);
     }
+    if (
+      request.capability === 'subway-station-name-search' &&
+      request.pathParams?.stationName === '강남역'
+    ) {
+      return {
+        SearchInfoBySubwayNameService: {
+          list_total_count: 0,
+          RESULT: { CODE: 'INFO-000', MESSAGE: '정상 처리되었습니다' },
+          row: [],
+        },
+      };
+    }
     return structuredClone(fixtureByCapability.get(request.capability));
   },
 };
@@ -122,7 +134,7 @@ try {
   expect(busArrivals.length === 2, 'Seoul bus XML route-all stop filter mismatch');
 
   const subway = new clients.SeoulSubwayRequestClient(fakeTransport);
-  const stations = await subway.searchStations('강남', { x: 127.02, y: 37.49 });
+  const stations = await subway.searchStations('강남역', { x: 127.02, y: 37.49 });
   const subwayArrivals = await subway.arrivals('강남', '02호선');
   const positions = await subway.trainPositions('2호선');
   expect(stations[0]?.providerId === '0222', 'Seoul subway station client mismatch');
@@ -160,7 +172,10 @@ try {
   expect(busArrivalRequest?.query?.resultType == null, 'Seoul bus arrival must use the documented XML contract');
 
   const stationRequest = byCapability.get('subway-station-name-search');
-  expect(stationRequest?.pathParams?.stationName === '강남', 'Seoul station path parameter mismatch');
+  expect(stationRequest?.pathParams?.stationName === '강남', 'Seoul station fallback path parameter mismatch');
+  const stationRequests = requests.filter((entry) => entry.request.capability === 'subway-station-name-search');
+  expect(stationRequests.length === 2, 'Seoul station search should retry once after an empty 역-suffixed query');
+  expect(stationRequests[0]?.request?.pathParams?.stationName === '강남역', 'Seoul station primary query must preserve user input');
   expect(stationRequest?.auth?.placement === 'path', 'Seoul subway station key placement mismatch');
   expect(stationRequest?.auth?.secretName === 'SEOUL_OPENAPI_KEY', 'Seoul subway station lookup must use the general Seoul Open Data key');
   expect(stationRequest?.auth?.target === '{SEOUL_OPENAPI_KEY}', 'Seoul subway station key token mismatch');
