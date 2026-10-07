@@ -365,11 +365,40 @@ export function mapSeoulSubwayStations(payload: unknown): TransitSearchResult[] 
   });
 }
 
-export function mapSeoulSubwayArrivals(payload: unknown): Arrival[] {
+function normalizedSubwayLine(value: string | undefined): string {
+  return (value ?? '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/서울|수도권|지하철|전철|호선|line|\s+/g, '')
+    .replace(/^0+/, '');
+}
+
+function subwayLineMatches(item: JsonRecord, requestedLine: string | undefined): boolean {
+  const requested = normalizedSubwayLine(requestedLine);
+  if (!requested) return true;
+
+  const names = [
+    text(item.subwayNm),
+    text(item.lineNm),
+    text(item.trainLineNm),
+  ].map(normalizedSubwayLine).filter(Boolean);
+  if (names.some((value) => value === requested || value.includes(requested) || requested.includes(value))) {
+    return true;
+  }
+
+  const subwayId = text(item.subwayId);
+  if (/^[1-9]$/.test(requested) && subwayId && /^100[1-9]$/.test(subwayId)) {
+    return subwayId.slice(-1) === requested;
+  }
+  return names.length === 0 && !subwayId;
+}
+
+export function mapSeoulSubwayArrivals(payload: unknown, line?: string): Arrival[] {
   const root = asRecord(payload);
   if (!root) return [];
 
   return asRecords(root.realtimeArrivalList).flatMap((item) => {
+    if (!subwayLineMatches(item, line)) return [];
     const minutes = secondsToMinutes(item.barvlDt);
     const observedAt = seoulTimestamp(item.recptnDt);
     if (minutes == null || !observedAt) return [];
@@ -379,7 +408,7 @@ export function mapSeoulSubwayArrivals(payload: unknown): Arrival[] {
       minutes,
       observedAt,
     }];
-  });
+  }).sort((left, right) => left.minutes - right.minutes);
 }
 
 export function mapSeoulSubwayTrainPositions(payload: unknown): SubwayTrainPosition[] {
