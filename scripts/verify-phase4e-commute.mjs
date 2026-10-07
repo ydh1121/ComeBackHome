@@ -6,7 +6,6 @@ const place = await read('../src/pages/PlaceEditPage.tsx');
 const route = await read('../src/pages/CommuteRoutePage.tsx');
 const manual = await read('../src/pages/CommuteManualPage.tsx');
 const access = await read('../src/pages/TransitAccessPage.tsx');
-const search = await read('../src/pages/TransitSearchPage.tsx');
 const bus = await read('../src/pages/BusRoutePage.tsx');
 const map = await read('../src/features/commute/KakaoTransitMap.tsx');
 const service = await read('../src/application/services/CommuteWorkflowService.ts');
