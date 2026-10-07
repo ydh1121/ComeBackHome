@@ -206,6 +206,7 @@ export async function handleApiRequest(
           segments[2] === 'transit-resolve' ||
           segments[2] === 'static-map' ||
           segments[2] === 'routes' ||
+          segments[2] === 'bus-routes' ||
           segments[2] === 'bus-arrivals' ||
           segments[2] === 'subway-arrivals'
         )
@@ -263,6 +264,16 @@ export async function handleApiRequest(
             }
             const station = chooseTransitResolution(stations, name, near, line);
             return json({ resolved: station ?? {} });
+          }
+
+          if (segments[2] === 'bus-routes') {
+            const arsId = url.searchParams.get('arsId')?.trim() ?? '';
+            if (!/^\d{4,5}$/.test(arsId)) {
+              return json({ error: 'Valid arsId is required.' }, 400);
+            }
+            return json({
+              routes: await providerRuntime.seoulBus.routesByStop(arsId.padStart(5, '0')),
+            });
           }
 
           if (segments[2] === 'bus-arrivals') {
