@@ -17,7 +17,7 @@ export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes
 export type ImportResolution = 'KEEP' | 'NEW' | 'SKIP';
 export type ImportFileKind = 'XLSX' | 'IMAGE';
 export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
-export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; }
+export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; message?: string; }
 export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; ignored?: boolean; }
 export interface ImportStructure { sheet: string; headerRow: number; personColumn: string; dateColumn: string; shiftColumn: string; needsReview: boolean; }
 export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'start'|'end'>; imported: { start: string | null; end: string | null }; resolution: ImportResolution | null; }
