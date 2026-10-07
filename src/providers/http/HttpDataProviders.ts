@@ -46,6 +46,20 @@ export class HttpTransitAccessSearchProvider implements TransitAccessSearchProvi
       '/providers/transit-nearby?' + params.toString(),
     )).results;
   }
+
+  async resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult> {
+    const params = new URLSearchParams({
+      mode: result.mode,
+      name: result.name,
+      x: String(near.x),
+      y: String(near.y),
+    });
+    if (result.line) params.set('line', result.line);
+    const response = await this.client.get<{ resolved: Partial<TransitSearchResult> }>(
+      '/providers/transit-resolve?' + params.toString(),
+    );
+    return { ...result, ...response.resolved };
+  }
 }
 
 export class HttpTransitRouteProvider implements TransitRouteProvider {
