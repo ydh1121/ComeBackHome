@@ -43,4 +43,4 @@ export interface PresenceState {
   arrivedHomeAt?: ISODateTime;
 }
 export interface EtaSnapshot { personId: EntityId; status: 'ACTUAL' | 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
-export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; routeCandidateId?: EntityId; }
+export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; leftWorkAt?: ISODateTime; arrivedHomeAt?: ISODateTime; routeCandidateId?: EntityId; }
