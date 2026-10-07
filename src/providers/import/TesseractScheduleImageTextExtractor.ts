@@ -531,7 +531,9 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
         tokens: mergeTokens(semanticMerged, numeric),
       };
 
-      const personRegions = inferSchedulePersonLabelProbeRegions(refinedLayout);
+      const personRegions = this.useStructureFirstMode
+        ? []
+        : inferSchedulePersonLabelProbeRegions(refinedLayout);
       if (personRegions.length) {
           await worker.setParameters({
             tessedit_pageseg_mode: String(PSM.SINGLE_LINE),
