@@ -12,7 +12,7 @@ const matchSource = await read('../src/pages/ImportPersonMatchPage.tsx');
 const commitSource = await read('../src/application/use-cases/commitImportReview.ts');
 
 for (const text of [
-  'batch.reviewItems.map',
+  'visibleReviewItems.map',
   'const allReviewed',
   "item.resolution === 'KEEP'",
   "item.resolution === 'NEW' && importedTimeComplete(item)",
@@ -25,9 +25,11 @@ for (const text of [
   expect(reviewSource.includes(text), 'multi-item review UI missing ' + text);
 }
 expect(!reviewSource.includes('batch.reviewItems[0]'), 'review UI must not collapse real import to first item');
-expect(matchSource.includes('const allMatched'), 'person match completion gate missing');
-expect(matchSource.includes("matched?.name ?? '연결 안 됨'"), 'unmatched person label must be explicit');
-expect(matchSource.includes('disabled={!allMatched}'), 'person match next CTA must block unresolved people');
+expect(matchSource.includes('const allResolved'), 'person match completion gate missing');
+expect(matchSource.includes('<option value="">연결 안 됨</option>'), 'unmatched person label must be explicit');
+expect(matchSource.includes('새 사람으로 등록'), 'detected person create option missing');
+expect(matchSource.includes('가져오지 않음'), 'detected person ignore option missing');
+expect(matchSource.includes('disabled={!allResolved || includedCount === 0}'), 'person match next CTA must block unresolved/empty imports');
 expect(commitSource.includes("Import contains unresolved people."), 'unresolved person commit guard missing');
 expect(commitSource.includes("Import contains unreviewed schedules."), 'unreviewed schedule commit guard missing');
 expect(commitSource.includes("Import contains incomplete schedule times."), 'incomplete imported time commit guard missing');
