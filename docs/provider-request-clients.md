@@ -45,10 +45,10 @@ The route-wide response is filtered by both busRouteId and stop stId after recei
 Current Seoul Open Data documentation also publishes HTTP sample URLs. Phase 5K records the documented templates and marks them DOCUMENTED_HTTP_REQUIRES_VALIDATION.
 
 Request plans:
-- station-name canonicalization: SearchInfoBySubwayNameService
-- realtime station arrivals: realtimeStationArrival
-- realtime train positions: realtimePosition
-- secret reference: SEOUL_SUBWAY_API_KEY as a path injection
+- station-name canonicalization: `SearchInfoBySubwayNameService` using `SEOUL_OPENAPI_KEY` (general Seoul Open Data key)
+- realtime station arrivals: `realtimeStationArrival` using `SEOUL_SUBWAY_API_KEY` (dedicated realtime-subway key)
+- realtime train positions: `realtimePosition` using `SEOUL_SUBWAY_API_KEY`
+- the two Seoul subway key classes are intentionally non-interchangeable and are injected independently
 
 The realtime arrival endpoint requires statnNm. RealtimeSubwayProvider was corrected to accept canonical stationName rather than a station ID.
 
