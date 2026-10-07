@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
-import type { Coordinate, PlaceKind, TransitMode } from '../domain/models';
-import { usePlace } from '../features/commute/useCommuteWorkflow';
+import type { Coordinate, PlaceKind, SavedCommuteRoute, TransitAccessPoint, TransitMode } from '../domain/models';
+import { useCommuteOverview, usePlace } from '../features/commute/useCommuteWorkflow';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
 import { KakaoTransitMap } from '../features/commute/KakaoTransitMap';
@@ -10,7 +10,7 @@ import './commute-page.css';
 
 type Filter = 'all' | 'subway' | 'bus';
 
-type NearbyTransit = {
+type TransitResult = {
   id: string;
   providerId: string;
   mode: TransitMode;
@@ -27,14 +27,24 @@ function resolveKind(value?: string): PlaceKind {
   return value === 'destination' ? 'destination' : 'origin';
 }
 
-function querySuffix(params: URLSearchParams): string {
-  const next = new URLSearchParams();
-  for (const name of ['routeId', 'routeRole', 'routeEdit', 'index']) {
-    const value = params.get(name);
-    if (value) next.set(name, value);
+function routeAccessIds(
+  route: SavedCommuteRoute | undefined,
+  role: string | null,
+): string[] {
+  if (!route) return [];
+  if (role === 'origin') {
+    return route.originAccessPointIds ??
+      (route.originAccessPointId ? [route.originAccessPointId] : []);
   }
-  const encoded = next.toString();
-  return encoded ? '?' + encoded : '';
+  if (role === 'destination') {
+    return route.destinationAccessPointIds ??
+      (route.destinationAccessPointId ? [route.destinationAccessPointId] : []);
+  }
+  return [];
+}
+
+function sameProvider(point: TransitAccessPoint, result: TransitResult): boolean {
+  return point.providerId === result.providerId && point.mode === result.mode;
 }
 
 export function TransitAccessPage() {
@@ -48,31 +58,33 @@ export function TransitAccessPage() {
   const routeEdit = params.get('routeEdit');
   const routeIndex = Number(params.get('index') ?? '-1');
   const placeState = usePlace(personId, kind);
+  const commuteState = useCommuteOverview(personId);
   const [filter, setFilter] = useState<Filter>('all');
-  const [nearby, setNearby] = useState<NearbyTransit[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [committing, setCommitting] = useState(false);
+  const [nearby, setNearby] = useState<TransitResult[]>([]);
+  const [searchResults, setSearchResults] = useState<TransitResult[]>([]);
+  const [query, setQuery] = useState('');
+  const [nearbyLoading, setNearbyLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [workingId, setWorkingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     if (placeState.status !== 'ready' || !placeState.place?.coordinate) {
-      if (placeState.status !== 'loading') setLoading(false);
+      if (placeState.status !== 'loading') setNearbyLoading(false);
       return () => { active = false; };
     }
 
-    setLoading(true);
+    setNearbyLoading(true);
     services.actions.transitSearch.nearby(personId, kind)
       .then((items) => {
         if (!active) return;
         setNearby(items);
-        setSelectedId((current) => current && items.some((item) => item.id === current) ? current : null);
-        setLoading(false);
+        setNearbyLoading(false);
       })
       .catch(() => {
         if (!active) return;
         setNearby([]);
-        setLoading(false);
+        setNearbyLoading(false);
       });
 
     return () => { active = false; };
@@ -84,75 +96,150 @@ export function TransitAccessPage() {
     placeState.status === 'ready' ? placeState.place?.id : null,
   ]);
 
+  useEffect(() => {
+    let active = true;
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return () => { active = false; };
+    }
+
+    setSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      services.actions.transitSearch.search(personId, kind, trimmed)
+        .then((items) => {
+          if (!active) return;
+          setSearchResults(items);
+          setSearchLoading(false);
+        })
+        .catch(() => {
+          if (!active) return;
+          setSearchResults([]);
+          setSearchLoading(false);
+        });
+    }, 220);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [services, personId, kind, query]);
+
+  const searching = query.trim().length > 0;
+  const source = searching ? searchResults : nearby;
   const visible = useMemo(
-    () => nearby.filter((point) => filter === 'all' || point.mode.toLocaleLowerCase() === filter),
-    [nearby, filter],
+    () => source
+      .filter((point) => filter === 'all' || point.mode.toLocaleLowerCase() === filter)
+      .sort((left, right) =>
+        (left.distanceM ?? Number.MAX_SAFE_INTEGER) -
+        (right.distanceM ?? Number.MAX_SAFE_INTEGER)
+      ),
+    [source, filter],
   );
-  const selected = nearby.find((point) => point.id === selectedId) ?? null;
+
   const place = placeState.status === 'ready' ? placeState.place : null;
   const kindLabel = kind === 'origin' ? '출발지' : '도착지';
   const base = '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access';
-  const suffix = querySuffix(params);
   const routeReturn = routeId
     ? '/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(routeId)
     : '/people/' + encodeURIComponent(personId) + '/commute';
 
-  const attachToRoute = async (accessPointId: string) => {
-    if (!routeId) return;
-    if (routeRole === 'origin') {
-      await services.actions.commute.setRouteOriginAccess(personId, routeId, accessPointId);
-      return;
-    }
-    if (routeRole === 'destination') {
-      await services.actions.commute.setRouteDestinationAccess(personId, routeId, accessPointId);
-      return;
-    }
-    if (routeRole === 'via') {
-      if (routeEdit === 'replace') {
-        await services.actions.commute.replaceRouteVia(personId, routeId, Math.max(0, routeIndex), accessPointId);
-      } else {
-        await services.actions.commute.addRouteVia(
-          personId,
-          routeId,
-          accessPointId,
-          routeIndex >= 0 ? routeIndex : undefined,
-        );
-      }
+  const overview = commuteState.status === 'ready' ? commuteState.overview : null;
+  const route = routeId
+    ? overview?.savedRoutes.find((candidate) => candidate.id === routeId)
+    : undefined;
+  const persistedPoints = kind === 'origin'
+    ? overview?.originAccessPoints ?? []
+    : overview?.destinationAccessPoints ?? [];
+  const selectedRouteIds = new Set(routeAccessIds(route, routeRole));
+  const selectedPoints = persistedPoints.filter((point) => selectedRouteIds.has(point.id));
+
+  const selectedResultIds = new Set(
+    visible
+      .filter((result) => selectedPoints.some((point) => sameProvider(point, result)))
+      .map((result) => result.id),
+  );
+
+  const attachSingleVia = async (accessPointId: string) => {
+    if (!routeId || routeRole !== 'via') return;
+    if (routeEdit === 'replace') {
+      await services.actions.commute.replaceRouteVia(
+        personId,
+        routeId,
+        Math.max(0, routeIndex),
+        accessPointId,
+      );
+    } else {
+      await services.actions.commute.addRouteVia(
+        personId,
+        routeId,
+        accessPointId,
+        routeIndex >= 0 ? routeIndex : undefined,
+      );
     }
   };
 
-  const commitSelected = async () => {
-    if (!selected || committing) return;
-    setCommitting(true);
+  const toggleResult = async (result: TransitResult) => {
+    if (workingId) return;
+    setWorkingId(result.id);
     try {
-      const point = await services.actions.transitSearch.addAccessPoint(personId, kind, selected.id);
-      await attachToRoute(point.id);
+      const existing = persistedPoints.find((point) => sameProvider(point, result));
 
-      if (point.mode === 'BUS') {
-        const busParams = new URLSearchParams();
-        if (routeId) busParams.set('routeId', routeId);
-        if (routeRole) busParams.set('routeRole', routeRole);
-        if (routeEdit) busParams.set('routeEdit', routeEdit);
-        if (routeIndex >= 0) busParams.set('index', String(routeIndex));
-        const tail = busParams.toString() ? '?' + busParams.toString() : '';
-        navigate(base + '/' + encodeURIComponent(point.id) + '/bus-routes' + tail);
+      if (routeId && routeRole === 'origin') {
+        if (existing && selectedRouteIds.has(existing.id)) {
+          await services.actions.commute.removeRouteOriginAccess(personId, routeId, existing.id);
+        } else {
+          const point = existing ??
+            await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
+          await services.actions.commute.addRouteOriginAccess(personId, routeId, point.id);
+        }
         return;
       }
 
-      navigate(routeId ? routeReturn : base, { replace: true });
+      if (routeId && routeRole === 'destination') {
+        if (existing && selectedRouteIds.has(existing.id)) {
+          await services.actions.commute.removeRouteDestinationAccess(personId, routeId, existing.id);
+        } else {
+          const point = existing ??
+            await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
+          await services.actions.commute.addRouteDestinationAccess(personId, routeId, point.id);
+        }
+        return;
+      }
+
+      const point = existing ??
+        await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
+
+      if (routeId && routeRole === 'via') {
+        await attachSingleVia(point.id);
+        if (point.mode === 'BUS') {
+          const busParams = new URLSearchParams();
+          busParams.set('routeId', routeId);
+          busParams.set('routeRole', routeRole);
+          if (routeEdit) busParams.set('routeEdit', routeEdit);
+          if (routeIndex >= 0) busParams.set('index', String(routeIndex));
+          navigate(
+            base + '/' + encodeURIComponent(point.id) + '/bus-routes?' + busParams.toString(),
+          );
+          return;
+        }
+        navigate(routeReturn, { replace: true });
+        return;
+      }
+
+      await services.actions.transitAccess.toggleAccess(point.id, !point.selected);
     } finally {
-      setCommitting(false);
+      setWorkingId(null);
     }
   };
 
   if (placeState.status === 'loading') {
-    return <section className="commute-page"><div className="commute-message">출발지 정보를 불러오는 중</div></section>;
+    return <section className="commute-page"><div className="commute-message">{kindLabel} 정보를 불러오는 중</div></section>;
   }
-
   if (placeState.status === 'error') {
-    return <section className="commute-page"><div className="commute-message">출발지 정보를 불러오지 못했습니다.</div></section>;
+    return <section className="commute-page"><div className="commute-message">{kindLabel} 정보를 불러오지 못했습니다.</div></section>;
   }
-
   if (!place?.coordinate) {
     return (
       <section className="commute-page" data-page="TransitAccessPicker" data-state="PLACE_REQUIRED">
@@ -166,12 +253,15 @@ export function TransitAccessPage() {
     );
   }
 
+  const loading = searching ? searchLoading : nearbyLoading;
+  const selectedCount = selectedPoints.length;
+
   return (
     <section className="commute-page" data-route={base} data-page="TransitAccessPicker" data-state={loading ? 'LOADING' : visible.length ? 'CANDIDATE_SELECTING' : 'NO_RESULT'}>
       <BackButton fallbackTo={routeReturn} />
       <h1 className="page-title">{kindLabel} 근처 교통</h1>
       <div className="transit-context">
-        {place.label || kindLabel} 위치를 중심으로 가까운 정류장과 역을 표시합니다.
+        {place.label || kindLabel} 위치에서 실제 거리순으로 가까운 정류장과 역을 표시합니다.
       </div>
 
       <KakaoTransitMap
@@ -183,8 +273,11 @@ export function TransitAccessPage() {
           mode: point.mode,
           coordinate: point.coordinate,
         }] : [])}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
+        selectedIds={[...selectedResultIds]}
+        onSelect={(id) => {
+          const result = visible.find((item) => item.id === id);
+          if (result) void toggleResult(result);
+        }}
       />
 
       <div className="candidate-filter">
@@ -193,40 +286,66 @@ export function TransitAccessPage() {
         ))}
       </div>
 
-      <div className="transit-list">
-        {loading ? <div className="transit-empty">주변 정류장과 역을 찾는 중</div> : visible.map((point) => (
-          <button
-            type="button"
-            className={'transit-row transit-row-action' + (point.id === selectedId ? ' selected' : '')}
-            key={point.id}
-            onClick={() => setSelectedId(point.id)}
-          >
-            <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
-            <span className="transit-copy">
-              <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
-              <span className="row-sub">
-                {[
-                  point.displayCode ? '정류소 ' + point.displayCode : null,
-                  point.distanceM != null ? point.distanceM.toLocaleString() + 'm' : null,
-                  point.walkMinutes != null ? '도보 약 ' + point.walkMinutes + '분' : null,
-                ].filter(Boolean).join(' · ')}
-              </span>
-            </span>
-            <span className="transit-trailing">{point.id === selectedId ? <Icon name="check" /> : <Icon name="chevron-right" />}</span>
-          </button>
-        ))}
-        {!loading && !visible.length ? <div className="transit-empty">주변 교통을 찾지 못했습니다.</div> : null}
-      </div>
+      <label className="transit-inline-search">
+        <Icon name="search" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="정류장명·번호 또는 역 이름 검색"
+          autoComplete="off"
+          enterKeyHint="search"
+        />
+        {query ? (
+          <button type="button" aria-label="검색어 지우기" onClick={() => setQuery('')}>×</button>
+        ) : null}
+      </label>
 
-      {selected ? (
-        <button type="button" className="cta" disabled={committing} onClick={commitSelected}>
-          {selected.mode === 'BUS' ? '이 정류장 선택 후 버스 보기' : '이 역 선택'}
-        </button>
+      {routeId && (routeRole === 'origin' || routeRole === 'destination') ? (
+        <div className="transit-multi-hint">
+          여러 곳을 선택할 수 있습니다. 현재 {selectedCount}개 선택됨
+        </div>
       ) : null}
 
-      <button type="button" className="cta secondary add-action" onClick={() => navigate(base + '/search' + suffix)}>
-        <Icon name="search" /> 정류장명·번호 직접 검색
-      </button>
+      <div className="transit-list">
+        {loading ? (
+          <div className="transit-empty">
+            {searching ? '검색 중' : '주변 정류장과 역을 찾는 중'}
+          </div>
+        ) : visible.map((point) => {
+          const selected = selectedResultIds.has(point.id);
+          return (
+            <button
+              type="button"
+              className={'transit-row transit-row-action' + (selected ? ' selected' : '')}
+              key={point.id}
+              aria-pressed={selected}
+              disabled={workingId === point.id}
+              onClick={() => void toggleResult(point)}
+            >
+              <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
+              <span className="transit-copy">
+                <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
+                <span className="row-sub">
+                  {[
+                    point.displayCode ? '정류소 ' + point.displayCode : null,
+                    point.distanceM != null ? point.distanceM.toLocaleString() + 'm' : null,
+                    point.walkMinutes != null ? '도보 약 ' + point.walkMinutes + '분' : null,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <span className="transit-trailing">
+                {workingId === point.id ? '처리 중' : selected ? <Icon name="check" /> : <Icon name="plus" />}
+              </span>
+            </button>
+          );
+        })}
+        {!loading && !visible.length ? (
+          <div className="transit-empty">
+            {searching ? '검색 결과가 없습니다.' : '이 위치에서 가까운 교통을 찾지 못했습니다.'}
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
