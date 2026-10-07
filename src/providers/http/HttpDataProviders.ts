@@ -1,5 +1,6 @@
 import type {
   Arrival,
+  BusRouteLookupProvider,
   PlaceSearchProvider,
   PlaceSearchResult,
   RealtimeBusProvider,
@@ -9,7 +10,7 @@ import type {
   TransitRouteResult,
   TransitSearchResult,
 } from '../../application/contracts/providers';
-import type { Coordinate } from '../../domain/models';
+import type { BusRouteOption, Coordinate } from '../../domain/models';
 import { HttpJsonClient } from './HttpJsonClient';
 
 export class HttpPlaceSearchProvider implements PlaceSearchProvider {
@@ -75,6 +76,17 @@ export class HttpTransitRouteProvider implements TransitRouteProvider {
     return (await this.client.get<{ results: TransitRouteResult[] }>(
       '/providers/routes?' + params.toString(),
     )).results;
+  }
+}
+
+export class HttpBusRouteLookupProvider implements BusRouteLookupProvider {
+  constructor(private readonly client: HttpJsonClient) {}
+
+  async listByStop(arsId: string): Promise<BusRouteOption[]> {
+    const params = new URLSearchParams({ arsId });
+    return (await this.client.get<{ routes: BusRouteOption[] }>(
+      '/providers/bus-routes?' + params.toString(),
+    )).routes;
   }
 }
 
