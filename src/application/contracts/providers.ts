@@ -15,7 +15,7 @@ export interface TransitAccessSearchProvider {
 }
 export interface BusRouteLookupProvider { listByStop(arsId: string): Promise<BusRouteOption[]>; }
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
-export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
+export interface RealtimeSubwayProvider { arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
 export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
 export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; sourceRow: number; confidence: number; }
