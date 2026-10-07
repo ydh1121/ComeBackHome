@@ -272,16 +272,26 @@ export class SeoulSubwayRequestClient implements SeoulSubwaySource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
   async searchStations(query: string, _near?: Coordinate, context?: ProviderRequestContext) {
-    const request: ProviderJsonRequest = {
-      source: 'seoul-subway',
-      capability: 'subway-station-name-search',
-      method: 'GET',
-      urlTemplate: 'http://openAPI.seoul.go.kr:8088/{SEOUL_OPENAPI_KEY}/json/SearchInfoBySubwayNameService/1/20/{stationName}/',
-      pathParams: { stationName: query },
-      auth: seoulOpenApiAuth(),
-      security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
+    const fetchStations = async (stationName: string) => {
+      const request: ProviderJsonRequest = {
+        source: 'seoul-subway',
+        capability: 'subway-station-name-search',
+        method: 'GET',
+        urlTemplate: 'http://openAPI.seoul.go.kr:8088/{SEOUL_OPENAPI_KEY}/json/SearchInfoBySubwayNameService/1/20/{stationName}/',
+        pathParams: { stationName },
+        auth: seoulOpenApiAuth(),
+        security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
+      };
+      return mapSeoulSubwayStations(await this.transport.getJson(request, context));
     };
-    return mapSeoulSubwayStations(await this.transport.getJson(request, context));
+
+    const normalizedQuery = query.normalize('NFKC').trim();
+    const primary = await fetchStations(normalizedQuery);
+    if (primary.length > 0 || !normalizedQuery.endsWith('역')) return primary;
+
+    const fallbackName = normalizedQuery.slice(0, -1).trim();
+    if (!fallbackName) return primary;
+    return fetchStations(fallbackName);
   }
 
   async arrivals(stationName: string, line?: string, context?: ProviderRequestContext) {
