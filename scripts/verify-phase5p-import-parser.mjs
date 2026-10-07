@@ -127,6 +127,21 @@ try {
 
   const nextBatch = await imports.getCurrentBatch();
   expect(nextBatch === null, 'committed import batch must not remain current');
+
+  const resetStore = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  resetStore.mutate((state) => { state.importBatches = []; });
+  const resetImports = new reposModule.MockImportRepository(resetStore);
+  const resetAction = new serviceModule.WorkbookImportFileSelectionAction(
+    resetImports,
+    new reposModule.MockPersonRepository(resetStore),
+    new reposModule.MockScheduleRepository(resetStore),
+    parser,
+  );
+  const firstResetBatchId = await resetAction.accept([{ kind: 'WORKBOOK', file: workbookFile }]);
+  const secondResetBatchId = await resetAction.accept([{ kind: 'WORKBOOK', file: workbookFile }]);
+  expect(firstResetBatchId !== secondResetBatchId, 'new upload must create a distinct batch');
+  expect(await resetImports.getBatch(firstResetBatchId) === null, 'new upload must remove the previous import batch');
+  expect((await resetImports.getCurrentBatch())?.id === secondResetBatchId, 'latest upload must be the only current import batch');
 } finally {
   await vite.close();
 }
