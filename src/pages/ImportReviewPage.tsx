@@ -5,6 +5,7 @@ import { useImportWorkflow } from '../features/import/useImportWorkflow';
 import { formatDateLabel } from '../features/schedule/date-format';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
+import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
 import './import-page.css';
 
 export function ImportReviewPage() {
@@ -78,39 +79,18 @@ export function ImportReviewPage() {
 
                 {!importedComplete ? (
                   <div className="review-time-editor" data-state="INCOMPLETE_TIME">
-                    <label className="review-time-field">
-                      <span>출근</span>
-                      <input
-                        className="review-time-input"
-                        type="time"
-                        value={item.imported.start ?? ''}
-                        onChange={(event) => {
-                          void services.actions.importReview.setImportedTime(
-                            batch.id,
-                            item.id,
-                            'start',
-                            event.currentTarget.value || null,
-                          );
-                        }}
-                      />
-                    </label>
-                    <span className="review-time-separator">–</span>
-                    <label className="review-time-field">
-                      <span>퇴근</span>
-                      <input
-                        className="review-time-input"
-                        type="time"
-                        value={item.imported.end ?? ''}
-                        onChange={(event) => {
-                          void services.actions.importReview.setImportedTime(
-                            batch.id,
-                            item.id,
-                            'end',
-                            event.currentTarget.value || null,
-                          );
-                        }}
-                      />
-                    </label>
+                    <TimeRangeWheelPicker
+                      start={item.imported.start}
+                      end={item.imported.end}
+                      onChange={(kind, value) =>
+                        services.actions.importReview.setImportedTime(
+                          batch.id,
+                          item.id,
+                          kind,
+                          value,
+                        )
+                      }
+                    />
                   </div>
                 ) : null}
 
