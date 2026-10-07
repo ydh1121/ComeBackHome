@@ -184,6 +184,31 @@ try {
     'generic row time range mismatch',
   );
 
+  const calendarCell = {
+    width: 1000,
+    height: 420,
+    tokens: [
+      { text: '2026-10-22', x: 260, y: 55, width: 120, height: 24, confidence: 0.98 },
+      { text: '2026-10-23', x: 620, y: 55, width: 120, height: 24, confidence: 0.98 },
+      { text: '여자친구', x: 60, y: 155, width: 110, height: 24, confidence: 0.98 },
+      { text: '09:00', x: 245, y: 155, width: 70, height: 24, confidence: 0.97 },
+      { text: '18:00', x: 335, y: 155, width: 70, height: 24, confidence: 0.97 },
+      { text: '10:30', x: 605, y: 155, width: 70, height: 24, confidence: 0.97 },
+      { text: '19:30', x: 695, y: 155, width: 70, height: 24, confidence: 0.97 },
+    ],
+  };
+  const calendarCellParsed = imageModule.parseScheduleImageLayout(calendarCell);
+  expect(
+    calendarCellParsed.structure.sheet.includes('calendar-cell-time-pair'),
+    'calendar cells without start/end headers must use time-pair fallback',
+  );
+  expect(calendarCellParsed.scheduleCandidates.length === 2, 'calendar cell fallback candidate count mismatch');
+  expect(
+    calendarCellParsed.scheduleCandidates[0]?.start === '09:00' &&
+      calendarCellParsed.scheduleCandidates[0]?.end === '18:00',
+    'calendar cell fallback first time pair mismatch',
+  );
+
   let unknownBlocked = false;
   try {
     imageModule.parseScheduleImageLayout({
@@ -197,7 +222,7 @@ try {
     });
   } catch (error) {
     unknownBlocked = error instanceof Error &&
-      error.message === 'Image schedule layout was not recognized confidently.';
+      error.message.includes('근무표 구조를 충분히 인식하지 못했습니다');
   }
   expect(unknownBlocked, 'unrecognized layout must fail closed instead of guessing');
 
