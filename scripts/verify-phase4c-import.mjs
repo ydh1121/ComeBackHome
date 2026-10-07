@@ -17,7 +17,7 @@ const browserImports = await read('../src/providers/browser/BrowserImportReposit
 for (const text of ['type="file"','근무표 이미지 추가','엑셀 파일 가져오기','인식 결과 보기','services.actions.importFiles.accept']) {
   if (!root.includes(text)) failures.push('root missing ' + text);
 }
-for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','가져오지 않음','setPersonIgnored','setPersonMatch']) {
+for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','새 사람으로 등록','가져오지 않음','services.actions.people.create','setPersonIgnored','setPersonMatch']) {
   if (!people.includes(text)) failures.push('people missing ' + text);
 }
 for (const text of ['표 구조 확인','머리글 행','근무시간 열','자동 인식이 확실하지 않을 때만']) {
