@@ -262,6 +262,8 @@ export function mapSeoulBusStops(payload: unknown): TransitSearchResult[] {
     if (!providerId || !name) return [];
 
     const distanceM = numberValue(item.dist);
+    const x = numberValue(item.gpsX) ?? numberValue(item.x);
+    const y = numberValue(item.gpsY) ?? numberValue(item.y);
     return [{
       id: 'seoul-bus:' + providerId,
       providerId,
@@ -269,7 +271,40 @@ export function mapSeoulBusStops(payload: unknown): TransitSearchResult[] {
       name,
       ...(text(item.arsId) ? { displayCode: text(item.arsId) } : {}),
       ...(distanceM != null && distanceM >= 0 ? { distanceM } : {}),
+      ...(x != null && y != null ? { coordinate: { x, y } } : {}),
     }];
+  });
+}
+
+export function mapSeoulBusRoutes(payload: unknown): BusRouteOption[] {
+  const root = asRecord(payload);
+  if (!root) return [];
+  const items = nestedRecords(root, ['msgBody', 'itemList']);
+  const routes = items.flatMap((item) => {
+    const providerRouteId = text(item.busRouteId);
+    const routeNo = text(item.busRouteNm) ?? text(item.routeNo);
+    if (!providerRouteId || !routeNo) return [];
+    const start = text(item.stBegin) ?? text(item.startStation);
+    const end = text(item.stEnd) ?? text(item.endStation);
+    const directionLabel =
+      start && end ? start + ' → ' + end :
+      end ? end + ' 방면' :
+      start ? start + ' 출발' :
+      routeNo;
+    return [{
+      providerRouteId,
+      routeNo,
+      directionLabel,
+      ...(end ? { terminalName: end } : {}),
+      ...(text(item.routeType) ? { routeType: text(item.routeType) } : {}),
+    }];
+  });
+
+  const seen = new Set<string>();
+  return routes.filter((route) => {
+    if (seen.has(route.providerRouteId)) return false;
+    seen.add(route.providerRouteId);
+    return true;
   });
 }
 
