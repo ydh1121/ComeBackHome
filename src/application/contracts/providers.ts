@@ -25,6 +25,28 @@ export interface ImageTextToken { text: string; x: number; y: number; width: num
 export interface ImageTextLayout { width: number; height: number; tokens: ImageTextToken[]; }
 export type ImportProgressReporter = (progress: number) => void | Promise<void>;
 export interface ImageTextExtractor { extract(file: File, onProgress?: ImportProgressReporter): Promise<ImageTextLayout>; }
+export interface ImageTextProbeRegion {
+  id: string;
+  purpose: 'person' | 'cell';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+export interface ImageTextProbeResult {
+  id: string;
+  purpose: ImageTextProbeRegion['purpose'];
+  text: string;
+  tokens: ImageTextToken[];
+  confidence: number;
+}
+export interface RegionalImageTextExtractor extends ImageTextExtractor {
+  extractRegions(
+    file: File,
+    regions: ImageTextProbeRegion[],
+    onProgress?: ImportProgressReporter,
+  ): Promise<ImageTextProbeResult[]>;
+}
 export interface PreparedImageRaster {
   image: File | Blob;
   sourceWidth: number;
