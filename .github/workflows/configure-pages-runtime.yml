@@ -182,7 +182,7 @@ jobs:
           }));
           NODE
 
-      - name: Resolve or trigger production Pages deployment
+      - name: Trigger production Pages deployment after runtime binding update
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -197,42 +197,25 @@ jobs:
             '/pages/projects/' + projectName + '/deployments';
           const authHeaders = { Authorization: 'Bearer ' + token };
 
-          const listUrl = new URL(deployUrl);
-          listUrl.searchParams.set('env', 'production');
-          listUrl.searchParams.set('per_page', '20');
-          const listResponse = await fetch(listUrl, { headers: authHeaders });
-          const listBody = await listResponse.json();
-          if (!listResponse.ok || listBody.success !== true) {
-            throw new Error('Failed to list Pages deployments');
-          }
+          const form = new FormData();
+          form.set('branch', 'main');
+          form.set('commit_hash', sourceCommit);
+          form.set('commit_dirty', 'false');
+          form.set('commit_message', 'Deploy canonical Pages runtime after binding update');
 
-          const deployments = Array.isArray(listBody.result) ? listBody.result : [];
-          let deployment = deployments.find(
-            (item) => item?.deployment_trigger?.metadata?.commit_hash === sourceCommit,
-          ) ?? null;
-
-          if (!deployment) {
-            const form = new FormData();
-            form.set('branch', 'main');
-            form.set('commit_hash', sourceCommit);
-            form.set('commit_dirty', 'false');
-            form.set('commit_message', 'Deploy canonical Pages runtime');
-
-            const response = await fetch(deployUrl, {
-              method: 'POST',
-              headers: authHeaders,
-              body: form,
-            });
-            const body = await response.json();
-            if (!response.ok || body?.success !== true || !body?.result?.id) {
-              throw new Error('Failed to trigger Pages deployment');
-            }
-            deployment = body.result;
+          const response = await fetch(deployUrl, {
+            method: 'POST',
+            headers: authHeaders,
+            body: form,
+          });
+          const body = await response.json();
+          if (!response.ok || body?.success !== true || !body?.result?.id) {
+            throw new Error('Failed to trigger post-binding Pages deployment');
           }
 
           fs.appendFileSync(
             process.env.GITHUB_ENV,
-            'PAGES_DEPLOYMENT_ID=' + deployment.id + '\n',
+            'PAGES_DEPLOYMENT_ID=' + body.result.id + '\n',
           );
           NODE
 
@@ -298,6 +281,16 @@ jobs:
           const providerBody = await provider.json().catch(() => null);
           if (!provider.ok || providerBody?.enabled !== true) {
             throw new Error('Direct Pages provider runtime failed');
+          }
+          for (const name of [
+            'kakao',
+            'seoulBus',
+            'seoulSubwayStationSearch',
+            'seoulSubwayRealtime',
+          ]) {
+            if (providerBody?.capabilities?.[name] !== true) {
+              throw new Error('Direct Pages provider capability missing: ' + name);
+            }
           }
 
           console.log(JSON.stringify({
