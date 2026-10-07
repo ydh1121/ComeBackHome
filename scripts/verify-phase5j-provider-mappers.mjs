@@ -49,6 +49,8 @@ try {
   expect(busStops[0]?.providerId === '122000606', 'Seoul bus stId mapping mismatch');
   expect(busStops[0]?.displayCode === '23813', 'Seoul bus arsId mapping mismatch');
   expect(busStops[0]?.distanceM === 153, 'Seoul bus distance mapping mismatch');
+  expect(busStops[0]?.coordinate?.x === 127.0300921798, 'Seoul bus tmX longitude mapping mismatch');
+  expect(busStops[0]?.coordinate?.y === 37.4985037086, 'Seoul bus tmY latitude mapping mismatch');
 
   const busArrivals = mappers.mapSeoulBusArrivals(
     await fixture('seoul-bus-arrivals.json'),
