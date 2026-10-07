@@ -26,9 +26,10 @@ Any other HTTP host remains blocked. Kakao remains HTTPS-only.
 
 Provider credentials remain Worker/Pages secrets. They are resolved only inside the server provider transport and are never returned to the browser, logs, repository source, or provider-status payload.
 
-Required realtime secrets for final production activation:
-- `SEOUL_BUS_SERVICE_KEY`
-- `SEOUL_SUBWAY_API_KEY`
+Required provider secrets for final production activation:
+- `SEOUL_BUS_SERVICE_KEY` — data.go.kr service key selected for the Seoul station-info and bus-arrival API applications
+- `SEOUL_OPENAPI_KEY` — Seoul Open Data general key used by `SearchInfoBySubwayNameService`
+- `SEOUL_SUBWAY_API_KEY` — dedicated Seoul realtime-subway key used by `realtimeStationArrival` and `realtimePosition`
 
 If either source fails or is unavailable, the application must degrade to route-based `FALLBACK` rather than fabricate realtime data.
 
