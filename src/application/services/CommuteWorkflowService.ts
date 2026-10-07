@@ -161,19 +161,22 @@ export class TransitSearchService implements TransitSearchActions {
   async addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint> {
     const result = this.resultCache.get(this.key(personId, kind))?.find((item) => item.id === resultId);
     if (!result) throw new Error('Transit search result was not found.');
+    const place = await this.places.get(personId, kind);
+    if (!place?.coordinate) throw new Error('Transit place coordinate is required.');
+    const resolved = await this.provider.resolve(result, place.coordinate).catch(() => result);
     const point: TransitAccessPoint = {
       id: crypto.randomUUID(),
       personId,
-      providerId: result.providerId,
+      providerId: resolved.providerId,
       placeKind: kind,
-      mode: result.mode,
-      name: result.name,
-      displayCode: result.displayCode,
-      line: result.line,
-      walkMinutes: result.walkMinutes,
+      mode: resolved.mode,
+      name: resolved.name,
+      displayCode: resolved.displayCode,
+      line: resolved.line,
+      walkMinutes: resolved.walkMinutes,
       selected: true,
-      busRoutes: result.busRoutes,
-      selectedBusRouteId: result.busRoutes?.[0]?.providerRouteId,
+      busRoutes: resolved.busRoutes,
+      selectedBusRouteId: resolved.busRoutes?.[0]?.providerRouteId,
     };
     await this.commute.upsertAccessPoint(point);
     return point;
