@@ -14,6 +14,10 @@ interface AccessPointRow {
   user_label: string | null;
   display_code: string | null;
   line: string | null;
+  coordinate_x: number | null;
+  coordinate_y: number | null;
+  distance_m: number | null;
+  walk_minutes: number | null;
   selected: number;
   selected_bus_route_id: string | null;
 }
@@ -54,6 +58,11 @@ function toAccessPoint(row: AccessPointRow): TransitAccessPoint {
     ...(row.user_label ? { userLabel: row.user_label } : {}),
     ...(row.display_code ? { displayCode: row.display_code } : {}),
     ...(row.line ? { line: row.line } : {}),
+    ...(row.coordinate_x != null && row.coordinate_y != null
+      ? { coordinate: { x: row.coordinate_x, y: row.coordinate_y } }
+      : {}),
+    ...(row.distance_m != null ? { distanceM: row.distance_m } : {}),
+    ...(row.walk_minutes != null ? { walkMinutes: row.walk_minutes } : {}),
     ...(row.selected_bus_route_id ? { selectedBusRouteId: row.selected_bus_route_id } : {}),
   };
 }
@@ -65,7 +74,8 @@ export class D1CommuteRepository implements CommuteRepository {
     const result = await this.db.prepare(
       `SELECT
         id, person_id, place_kind, provider_id, mode, canonical_name, user_label,
-        display_code, line, selected, selected_bus_route_id
+        display_code, line, coordinate_x, coordinate_y, distance_m, walk_minutes,
+        selected, selected_bus_route_id
       FROM transit_access_points
       WHERE person_id = ?1 AND place_kind = ?2
       ORDER BY selected DESC, canonical_name ASC, id ASC`,
@@ -78,14 +88,19 @@ export class D1CommuteRepository implements CommuteRepository {
     await this.db.prepare(
       `INSERT INTO transit_access_points (
         id, person_id, place_kind, provider_id, mode, canonical_name, user_label,
-        display_code, line, selected, selected_bus_route_id, created_at, updated_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)
+        display_code, line, coordinate_x, coordinate_y, distance_m, walk_minutes,
+        selected, selected_bus_route_id, created_at, updated_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16)
       ON CONFLICT(person_id, place_kind, provider_id) DO UPDATE SET
         mode = excluded.mode,
         canonical_name = excluded.canonical_name,
         user_label = excluded.user_label,
         display_code = excluded.display_code,
         line = excluded.line,
+        coordinate_x = excluded.coordinate_x,
+        coordinate_y = excluded.coordinate_y,
+        distance_m = excluded.distance_m,
+        walk_minutes = excluded.walk_minutes,
         selected = excluded.selected,
         selected_bus_route_id = excluded.selected_bus_route_id,
         updated_at = excluded.updated_at`,
@@ -99,6 +114,10 @@ export class D1CommuteRepository implements CommuteRepository {
       point.userLabel ?? null,
       point.displayCode ?? null,
       point.line ?? null,
+      point.coordinate?.x ?? null,
+      point.coordinate?.y ?? null,
+      point.distanceM ?? null,
+      point.walkMinutes ?? null,
       asInteger(point.selected),
       point.selectedBusRouteId ?? null,
       now,
