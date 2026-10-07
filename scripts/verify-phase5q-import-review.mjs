@@ -14,10 +14,11 @@ const commitSource = await read('../src/application/use-cases/commitImportReview
 for (const text of [
   'visibleReviewItems.map',
   'const allReviewed',
-  "item.resolution === 'KEEP'",
+  "item.resolution === 'SKIP'",
   "item.resolution === 'NEW' && importedTimeComplete(item)",
+  'exactDuplicate',
+  "item.resolution === 'NEW' ? 'SKIP' : 'NEW'",
   "disabled={!allReviewed || saveState === 'saving'}",
-  "disabled={!item.existing || !item.personId}",
   "disabled={!item.personId || !importedComplete}",
   'services.actions.importReview.setImportedTime',
   'type="time"',
@@ -95,8 +96,9 @@ try {
   expect(
     selectionBatch?.reviewItems.length === 1 &&
       selectionBatch.reviewItems[0]?.imported.start === '09:00' &&
-      selectionBatch.reviewItems[0]?.imported.end == null,
-    'one-sided parser review candidate must survive into ImportReviewItem',
+      selectionBatch.reviewItems[0]?.imported.end == null &&
+      selectionBatch.reviewItems[0]?.resolution === 'NEW',
+    'one-sided parser review candidate must survive and default selected',
   );
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
@@ -160,7 +162,7 @@ try {
   }
   expect(zeroReviewedBlocked, 'zero-reviewed batch must be blocked');
 
-  await imports.setResolution('phase5q-batch', 'phase5q-review-1', 'NEW');
+  await imports.setResolution('phase5q-batch', 'phase5q-review-1', 'SKIP');
   let partialReviewedBlocked = false;
   try {
     await commit.execute('phase5q-batch');
@@ -169,7 +171,7 @@ try {
       error.message === 'Import contains unreviewed schedules.';
   }
   expect(partialReviewedBlocked, 'partially reviewed batch must remain blocked');
-  expect(await schedules.getByDate('mock-person-1', '2099-02-01') === null, 'partial review must not mutate first schedule');
+  expect(await schedules.getByDate('mock-person-1', '2099-02-01') === null, 'SKIP review must not mutate first schedule');
 
   await imports.setResolution('phase5q-batch', 'phase5q-review-2', 'NEW');
 
@@ -187,7 +189,7 @@ try {
 
   const first = await schedules.getByDate('mock-person-1', '2099-02-01');
   const second = await schedules.getByDate('mock-person-1', '2099-02-02');
-  expect(first?.start === '09:00' && first?.end === '18:00', 'fully reviewed first schedule commit mismatch');
+  expect(first === null, 'SKIP schedule must remain uncommitted');
   expect(second?.start === '10:00' && second?.end === '19:00', 'fully reviewed second schedule commit mismatch');
   expect((await imports.getBatch('phase5q-batch'))?.committed === true, 'fully reviewed batch not marked committed');
 
