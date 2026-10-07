@@ -3,3 +3,24 @@
 .schedule-page .schedule-primary-actions .cta{margin-top:0;display:flex;align-items:center;justify-content:center;gap:8px}
 .schedule-page .schedule-primary-actions .cta .svg{width:18px;height:18px}
 .schedule-page .schedule-primary-actions .cta.secondary{background:#f2f4f7;color:#1d2939;box-shadow:none}
+.schedule-page .optional-label{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;margin-left:5px;border-radius:999px;background:#eef2f6;color:#667085;font-size:10px;font-weight:800}
+.schedule-page .form-hint{margin-top:-3px;font-size:11px;line-height:1.4;color:#667085}
+.schedule-page .schedule-day-date-field{margin-bottom:8px}
+.schedule-page .schedule-native-date,
+.schedule-page .schedule-native-time,
+.schedule-page input[type="date"],
+.schedule-page input[type="time"]{
+  color:#101828;
+  -webkit-text-fill-color:#101828;
+  opacity:1;
+  font-variant-numeric:tabular-nums;
+  color-scheme:light;
+}
+.schedule-page input[type="date"]::-webkit-date-and-time-value,
+.schedule-page input[type="time"]::-webkit-date-and-time-value{
+  color:#101828;
+  -webkit-text-fill-color:#101828;
+  text-align:left;
+}
+.schedule-page .ios-wheel button{color:#667085;-webkit-text-fill-color:#667085;opacity:.74}
+.schedule-page .ios-wheel button.selected{color:#101828;-webkit-text-fill-color:#101828;opacity:1}
