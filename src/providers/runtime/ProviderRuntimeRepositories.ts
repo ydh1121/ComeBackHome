@@ -33,6 +33,7 @@ export const systemRuntimeClock: RuntimeClock = {
 
 function compareRoutes(left: RouteCandidate, right: RouteCandidate): number {
   return (
+    (right.preferenceMatchScore ?? 0) - (left.preferenceMatchScore ?? 0) ||
     Number(right.matchesPreference === true) - Number(left.matchesPreference === true) ||
     left.totalMinutes - right.totalMinutes ||
     left.transferCount - right.transferCount ||
@@ -168,14 +169,22 @@ export class ProviderCommuteRepository implements CommuteRepository {
     const pointsById = new Map(
       [...originPoints, ...destinationPoints].map((point) => [point.id, point]),
     );
-    const configuredPointIds = activeSavedRoute
-      ? [
-          ...(activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : []),
-          ...activeSavedRoute.viaAccessPointIds,
-          ...(activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : []),
-        ]
+    const originIds = activeSavedRoute
+      ? activeSavedRoute.originAccessPointIds ??
+        (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
       : [];
-    const configuredPoints = configuredPointIds
+    const destinationIds = activeSavedRoute
+      ? activeSavedRoute.destinationAccessPointIds ??
+        (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
+      : [];
+    const viaIds = activeSavedRoute?.viaAccessPointIds ?? [];
+    const originConfiguredPoints = originIds
+      .map((id) => pointsById.get(id))
+      .filter((point): point is TransitAccessPoint => point != null);
+    const destinationConfiguredPoints = destinationIds
+      .map((id) => pointsById.get(id))
+      .filter((point): point is TransitAccessPoint => point != null);
+    const viaConfiguredPoints = viaIds
       .map((id) => pointsById.get(id))
       .filter((point): point is TransitAccessPoint => point != null);
 
@@ -183,9 +192,32 @@ export class ProviderCommuteRepository implements CommuteRepository {
       const results = await this.routeProvider.search(origin.coordinate, destination.coordinate);
       return results
         .map((result): RouteCandidate => {
+          const originConfigured = originConfiguredPoints.length > 0;
+          const destinationConfigured = destinationConfiguredPoints.length > 0;
+          const viaConfigured = viaConfiguredPoints.length > 0;
+          const originMatch =
+            !originConfigured ||
+            originConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
+          const destinationMatch =
+            !destinationConfigured ||
+            destinationConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
+          const viaMatch =
+            !viaConfigured ||
+            viaConfiguredPoints.every((point) => routeMatchesAccessPoint(result, point));
+          const configuredGroupCount =
+            Number(originConfigured) + Number(destinationConfigured) + Number(viaConfigured);
+          const matchedGroupCount =
+            Number(originConfigured && originMatch) +
+            Number(destinationConfigured && destinationMatch) +
+            Number(viaConfigured && viaMatch);
+          const preferenceMatchScore = configuredGroupCount
+            ? matchedGroupCount / configuredGroupCount
+            : 0;
           const matchesPreference =
-            configuredPoints.length > 0 &&
-            configuredPoints.every((point) => routeMatchesAccessPoint(result, point));
+            configuredGroupCount > 0 &&
+            originMatch &&
+            destinationMatch &&
+            viaMatch;
           return {
             id: result.id,
             personId,
@@ -196,8 +228,9 @@ export class ProviderCommuteRepository implements CommuteRepository {
             ...(result.egressMinutes == null ? {} : { egressMinutes: result.egressMinutes }),
             ...(result.fare == null ? {} : { fare: result.fare }),
             ...(result.steps ? { steps: result.steps } : {}),
+            ...(preferenceMatchScore > 0 ? { preferenceMatchScore } : {}),
             ...(matchesPreference
-              ? { matchesPreference: true, policyLabels: ['설정 경로'] }
+              ? { matchesPreference: true, policyLabels: ['선택 교통 반영'] }
               : {}),
           };
         })
@@ -285,8 +318,12 @@ export class ProviderTodayRepository implements TodayRepository {
       ? Math.max(baselineDepartureMs, leftWorkTime)
       : baselineDepartureMs;
      const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
-    const selectedAccess = activeSavedRoute?.originAccessPointId
-      ? originAccessPoints.find((point) => point.id === activeSavedRoute.originAccessPointId)
+    const activeOriginIds = activeSavedRoute
+      ? activeSavedRoute.originAccessPointIds ??
+        (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
+      : [];
+    const selectedAccess = activeOriginIds.length
+      ? originAccessPoints.find((point) => activeOriginIds.includes(point.id))
       : originAccessPoints.find((point) => point.selected);
     let arrivals: Arrival[] = [];
     if (departureMs <= now.getTime()) {
