@@ -42,6 +42,7 @@ function freshnessLabel(data: TodayOverviewQueryResult): string {
   if (eta.status === 'LIVE') return `실시간 · ${eta.freshnessMinutes ?? 0}분 전`;
   if (eta.status === 'STALE') return `최근 정보 · ${eta.freshnessMinutes ?? 0}분 전`;
   if (eta.status === 'FALLBACK') return '예상 경로 기준';
+  if (eta.status === 'UNKNOWN') return '정보 확인 중';
   return '정보 확인 중';
 }
 
