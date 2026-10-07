@@ -9,7 +9,10 @@ import type {
   ParsedScheduleReviewCandidate,
   RegionalImageTextExtractor,
 } from '../../application/contracts/providers';
-import type { ScheduleTableStructureDetector } from './ScheduleTableStructureDetector';
+import type {
+  ScheduleTableStructureDetection,
+  ScheduleTableStructureDetector,
+} from './ScheduleTableStructureDetector';
 import {
   buildScheduleCellMatrix,
   buildScheduleMatrixProbeRegions,
@@ -111,7 +114,9 @@ function cellTimes(result: ImageTextProbeResult | undefined): {
   };
 }
 
-function probeRegions(matrix: ScheduleCellMatrix): ImageTextProbeRegion[] {
+export function scheduleMatrixProbeRegions(
+  matrix: ScheduleCellMatrix,
+): ImageTextProbeRegion[] {
   return buildScheduleMatrixProbeRegions(matrix).map((region) => ({
     id: region.id,
     purpose: region.kind,
@@ -122,23 +127,169 @@ function probeRegions(matrix: ScheduleCellMatrix): ImageTextProbeRegion[] {
   }));
 }
 
+export interface StructureFirstRecognitionDiagnostics {
+  parsed: ParsedImport;
+  detection: ScheduleTableStructureDetection;
+  matrix: ScheduleCellMatrix;
+  layoutTokenCount: number;
+  regionResults: ImageTextProbeResult[];
+  timingMs: {
+    preprocessing: number;
+    structureDetection: number;
+    initialOcr: number;
+    regionalOcr: number;
+    total: number;
+  };
+  roiCount: number;
+}
+
+export function interpretStructureFirstSchedule(
+  matrix: ScheduleCellMatrix,
+  regionResults: ImageTextProbeResult[],
+): ParsedImport {
+  const byRegion = new Map(regionResults.map((result) => [result.id, result]));
+  const peopleByRow = new Map(
+    matrix.rows.map((row) => [row.sourceRow, rowName(row, byRegion)])
+  );
+  const detectedPeople: ParsedImportPerson[] = matrix.rows.map((row) => {
+    const person = peopleByRow.get(row.sourceRow)!;
+    return {
+      sourceName: person.sourceName,
+      confidence: person.confidence,
+    };
+  });
+
+  const scheduleCandidates: ParsedScheduleCandidate[] = [];
+  const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
+  let workCount = 0;
+  let offCount = 0;
+  let incompleteCount = 0;
+  let unreadableCount = 0;
+
+  for (const cell of matrix.cells) {
+    const person = peopleByRow.get(cell.sourceRow);
+    if (!person) continue;
+    const time = cellTimes(byRegion.get(cell.id));
+    const dateConfidence =
+      matrix.dates.find((date) => date.date === cell.date)?.confidence ?? 0.5;
+    const confidence = Math.max(
+      0.05,
+      Math.min(
+        person.confidence || 0.12,
+        dateConfidence,
+        time.confidence || matrix.confidence,
+      )
+    );
+
+    if (time.start && time.end) {
+      workCount += 1;
+      scheduleCandidates.push({
+        sourcePersonName: person.sourceName,
+        date: cell.date,
+        start: time.start,
+        end: time.end,
+        sourceRow: cell.sourceRow,
+        confidence,
+      });
+      continue;
+    }
+
+    if (time.start || time.end) {
+      incompleteCount += 1;
+      reviewCandidates.push({
+        sourcePersonName: person.sourceName,
+        date: cell.date,
+        start: time.start,
+        end: time.end,
+        sourceRow: cell.sourceRow,
+        confidence,
+        recognitionState: 'INCOMPLETE',
+        enabled: true,
+      });
+      continue;
+    }
+
+    if (cell.visual.occupancy === 'EMPTY') {
+      offCount += 1;
+      reviewCandidates.push({
+        sourcePersonName: person.sourceName,
+        date: cell.date,
+        start: null,
+        end: null,
+        sourceRow: cell.sourceRow,
+        confidence: Math.min(confidence, 0.88),
+        recognitionState: 'OFF',
+        enabled: false,
+      });
+    } else {
+      unreadableCount += 1;
+      reviewCandidates.push({
+        sourcePersonName: person.sourceName,
+        date: cell.date,
+        start: null,
+        end: null,
+        sourceRow: cell.sourceRow,
+        confidence: Math.min(confidence, 0.45),
+        recognitionState: 'UNREADABLE',
+        enabled: true,
+      });
+    }
+  }
+
+  if (!scheduleCandidates.length && !reviewCandidates.length) {
+    throw new Error('표 구조는 찾았지만 사람×날짜 셀에서 일정 증거를 생성하지 못했습니다.');
+  }
+
+  const finalConfidence = Math.max(
+    0.05,
+    Math.min(
+      1,
+      matrix.confidence * 0.72 +
+      (detectedPeople.filter((person) => person.confidence >= 0.5).length /
+        Math.max(1, detectedPeople.length)) * 0.28
+    )
+  );
+
+  return {
+    detectedPeople,
+    scheduleCandidates,
+    reviewCandidates,
+    structure: {
+      sheet: '이미지 근무표 / structure-first pixel-cell-matrix',
+      headerRow: 0,
+      personColumn: 'pixel row geometry + focused person-label ROI',
+      dateColumn: 'date anchors snapped to pixel table geometry',
+      shiftColumn:
+        'cell-scoped OCR / WORK=' + workCount +
+        ' OFF=' + offCount +
+        ' INCOMPLETE=' + incompleteCount +
+        ' UNREADABLE=' + unreadableCount,
+      needsReview: true,
+    },
+    confidence: finalConfidence,
+  };
+}
+
 export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecognizer {
   constructor(
     private readonly detector: ScheduleTableStructureDetector,
     private readonly extractor: RegionalImageTextExtractor,
   ) {}
 
-  async parse(
+  async evaluate(
     file: File,
     onProgress?: ImportProgressReporter,
-  ): Promise<ParsedImport> {
+  ): Promise<StructureFirstRecognitionDiagnostics> {
+    const started = performance.now();
     await onProgress?.(8);
     const detection = await this.detector.detect(file);
     await onProgress?.(18);
 
+    const initialOcrStarted = performance.now();
     const layout = await this.extractor.extract(file, async (progress) => {
       await onProgress?.(Math.min(58, 18 + Math.round(progress * 0.43)));
     });
+    const initialOcrMs = performance.now() - initialOcrStarted;
     await onProgress?.(60);
 
     const matrix = buildScheduleCellMatrix(detection, layout);
@@ -151,7 +302,8 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
       );
     }
 
-    const regions = probeRegions(matrix);
+    const regions = scheduleMatrixProbeRegions(matrix);
+    const regionalOcrStarted = performance.now();
     const regionResults = await this.extractor.extractRegions(
       file,
       regions,
@@ -159,129 +311,33 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
         await onProgress?.(60 + Math.round(progress * 0.32));
       },
     );
-    const byRegion = new Map(regionResults.map((result) => [result.id, result]));
+    const regionalOcrMs = performance.now() - regionalOcrStarted;
     await onProgress?.(94);
 
-    const peopleByRow = new Map(
-      matrix.rows.map((row) => [row.sourceRow, rowName(row, byRegion)])
-    );
-    const detectedPeople: ParsedImportPerson[] = matrix.rows.map((row) => {
-      const person = peopleByRow.get(row.sourceRow)!;
-      return {
-        sourceName: person.sourceName,
-        confidence: person.confidence,
-      };
-    });
-
-    const scheduleCandidates: ParsedScheduleCandidate[] = [];
-    const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
-    let workCount = 0;
-    let offCount = 0;
-    let incompleteCount = 0;
-    let unreadableCount = 0;
-
-    for (const cell of matrix.cells) {
-      const person = peopleByRow.get(cell.sourceRow);
-      if (!person) continue;
-      const time = cellTimes(byRegion.get(cell.id));
-      const dateConfidence =
-        matrix.dates.find((date) => date.date === cell.date)?.confidence ?? 0.5;
-      const confidence = Math.max(
-        0.05,
-        Math.min(
-          person.confidence || 0.12,
-          dateConfidence,
-          time.confidence || matrix.confidence,
-        )
-      );
-
-      if (time.start && time.end) {
-        workCount += 1;
-        scheduleCandidates.push({
-          sourcePersonName: person.sourceName,
-          date: cell.date,
-          start: time.start,
-          end: time.end,
-          sourceRow: cell.sourceRow,
-          confidence,
-        });
-        continue;
-      }
-
-      if (time.start || time.end) {
-        incompleteCount += 1;
-        reviewCandidates.push({
-          sourcePersonName: person.sourceName,
-          date: cell.date,
-          start: time.start,
-          end: time.end,
-          sourceRow: cell.sourceRow,
-          confidence,
-          recognitionState: 'INCOMPLETE',
-          enabled: true,
-        });
-        continue;
-      }
-
-      if (cell.visual.occupancy === 'EMPTY') {
-        offCount += 1;
-        reviewCandidates.push({
-          sourcePersonName: person.sourceName,
-          date: cell.date,
-          start: null,
-          end: null,
-          sourceRow: cell.sourceRow,
-          confidence: Math.min(confidence, 0.88),
-          recognitionState: 'OFF',
-          enabled: false,
-        });
-      } else {
-        unreadableCount += 1;
-        reviewCandidates.push({
-          sourcePersonName: person.sourceName,
-          date: cell.date,
-          start: null,
-          end: null,
-          sourceRow: cell.sourceRow,
-          confidence: Math.min(confidence, 0.45),
-          recognitionState: 'UNREADABLE',
-          enabled: true,
-        });
-      }
-    }
-
-    if (!scheduleCandidates.length && !reviewCandidates.length) {
-      throw new Error('표 구조는 찾았지만 사람×날짜 셀에서 일정 증거를 생성하지 못했습니다.');
-    }
-
-    const finalConfidence = Math.max(
-      0.05,
-      Math.min(
-        1,
-        matrix.confidence * 0.72 +
-        (detectedPeople.filter((person) => person.confidence >= 0.5).length /
-          Math.max(1, detectedPeople.length)) * 0.28
-      )
-    );
-
+    const parsed = interpretStructureFirstSchedule(matrix, regionResults);
     await onProgress?.(98);
+
     return {
-      detectedPeople,
-      scheduleCandidates,
-      reviewCandidates,
-      structure: {
-        sheet: '이미지 근무표 / structure-first pixel-cell-matrix',
-        headerRow: 0,
-        personColumn: 'pixel row geometry + focused person-label ROI',
-        dateColumn: 'date anchors snapped to pixel table geometry',
-        shiftColumn:
-          'cell-scoped OCR / WORK=' + workCount +
-          ' OFF=' + offCount +
-          ' INCOMPLETE=' + incompleteCount +
-          ' UNREADABLE=' + unreadableCount,
-        needsReview: true,
+      parsed,
+      detection,
+      matrix,
+      layoutTokenCount: layout.tokens.length,
+      regionResults,
+      timingMs: {
+        preprocessing: detection.preprocessingMs,
+        structureDetection: detection.structureDetectionMs,
+        initialOcr: Math.round(initialOcrMs),
+        regionalOcr: Math.round(regionalOcrMs),
+        total: Math.round(performance.now() - started),
       },
-      confidence: finalConfidence,
+      roiCount: regions.length,
     };
+  }
+
+  async parse(
+    file: File,
+    onProgress?: ImportProgressReporter,
+  ): Promise<ParsedImport> {
+    return (await this.evaluate(file, onProgress)).parsed;
   }
 }
