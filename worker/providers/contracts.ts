@@ -6,8 +6,9 @@ export type ProviderCoverage = 'KOREA' | 'SEOUL' | 'SEOUL_METRO_PARTIAL';
 
 export interface ProviderSecretBindings {
   KAKAO_REST_API_KEY?: string;
-  SEOUL_SUBWAY_API_KEY?: string;
   SEOUL_BUS_SERVICE_KEY?: string;
+  SEOUL_OPENAPI_KEY?: string;
+  SEOUL_SUBWAY_API_KEY?: string;
 }
 
 export interface ProviderRequestContext {
