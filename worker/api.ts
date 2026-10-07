@@ -297,9 +297,24 @@ export async function handleApiRequest(
             if (!providerStationId || !stationName) {
               return json({ error: 'providerStationId/stationName are required.' }, 400);
             }
+
+            let stations: TransitSearchResult[] = [];
+            try {
+              stations = await providerRuntime.seoulSubway.searchStations(stationName);
+            } catch {
+              stations = [];
+            }
+            const station = stations.find((candidate) => candidate.providerId === providerStationId);
+            if (!station) {
+              return json({ providerStationId, arrivals: [] });
+            }
+
             return json({
               providerStationId,
-              arrivals: await providerRuntime.seoulSubway.arrivals(stationName, line),
+              arrivals: await providerRuntime.seoulSubway.arrivals(
+                station.name,
+                line ?? station.line,
+              ),
             });
           }
 
