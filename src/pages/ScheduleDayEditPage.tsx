@@ -4,6 +4,7 @@ import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { formatDateLabel, isIsoDate } from '../features/schedule/date-format';
 import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { BackButton } from '../shared/components/BackButton';
+import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import './schedule-page.css';
 
@@ -83,10 +84,15 @@ export function ScheduleDayEditPage() {
       <button type="button" className="rule schedule-workday-rule" onClick={() => { setEnabled((value) => !value); form.markDirty(); }} aria-pressed={enabled}>
         <b>근무일</b><span className={'switch' + (enabled ? ' on' : '')} />
       </button>
-      <div className="form-row-2">
-        <label className="form-field"><span className="form-label">출근</span><input className="input schedule-native-time" type="time" value={start} onChange={(event) => { setStart(event.target.value); form.markDirty(); }} /></label>
-        <label className="form-field"><span className="form-label">퇴근</span><input className="input schedule-native-time" type="time" value={end} onChange={(event) => { setEnd(event.target.value); form.markDirty(); }} /></label>
-      </div>
+      <TimeRangeWheelPicker
+        start={start || null}
+        end={end || null}
+        onChange={(kind, value) => {
+          if (kind === 'start') setStart(value);
+          else setEnd(value);
+          form.markDirty();
+        }}
+      />
       <button type="button" className="cta" disabled={form.state === 'SAVING' || !canSave} onClick={save}>{form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}</button>
     </section>
   );
