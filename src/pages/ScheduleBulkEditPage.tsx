@@ -42,15 +42,15 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
   const fallbackDate = first?.date ?? currentLocalIsoDate();
   const [from, setFrom] = useState(fallbackDate);
   const [to, setTo] = useState(entries[entries.length - 1]?.date ?? fallbackDate);
-  const [weekdays, setWeekdays] = useState<number[]>([0,1,2,3,4,5,6]);
+  const [weekdays, setWeekdays] = useState<number[]>([]);
   const [start, setStart] = useState(first?.start ?? '');
   const [end, setEnd] = useState(first?.end ?? '');
   const form = useFormRuntimeState();
-  const canApply = isIsoDate(from) && isIsoDate(to) && from <= to && weekdays.length > 0 && Boolean(start) && Boolean(end);
+  const canApply = isIsoDate(from) && isIsoDate(to) && from <= to && Boolean(start) && Boolean(end);
 
   const toggleWeekday = (day: number) => {
     setWeekdays((current) => current.includes(day)
-      ? current.length > 1 ? current.filter((value) => value !== day) : current
+      ? current.filter((value) => value !== day)
       : [...current, day].sort((a, b) => a - b));
     form.markDirty();
   };
@@ -65,7 +65,8 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
           <ScheduleRangePicker entries={entries} from={from} to={to} onChange={(nextFrom, nextTo) => { setFrom(nextFrom); setTo(nextTo); form.markDirty(); }} />
         </div>
         <div className="form-field">
-          <div className="form-label">기간 내 적용 요일</div>
+          <div className="form-label">기간 내 적용 요일 <span className="optional-label">선택</span></div>
+          <div className="form-hint">선택하지 않으면 기간의 모든 날짜에 적용합니다.</div>
           <div className="weekday-grid">
             {weekdayLabels.map((label, day) => (
               <button key={label} type="button" className={'weekday-btn' + (weekdays.includes(day) ? ' active' : '')} aria-pressed={weekdays.includes(day)} onClick={() => toggleWeekday(day)}>{label}</button>
