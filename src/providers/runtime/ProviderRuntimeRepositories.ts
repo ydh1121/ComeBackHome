@@ -186,6 +186,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
       ? [
           ...(activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : []),
           ...activeSavedRoute.viaAccessPointIds,
+          ...(activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : []),
         ]
       : [];
     const configuredPoints = configuredPointIds
