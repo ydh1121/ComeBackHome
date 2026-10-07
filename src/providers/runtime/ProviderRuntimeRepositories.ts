@@ -9,11 +9,11 @@ import type {
   TransitAccessPoint,
 } from '../../domain/models';
 import type {
-  Arrival,
   RealtimeBusProvider,
   RealtimeSubwayProvider,
   TransitRouteProvider,
 } from '../../application/contracts/providers';
+import { calculateArrivalEta } from '../../application/services/ArrivalEtaCalculator';
 import type {
   CommuteRepository,
   PlaceRepository,
@@ -24,10 +24,6 @@ import type {
 
 export interface RuntimeClock {
   now(): Date;
-}
-
-export interface RealtimeFreshnessPolicy {
-  classify(observedAt: string, now: Date): 'LIVE' | 'STALE';
 }
 
 export const systemRuntimeClock: RuntimeClock = {
@@ -67,43 +63,6 @@ function kstTime(now: Date): string {
 function parseKstDateTime(date: string, time: string): number | null {
   const value = Date.parse(date + 'T' + time + ':00+09:00');
   return Number.isFinite(value) ? value : null;
-}
-
-const REALTIME_LIVE_MAX_MINUTES = 2;
-const REALTIME_STALE_MAX_MINUTES = 5;
-
-export const defaultRealtimeFreshnessPolicy: RealtimeFreshnessPolicy = {
-  classify(observedAt, now) {
-    const observed = Date.parse(observedAt);
-    if (!Number.isFinite(observed)) return 'STALE';
-    return now.getTime() - observed <= REALTIME_LIVE_MAX_MINUTES * 60_000
-      ? 'LIVE'
-      : 'STALE';
-  },
-};
-
-function usableRealtimeArrival(
-  arrivals: Arrival[],
-  now: Date,
-  minimumArrivalMinutes: number,
-): Arrival | null {
-  return arrivals
-    .filter((arrival) => {
-      const observed = Date.parse(arrival.observedAt);
-      if (!Number.isFinite(observed) || !Number.isFinite(arrival.minutes)) return false;
-      const ageMinutes = Math.max(0, (now.getTime() - observed) / 60_000);
-      return ageMinutes <= REALTIME_STALE_MAX_MINUTES && arrival.minutes >= minimumArrivalMinutes;
-    })
-    .sort((left, right) =>
-      left.minutes - right.minutes ||
-      Date.parse(right.observedAt) - Date.parse(left.observedAt)
-    )[0] ?? null;
-}
-
-function freshnessMinutes(observedAt: string, now: Date): number | undefined {
-  const observed = Date.parse(observedAt);
-  if (!Number.isFinite(observed)) return undefined;
-  return Math.max(0, Math.floor((now.getTime() - observed) / 60_000));
 }
 
 function normalizeTransitEvidence(value: string): string {
@@ -264,7 +223,6 @@ export class ProviderTodayRepository implements TodayRepository {
     private readonly bus: RealtimeBusProvider,
     private readonly subway: RealtimeSubwayProvider,
     private readonly clock: RuntimeClock = systemRuntimeClock,
-    private readonly freshnessPolicy: RealtimeFreshnessPolicy = defaultRealtimeFreshnessPolicy,
   ) {}
 
   async get(personId: EntityId): Promise<TodaySnapshot | null> {
@@ -325,9 +283,7 @@ export class ProviderTodayRepository implements TodayRepository {
     const departureMs = Number.isFinite(leftWorkTime)
       ? Math.max(baselineDepartureMs, leftWorkTime)
       : baselineDepartureMs;
-    let travelMinutes = route.totalMinutes;
-
-    const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
+     const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
     const selectedAccess = activeSavedRoute?.originAccessPointId
       ? originAccessPoints.find((point) => point.id === activeSavedRoute.originAccessPointId)
       : originAccessPoints.find((point) => point.selected);
@@ -350,20 +306,16 @@ export class ProviderTodayRepository implements TodayRepository {
       }
     }
 
-    const accessMinutes = Math.max(0, route.accessMinutes ?? selectedAccess?.walkMinutes ?? 0);
-    const egressMinutes = Math.max(0, route.egressMinutes ?? 0);
-    const observed = usableRealtimeArrival(arrivals, now, accessMinutes);
-    const freshness = observed ? freshnessMinutes(observed.observedAt, now) : undefined;
-    const status: EtaSnapshot['status'] =
-      observed
-        ? this.freshnessPolicy.classify(observed.observedAt, now)
-        : 'FALLBACK';
-
-    if (observed) {
-      const coreMinutes = Math.max(0, route.totalMinutes - accessMinutes - egressMinutes);
-      travelMinutes = observed.minutes + coreMinutes + egressMinutes;
-    }
-    const arrivalAt = new Date(departureMs + travelMinutes * 60_000);
+    const calculated = calculateArrivalEta({
+      departureMs,
+      now,
+      route,
+      fallbackAccessMinutes: selectedAccess?.walkMinutes,
+      arrivals,
+    });
+    const arrivalAt = calculated.arrivalAt;
+    const status: EtaSnapshot['status'] = calculated.confidence;
+    const freshness = calculated.freshnessMinutes;
 
     return {
       personId,
