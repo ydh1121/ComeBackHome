@@ -17,7 +17,8 @@ const docs = await read('../docs/runtime-modes.md');
 
 for (const text of [
   "export type AppRuntimeMode = 'mock' | 'api'",
-  "value == null || value === '' || value === 'mock'",
+  "import.meta.env.DEV ? 'mock' : 'api'",
+  "if (value === 'mock') return 'mock'",
   "if (value === 'api') return 'api'",
   'Unsupported VITE_CBH_RUNTIME value',
 ]) {
@@ -67,10 +68,11 @@ for (const text of [
   'new HttpPersonRepository(client)',
   'new HttpScheduleRepository(client)',
   'new HttpPlaceRepository(client)',
-  'new HybridCommuteRepository(persistedCommute, runtimeCommute)',
+  "const commute = providerMode === 'api' && routeProvider",
+  ': persistedCommute',
   "mode: 'hybrid-api'",
   "persistence: 'worker-api'",
-  "providerData: providerMode === 'api' ? 'worker-api' : 'mock'",
+  "providerData: providerMode === 'api' ? 'worker-api' : 'disabled'",
   'new WorkbookImportFileSelectionAction',
   'new ReadExcelWorkbookParser',
   'commitImportReview: new CommitImportReview(imports, schedules)',
@@ -83,7 +85,7 @@ if (composition.includes('HttpPushSubscriptionTransport')) failures.push('push t
 for (const text of [
   "mode: 'mock' | 'hybrid-api'",
   "persistence: 'mock' | 'worker-api'",
-  "providerData: 'mock' | 'worker-api'",
+  "providerData: 'mock' | 'worker-api' | 'disabled'",
 ]) {
   if (!runtimeContracts.includes(text)) failures.push('runtime metadata contract missing ' + text);
 }
@@ -100,7 +102,9 @@ for (const text of [
 }
 
 for (const text of [
-  'createApplicationServices(resolveRuntimeMode(), resolveProviderRuntimeMode())',
+  'const runtimeMode = resolveRuntimeMode()',
+  'const providerMode = resolveProviderRuntimeMode()',
+  "import.meta.env.DEV && runtimeMode === 'mock'",
   "root.textContent = 'ComeBackHome 시작 실패: '",
 ]) {
   if (!main.includes(text)) failures.push('main runtime bootstrap missing ' + text);
@@ -112,8 +116,8 @@ if (!qa.includes('services.runtime.persistence') || !qa.includes('services.runti
 for (const text of [
   'VITE_CBH_RUNTIME=api',
   'same-origin /api/*',
-  'real XLSX parsing runs through WorkbookParser',
-  'browser push adapter and push-subscription HTTP transport remain inactive',
+  'Excel and image/OCR imports run through production parsers',
+  'Web Push subscription transport and notification delivery use the production software path',
 ]) {
   const normalizedDocs = docs.replaceAll('`', '');
   if (!normalizedDocs.includes(text)) failures.push('runtime mode documentation missing ' + text);
