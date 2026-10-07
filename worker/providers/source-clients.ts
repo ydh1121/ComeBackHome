@@ -36,7 +36,7 @@ function firstXmlTag(xml: string, names: string[]): string | undefined {
       '<' + name + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + name + '>',
       'i',
     ).exec(xml);
-    if (match?.[1] != null) return decodeXmlText(match[1].replace(/<[^>]+>/g, ''));
+    if (match?.[1] != null) return decodeXmlText(match[1]);
   }
   return undefined;
 }
@@ -49,7 +49,7 @@ function xmlRecord(block: string): Record<string, string> {
     const raw = match[2] ?? '';
     const withoutCdata = raw.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
     if (/<[A-Za-z0-9_]+(?:\s[^>]*)?>/.test(withoutCdata)) continue;
-    record[name] = decodeXmlText(raw.replace(/<[^>]+>/g, ''));
+    record[name] = decodeXmlText(raw);
   }
   return record;
 }
