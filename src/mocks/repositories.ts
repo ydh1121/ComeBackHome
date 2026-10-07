@@ -167,7 +167,9 @@ export class MockImportRepository implements ImportRepository {
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (person) person.matchedPersonId = personId;
       for (const item of batch?.reviewItems ?? []) {
-        if (item.detectedPersonId === detectedPersonId) item.personId = personId;
+        if (item.detectedPersonId !== detectedPersonId) continue;
+        item.personId = personId;
+        if (personId && item.resolution == null) item.resolution = 'NEW';
       }
     });
   }
