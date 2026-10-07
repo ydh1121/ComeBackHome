@@ -158,6 +158,92 @@ jobs:
             throw new Error('Nearby transit returned no supported mode');
           }
 
+          // Regression probe for the user's saved-origin symptom around Eonju:
+          // resolve Eonju from Kakao first, then require nearby results to remain
+          // distance-sorted and inside the same adaptive radius contract as the API.
+          const eonjuSearchUrl = new URL(origin + '/api/providers/place-search');
+          eonjuSearchUrl.searchParams.set('q', '언주역');
+          const eonjuSearch = await fetch(eonjuSearchUrl, {
+            headers: { Accept: 'application/json' },
+          });
+          const eonjuSearchBody = await eonjuSearch.json().catch(() => null);
+          const eonjuPlaces = Array.isArray(eonjuSearchBody?.results)
+            ? eonjuSearchBody.results
+            : [];
+          const eonju = eonjuPlaces.find((item) =>
+            String(item?.placeName ?? '').includes('언주') &&
+            Number.isFinite(item?.coordinate?.x) &&
+            Number.isFinite(item?.coordinate?.y)
+          );
+          if (!eonjuSearch.ok || !eonju) {
+            throw new Error('Kakao Eonju anchor resolution failed');
+          }
+
+          const eonjuNearbyUrl = new URL(origin + '/api/providers/transit-nearby');
+          eonjuNearbyUrl.searchParams.set('x', String(eonju.coordinate.x));
+          eonjuNearbyUrl.searchParams.set('y', String(eonju.coordinate.y));
+          const eonjuNearby = await fetch(eonjuNearbyUrl, {
+            headers: { Accept: 'application/json' },
+          });
+          const eonjuNearbyBody = await eonjuNearby.json().catch(() => null);
+          const eonjuResults = Array.isArray(eonjuNearbyBody?.results)
+            ? eonjuNearbyBody.results
+            : [];
+          if (!eonjuNearby.ok || eonjuResults.length === 0) {
+            throw new Error('Eonju nearby transit failed');
+          }
+
+          const eonjuDistances = eonjuResults.map((item) => Number(item?.distanceM));
+          if (eonjuDistances.some((distance) => !Number.isFinite(distance))) {
+            throw new Error('Eonju nearby transit contains missing distance evidence');
+          }
+          for (let index = 1; index < eonjuDistances.length; index += 1) {
+            if (eonjuDistances[index] < eonjuDistances[index - 1]) {
+              throw new Error('Eonju nearby transit is not sorted by Kakao distance');
+            }
+          }
+
+          const distanceContract = (mode, items) => {
+            const distances = items
+              .map((item) => Number(item?.distanceM))
+              .filter(Number.isFinite)
+              .sort((left, right) => left - right);
+            if (!distances.length) return { nearest: null, max: null, threshold: null };
+            const nearest = distances[0];
+            const baseRadius = mode === 'BUS' ? 450 : 650;
+            const delta = mode === 'BUS' ? 450 : 600;
+            const normalCap = mode === 'BUS' ? 800 : 950;
+            const threshold = nearest <= normalCap
+              ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
+              : nearest + 400;
+            const max = distances[distances.length - 1];
+            if (max > threshold) {
+              throw new Error(
+                'Eonju ' + mode + ' distance scope exceeded: max=' + max +
+                ' threshold=' + threshold
+              );
+            }
+            return { nearest, max, threshold };
+          };
+
+          const eonjuBusDistance = distanceContract(
+            'BUS',
+            eonjuResults.filter((item) => item?.mode === 'BUS'),
+          );
+          const eonjuSubwayItems = eonjuResults.filter((item) => item?.mode === 'SUBWAY');
+          const eonjuSubwayDistance = distanceContract('SUBWAY', eonjuSubwayItems);
+          const nearestEonjuSubway = eonjuSubwayItems
+            .slice()
+            .sort((left, right) => Number(left.distanceM) - Number(right.distanceM))[0];
+          if (
+            !nearestEonjuSubway ||
+            !String(nearestEonjuSubway.name ?? '').includes('언주')
+          ) {
+            throw new Error(
+              'Eonju coordinate did not rank Eonju station as the nearest subway'
+            );
+          }
+
           const resolveBusUrl = new URL(origin + '/api/providers/transit-resolve');
           resolveBusUrl.searchParams.set('mode', 'BUS');
           resolveBusUrl.searchParams.set('name', '강남역');
@@ -262,6 +348,10 @@ jobs:
             realTestPushEndpointDeployed: true,
             nearbyTransitCount: results.length,
             nearbyModes: modes,
+            eonjuNearbyTransitCount: eonjuResults.length,
+            eonjuNearestSubway: nearestEonjuSubway.name,
+            eonjuBusDistance,
+            eonjuSubwayDistance,
             markerCandidates: firstMarkers.length,
             staticMapContentType: contentType,
             staticMapBytes: mapBytes,
