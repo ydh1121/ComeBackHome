@@ -69,10 +69,35 @@ function parseKstDateTime(date: string, time: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function latestObservedArrival(arrivals: Arrival[]): Arrival | null {
+const REALTIME_LIVE_MAX_MINUTES = 2;
+const REALTIME_STALE_MAX_MINUTES = 5;
+
+export const defaultRealtimeFreshnessPolicy: RealtimeFreshnessPolicy = {
+  classify(observedAt, now) {
+    const observed = Date.parse(observedAt);
+    if (!Number.isFinite(observed)) return 'STALE';
+    return now.getTime() - observed <= REALTIME_LIVE_MAX_MINUTES * 60_000
+      ? 'LIVE'
+      : 'STALE';
+  },
+};
+
+function usableRealtimeArrival(
+  arrivals: Arrival[],
+  now: Date,
+  minimumArrivalMinutes: number,
+): Arrival | null {
   return arrivals
-    .filter((arrival) => Number.isFinite(Date.parse(arrival.observedAt)))
-    .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null;
+    .filter((arrival) => {
+      const observed = Date.parse(arrival.observedAt);
+      if (!Number.isFinite(observed) || !Number.isFinite(arrival.minutes)) return false;
+      const ageMinutes = Math.max(0, (now.getTime() - observed) / 60_000);
+      return ageMinutes <= REALTIME_STALE_MAX_MINUTES && arrival.minutes >= minimumArrivalMinutes;
+    })
+    .sort((left, right) =>
+      left.minutes - right.minutes ||
+      Date.parse(right.observedAt) - Date.parse(left.observedAt)
+    )[0] ?? null;
 }
 
 function freshnessMinutes(observedAt: string, now: Date): number | undefined {
@@ -239,7 +264,7 @@ export class ProviderTodayRepository implements TodayRepository {
     private readonly bus: RealtimeBusProvider,
     private readonly subway: RealtimeSubwayProvider,
     private readonly clock: RuntimeClock = systemRuntimeClock,
-    private readonly freshnessPolicy?: RealtimeFreshnessPolicy,
+    private readonly freshnessPolicy: RealtimeFreshnessPolicy = defaultRealtimeFreshnessPolicy,
   ) {}
 
   async get(personId: EntityId): Promise<TodaySnapshot | null> {
@@ -300,35 +325,45 @@ export class ProviderTodayRepository implements TodayRepository {
     const departureMs = Number.isFinite(leftWorkTime)
       ? Math.max(baselineDepartureMs, leftWorkTime)
       : baselineDepartureMs;
-    const arrivalAt = new Date(departureMs + route.totalMinutes * 60_000);
+    let travelMinutes = route.totalMinutes;
 
     const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
     const selectedAccess = activeSavedRoute?.originAccessPointId
       ? originAccessPoints.find((point) => point.id === activeSavedRoute.originAccessPointId)
       : originAccessPoints.find((point) => point.selected);
     let arrivals: Arrival[] = [];
-    try {
-      if (selectedAccess?.mode === 'BUS' && selectedAccess.selectedBusRouteId) {
-        arrivals = await this.bus.arrivals(
-          selectedAccess.providerId,
-          selectedAccess.selectedBusRouteId,
-        );
-      } else if (selectedAccess?.mode === 'SUBWAY') {
-        arrivals = await this.subway.arrivals(
-          selectedAccess.name,
-          selectedAccess.line,
-        );
+    if (departureMs <= now.getTime()) {
+      try {
+        if (selectedAccess?.mode === 'BUS' && selectedAccess.selectedBusRouteId) {
+          arrivals = await this.bus.arrivals(
+            selectedAccess.providerId,
+            selectedAccess.selectedBusRouteId,
+          );
+        } else if (selectedAccess?.mode === 'SUBWAY') {
+          arrivals = await this.subway.arrivals(
+            selectedAccess.name,
+            selectedAccess.line,
+          );
+        }
+      } catch {
+        arrivals = [];
       }
-    } catch {
-      arrivals = [];
     }
 
-    const observed = latestObservedArrival(arrivals);
+    const accessMinutes = Math.max(0, route.accessMinutes ?? selectedAccess?.walkMinutes ?? 0);
+    const egressMinutes = Math.max(0, route.egressMinutes ?? 0);
+    const observed = usableRealtimeArrival(arrivals, now, accessMinutes);
     const freshness = observed ? freshnessMinutes(observed.observedAt, now) : undefined;
     const status: EtaSnapshot['status'] =
-      observed && this.freshnessPolicy
+      observed
         ? this.freshnessPolicy.classify(observed.observedAt, now)
         : 'FALLBACK';
+
+    if (observed) {
+      const coreMinutes = Math.max(0, route.totalMinutes - accessMinutes - egressMinutes);
+      travelMinutes = observed.minutes + coreMinutes + egressMinutes;
+    }
+    const arrivalAt = new Date(departureMs + travelMinutes * 60_000);
 
     return {
       personId,
