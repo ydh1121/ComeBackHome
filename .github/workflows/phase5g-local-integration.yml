@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "feat/**"
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
       - "wrangler.local.jsonc"
@@ -12,7 +13,7 @@ on:
       - "package.json"
       - "db/migrations/**"
       - "worker/**"
-      - "src/app/**"
+      - "src/**"
       - "src/config/runtime.ts"
       - "src/features/notifications/**"
       - "src/providers/browser/**"
@@ -21,7 +22,7 @@ on:
       - "src/application/services/**"
       - "src/features/schedule/**"
       - "src/pages/Schedule*.tsx"
-      - "scripts/verify-phase4b-schedule.mjs"
+      - "scripts/verify-*.mjs"
       - "src/application/contracts/**"
       - "src/providers/http/**"
       - "scripts/verify-phase5g-local*.mjs"
@@ -58,6 +59,8 @@ on:
       - "scripts/verify-phase5ab-*.mjs"
       - "scripts/verify-phase5ad-*.mjs"
       - "scripts/verify-schedule-image-pattern-refinement.mjs"
+      - "scripts/verify-product-completion-gate.mjs"
+      - "scripts/verify-production-bundle.mjs"
       - "docs/ocr-half-hour-recovery.md"
       - "docs/ocr-calendar-strip-reconstruction.md"
       - "scripts/run-ocr-eval.mjs"
@@ -101,7 +104,7 @@ on:
       - "package.json"
       - "db/migrations/**"
       - "worker/**"
-      - "src/app/**"
+      - "src/**"
       - "src/config/runtime.ts"
       - "src/features/notifications/**"
       - "src/providers/browser/**"
@@ -110,7 +113,7 @@ on:
       - "src/application/services/**"
       - "src/features/schedule/**"
       - "src/pages/Schedule*.tsx"
-      - "scripts/verify-phase4b-schedule.mjs"
+      - "scripts/verify-*.mjs"
       - "src/providers/http/**"
       - "scripts/verify-phase5g-local*.mjs"
       - "scripts/verify-phase5h-*.mjs"
@@ -311,6 +314,18 @@ jobs:
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
+
+      - name: Run full product check
+        run: npm run check
+
+      - name: Build production API bundle
+        run: npm run build
+        env:
+          VITE_CBH_RUNTIME: api
+          VITE_CBH_PROVIDER_RUNTIME: api
+
+      - name: Verify production bundle cleanliness
+        run: npm run verify:production-bundle
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration

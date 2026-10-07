@@ -5,6 +5,7 @@ import type {
 } from './contracts';
 import type {
   PersonRepository,
+  PresenceRepository,
   ScheduleRepository,
 } from '../src/application/contracts/repositories';
 import type { Person, ScheduleEntry } from '../src/domain/models';
@@ -22,6 +23,7 @@ export interface PresenceEventDependencies {
   people: PersonRepository;
   schedules: ScheduleRepository;
   settings: NotificationSettingsStore;
+  presence: PresenceRepository;
 }
 
 export interface PresenceEventResult {
@@ -114,6 +116,24 @@ export async function enqueuePresenceEvent(
   if (!person) throw new Error('Person was not found.');
 
   const acceptedAt = now.toISOString();
+  const workDate = seoulDate(now);
+  const recorded = await dependencies.presence.record({
+    eventId,
+    personId,
+    type: input.type,
+    acceptedAt,
+    workDate,
+  });
+  if (recorded.duplicate) {
+    return {
+      eventId,
+      personId,
+      type: input.type,
+      acceptedAt,
+      queued: false,
+    };
+  }
+
   const settings = await dependencies.settings.get();
   const enabled = input.type === 'LEFT_WORK'
     ? settings.leftWorkEnabled

@@ -4,7 +4,11 @@ import type { Address, Coordinate, ImportResolution, NotificationRules, Person, 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
-export interface ImportMatchActions { cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>; }
+export interface ImportMatchActions {
+  cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>;
+  setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
+  setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
+}
 export interface ImportReviewActions {
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
@@ -62,6 +66,7 @@ export interface CommuteActions {
   createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute>;
   selectSavedRoute(personId: EntityId, routeId: EntityId): Promise<void>;
   setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
+  setRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
   moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void>;
   addRouteVia(personId: EntityId, routeId: EntityId, accessPointId: EntityId, index?: number): Promise<void>;
   replaceRouteVia(personId: EntityId, routeId: EntityId, index: number, accessPointId: EntityId): Promise<void>;

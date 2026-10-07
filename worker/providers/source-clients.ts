@@ -9,6 +9,7 @@ import {
   mapKakaoPlaceSearch,
   mapKakaoPublicTransitRoutes,
   mapSeoulBusArrivals,
+  mapSeoulBusRoutes,
   mapSeoulBusStops,
   mapSeoulSubwayArrivals,
   mapSeoulSubwayStations,
@@ -147,6 +148,22 @@ export class SeoulBusRequestClient implements SeoulBusSource {
     return mapSeoulBusStops(await this.transport.getJson(request, context));
   }
 
+  async routesByStop(arsId: string, context?: ProviderRequestContext) {
+    const request: ProviderJsonRequest = {
+      source: 'seoul-bus',
+      capability: 'bus-routes-by-stop',
+      method: 'GET',
+      urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getRouteByStation',
+      query: {
+        arsId,
+        resultType: 'json',
+      },
+      auth: seoulBusAuth(),
+      security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
+    };
+    return mapSeoulBusRoutes(await this.transport.getJson(request, context));
+  }
+
   async arrivals(stopProviderId: string, routeProviderId: string, context?: ProviderRequestContext) {
     const request: ProviderJsonRequest = {
       source: 'seoul-bus',
@@ -171,7 +188,7 @@ export class SeoulBusRequestClient implements SeoulBusSource {
 export class SeoulSubwayRequestClient implements SeoulSubwaySource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
-  async searchStations(query: string, _near: Coordinate, context?: ProviderRequestContext) {
+  async searchStations(query: string, _near?: Coordinate, context?: ProviderRequestContext) {
     const request: ProviderJsonRequest = {
       source: 'seoul-subway',
       capability: 'subway-station-name-search',
@@ -184,7 +201,7 @@ export class SeoulSubwayRequestClient implements SeoulSubwaySource {
     return mapSeoulSubwayStations(await this.transport.getJson(request, context));
   }
 
-  async arrivals(stationName: string, _line?: string, context?: ProviderRequestContext) {
+  async arrivals(stationName: string, line?: string, context?: ProviderRequestContext) {
     const request: ProviderJsonRequest = {
       source: 'seoul-subway',
       capability: 'realtime-subway-arrivals',
@@ -194,7 +211,7 @@ export class SeoulSubwayRequestClient implements SeoulSubwaySource {
       auth: seoulSubwayAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
-    return mapSeoulSubwayArrivals(await this.transport.getJson(request, context));
+    return mapSeoulSubwayArrivals(await this.transport.getJson(request, context), line);
   }
 
   async trainPositions(line: string, context?: ProviderRequestContext) {

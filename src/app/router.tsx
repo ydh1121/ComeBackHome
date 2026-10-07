@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router';
-import { productRoutes, qaRoutes } from '../application/route-manifest';
+import { productRoutes } from '../application/route-manifest';
 import { ImplementationBoundaryPage } from '../pages/ImplementationBoundaryPage';
 import { ImportPage } from '../pages/ImportPage';
 import { ImportPersonMatchPage } from '../pages/ImportPersonMatchPage';
@@ -17,9 +17,7 @@ import { TransitSearchPage } from '../pages/TransitSearchPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
 import { NotificationPage } from '../pages/NotificationPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { QaStateMatrixPage } from '../pages/QaStateMatrixPage';
-import { QaFlowMapPage } from '../pages/QaFlowMapPage';
-import { QaDesktopDropPage } from '../pages/QaDesktopDropPage';
+import { PresenceAutomationPage } from '../pages/PresenceAutomationPage';
 import { ScheduleBulkEditPage } from '../pages/ScheduleBulkEditPage';
 import { ScheduleDayEditPage } from '../pages/ScheduleDayEditPage';
 import { SchedulePage } from '../pages/SchedulePage';
@@ -49,18 +47,33 @@ function componentFor(path: string) {
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;
   if (path === '/notifications') return NotificationPage;
   if (path === '/settings') return SettingsPage;
-  return ImplementationBoundaryPage;
-}
-
-function qaComponentFor(path: string) {
-  if (path === '/__qa/states') return QaStateMatrixPage;
-  if (path === '/__qa/flow') return QaFlowMapPage;
-  if (path === '/__qa/desktop-drop') return QaDesktopDropPage;
+  if (path === '/settings/presence') return PresenceAutomationPage;
   return ImplementationBoundaryPage;
 }
 
 const productRouteEntries = productRoutes.map((path) => ({ path, Component: componentFor(path) }));
-const qaRouteEntries = import.meta.env.DEV ? qaRoutes.map((path) => ({ path, Component: qaComponentFor(path) })) : [];
+const qaRouteEntries = import.meta.env.DEV
+  ? [
+      {
+        path: '/__qa/states',
+        lazy: async () => ({
+          Component: (await import('../pages/QaStateMatrixPage')).QaStateMatrixPage,
+        }),
+      },
+      {
+        path: '/__qa/flow',
+        lazy: async () => ({
+          Component: (await import('../pages/QaFlowMapPage')).QaFlowMapPage,
+        }),
+      },
+      {
+        path: '/__qa/desktop-drop',
+        lazy: async () => ({
+          Component: (await import('../pages/QaDesktopDropPage')).QaDesktopDropPage,
+        }),
+      },
+    ]
+  : [];
 
 export const router = createBrowserRouter([
   {

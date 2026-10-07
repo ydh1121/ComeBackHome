@@ -9,7 +9,14 @@ const query = await read('../src/application/queries/ComeBackHomeQueries.ts');
 
 const requiredPageFragments = [
   'data-page="TodayPage"',
-  'WORKING ARRIVAL_ESTIMATED NEXT_SHIFT_KNOWN',
+  "'ARRIVED_HOME'",
+  "'LEFT_WORK'",
+  "'WORKING'",
+  "'NO_SCHEDULE_TODAY'",
+  "eta.status === 'ACTUAL'",
+  "eta.status === 'LIVE'",
+  "eta.status === 'STALE'",
+  "eta.status === 'FALLBACK'",
   '사람 선택',
   '집 도착 예정',
   '퇴근',
@@ -27,7 +34,7 @@ for (const fragment of requiredPageFragments) {
   if (!page.includes(fragment)) failures.push(`TodayPage contract missing: ${fragment}`);
 }
 
-if (!router.includes("path === '/' ? TodayPage")) failures.push('root route is not wired to TodayPage');
+if (!router.includes("if (path === '/') return TodayPage")) failures.push('root route is not wired to TodayPage');
 if (!query.includes('getTodayOverview(referenceDate: ISODate)')) failures.push('Today overview query missing');
 if (!query.includes('this.repositories.today.get(selectedId)')) failures.push('TodayPage data must cross TodayRepository boundary');
 if (!css.includes('.today-page { padding: 0 18px 28px; }')) failures.push('Today page 18px horizontal padding missing');
@@ -38,6 +45,7 @@ if (!css.includes('grid-template-columns: 1fr 1fr;')) failures.push('Today two-c
 if (!css.includes('.today-page .action-card { min-height: 60px;')) failures.push('Today action touch/height contract missing');
 if (!css.includes('env(safe-area-inset-bottom)')) failures.push('Person picker bottom safe-area contract missing');
 if (/from ['"].*(mocks|providers)\//.test(page)) failures.push('TodayPage imports infrastructure directly');
+if (page.includes('services.runtime.persistence') || page.includes('services.runtime.providerData') || page.includes('data-source-qa')) failures.push('TodayPage exposes developer runtime diagnostics');
 if (page.includes('contracts/repositories')) failures.push('TodayPage imports repository contracts directly');
 if (/^\.action-card\s*\{/m.test(css)) failures.push('Today action styles leaked globally');
 

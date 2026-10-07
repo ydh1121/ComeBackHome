@@ -1,6 +1,6 @@
 # Cloudflare Environment Contract
 
-Status: NON-LIVE / configuration contract
+Status: PRODUCTION-CAPABLE / secret-value-free configuration contract
 
 This document defines exactly where each ComeBackHome production value belongs.
 It does not provision values, change Cloudflare resources, enable providers, enable push delivery, run D1 migrations, create Cron triggers, or deploy.
@@ -25,6 +25,8 @@ In the current Pages/Workers project UI, Text and Secret variables are managed f
 These values must be stored as Cloudflare Secret:
 
 - KAKAO_REST_API_KEY
+- SEOUL_BUS_SERVICE_KEY
+- SEOUL_SUBWAY_API_KEY
 - VAPID_PRIVATE_KEY
 - PRESENCE_EVENT_INGEST_TOKEN
 
@@ -45,12 +47,12 @@ The public VAPID key is intentionally not secret.
 
 VITE_CBH_RUNTIME and VITE_CBH_PROVIDER_RUNTIME control which client runtime is compiled into the production bundle.
 
-Safe pre-activation values:
+Safe local-development values:
 
 - VITE_CBH_RUNTIME=mock
 - VITE_CBH_PROVIDER_RUNTIME=mock
 
-Production API/provider activation values, only after Worker + D1 + provider readiness is complete:
+Canonical production API/provider values:
 
 - VITE_CBH_RUNTIME=api
 - VITE_CBH_PROVIDER_RUNTIME=api
@@ -61,9 +63,9 @@ For the current Cloudflare project UI it may be entered on the same Variables an
 
 Its value must be exactly the same public key as VAPID_PUBLIC_KEY.
 
-## Safe staged state
+## Safe local state
 
-Before explicit live activation approval:
+For local development without external calls:
 
 - PROVIDER_RUNTIME_ENABLED=0
 - PUSH_DELIVERY_ENABLED=0
@@ -72,17 +74,18 @@ Before explicit live activation approval:
 
 All other values may be prepared in advance without enabling provider calls or Web Push delivery.
 
-## Live activation boundary
+## Production runtime boundary
 
-Changing either enable flag to 1 is not sufficient by itself and is not authorized by this contract.
-
-Live activation additionally requires:
+Canonical production requires:
 
 - production D1 binding and migrations
-- scheduled Worker dependency wiring
-- Cloudflare Cron configuration
-- same-origin Worker/static deployment
-- explicit production activation approval
+- direct Pages Functions API/provider runtime
+- minimal private scheduler Worker for clock-driven rules
+- Cloudflare Cron on that scheduler
+- same-origin Pages deployment
+- provider secrets kept server-side
+
+Kakao provides route/place data. Seoul bus/subway secrets are optional capability bindings: when absent or out of coverage, realtime data must degrade to FALLBACK rather than fabricate a LIVE value.
 
 ## Secret handling
 

@@ -1,5 +1,5 @@
 import type { ProviderSecretBindings } from './contracts';
-import { assertProviderActivationReady, type ProviderSecretPresenceResolver } from './security';
+import { assertProviderActivationReady, isDocumentedOfficialHttpEndpoint, type ProviderSecretPresenceResolver } from './security';
 import type {
   ProviderAuthReference,
   ProviderJsonRequest,
@@ -44,13 +44,17 @@ function applySecret(
 
   if (auth.placement === 'query') {
     url.searchParams.set(auth.target, value);
-    return;
   }
+}
 
-  url.pathname = url.pathname.replace(
-    auth.target,
-    encodeURIComponent(secret),
-  );
+function applyPathSecret(
+  urlTemplate: string,
+  auth: ProviderAuthReference,
+  secret: string,
+): string {
+  return auth.placement === 'path'
+    ? urlTemplate.replace(auth.target, encodeURIComponent(secret))
+    : urlTemplate;
 }
 
 function assertNoUnresolvedPathTokens(url: URL): void {
@@ -77,7 +81,11 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
       throw new Error('Provider activation blocked: MISSING_SECRET');
     }
 
-    const materialized = replacePathParams(request.urlTemplate, request.pathParams);
+    const materialized = applyPathSecret(
+      replacePathParams(request.urlTemplate, request.pathParams),
+      request.auth,
+      secret,
+    );
     const url = new URL(materialized);
     const headers = new Headers({ Accept: accept });
 
@@ -89,7 +97,13 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
     applySecret(url, headers, request.auth, secret);
     assertNoUnresolvedPathTokens(url);
 
-    if (url.protocol !== 'https:') {
+    if (
+      url.protocol !== 'https:' &&
+      !(
+        request.security === 'DOCUMENTED_HTTP_REQUIRES_VALIDATION' &&
+        isDocumentedOfficialHttpEndpoint(url.toString())
+      )
+    ) {
       throw new Error('Provider activation blocked: INSECURE_ENDPOINT');
     }
 

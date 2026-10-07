@@ -198,12 +198,20 @@ try {
   );
 
   assert(
-    !source.includes('TesseractScheduleImageTextExtractor'),
-    'Phase5Y must not activate OCR in application composition',
+    source.includes('TesseractScheduleImageTextExtractor'),
+    'Production composition must include the local OCR extractor',
+  );
+  assert(
+    source.includes('AdaptiveScheduleImageRecognizer'),
+    'Production composition must include the image schedule recognizer',
+  );
+  assert(
+    packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets',
+    'Production build must stage OCR assets',
   );
   assert(
     packageJson.scripts?.build === 'tsc -b && vite build',
-    'Phase5Y must not change the normal production build',
+    'Production build command must remain typecheck + Vite build',
   );
 
   console.log(JSON.stringify({
@@ -215,7 +223,7 @@ try {
     servedBytes,
     transparentlyDecodedGzipFiles,
     sameOriginOnly: true,
-    productionActivation: false,
+    productionActivation: true,
     externalImageUpload: 0,
     externalOcrApi: 0,
   }, null, 2));

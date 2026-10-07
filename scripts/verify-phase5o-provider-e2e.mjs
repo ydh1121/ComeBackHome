@@ -75,17 +75,32 @@ try {
       },
       async arrivals() {
         calls.bus += 1;
-        return [];
+        return [{
+          providerVehicleId: 'e2e-bus',
+          minutes: 5,
+          observedAt: '2026-10-05T13:15:00.000Z',
+        }];
       },
     },
     seoulSubway: {
-      async searchStations() {
+      async searchStations(query) {
         calls.transit += 1;
-        return [];
+        return [{
+          id: 'seoul-subway:0222',
+          providerId: '0222',
+          mode: 'SUBWAY',
+          name: query === '강남' ? '강남' : query,
+          line: '02호선',
+          selected: false,
+        }];
       },
       async arrivals() {
         calls.subway += 1;
-        return [];
+        return [{
+          providerVehicleId: 'e2e-subway',
+          minutes: 4,
+          observedAt: '2026-10-05T13:15:00.000Z',
+        }];
       },
       async trainPositions() {
         calls.subway += 1;
@@ -142,27 +157,26 @@ try {
   expect(nearbyTransit.some((item) => item.mode === 'BUS'), 'nearby transit must include bus candidates');
   expect(nearbyTransit.some((item) => item.mode === 'SUBWAY'), 'nearby transit must include subway candidates');
 
-  let busBlocked = '';
-  try {
-    await busProvider.arrivals('stop-1', 'route-1');
-  } catch (error) {
-    busBlocked = error instanceof Error ? error.message : String(error);
-  }
-  expect(busBlocked === 'Seoul provider secure transport is unavailable.', 'bus realtime secure-path degradation mismatch');
+  const busArrivals = await busProvider.arrivals('122000606', '100100118');
+  expect(busArrivals[0]?.providerVehicleId === 'e2e-bus', 'bus realtime client -> Worker -> Seoul source mapping failed');
+  expect(calls.bus === 1, 'Seoul bus fake source call count mismatch');
 
-  let subwayBlocked = '';
-  try {
-    await subwayProvider.arrivals('강남', '02호선');
-  } catch (error) {
-    subwayBlocked = error instanceof Error ? error.message : String(error);
-  }
-  expect(subwayBlocked === 'Seoul provider secure transport is unavailable.', 'subway realtime secure-path degradation mismatch');
-  expect(calls.transit === 0 && calls.bus === 0 && calls.subway === 0, 'Seoul realtime routes must remain blocked before fake source bundle');
+  const transitCallsBeforeSubwayRealtime = calls.transit;
+  const subwayArrivals = await subwayProvider.arrivals('0222', '강남', '02호선');
+  expect(subwayArrivals[0]?.providerVehicleId === 'e2e-subway', 'subway realtime client -> Worker -> Seoul source mapping failed');
+  expect(calls.transit === transitCallsBeforeSubwayRealtime + 1, 'subway realtime must resolve the persisted provider station ID first');
+  expect(calls.subway === 1, 'Seoul subway fake source call count mismatch');
+
+  const subwayCallsBeforeMismatch = calls.subway;
+  const mismatchedSubway = await subwayProvider.arrivals('9999', '강남', '02호선');
+  expect(mismatchedSubway.length === 0, 'mismatched persisted subway station ID must fail closed to no realtime evidence');
+  expect(calls.subway === subwayCallsBeforeMismatch, 'mismatched station ID must not reach realtime arrival source');
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   const places = new mocks.MockPlaceRepository(store);
   const schedules = new mocks.MockScheduleRepository(store);
   const persistedCommute = new mocks.MockCommuteRepository(store);
+  const presence = new mocks.MockPresenceRepository();
   await persistedCommute.setPreferredRouteCandidateId('mock-person-1', 'e2e-route-fast');
 
   const commute = new runtimeModule.ProviderCommuteRepository(
@@ -174,18 +188,23 @@ try {
   expect(candidates[0]?.id === 'e2e-route-fast', 'provider-backed commute did not rank Worker route result');
   expect(candidates[0]?.personId === 'mock-person-1', 'provider-backed commute lost person ownership');
 
+  const realtimeCallsBeforeToday = { bus: calls.bus, subway: calls.subway };
   const today = new runtimeModule.ProviderTodayRepository(
     schedules,
     commute,
+    presence,
     busProvider,
     subwayProvider,
     { now: () => new Date('2026-10-05T12:00:00.000Z') },
   );
   const snapshot = await today.get('mock-person-1');
   expect(snapshot?.routeCandidateId === 'e2e-route-fast', 'Today E2E preferred route mismatch');
-  expect(snapshot?.eta.status === 'FALLBACK', 'blocked realtime must degrade Today ETA to FALLBACK');
+  expect(snapshot?.eta.status === 'FALLBACK', 'future scheduled departure must use route-based FALLBACK');
   expect(snapshot?.eta.arrivalTime === '22:48', 'Today E2E route-based fallback ETA mismatch');
-  expect(calls.bus === 0 && calls.subway === 0, 'Today blocked realtime must not reach Seoul fake source');
+  expect(
+    calls.bus === realtimeCallsBeforeToday.bus && calls.subway === realtimeCallsBeforeToday.subway,
+    'future scheduled departure must not query realtime arrivals too early',
+  );
 
   providerEnabled = false;
   let disabledError = '';

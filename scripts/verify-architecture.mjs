@@ -33,6 +33,7 @@ const required = [
   'src/app/ApplicationServicesContext.tsx',
   'src/app/changeSignal.ts',
   'src/app/composition.ts',
+  'src/app/mockComposition.ts',
   'src/app/useRouteScrollRestoration.ts',
   'src/domain/models.ts',
   'src/mocks/commute-providers.ts',
@@ -92,7 +93,12 @@ for (const [file, content] of texts) {
   if (path.startsWith('src/application/') && content.includes('/mocks/')) failures.push(`application layer imports mocks: ${path}`);
   if (path.startsWith('src/shared/') && (content.includes('/mocks/') || content.includes('/providers/'))) failures.push(`shared UI imports infrastructure directly: ${path}`);
   if (path.startsWith('src/shared/') && content.includes('contracts/repositories')) failures.push(`shared UI imports repositories directly: ${path}`);
-  if (path.startsWith('src/app/') && path !== 'src/app/composition.ts' && content.includes('/mocks/')) failures.push(`only composition may import mocks: ${path}`);
+  if (path.startsWith('src/app/') && path !== 'src/app/mockComposition.ts' && content.includes('/mocks/')) failures.push(`only DEV mock composition may import mocks: ${path}`);
+}
+
+const productionComposition = await readFile(new URL('../src/app/composition.ts', import.meta.url), 'utf8');
+if (productionComposition.includes('/mocks/') || productionComposition.includes('MOCK_FIXTURE')) {
+  failures.push('production composition imports mock data');
 }
 
 const providers = await readFile(new URL('../src/application/contracts/providers.ts', import.meta.url), 'utf8');

@@ -27,9 +27,9 @@ export const PROVIDER_SOURCE_PLAN = {
 } as const;
 
 export const PROVIDER_ACTIVATION_POLICY = {
-  secrets: 'worker-only',
+  secrets: 'server-only',
   clientKeysAllowed: false,
-  externalRequestsAllowedInPhase5I: false,
-  remoteActivationAllowedInPhase5I: false,
+  officialSeoulHttpAllowlistRequired: true,
+  missingRealtimeSecretBehavior: 'FALLBACK',
   fabricatedRealtimeAllowed: false,
 } as const;

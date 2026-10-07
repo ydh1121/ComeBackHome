@@ -5,6 +5,7 @@ import { D1NotificationJobStore } from './repositories/D1NotificationJobStore';
 import { D1NotificationSettingsStore } from './repositories/D1NotificationSettingsStore';
 import { D1PersonRepository } from './repositories/D1PersonRepository';
 import { D1PlaceRepository } from './repositories/D1PlaceRepository';
+import { D1PresenceRepository } from './repositories/D1PresenceRepository';
 import { D1ScheduleRepository } from './repositories/D1ScheduleRepository';
 import { D1SubscriptionStore } from './repositories/D1SubscriptionStore';
 import type { WorkerEnv } from './runtime-types';
@@ -107,6 +108,42 @@ function dedupeTransit(results: TransitSearchResult[]): TransitSearchResult[] {
     .sort((left, right) => (left.distanceM ?? Number.MAX_SAFE_INTEGER) - (right.distanceM ?? Number.MAX_SAFE_INTEGER));
 }
 
+function normalizeTransitName(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/정류장|정류소|역$/g, '');
+}
+
+function chooseTransitResolution(
+  candidates: TransitSearchResult[],
+  name: string,
+  near: Coordinate,
+  line?: string,
+): TransitSearchResult | null {
+  const target = normalizeTransitName(name);
+  const targetLine = line?.normalize('NFKC').replace(/\s+/g, '').toLocaleLowerCase() ?? '';
+  const scored = candidates.map((candidate) => {
+    const candidateName = normalizeTransitName(candidate.name);
+    const nameScore =
+      candidateName === target ? 0 :
+      candidateName.includes(target) || target.includes(candidateName) ? 1 :
+      3;
+    const lineValue = candidate.line?.normalize('NFKC').replace(/\s+/g, '').toLocaleLowerCase() ?? '';
+    const lineScore = targetLine && lineValue
+      ? lineValue === targetLine || lineValue.includes(targetLine) || targetLine.includes(lineValue) ? 0 : 1
+      : 0;
+    const distance = candidate.coordinate
+      ? coordinateDistanceMeters(near, candidate.coordinate)
+      : candidate.distanceM ?? Number.MAX_SAFE_INTEGER;
+    return { candidate, score: nameScore * 1_000_000 + lineScore * 100_000 + distance };
+  }).sort((left, right) => left.score - right.score);
+
+  const best = scored[0];
+  return best && best.score < 3_000_000 ? best.candidate : null;
+}
+
 export async function handleApiRequest(
   request: Request,
   env: WorkerEnv,
@@ -152,6 +189,11 @@ export async function handleApiRequest(
         return json({
           enabled,
           source: providerRuntime ? 'worker-provider' : enabled ? 'unavailable' : 'unconfigured',
+          capabilities: {
+            kakao: Boolean(env.KAKAO_REST_API_KEY?.trim()),
+            seoulBus: Boolean(env.SEOUL_BUS_SERVICE_KEY?.trim()),
+            seoulSubway: Boolean(env.SEOUL_SUBWAY_API_KEY?.trim()),
+          },
         });
       }
 
@@ -161,8 +203,10 @@ export async function handleApiRequest(
           segments[2] === 'place-search' ||
           segments[2] === 'transit-search' ||
           segments[2] === 'transit-nearby' ||
+          segments[2] === 'transit-resolve' ||
           segments[2] === 'static-map' ||
           segments[2] === 'routes' ||
+          segments[2] === 'bus-routes' ||
           segments[2] === 'bus-arrivals' ||
           segments[2] === 'subway-arrivals'
         )
@@ -171,14 +215,109 @@ export async function handleApiRequest(
           return json({ error: 'Provider runtime is disabled.' }, 503);
         }
 
-        if (
-          segments[2] === 'bus-arrivals' ||
-          segments[2] === 'subway-arrivals'
-        ) {
-          return json({ error: 'Seoul provider secure transport is unavailable.' }, 503);
-        }
-
         try {
+          if (segments[2] === 'transit-resolve') {
+            const mode = url.searchParams.get('mode');
+            const name = url.searchParams.get('name')?.trim() ?? '';
+            const line = url.searchParams.get('line')?.trim() || undefined;
+            const x = Number(url.searchParams.get('x'));
+            const y = Number(url.searchParams.get('y'));
+            if ((mode !== 'BUS' && mode !== 'SUBWAY') || !name || ![x, y].every(Number.isFinite)) {
+              return json({ error: 'mode/name/x/y are required.' }, 400);
+            }
+            const near = { x, y };
+
+            if (mode === 'BUS') {
+              let candidates: TransitSearchResult[] = [];
+              try {
+                candidates = await providerRuntime.seoulBus.searchStops(name, near);
+              } catch {
+                candidates = [];
+              }
+              const stop = chooseTransitResolution(candidates, name, near);
+              if (!stop) return json({ resolved: {} });
+
+              let busRoutes = stop.busRoutes ?? [];
+              if (stop.displayCode) {
+                try {
+                  busRoutes = await providerRuntime.seoulBus.routesByStop(stop.displayCode);
+                } catch {
+                  busRoutes = [];
+                }
+              }
+              return json({
+                resolved: {
+                  ...stop,
+                  ...(busRoutes.length ? {
+                    busRoutes,
+                    routeCount: busRoutes.length,
+                  } : {}),
+                },
+              });
+            }
+
+            let stations: TransitSearchResult[] = [];
+            try {
+              stations = await providerRuntime.seoulSubway.searchStations(name, near);
+            } catch {
+              stations = [];
+            }
+            const station = chooseTransitResolution(stations, name, near, line);
+            return json({ resolved: station ?? {} });
+          }
+
+          if (segments[2] === 'bus-routes') {
+            const arsId = url.searchParams.get('arsId')?.trim() ?? '';
+            if (!/^\d{4,5}$/.test(arsId)) {
+              return json({ error: 'Valid arsId is required.' }, 400);
+            }
+            return json({
+              routes: await providerRuntime.seoulBus.routesByStop(arsId.padStart(5, '0')),
+            });
+          }
+
+          if (segments[2] === 'bus-arrivals') {
+            const stopProviderId = url.searchParams.get('stopProviderId')?.trim() ?? '';
+            const routeProviderId = url.searchParams.get('routeProviderId')?.trim() ?? '';
+            if (!stopProviderId || !routeProviderId) {
+              return json({ error: 'stopProviderId/routeProviderId are required.' }, 400);
+            }
+            if (!/^\d+$/.test(stopProviderId) || !/^\d+$/.test(routeProviderId)) {
+              return json({ arrivals: [] });
+            }
+            return json({
+              arrivals: await providerRuntime.seoulBus.arrivals(stopProviderId, routeProviderId),
+            });
+          }
+
+          if (segments[2] === 'subway-arrivals') {
+            const providerStationId = url.searchParams.get('providerStationId')?.trim() ?? '';
+            const stationName = url.searchParams.get('stationName')?.trim() ?? '';
+            const line = url.searchParams.get('line')?.trim() || undefined;
+            if (!providerStationId || !stationName) {
+              return json({ error: 'providerStationId/stationName are required.' }, 400);
+            }
+
+            let stations: TransitSearchResult[] = [];
+            try {
+              stations = await providerRuntime.seoulSubway.searchStations(stationName);
+            } catch {
+              stations = [];
+            }
+            const station = stations.find((candidate) => candidate.providerId === providerStationId);
+            if (!station) {
+              return json({ providerStationId, arrivals: [] });
+            }
+
+            return json({
+              providerStationId,
+              arrivals: await providerRuntime.seoulSubway.arrivals(
+                station.name,
+                line ?? station.line,
+              ),
+            });
+          }
+
           if (segments[2] === 'static-map') {
             const centerX = Number(url.searchParams.get('centerX'));
             const centerY = Number(url.searchParams.get('centerY'));
@@ -275,6 +414,31 @@ export async function handleApiRequest(
     }
 
     if (
+      segments.length === 3 &&
+      segments[1] === 'presence-events' &&
+      segments[2] === 'status' &&
+      request.method === 'GET'
+    ) {
+      return json({
+        configured: Boolean(env.PRESENCE_EVENT_INGEST_TOKEN?.trim()),
+      });
+    }
+
+    if (
+      segments.length === 3 &&
+      segments[1] === 'presence-events' &&
+      segments[2] === 'validate' &&
+      request.method === 'POST'
+    ) {
+      const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
+      if (!configuredToken) return json({ error: 'Presence event ingest is not configured.' }, 503);
+      if (!isPresenceEventAuthorized(request, configuredToken)) {
+        return json({ error: 'Unauthorized.' }, 401);
+      }
+      return json({ valid: true });
+    }
+
+    if (
       segments.length === 2 &&
       segments[1] === 'presence-events' &&
       request.method === 'POST'
@@ -299,6 +463,7 @@ export async function handleApiRequest(
           people: new D1PersonRepository(env.DB),
           schedules: new D1ScheduleRepository(env.DB),
           settings: new D1NotificationSettingsStore(env.DB),
+          presence: new D1PresenceRepository(env.DB),
         },
         {
           eventId: asString(body.eventId, 'eventId'),
@@ -365,6 +530,11 @@ export async function handleApiRequest(
           });
           return json({ person });
         }
+      }
+
+      if (segments.length === 4 && segments[3] === 'presence' && request.method === 'GET') {
+        const presence = new D1PresenceRepository(env.DB);
+        return json({ presence: await presence.get(personId) });
       }
 
       if (segments[3] === 'schedules') {
@@ -517,6 +687,11 @@ export async function handleApiRequest(
               route.originAccessPointId = body.originAccessPointId.trim();
             } else if (body.originAccessPointId === null) {
               delete route.originAccessPointId;
+            }
+            if (typeof body.destinationAccessPointId === 'string' && body.destinationAccessPointId.trim()) {
+              route.destinationAccessPointId = body.destinationAccessPointId.trim();
+            } else if (body.destinationAccessPointId === null) {
+              delete route.destinationAccessPointId;
             }
             await commute.saveSavedRoute(route);
             return json({ route });

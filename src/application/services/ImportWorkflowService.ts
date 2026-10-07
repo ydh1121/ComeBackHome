@@ -29,7 +29,25 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     const options: Array<EntityId | null> = [null, ...people.map((person) => person.id)];
     const index = options.findIndex((personId) => personId === detected.matchedPersonId);
     const next = options[(index + 1 + options.length) % options.length] ?? null;
+    await this.imports.setDetectedPersonIgnored(batchId, detectedPersonId, false);
     await this.imports.setDetectedPersonMatch(batchId, detectedPersonId, next);
+  }
+
+  async setPersonMatch(
+    batchId: EntityId,
+    detectedPersonId: EntityId,
+    personId: EntityId | null,
+  ): Promise<void> {
+    await this.imports.setDetectedPersonIgnored(batchId, detectedPersonId, false);
+    await this.imports.setDetectedPersonMatch(batchId, detectedPersonId, personId);
+  }
+
+  async setPersonIgnored(
+    batchId: EntityId,
+    detectedPersonId: EntityId,
+    ignored: boolean,
+  ): Promise<void> {
+    await this.imports.setDetectedPersonIgnored(batchId, detectedPersonId, ignored);
   }
 
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {

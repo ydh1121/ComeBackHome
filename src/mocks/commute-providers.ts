@@ -48,4 +48,7 @@ export class MockTransitAccessSearchProvider implements TransitAccessSearchProvi
   async nearby(_near: Coordinate): Promise<TransitSearchResult[]> {
     return structuredClone(transitResults);
   }
+  async resolve(result: TransitSearchResult, _near: Coordinate): Promise<TransitSearchResult> {
+    return structuredClone(result);
+  }
 }

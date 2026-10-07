@@ -12,13 +12,13 @@ export interface CommuteStep { type: CommuteStepType; label: string; }
 export interface TransitAccessPoint { id: EntityId; personId: EntityId; providerId: string; placeKind: PlaceKind; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; selected: boolean; userLabel?: string; busRoutes?: BusRouteOption[]; selectedBusRouteId?: string; }
 export interface BusRouteOption { providerRouteId: string; routeNo: string; directionLabel: string; terminalName?: string; routeType?: string; }
 export interface RoutePreference { id: EntityId; personId: EntityId; originPlaceKind: 'origin'; destinationPlaceKind: 'destination'; viaAccessPointIds: EntityId[]; preferredModes?: TransitMode[]; }
-export interface SavedCommuteRoute { id: EntityId; personId: EntityId; position: number; label: string; originAccessPointId?: EntityId; viaAccessPointIds: EntityId[]; active: boolean; }
-export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; fare?: number; policyLabels?: string[]; matchesPreference?: boolean; steps?: CommuteStep[]; }
+export interface SavedCommuteRoute { id: EntityId; personId: EntityId; position: number; label: string; originAccessPointId?: EntityId; destinationAccessPointId?: EntityId; viaAccessPointIds: EntityId[]; active: boolean; }
+export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; accessMinutes?: number; egressMinutes?: number; fare?: number; policyLabels?: string[]; matchesPreference?: boolean; steps?: CommuteStep[]; }
 export type ImportResolution = 'KEEP' | 'NEW';
 export type ImportFileKind = 'XLSX' | 'IMAGE';
 export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
 export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; }
-export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; }
+export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; ignored?: boolean; }
 export interface ImportStructure { sheet: string; headerRow: number; personColumn: string; dateColumn: string; shiftColumn: string; needsReview: boolean; }
 export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'start'|'end'>; imported: { start: string | null; end: string | null }; resolution: ImportResolution | null; }
 export interface ImportBatch {
@@ -36,5 +36,11 @@ export interface WebPushSubscriptionRecord {
   keys: { p256dh: string; auth: string };
 }
 export interface NotificationSettings { permission: PermissionState; rules: NotificationRules; subscription?: WebPushSubscriptionRecord | null; }
-export interface EtaSnapshot { personId: EntityId; status: 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
-export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; routeCandidateId?: EntityId; }
+export interface PresenceState {
+  personId: EntityId;
+  workDate: ISODate;
+  leftWorkAt?: ISODateTime;
+  arrivedHomeAt?: ISODateTime;
+}
+export interface EtaSnapshot { personId: EntityId; status: 'ACTUAL' | 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
+export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; leftWorkAt?: ISODateTime; arrivedHomeAt?: ISODateTime; routeCandidateId?: EntityId; }

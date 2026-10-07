@@ -1,4 +1,4 @@
-import type { NotificationPermissionProvider, NotificationTestGateway, PushSubscriptionProvider } from '../application/contracts/providers';
+import type { NotificationPermissionProvider, NotificationTestGateway, PresenceAutomationGateway, PushSubscriptionProvider } from '../application/contracts/providers';
 import type { WebPushSubscriptionRecord } from '../domain/models';
 export class MockNotificationPermissionProvider implements NotificationPermissionProvider { private permission: NotificationPermission = 'default'; async getPermission(): Promise<NotificationPermission> { return this.permission; } async requestPermissionFromUserGesture(): Promise<NotificationPermission> { this.permission = 'granted'; return this.permission; } }
 export class MockNotificationTestGateway implements NotificationTestGateway { private sentCount = 0; async sendTestNotification(): Promise<void> { this.sentCount += 1; } getSentCount(): number { return this.sentCount; } }
@@ -27,4 +27,9 @@ export class MockPushSubscriptionProvider implements PushSubscriptionProvider {
   async unsubscribe(): Promise<void> {
     this.subscription = null;
   }
+}
+
+export class MockPresenceAutomationGateway implements PresenceAutomationGateway {
+  async getStatus(): Promise<{ configured: boolean }> { return { configured: true }; }
+  async validateToken(token: string): Promise<boolean> { return token.trim() === 'mock-presence-token'; }
 }

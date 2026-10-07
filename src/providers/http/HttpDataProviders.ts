@@ -1,5 +1,6 @@
 import type {
   Arrival,
+  BusRouteLookupProvider,
   PlaceSearchProvider,
   PlaceSearchResult,
   RealtimeBusProvider,
@@ -9,7 +10,7 @@ import type {
   TransitRouteResult,
   TransitSearchResult,
 } from '../../application/contracts/providers';
-import type { Coordinate } from '../../domain/models';
+import type { BusRouteOption, Coordinate } from '../../domain/models';
 import { HttpJsonClient } from './HttpJsonClient';
 
 export class HttpPlaceSearchProvider implements PlaceSearchProvider {
@@ -46,6 +47,20 @@ export class HttpTransitAccessSearchProvider implements TransitAccessSearchProvi
       '/providers/transit-nearby?' + params.toString(),
     )).results;
   }
+
+  async resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult> {
+    const params = new URLSearchParams({
+      mode: result.mode,
+      name: result.name,
+      x: String(near.x),
+      y: String(near.y),
+    });
+    if (result.line) params.set('line', result.line);
+    const response = await this.client.get<{ resolved: Partial<TransitSearchResult> }>(
+      '/providers/transit-resolve?' + params.toString(),
+    );
+    return { ...result, ...response.resolved };
+  }
 }
 
 export class HttpTransitRouteProvider implements TransitRouteProvider {
@@ -64,6 +79,17 @@ export class HttpTransitRouteProvider implements TransitRouteProvider {
   }
 }
 
+export class HttpBusRouteLookupProvider implements BusRouteLookupProvider {
+  constructor(private readonly client: HttpJsonClient) {}
+
+  async listByStop(arsId: string): Promise<BusRouteOption[]> {
+    const params = new URLSearchParams({ arsId });
+    return (await this.client.get<{ routes: BusRouteOption[] }>(
+      '/providers/bus-routes?' + params.toString(),
+    )).routes;
+  }
+}
+
 export class HttpRealtimeBusProvider implements RealtimeBusProvider {
   constructor(private readonly client: HttpJsonClient) {}
 
@@ -78,8 +104,8 @@ export class HttpRealtimeBusProvider implements RealtimeBusProvider {
 export class HttpRealtimeSubwayProvider implements RealtimeSubwayProvider {
   constructor(private readonly client: HttpJsonClient) {}
 
-  async arrivals(stationName: string, line?: string): Promise<Arrival[]> {
-    const params = new URLSearchParams({ stationName });
+  async arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]> {
+    const params = new URLSearchParams({ providerStationId, stationName });
     if (line) params.set('line', line);
     return (await this.client.get<{ arrivals: Arrival[] }>(
       '/providers/subway-arrivals?' + params.toString(),

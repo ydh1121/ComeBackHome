@@ -5,12 +5,17 @@ export interface PlaceSearchResult { providerId: string; placeName?: string; roa
 export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; coordinate?: Coordinate; busRoutes?: BusRouteOption[]; }
 export interface Arrival { providerVehicleId?: string; minutes: number; observedAt: string; }
 export interface TransitBusLeg { stopNames: string[]; routes: BusRouteOption[]; }
-export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
+export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; accessMinutes?: number; egressMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
 export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearchResult[]>; }
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]>; }
-export interface TransitAccessSearchProvider { search(query: string, near: Coordinate): Promise<TransitSearchResult[]>; nearby(near: Coordinate): Promise<TransitSearchResult[]>; }
+export interface TransitAccessSearchProvider {
+  search(query: string, near: Coordinate): Promise<TransitSearchResult[]>;
+  nearby(near: Coordinate): Promise<TransitSearchResult[]>;
+  resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult>;
+}
+export interface BusRouteLookupProvider { listByStop(arsId: string): Promise<BusRouteOption[]>; }
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
-export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
+export interface RealtimeSubwayProvider { arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
 export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
 export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; sourceRow: number; confidence: number; }
@@ -32,3 +37,8 @@ export interface NotificationPermissionProvider { getPermission(): Promise<Notif
 export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; }
 export interface PushSubscriptionTransport { upsert(subscription: WebPushSubscriptionRecord): Promise<void>; remove(endpoint: string): Promise<void>; }
 export interface NotificationTestGateway { sendTestNotification(): Promise<void>; }
+
+export interface PresenceAutomationGateway {
+  getStatus(): Promise<{ configured: boolean }>;
+  validateToken(token: string): Promise<boolean>;
+}

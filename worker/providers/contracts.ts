@@ -1,4 +1,4 @@
-import type { Coordinate } from '../../src/domain/models';
+import type { BusRouteOption, Coordinate } from '../../src/domain/models';
 import type { Arrival, PlaceSearchResult, TransitRouteResult, TransitSearchResult } from '../../src/application/contracts/providers';
 
 export type ProviderSourceId = 'kakao-map' | 'seoul-bus' | 'seoul-subway';
@@ -28,11 +28,12 @@ export interface KakaoMapSource {
 
 export interface SeoulBusSource {
   searchStops(query: string, near: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
+  routesByStop(arsId: string, context?: ProviderRequestContext): Promise<BusRouteOption[]>;
   arrivals(stopProviderId: string, routeProviderId: string, context?: ProviderRequestContext): Promise<Arrival[]>;
 }
 
 export interface SeoulSubwaySource {
-  searchStations(query: string, near: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
+  searchStations(query: string, near?: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
   arrivals(stationName: string, line?: string, context?: ProviderRequestContext): Promise<Arrival[]>;
   trainPositions(line: string, context?: ProviderRequestContext): Promise<SubwayTrainPosition[]>;
 }

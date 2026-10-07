@@ -17,10 +17,11 @@ expect(securitySource.includes("'UNVERIFIED_TRANSPORT'"), 'unverified transport 
 expect(securitySource.includes("'MISSING_SECRET'"), 'missing secret reason missing');
 
 for (const text of [
-  'http://openapi.seoul.go.kr:8088',
-  'http://ws.bus.go.kr',
-  'SEOUL SOURCES BLOCKED FOR LIVE ACTIVATION',
-  'No secret value is returned',
+  'ws.bus.go.kr',
+  'swopenapi.seoul.go.kr',
+  'openapi.seoul.go.kr',
+  'OFFICIAL SEOUL HTTP ALLOWLIST ACTIVE / SECRET-GATED',
+  'never returned to the browser',
 ]) {
   expect(docs.includes(text), 'secure-transport docs missing ' + text);
 }
@@ -75,7 +76,7 @@ try {
       },
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     }, presentSecrets);
-    expect(blocked.ready === false && blocked.reason === 'INSECURE_ENDPOINT', 'Seoul HTTP request must be activation-blocked: ' + urlTemplate);
+    expect(blocked.ready === true, 'Documented Seoul HTTP request must pass the official-host allowlist: ' + urlTemplate);
   }
 
   const httpsButUnverified = security.assessProviderActivation({
@@ -98,7 +99,7 @@ try {
   } catch (error) {
     blockedError = error instanceof Error ? error.message : String(error);
   }
-  expect(blockedError === 'Provider activation blocked: INSECURE_ENDPOINT', 'fail-closed assertion mismatch');
+  expect(blockedError === 'Provider activation blocked: UNVERIFIED_TRANSPORT', 'fail-closed assertion mismatch');
 } finally {
   await vite.close();
 }

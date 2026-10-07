@@ -1,38 +1,34 @@
 # ComeBackHome Runtime Modes
 
-Status: Phase 5P / pre-deployment
+Status: PRODUCT COMPLETION
 
-## Default
+## Production
 
-`VITE_CBH_RUNTIME` unset or `mock`:
+Production defaults to `VITE_CBH_RUNTIME=api` and `VITE_CBH_PROVIDER_RUNTIME=api` semantics even when a build-time value is absent.
 
-- all repositories use in-memory mock state;
-- provider data uses mock providers;
-- no Worker API is required.
+API runtime:
+- people, schedules, places, commute preferences/routes and presence state use same-origin `/api/*`;
+- D1 is the persistent server store;
+- Kakao/Seoul provider data is server-derived;
+- Today/ETA overlays realtime provider observations on persisted route configuration;
+- Excel and image/OCR imports run through production parsers and reviewed schedules commit through one D1 batch;
+- Web Push subscription transport and notification delivery use the production software path;
+- browser notification permission remains browser-local state.
 
-## Hybrid API
+The browser never receives provider secrets or a configurable external API base.
 
-`VITE_CBH_RUNTIME=api`:
+## Development
 
-- people, schedules, places and persisted commute state use same-origin `/api/*`;
-- notification rules use the Worker API;
-- browser notification permission/subscription state remains client-runtime state;
-- Today/ETA and automatic route candidates remain runtime/provider-derived rather than D1 snapshots;
-- import preview remains client-runtime state and is not persisted to D1;
-- real XLSX parsing runs through WorkbookParser before import review;
-- a reviewed workbook-derived batch may commit schedule rows through the Worker API/D1 batch boundary;
-- image schedule recognition remains unavailable and image files are surfaced as explicit errors;
-- browser push adapter and push-subscription HTTP transport remain inactive.
+Mock runtime is development-only. It is loaded from `src/app/mockComposition.ts` only when `import.meta.env.DEV` is true and the runtime mode is explicitly mock.
 
-The API base is not configurable from the client. Requests are same-origin and always use `/api`.
+Production composition does not import mock repositories, mock providers, or `MOCK_FIXTURE`.
 
-## Activation rule
+## Provider-disabled API mode
 
-Do not set `VITE_CBH_RUNTIME=api` for a deployed build until:
+Local integration may run API persistence with provider mode disabled. In that mode:
+- persistence still uses same-origin API/D1;
+- provider searches return no fake data;
+- Today degrades to UNKNOWN/FALLBACK where provider evidence is unavailable;
+- no fixture data is substituted.
 
-1. the Worker is running with the D1 binding;
-2. migrations have been applied;
-3. local/API integration checks pass;
-4. the deployment phase explicitly authorizes remote resources.
-
-Any unsupported runtime mode fails application startup rather than silently falling back.
+Unsupported runtime combinations fail startup rather than silently falling back.

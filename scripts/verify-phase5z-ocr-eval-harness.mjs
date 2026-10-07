@@ -134,8 +134,12 @@ try {
     'OCR evaluation launcher must stage same-origin runtime assets',
   );
   assert(
-    !composition.includes('TesseractScheduleImageTextExtractor'),
-    'Private OCR evaluation harness must not activate OCR in app composition',
+    composition.includes('TesseractScheduleImageTextExtractor'),
+    'Production app composition must activate the local OCR extractor',
+  );
+  assert(
+    composition.includes('AdaptiveScheduleImageRecognizer'),
+    'Production app composition must connect OCR to the schedule recognizer',
   );
   assert(
     !composition.includes('tools/ocr-eval'),

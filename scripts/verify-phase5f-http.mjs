@@ -17,7 +17,8 @@ const docs = await read('../docs/runtime-modes.md');
 
 for (const text of [
   "export type AppRuntimeMode = 'mock' | 'api'",
-  "value == null || value === '' || value === 'mock'",
+  "import.meta.env.DEV ? 'mock' : 'api'",
+  "if (value === 'mock') return 'mock'",
   "if (value === 'api') return 'api'",
   'Unsupported VITE_CBH_RUNTIME value',
 ]) {
@@ -41,7 +42,6 @@ for (const name of [
   'HttpScheduleRepository',
   'HttpPlaceRepository',
   'HttpCommuteRepository',
-  'HybridCommuteRepository',
   'HttpNotificationRepository',
   'HttpPushSubscriptionTransport',
 ]) {
@@ -51,7 +51,6 @@ for (const name of [
 for (const text of [
   "await this.client.put(\n      '/people/' + encodeURIComponent(personId) + '/schedules'",
   'Schedule batch must belong to one person.',
-  'return this.runtime.listRouteCandidates(personId)',
   'permission: this.permission',
   'subscription: this.subscription',
   "await this.client.put('/notifications/settings'",
@@ -67,23 +66,25 @@ for (const text of [
   'new HttpPersonRepository(client)',
   'new HttpScheduleRepository(client)',
   'new HttpPlaceRepository(client)',
-  'new HybridCommuteRepository(persistedCommute, runtimeCommute)',
+  "const commute = providerMode === 'api' && routeProvider",
+  ': persistedCommute',
   "mode: 'hybrid-api'",
   "persistence: 'worker-api'",
-  "providerData: providerMode === 'api' ? 'worker-api' : 'mock'",
+  "providerData: providerMode === 'api' ? 'worker-api' : 'disabled'",
   'new WorkbookImportFileSelectionAction',
   'new ReadExcelWorkbookParser',
   'commitImportReview: new CommitImportReview(imports, schedules)',
 ]) {
   if (!composition.includes(text)) failures.push('hybrid composition missing ' + text);
 }
+if (httpRepositories.includes('class HybridCommuteRepository')) failures.push('obsolete hybrid commute adapter remains in production source');
 if (composition.includes('BrowserPushSubscriptionProvider')) failures.push('browser push adapter activated in hybrid composition');
 if (composition.includes('HttpPushSubscriptionTransport')) failures.push('push transport activated in hybrid composition');
 
 for (const text of [
   "mode: 'mock' | 'hybrid-api'",
   "persistence: 'mock' | 'worker-api'",
-  "providerData: 'mock' | 'worker-api'",
+  "providerData: 'mock' | 'worker-api' | 'disabled'",
 ]) {
   if (!runtimeContracts.includes(text)) failures.push('runtime metadata contract missing ' + text);
 }
@@ -100,20 +101,22 @@ for (const text of [
 }
 
 for (const text of [
-  'createApplicationServices(resolveRuntimeMode(), resolveProviderRuntimeMode())',
+  'const runtimeMode = resolveRuntimeMode()',
+  'const providerMode = resolveProviderRuntimeMode()',
+  "import.meta.env.DEV && runtimeMode === 'mock'",
   "root.textContent = 'ComeBackHome 시작 실패: '",
 ]) {
   if (!main.includes(text)) failures.push('main runtime bootstrap missing ' + text);
 }
 
-if (!today.includes('services.runtime.persistence') || !today.includes('services.runtime.providerData')) failures.push('Today runtime source label missing');
+if (today.includes('services.runtime.persistence') || today.includes('services.runtime.providerData')) failures.push('developer runtime source label leaked into Today');
 if (!qa.includes('services.runtime.persistence') || !qa.includes('services.runtime.providerData')) failures.push('QA runtime source label missing');
 
 for (const text of [
   'VITE_CBH_RUNTIME=api',
   'same-origin /api/*',
-  'real XLSX parsing runs through WorkbookParser',
-  'browser push adapter and push-subscription HTTP transport remain inactive',
+  'Excel and image/OCR imports run through production parsers',
+  'Web Push subscription transport and notification delivery use the production software path',
 ]) {
   const normalizedDocs = docs.replaceAll('`', '');
   if (!normalizedDocs.includes(text)) failures.push('runtime mode documentation missing ' + text);

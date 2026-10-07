@@ -1,6 +1,6 @@
 import type { EntityId, ISODate } from '../domain/common';
-import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
-import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
+import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, PresenceState, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
+import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, PresenceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
 
@@ -31,6 +31,45 @@ export class MockScheduleRepository implements ScheduleRepository {
       else draft.push(clone(entry));
     }
     this.store.mutate((state) => { state.schedules = draft; });
+  }
+}
+
+
+export class MockPresenceRepository implements PresenceRepository {
+  private readonly state = new Map<string, PresenceState>();
+  private readonly events = new Set<string>();
+
+  async get(personId: EntityId): Promise<PresenceState | null> {
+    return clone(this.state.get(personId) ?? null);
+  }
+
+  async record(input: {
+    eventId: string;
+    personId: EntityId;
+    type: 'LEFT_WORK' | 'ARRIVED_HOME';
+    acceptedAt: string;
+    workDate: ISODate;
+  }): Promise<{ state: PresenceState; duplicate: boolean }> {
+    if (this.events.has(input.eventId)) {
+      const current = this.state.get(input.personId);
+      if (!current) throw new Error('Presence event exists without current state.');
+      return { state: clone(current), duplicate: true };
+    }
+    this.events.add(input.eventId);
+    const current = this.state.get(input.personId);
+    const sameDate = current?.workDate === input.workDate;
+    const next: PresenceState = {
+      personId: input.personId,
+      workDate: input.workDate,
+      ...(input.type === 'LEFT_WORK'
+        ? { leftWorkAt: input.acceptedAt }
+        : sameDate && current?.leftWorkAt
+          ? { leftWorkAt: current.leftWorkAt }
+          : {}),
+      ...(input.type === 'ARRIVED_HOME' ? { arrivedHomeAt: input.acceptedAt } : {}),
+    };
+    this.state.set(input.personId, next);
+    return { state: clone(next), duplicate: false };
   }
 }
 
@@ -65,7 +104,10 @@ export class MockCommuteRepository implements CommuteRepository {
   }
   async saveSavedRoute(route: SavedCommuteRoute): Promise<void> {
     this.store.mutate((state) => {
-      if (route.active) state.savedRoutes.filter((candidate) => candidate.personId === route.personId).forEach((candidate) => { candidate.active = false; });
+      if (route.active) {
+        state.savedRoutes.filter((candidate) => candidate.personId === route.personId).forEach((candidate) => { candidate.active = false; });
+        delete state.preferredRouteCandidateIds[route.personId];
+      }
       const index = state.savedRoutes.findIndex((candidate) => candidate.id === route.id);
       if (index >= 0) state.savedRoutes[index] = clone(route);
       else state.savedRoutes.push(clone(route));
@@ -126,6 +168,23 @@ export class MockImportRepository implements ImportRepository {
       }
     });
   }
+  async setDetectedPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void> {
+    this.store.mutate((state) => {
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
+      if (!person || !batch) return;
+      person.ignored = ignored;
+      if (ignored) person.matchedPersonId = null;
+      for (const item of batch.reviewItems) {
+        if (item.detectedPersonId !== detectedPersonId) continue;
+        if (ignored) {
+          item.personId = null;
+          item.resolution = null;
+        }
+      }
+    });
+  }
+
   async setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {
     this.store.mutate((state) => {
       const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);

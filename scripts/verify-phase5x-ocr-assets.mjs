@@ -114,10 +114,15 @@ try {
   assert(runtimeConfig.includes(manifest.publicPaths.corePath), 'OCR runtime core path differs from manifest');
   assert(runtimeConfig.includes(manifest.publicPaths.langPath), 'OCR runtime lang path differs from manifest');
   assert(gitignore.split(/\r?\n/).includes('public/ocr/'), 'Generated OCR runtime tree must remain gitignored');
-  assert(!composition.includes('TesseractScheduleImageTextExtractor'), 'OCR must remain inactive in app composition during Phase5X');
+  assert(composition.includes('TesseractScheduleImageTextExtractor'), 'Production OCR extractor must be active in application composition');
+  assert(composition.includes('AdaptiveScheduleImageRecognizer'), 'Production image schedule recognizer must be active');
+  assert(
+    packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets',
+    'Production build must stage same-origin OCR assets before Vite build',
+  );
   assert(
     packageJson.scripts?.build === 'tsc -b && vite build',
-    'Phase5X must not silently inject OCR asset staging into production build',
+    'Production build command must remain typecheck + Vite build',
   );
 
   const preparedSummary = JSON.parse(prepared.stdout);
@@ -129,7 +134,7 @@ try {
     verifiedFiles: manifest.files.length,
     verifiedBytes: totalBytes,
     sameOriginOnly: true,
-    productionActivation: false,
+    productionActivation: true,
     externalDownloads: 0,
   }, null, 2));
 } finally {

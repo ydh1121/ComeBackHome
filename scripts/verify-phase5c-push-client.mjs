@@ -7,6 +7,8 @@ const config = await read('../src/config/webPush.ts');
 const browser = await read('../src/providers/browser/BrowserPushSubscriptionProvider.ts');
 const providers = await read('../src/application/contracts/providers.ts');
 const composition = await read('../src/app/composition.ts');
+const mockComposition = await read('../src/app/mockComposition.ts');
+const browserRuntime = await read('../src/app/browserNotificationRuntime.ts');
 const service = await read('../src/application/services/ApplicationActions.ts');
 
 for (const text of [
@@ -41,9 +43,10 @@ for (const text of [
   if (!providers.includes(text)) failures.push('subscription transport contract missing ' + text);
 }
 
-if (composition.includes('BrowserPushSubscriptionProvider')) failures.push('browser push adapter became active in composition');
-if (composition.includes('UNCONFIGURED_WEB_PUSH_CLIENT_CONFIG')) failures.push('push client config became active in composition');
-if (!composition.includes('new MockPushSubscriptionProvider()')) failures.push('mock push provider is no longer active');
+if (!browserRuntime.includes('BrowserPushSubscriptionProvider')) failures.push('production browser push adapter wiring missing');
+if (!composition.includes('createBrowserNotificationRuntime(client)')) failures.push('production notification runtime composition missing');
+if (!mockComposition.includes('new MockPushSubscriptionProvider()')) failures.push('DEV mock push provider is no longer active');
+if (composition.includes('MockPushSubscriptionProvider')) failures.push('mock push provider leaked into production composition');
 if (!service.includes('private readonly subscriptionProvider: PushSubscriptionProvider')) failures.push('application subscription boundary missing');
 
 const forbidden = [

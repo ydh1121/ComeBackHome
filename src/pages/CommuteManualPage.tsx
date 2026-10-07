@@ -58,6 +58,7 @@ export function CommuteManualPage() {
   }
 
   const originPoint = points.find((point) => point.id === route.originAccessPointId);
+  const destinationPoint = points.find((point) => point.id === route.destinationAccessPointId);
   const viaPoints = route.viaAccessPointIds
     .map((id) => points.find((point) => point.id === id))
     .filter((point): point is TransitAccessPoint => Boolean(point));
@@ -70,6 +71,9 @@ export function CommuteManualPage() {
   const viaAccessPath =
     '/people/' + encodeURIComponent(personId) + '/commute/origin/access?routeId=' +
     encodeURIComponent(route.id) + '&routeRole=via&index=' + route.viaAccessPointIds.length;
+  const destinationAccessPath =
+    '/people/' + encodeURIComponent(personId) + '/commute/destination/access?routeId=' +
+    encodeURIComponent(route.id) + '&routeRole=destination';
 
   const replaceViaPath = (index: number) =>
     '/people/' + encodeURIComponent(personId) + '/commute/origin/access?routeId=' +
@@ -158,7 +162,22 @@ export function CommuteManualPage() {
           <Icon name="plus" /> 경유 교통수단 추가
         </button>
 
-        <button type="button" className="manual-route-node" onClick={() => navigate('/people/' + encodeURIComponent(personId) + '/place/destination')}>
+        {destinationPoint ? (
+          <div className="manual-route-transport">
+            <div className="manual-route-transport-label">도착 교통수단</div>
+            <button type="button" className="manual-route-edit" onClick={() => navigate(destinationAccessPath)}>
+              <span className="manual-route-mode"><Icon name={destinationPoint.mode === 'BUS' ? 'bus' : 'train'} /></span>
+              <span><b>{displayName(destinationPoint)}</b>{accessMeta(destinationPoint) ? <span className="manual-route-meta">{accessMeta(destinationPoint)}</span> : null}</span>
+              <span className="node-trailing"><Icon name="chevron-right" /></span>
+            </button>
+          </div>
+        ) : null}
+
+        <button type="button" className="cta secondary route-leg-add" onClick={() => navigate(destinationAccessPath)}>
+          <Icon name="plus" /> {destinationPoint ? '도착 교통수단 변경' : '도착 교통수단 추가'}
+        </button>
+
+                <button type="button" className="manual-route-node" onClick={() => navigate('/people/' + encodeURIComponent(personId) + '/place/destination')}>
           <Icon name="home" />
           <span><b>{overview.destination?.label || '도착지'}</b><span className="manual-route-meta">도착지 수정</span></span>
           <Icon name="chevron-right" />

@@ -15,13 +15,22 @@ for (const path of ['/__qa/states','/__qa/flow','/__qa/desktop-drop']) {
   if (!manifest.includes("'" + path + "'")) failures.push('qa manifest missing ' + path);
   if (!router.includes("'" + path + "'")) failures.push('qa router missing ' + path);
 }
-if (!router.includes('import.meta.env.DEV ? qaRoutes')) failures.push('QA routes are not DEV gated');
-if (!router.includes('qaComponentFor')) failures.push('QA route component mapping missing');
+if (!router.includes('const qaRouteEntries = import.meta.env.DEV')) failures.push('QA routes are not DEV gated');
+for (const path of ['QaStateMatrixPage','QaFlowMapPage','QaDesktopDropPage']) {
+  if (!router.includes("await import('../pages/" + path + "')")) failures.push('QA lazy route mapping missing ' + path);
+}
+for (const forbidden of [
+  "import { QaStateMatrixPage }",
+  "import { QaFlowMapPage }",
+  "import { QaDesktopDropPage }",
+]) {
+  if (router.includes(forbidden)) failures.push('QA page is statically imported into product router: ' + forbidden);
+}
 
 for (const text of ['상태 점검','오늘 · 도착 시간 상태','일정 · 보기 상태','근처 교통 · 필터 상태','Application boundary']) {
   if (!stateMatrix.includes(text)) failures.push('state matrix missing ' + text);
 }
-for (const text of ['화면 흐름','일정 → 일괄 입력','가져오기 → 사람 연결 → 구조 확인 → 검토','사람 → 추가/수정/상세','설정 → 알림 권한/규칙/테스트']) {
+for (const text of ['화면 흐름','일정 → 일괄 입력','가져오기 → 사람 연결 → 구조 확인 → 검토','사람 → 추가/수정/상세','설정 → 알림 권한/규칙/테스트','설정 → 퇴근·귀가 단축어 자동화']) {
   if (!flow.includes(text)) failures.push('flow map missing ' + text);
 }
 for (const text of ['여기에 놓기','엑셀 · 이미지 · 여러 파일','desktop-drop-active','ImportPage']) {

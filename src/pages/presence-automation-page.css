@@ -1,0 +1,30 @@
+.presence-automation-page{padding:0 18px 28px}
+.presence-automation-page .presence-intro{margin:4px 0 16px;color:#667085;font-size:13px;line-height:1.55}
+.presence-automation-page .presence-ready-card{display:grid;gap:4px;padding:14px;border-radius:14px;background:#f2f4f7;margin-bottom:18px}
+.presence-automation-page .presence-ready-card.ready{background:#eef7f0}
+.presence-automation-page .presence-ready-card.blocked{background:#fff4ed}
+.presence-automation-page .presence-ready-card b{font-size:14px}
+.presence-automation-page .presence-ready-card span{font-size:12px;color:#667085;line-height:1.45}
+.presence-automation-page .presence-field{display:grid;gap:7px;margin:14px 0}
+.presence-automation-page .presence-field>span{font-size:12px;font-weight:750;color:#475467}
+.presence-automation-page .presence-field input,
+.presence-automation-page .presence-field select{width:100%;min-height:48px;border:0;border-radius:14px;background:#f7f9fc;box-shadow:inset 0 0 0 1px rgba(16,24,40,.07);padding:0 13px;color:#101828}
+.presence-automation-page .presence-validate{width:100%;min-height:48px;border:0;border-radius:14px;background:#101828;color:#fff;font-weight:800;margin:2px 0 6px}
+.presence-automation-page .presence-validate:disabled{opacity:.45}
+.presence-automation-page .presence-error{font-size:12px;color:#b42318;margin:8px 0 12px}
+.presence-automation-page .presence-copy-block{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid #e4e7ec}
+.presence-automation-page .presence-copy-block>div{display:grid;gap:4px;min-width:0}
+.presence-automation-page .presence-copy-block span{font-size:11px;color:#667085}
+.presence-automation-page code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;overflow-wrap:anywhere;color:#344054}
+.presence-automation-page .presence-copy-block button,
+.presence-automation-page .presence-automation-head button{min-height:38px;border:0;border-radius:10px;background:#eef2f7;color:#344054;padding:0 12px;font-weight:800;font-size:12px}
+.presence-automation-page .presence-automation-card{margin-top:18px;padding:14px;border-radius:16px;background:#f7f9fc;box-shadow:inset 0 0 0 1px rgba(16,24,40,.055)}
+.presence-automation-page .presence-automation-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
+.presence-automation-page .presence-automation-head>div{display:grid;gap:4px}
+.presence-automation-page .presence-automation-head b{font-size:15px}
+.presence-automation-page .presence-automation-head span{font-size:11.5px;color:#667085;line-height:1.45}
+.presence-automation-page pre{margin:12px 0 0;padding:12px;border-radius:12px;background:#fff;box-shadow:inset 0 0 0 1px rgba(16,24,40,.06);overflow:auto;font-size:10.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.presence-automation-page .presence-steps{margin-top:20px;padding:14px 0;border-top:1px solid #e4e7ec}
+.presence-automation-page .presence-steps>b{font-size:14px}
+.presence-automation-page .presence-steps ol{padding-left:20px;margin:10px 0 0;color:#475467;font-size:12.5px;line-height:1.6}
+.presence-automation-page .presence-message{min-height:220px;display:grid;place-items:center;color:#667085;font-size:14px}

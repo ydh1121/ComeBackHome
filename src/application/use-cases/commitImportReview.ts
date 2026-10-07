@@ -11,13 +11,21 @@ export class CommitImportReview implements CommitImportReviewAction {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
 
-    const unresolved = batch.reviewItems.filter((item) => item.personId == null);
+    const ignoredDetectedIds = new Set(
+      batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
+    );
+    const includedItems = batch.reviewItems.filter(
+      (item) => !ignoredDetectedIds.has(item.detectedPersonId),
+    );
+    if (!includedItems.length) throw new Error('Import contains no selected schedules.');
+
+    const unresolved = includedItems.filter((item) => item.personId == null);
     if (unresolved.length) throw new Error('Import contains unresolved people.');
 
-    const unreviewed = batch.reviewItems.filter((item) => item.resolution == null);
+    const unreviewed = includedItems.filter((item) => item.resolution == null);
     if (unreviewed.length) throw new Error('Import contains unreviewed schedules.');
 
-    const incomplete = batch.reviewItems.filter(
+    const incomplete = includedItems.filter(
       (item) =>
         item.resolution === 'NEW' &&
         (item.imported.start == null || item.imported.end == null),
@@ -25,7 +33,7 @@ export class CommitImportReview implements CommitImportReviewAction {
     if (incomplete.length) throw new Error('Import contains incomplete schedule times.');
 
     const entries = [];
-    for (const item of batch.reviewItems) {
+    for (const item of includedItems) {
       if (item.resolution === 'KEEP') continue;
       const personId = item.personId;
       if (!personId) continue;
@@ -42,7 +50,9 @@ export class CommitImportReview implements CommitImportReviewAction {
         end,
       });
     }
-    await this.schedules.upsertMany(entries);
+    if (entries.length) {
+      await this.schedules.upsertMany(entries);
+    }
 
     await this.imports.markCommitted(batchId);
   }

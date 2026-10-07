@@ -1,7 +1,7 @@
 import type { EntityId } from '../../domain/common';
 import type { BusRouteOption, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
 import type { BusRouteActions, CommuteActions, PlaceActions, PlaceInput, TransitSearchActions } from '../contracts/actions';
-import type { PlaceSearchProvider, TransitAccessSearchProvider, TransitRouteProvider, TransitSearchResult } from '../contracts/providers';
+import type { BusRouteLookupProvider, PlaceSearchProvider, TransitAccessSearchProvider, TransitRouteProvider, TransitSearchResult } from '../contracts/providers';
 import type { CommuteRepository, PlaceRepository } from '../contracts/repositories';
 
 export class PlaceService implements PlaceActions {
@@ -49,6 +49,11 @@ export class CommuteService implements CommuteActions {
   async setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
     const route = await this.requireSavedRoute(personId, routeId);
     await this.commute.saveSavedRoute({ ...route, originAccessPointId: accessPointId });
+  }
+
+  async setRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointId: accessPointId });
   }
 
   async moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void> {
@@ -156,19 +161,21 @@ export class TransitSearchService implements TransitSearchActions {
   async addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint> {
     const result = this.resultCache.get(this.key(personId, kind))?.find((item) => item.id === resultId);
     if (!result) throw new Error('Transit search result was not found.');
+    const place = await this.places.get(personId, kind);
+    if (!place?.coordinate) throw new Error('Transit place coordinate is required.');
+    const resolved = await this.provider.resolve(result, place.coordinate).catch(() => result);
     const point: TransitAccessPoint = {
       id: crypto.randomUUID(),
       personId,
-      providerId: result.providerId,
+      providerId: resolved.providerId,
       placeKind: kind,
-      mode: result.mode,
-      name: result.name,
-      displayCode: result.displayCode,
-      line: result.line,
-      walkMinutes: result.walkMinutes,
+      mode: resolved.mode,
+      name: resolved.name,
+      displayCode: resolved.displayCode,
+      line: resolved.line,
+      walkMinutes: resolved.walkMinutes,
       selected: true,
-      busRoutes: result.busRoutes,
-      selectedBusRouteId: result.busRoutes?.[0]?.providerRouteId,
+      busRoutes: resolved.busRoutes,
     };
     await this.commute.upsertAccessPoint(point);
     return point;
@@ -192,12 +199,23 @@ export class BusRouteService implements BusRouteActions {
     private readonly commute: CommuteRepository,
     private readonly places: PlaceRepository,
     private readonly routeProvider?: TransitRouteProvider | null,
+    private readonly busRouteLookup?: BusRouteLookupProvider | null,
   ) {}
 
   async listRoutes(personId: EntityId, kind: PlaceKind, accessPointId: EntityId): Promise<BusRouteOption[]> {
     const point = (await this.commute.listAccessPoints(personId, kind))
       .find((candidate) => candidate.id === accessPointId);
     if (!point || point.mode !== 'BUS') return [];
+    if (point.displayCode && this.busRouteLookup) {
+      try {
+        const officialRoutes = await this.busRouteLookup.listByStop(point.displayCode);
+        if (officialRoutes.length) return officialRoutes;
+      } catch {
+        // Fall through to runtime/static route evidence.
+      }
+    }
+    const officialRoutes = (point.busRoutes ?? []).filter((route) => /^\d+$/.test(route.providerRouteId));
+    if (officialRoutes.length) return officialRoutes;
     if (!this.routeProvider) return point.busRoutes ?? [];
 
     const [origin, destination] = await Promise.all([
