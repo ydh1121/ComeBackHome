@@ -47,6 +47,16 @@ try {
     },
     async save() {},
   };
+  let presenceState = null;
+  const presence = {
+    async get(personId) {
+      return personId === 'person-1' ? structuredClone(presenceState) : null;
+    },
+    async record() {
+      throw new Error('record is not used by notification ETA source verification');
+    },
+  };
+
   const commute = {
     async getPreferredRouteCandidateId() { return 'route-preferred'; },
     async listAccessPoints() { return []; },
@@ -56,6 +66,10 @@ try {
     async setSelectedBusRoute() {},
     async getRoutePreference() { return null; },
     async saveRoutePreference() {},
+    async listSavedRoutes() { return []; },
+    async createSavedRoute() { throw new Error('not used'); },
+    async saveSavedRoute() {},
+    async setActiveSavedRoute() {},
     async listRouteCandidates() { return []; },
     async setPreferredRouteCandidateId() {},
   };
@@ -84,6 +98,7 @@ try {
   const source = new etaModule.ProviderNotificationEtaSource({
     schedules,
     places,
+    presence,
     commute,
     providers,
   });
@@ -96,12 +111,30 @@ try {
 
   commute.getPreferredRouteCandidateId = async () => 'missing-route';
   const afterShiftEnd = await source.get('person-1', new Date('2026-10-06T14:00:00.000Z'));
-  expect(afterShiftEnd?.arrivalAt === '2026-10-06T14:25:00.000Z', 'missing preferred route must deterministically choose fastest route after shift end');
+  expect(afterShiftEnd?.arrivalAt === '2026-10-06T13:25:00.000Z', 'without LEFT_WORK, scheduled shift end must remain the departure baseline');
   expect(routeContexts[1] === '2026-10-06T14:00:00.000Z', 'second provider context timestamp mismatch');
+
+  presenceState = {
+    personId: 'person-1',
+    workDate: '2026-10-06',
+    leftWorkAt: '2026-10-06T14:10:00.000Z',
+  };
+  const actualDeparture = await source.get('person-1', new Date('2026-10-06T14:11:00.000Z'));
+  expect(actualDeparture?.arrivalAt === '2026-10-06T14:35:00.000Z', 'LEFT_WORK must replace scheduled departure when it is later');
+  expect(actualDeparture?.confidence === 'FALLBACK', 'route-only actual-departure ETA must remain FALLBACK');
+
+  presenceState = {
+    ...presenceState,
+    arrivedHomeAt: '2026-10-06T14:42:00.000Z',
+  };
+  const afterArrival = await source.get('person-1', new Date('2026-10-06T14:43:00.000Z'));
+  expect(afterArrival === null, 'ARRIVED_HOME must stop scheduled ETA-change planning');
+  presenceState = null;
 
   const noCoordinates = new etaModule.ProviderNotificationEtaSource({
     schedules,
     commute,
+    presence,
     providers,
     places: { ...places, async get(_personId, kind) { return kind === 'origin' ? await places.get('person-1', kind) : null; } },
   });
