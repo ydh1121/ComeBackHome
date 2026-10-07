@@ -35,7 +35,15 @@ function seoulBusAuth(): ProviderJsonRequest['auth'] {
   };
 }
 
-function seoulSubwayAuth(): ProviderJsonRequest['auth'] {
+function seoulOpenApiAuth(): ProviderJsonRequest['auth'] {
+  return {
+    secretName: 'SEOUL_OPENAPI_KEY',
+    placement: 'path',
+    target: '{SEOUL_OPENAPI_KEY}',
+  };
+}
+
+function seoulSubwayRealtimeAuth(): ProviderJsonRequest['auth'] {
   return {
     secretName: 'SEOUL_SUBWAY_API_KEY',
     placement: 'path',
@@ -193,9 +201,9 @@ export class SeoulSubwayRequestClient implements SeoulSubwaySource {
       source: 'seoul-subway',
       capability: 'subway-station-name-search',
       method: 'GET',
-      urlTemplate: 'http://openAPI.seoul.go.kr:8088/{SEOUL_SUBWAY_API_KEY}/json/SearchInfoBySubwayNameService/1/20/{stationName}/',
+      urlTemplate: 'http://openAPI.seoul.go.kr:8088/{SEOUL_OPENAPI_KEY}/json/SearchInfoBySubwayNameService/1/20/{stationName}/',
       pathParams: { stationName: query },
-      auth: seoulSubwayAuth(),
+      auth: seoulOpenApiAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
     return mapSeoulSubwayStations(await this.transport.getJson(request, context));
@@ -208,7 +216,7 @@ export class SeoulSubwayRequestClient implements SeoulSubwaySource {
       method: 'GET',
       urlTemplate: 'http://swopenAPI.seoul.go.kr/api/subway/{SEOUL_SUBWAY_API_KEY}/json/realtimeStationArrival/0/20/{stationName}',
       pathParams: { stationName },
-      auth: seoulSubwayAuth(),
+      auth: seoulSubwayRealtimeAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
     return mapSeoulSubwayArrivals(await this.transport.getJson(request, context), line);
@@ -221,7 +229,7 @@ export class SeoulSubwayRequestClient implements SeoulSubwaySource {
       method: 'GET',
       urlTemplate: 'http://swopenAPI.seoul.go.kr/api/subway/{SEOUL_SUBWAY_API_KEY}/json/realtimePosition/0/100/{line}',
       pathParams: { line },
-      auth: seoulSubwayAuth(),
+      auth: seoulSubwayRealtimeAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
     return mapSeoulSubwayTrainPositions(await this.transport.getJson(request, context));

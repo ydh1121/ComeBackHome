@@ -22,7 +22,9 @@ Status: PRODUCT PATH ACTIVE / SERVER-SECRET-GATED
 - Missing/failed realtime data degrades to FALLBACK or UNKNOWN.
 - Fabricated realtime data is forbidden.
 - Route planning and realtime availability are independent.
-- Final product promotion requires KAKAO_REST_API_KEY, SEOUL_BUS_SERVICE_KEY and SEOUL_SUBWAY_API_KEY.
+- Final product promotion requires `KAKAO_REST_API_KEY`, `SEOUL_BUS_SERVICE_KEY`, `SEOUL_OPENAPI_KEY`, and `SEOUL_SUBWAY_API_KEY`.
+- `SEOUL_OPENAPI_KEY` is the general Seoul Open Data key for station-name/code lookup.
+- `SEOUL_SUBWAY_API_KEY` is the separately issued realtime-subway key; it is not treated as interchangeable with the general key.
 
 ## ETA policy
 

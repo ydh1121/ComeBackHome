@@ -26,6 +26,7 @@ These values must be stored as Cloudflare Secret:
 
 - KAKAO_REST_API_KEY
 - SEOUL_BUS_SERVICE_KEY
+- SEOUL_OPENAPI_KEY
 - SEOUL_SUBWAY_API_KEY
 - VAPID_PRIVATE_KEY
 - PRESENCE_EVENT_INGEST_TOKEN
@@ -85,7 +86,7 @@ Canonical production requires:
 - same-origin Pages deployment
 - provider secrets kept server-side
 
-Kakao provides route/place data. Seoul bus/subway secrets are optional capability bindings: when absent or out of coverage, realtime data must degrade to FALLBACK rather than fabricate a LIVE value.
+Kakao provides route/place data. Final product promotion requires all three Seoul credentials: the data.go.kr Seoul bus service key, the Seoul Open Data general key for subway station canonicalization, and the dedicated realtime-subway key. Runtime provider failures may degrade ETA to FALLBACK, but production promotion must fail closed when a required credential binding is absent.
 
 ## Secret handling
 

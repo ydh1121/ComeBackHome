@@ -25,6 +25,7 @@ Status: PRODUCT API RUNTIME ACTIVE / DEV MOCK ISOLATED
 Final promotion requires:
 - `KAKAO_REST_API_KEY`
 - `SEOUL_BUS_SERVICE_KEY`
+- `SEOUL_OPENAPI_KEY`
 - `SEOUL_SUBWAY_API_KEY`
 
 Production builds must not contain mock fixture identities or QA routes.

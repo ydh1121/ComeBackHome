@@ -39,6 +39,7 @@ try {
   const placeFixture = await fixture('kakao-place.json');
   const routeFixture = await fixture('kakao-public-transit.json');
   const busFixture = await fixture('seoul-bus-stops.json');
+  const subwayStationFixture = await fixture('seoul-subway-stations.json');
   const subwayFixture = await fixture('seoul-subway-arrivals.json');
   const addressQuery = '서울특별시 문성로32길 20-4';
   const addressFixture = {
@@ -67,6 +68,8 @@ try {
     let body = placeFixture;
     if (url.hostname === 'ws.bus.go.kr') {
       body = busFixture;
+    } else if (url.hostname === 'openapi.seoul.go.kr') {
+      body = subwayStationFixture;
     } else if (url.hostname === 'swopenapi.seoul.go.kr') {
       body = subwayFixture;
     } else if (url.pathname === '/v2/routing/publictraffic') {
@@ -97,6 +100,7 @@ try {
     PROVIDER_RUNTIME_ENABLED: '1',
     KAKAO_REST_API_KEY: fakeSecretValue,
     SEOUL_BUS_SERVICE_KEY: 'fixture-bus-key',
+    SEOUL_OPENAPI_KEY: 'fixture-openapi-key',
     SEOUL_SUBWAY_API_KEY: 'fixture-subway-key',
     DB: {},
   }, fakeFetch);
@@ -132,16 +136,23 @@ try {
 
   const seoulFetchCount = calls.length;
   const seoulStops = await enabledRuntime.seoulBus.searchStops('강남역', { x: 127.03, y: 37.49 });
+  const subwayStations = await enabledRuntime.seoulSubway.searchStations('강남');
   const subwayArrivals = await enabledRuntime.seoulSubway.arrivals('강남', '02호선');
   expect(seoulStops[0]?.providerId === '122000606', 'Seoul bus official HTTP transport mapping mismatch');
+  expect(subwayStations[0]?.providerId === '0222', 'Seoul subway station lookup mapping mismatch');
   expect(subwayArrivals[0]?.providerVehicleId === '2258', 'Seoul subway official HTTP transport mapping mismatch');
-  expect(calls.length === seoulFetchCount + 2, 'Seoul official provider calls must reach fake transport');
+  expect(calls.length === seoulFetchCount + 3, 'Seoul official provider calls must reach fake transport');
   const busUrl = new URL(calls[seoulFetchCount].input);
-  const subwayUrl = new URL(calls[seoulFetchCount + 1].input);
+  const stationUrl = new URL(calls[seoulFetchCount + 1].input);
+  const subwayUrl = new URL(calls[seoulFetchCount + 2].input);
   expect(busUrl.protocol === 'http:' && busUrl.hostname === 'ws.bus.go.kr', 'Seoul bus official HTTP allowlist URL mismatch');
+  expect(stationUrl.protocol === 'http:' && stationUrl.hostname === 'openapi.seoul.go.kr', 'Seoul station-search official HTTP allowlist URL mismatch');
   expect(subwayUrl.protocol === 'http:' && subwayUrl.hostname === 'swopenapi.seoul.go.kr', 'Seoul subway official HTTP allowlist URL mismatch');
   expect(busUrl.searchParams.get('serviceKey') === 'fixture-bus-key', 'Seoul bus service key materialization mismatch');
-  expect(subwayUrl.pathname.includes('fixture-subway-key'), 'Seoul subway path key materialization mismatch');
+  expect(stationUrl.pathname.includes('fixture-openapi-key'), 'Seoul station search must materialize the general Open Data key');
+  expect(!stationUrl.pathname.includes('fixture-subway-key'), 'Realtime subway key leaked into general station lookup');
+  expect(subwayUrl.pathname.includes('fixture-subway-key'), 'Seoul realtime subway path key materialization mismatch');
+  expect(!subwayUrl.pathname.includes('fixture-openapi-key'), 'General Seoul Open Data key leaked into realtime subway request');
 
   const noSecretTransport = new network.SecureProviderJsonTransport(
     fakeFetch,

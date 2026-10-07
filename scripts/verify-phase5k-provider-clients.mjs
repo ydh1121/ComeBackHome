@@ -96,15 +96,19 @@ try {
 
   const stationRequest = byCapability.get('subway-station-name-search');
   expect(stationRequest?.pathParams?.stationName === '강남', 'Seoul station path parameter mismatch');
-  expect(stationRequest?.auth?.placement === 'path', 'Seoul subway key placement mismatch');
-  expect(stationRequest?.auth?.secretName === 'SEOUL_SUBWAY_API_KEY', 'Seoul subway secret reference mismatch');
+  expect(stationRequest?.auth?.placement === 'path', 'Seoul subway station key placement mismatch');
+  expect(stationRequest?.auth?.secretName === 'SEOUL_OPENAPI_KEY', 'Seoul subway station lookup must use the general Seoul Open Data key');
+  expect(stationRequest?.auth?.target === '{SEOUL_OPENAPI_KEY}', 'Seoul subway station key token mismatch');
   expect(stationRequest?.security === 'DOCUMENTED_HTTP_REQUIRES_VALIDATION', 'Seoul subway HTTP risk must remain explicit');
 
   const arrivalRequest = byCapability.get('realtime-subway-arrivals');
   expect(arrivalRequest?.pathParams?.stationName === '강남', 'Realtime subway must use stationName');
+  expect(arrivalRequest?.auth?.secretName === 'SEOUL_SUBWAY_API_KEY', 'Realtime subway arrival must use the dedicated realtime key');
+  expect(arrivalRequest?.auth?.target === '{SEOUL_SUBWAY_API_KEY}', 'Realtime subway arrival key token mismatch');
 
   const positionRequest = byCapability.get('realtime-subway-position');
   expect(positionRequest?.pathParams?.line === '2호선', 'Realtime position line parameter mismatch');
+  expect(positionRequest?.auth?.secretName === 'SEOUL_SUBWAY_API_KEY', 'Realtime subway position must use the dedicated realtime key');
 } finally {
   await vite.close();
 }
