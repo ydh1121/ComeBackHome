@@ -5,7 +5,7 @@ import type { Coordinate, PlaceKind, TransitMode } from '../domain/models';
 import { usePlace } from '../features/commute/useCommuteWorkflow';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
-import { KakaoTransitMap } from '../shared/components/KakaoTransitMap';
+import { KakaoTransitMap } from '../features/commute/KakaoTransitMap';
 import './commute-page.css';
 
 type Filter = 'all' | 'subway' | 'bus';
