@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'cbh-shell-';
-const CACHE_NAME = CACHE_PREFIX + 'v1';
+const CACHE_NAME = CACHE_PREFIX + 'v2';
 const SHELL_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -69,6 +69,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(handleNavigation(request));
     return;
   }
+
+  // API responses are runtime data/config and must never be pinned by the
+  // shell cache. This also prevents static-map fallback images from surviving
+  // a later interactive-map activation.
+  if (url.pathname.startsWith('/api/')) return;
 
   if (['script', 'style', 'font', 'image'].includes(request.destination)) {
     event.respondWith(handleStaticAsset(request));
