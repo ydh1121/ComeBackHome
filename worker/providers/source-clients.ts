@@ -18,6 +18,84 @@ import {
 import type { ProviderJsonRequest, ProviderJsonTransport } from './transport';
 import type { Coordinate } from '../../src/domain/models';
 
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .trim();
+}
+
+function firstXmlTag(xml: string, names: string[]): string | undefined {
+  for (const name of names) {
+    const match = new RegExp(
+      '<' + name + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + name + '>',
+      'i',
+    ).exec(xml);
+    if (match?.[1] != null) return decodeXmlText(match[1].replace(/<[^>]+>/g, ''));
+  }
+  return undefined;
+}
+
+function xmlRecord(block: string): Record<string, string> {
+  const record: Record<string, string> = {};
+  const fieldPattern = /<([A-Za-z0-9_]+)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/g;
+  for (const match of block.matchAll(fieldPattern)) {
+    const name = match[1];
+    const raw = match[2] ?? '';
+    const withoutCdata = raw.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+    if (/<[A-Za-z0-9_]+(?:\s[^>]*)?>/.test(withoutCdata)) continue;
+    record[name] = decodeXmlText(raw.replace(/<[^>]+>/g, ''));
+  }
+  return record;
+}
+
+function parseSeoulBusPayload(payload: string): unknown {
+  const trimmed = payload.trim();
+  if (!trimmed) throw new Error('Seoul bus provider returned an empty response.');
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return JSON.parse(trimmed);
+  }
+
+  const itemBlocks = [
+    ...trimmed.matchAll(/<(?:itemList|StationList)(?:\s[^>]*)?>([\s\S]*?)<\/(?:itemList|StationList)>/gi),
+  ];
+  if (itemBlocks.length > 0) {
+    return {
+      msgBody: {
+        itemList: itemBlocks.map((match) => xmlRecord(match[1] ?? '')),
+      },
+    };
+  }
+
+  const code = firstXmlTag(trimmed, ['headerCd', 'resultCode', 'returnReasonCode']);
+  const message = firstXmlTag(trimmed, ['headerMsg', 'resultMsg', 'returnAuthMsg', 'errMsg']);
+  if (code || message) {
+    throw new Error(
+      'Seoul bus provider error' +
+      (code ? ' [' + code + ']' : '') +
+      (message ? ': ' + message : '.'),
+    );
+  }
+
+  return { msgBody: { itemList: [] } };
+}
+
+async function readSeoulBusPayload(
+  transport: ProviderJsonTransport,
+  request: ProviderJsonRequest,
+  context?: ProviderRequestContext,
+): Promise<unknown> {
+  if (transport.getText) {
+    return parseSeoulBusPayload(await transport.getText(request, context));
+  }
+  return transport.getJson(request, context);
+}
 function kakaoAuth(): ProviderJsonRequest['auth'] {
   return {
     secretName: 'KAKAO_REST_API_KEY',
@@ -148,12 +226,11 @@ export class SeoulBusRequestClient implements SeoulBusSource {
       urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName',
       query: {
         stSrch: query,
-        resultType: 'json',
       },
       auth: seoulBusAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
-    return mapSeoulBusStops(await this.transport.getJson(request, context));
+    return mapSeoulBusStops(await readSeoulBusPayload(this.transport, request, context));
   }
 
   async routesByStop(arsId: string, context?: ProviderRequestContext) {
@@ -164,12 +241,11 @@ export class SeoulBusRequestClient implements SeoulBusSource {
       urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getRouteByStation',
       query: {
         arsId,
-        resultType: 'json',
       },
       auth: seoulBusAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
-    return mapSeoulBusRoutes(await this.transport.getJson(request, context));
+    return mapSeoulBusRoutes(await readSeoulBusPayload(this.transport, request, context));
   }
 
   async arrivals(stopProviderId: string, routeProviderId: string, context?: ProviderRequestContext) {
@@ -180,13 +256,12 @@ export class SeoulBusRequestClient implements SeoulBusSource {
       urlTemplate: 'http://ws.bus.go.kr/api/rest/arrive/getArrInfoByRouteAll',
       query: {
         busRouteId: routeProviderId,
-        resultType: 'json',
       },
       auth: seoulBusAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
     return mapSeoulBusArrivals(
-      await this.transport.getJson(request, context),
+      await readSeoulBusPayload(this.transport, request, context),
       routeProviderId,
       stopProviderId,
     );
