@@ -132,9 +132,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       detectedPersonId: string;
       personId: string | null;
       date: string;
+      enabled: boolean;
       start: string | null;
       end: string | null;
       confidence: number;
+      recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
     }>();
     let duplicateCandidate = false;
 
@@ -144,8 +146,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       start: string | null;
       end: string | null;
       confidence: number;
+      enabled?: boolean;
+      recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
     }) => {
-      if (!candidate.start && !candidate.end) return;
       const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
       if (!detected) return;
 
@@ -154,9 +157,13 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         detectedPersonId: detected.id,
         personId: detected.matchedPersonId,
         date: candidate.date,
+        enabled: candidate.enabled ?? true,
         start: candidate.start,
         end: candidate.end,
         confidence: candidate.confidence,
+        recognitionState:
+          candidate.recognitionState ??
+          (candidate.start && candidate.end ? 'WORK' : 'INCOMPLETE'),
       };
       const existing = candidateByKey.get(key);
       if (!existing) {
@@ -165,15 +172,21 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       }
 
       duplicateCandidate = true;
-      const existingComplete = existing.start != null && existing.end != null;
-      const nextComplete = next.start != null && next.end != null;
+      const statePriority = {
+        WORK: 4,
+        INCOMPLETE: 3,
+        UNREADABLE: 2,
+        OFF: 1,
+      } as const;
+      const existingPriority = statePriority[existing.recognitionState];
+      const nextPriority = statePriority[next.recognitionState];
       const existingEvidence = Number(existing.start != null) + Number(existing.end != null);
       const nextEvidence = Number(next.start != null) + Number(next.end != null);
 
       if (
-        (!existingComplete && nextComplete) ||
+        nextPriority > existingPriority ||
         (
-          existingComplete === nextComplete &&
+          nextPriority === existingPriority &&
           (
             nextEvidence > existingEvidence ||
             (nextEvidence === existingEvidence && next.confidence > existing.confidence)
@@ -185,10 +198,21 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     };
 
     for (const parsed of parsedResults) {
-      for (const candidate of parsed.scheduleCandidates) registerCandidate(candidate);
+      for (const candidate of parsed.scheduleCandidates) {
+        registerCandidate({
+          ...candidate,
+          enabled: true,
+          recognitionState: 'WORK',
+        });
+      }
       for (const candidate of parsed.reviewCandidates ?? []) {
-        if ((candidate.start == null) === (candidate.end == null)) continue;
-        registerCandidate(candidate);
+        registerCandidate({
+          ...candidate,
+          enabled: candidate.enabled ?? true,
+          recognitionState:
+            candidate.recognitionState ??
+            (candidate.start || candidate.end ? 'INCOMPLETE' : 'UNREADABLE'),
+        });
       }
     }
 
@@ -199,18 +223,30 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         : null;
       const exactDuplicate = Boolean(
         existing &&
-        candidate.start != null &&
-        candidate.end != null &&
-        existing.start === candidate.start &&
-        existing.end === candidate.end
+        (
+          (!candidate.enabled && existing.enabled === false) ||
+          (
+            candidate.enabled &&
+            existing.enabled !== false &&
+            candidate.start != null &&
+            candidate.end != null &&
+            existing.start === candidate.start &&
+            existing.end === candidate.end
+          )
+        )
       );
       reviewItems.push({
         id: crypto.randomUUID(),
         detectedPersonId: candidate.detectedPersonId,
         personId: candidate.personId,
         date: candidate.date,
-        ...(existing ? { existing: { start: existing.start, end: existing.end } } : {}),
-        imported: { start: candidate.start, end: candidate.end },
+        ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end } } : {}),
+        imported: {
+          enabled: candidate.enabled,
+          start: candidate.start,
+          end: candidate.end,
+        },
+        recognitionState: candidate.recognitionState,
         resolution: exactDuplicate ? 'SKIP' : candidate.personId ? 'NEW' : null,
       });
     }
