@@ -161,6 +161,16 @@ for (const rootPath of ['../src/', '../worker/', '../functions/']) {
     for (const forbidden of ['mock-person-1', 'MOCK_FIXTURE', 'fixture-person']) {
       if (source.includes(forbidden)) failures.push('mock/fixture leakage in production source: ' + path + ' -> ' + forbidden);
     }
+    if (
+      path.startsWith('src/pages/') &&
+      (
+        source.includes('data-source-qa') ||
+        source.includes('persistence: {services.runtime.persistence}') ||
+        source.includes('provider: {services.runtime.providerData}')
+      )
+    ) {
+      failures.push('developer runtime diagnostics leaked into product UI: ' + path);
+    }
   }
 }
 
