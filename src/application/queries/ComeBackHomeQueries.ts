@@ -5,7 +5,7 @@ import type { RepositoryBundle } from '../contracts/runtime';
 import { rankRouteCandidates, selectNextShift, selectVisibleAccessPoints } from '../selectors';
 
 export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; }
-export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
+export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; leftWorkAt: string | null; arrivedHomeAt: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
 export interface CommuteOverviewQueryResult extends PersonDetailQueryResult { preferredRouteCandidateId: EntityId | null; }
 
 function formatNextShiftLabel(referenceDate: ISODate, shift: ScheduleEntry | null): string | null {
@@ -34,7 +34,7 @@ export class ComeBackHomeQueries {
   async getTodayOverview(referenceDate: ISODate): Promise<TodayOverviewQueryResult> {
     const people = await this.repositories.people.list();
     const selectedId = this.selection.getSelectedPersonId() ?? people[0]?.id ?? null;
-    if (!selectedId) return { people, person: null, eta: null, shiftEnd: null, nextShiftLabel: null, route: null };
+    if (!selectedId) return { people, person: null, eta: null, shiftEnd: null, leftWorkAt: null, arrivedHomeAt: null, nextShiftLabel: null, route: null };
 
     const [person, today, schedule, routes] = await Promise.all([
       this.repositories.people.get(selectedId),
@@ -56,6 +56,8 @@ export class ComeBackHomeQueries {
       person,
       eta: today?.eta ?? null,
       shiftEnd: today?.shiftEnd ?? null,
+      leftWorkAt: today?.leftWorkAt ?? null,
+      arrivedHomeAt: today?.arrivedHomeAt ?? null,
       nextShiftLabel: formatNextShiftLabel(referenceDate, nextShift),
       route,
     };
