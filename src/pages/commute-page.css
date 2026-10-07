@@ -36,3 +36,4 @@
 .commute-page .transit-multi-hint{margin:0 0 8px;color:#667085;font-size:12px;line-height:1.45}
 .commute-page .manual-route-selected-access{display:grid;grid-template-columns:minmax(0,1fr) 38px;align-items:center;gap:6px}
 .commute-page .manual-route-selected-access .route-via-remove{position:static;width:36px;height:36px}
+.commute-page .route-recommendation-context{margin:-2px 0 12px;color:#667085;font-size:12px;line-height:1.5}
