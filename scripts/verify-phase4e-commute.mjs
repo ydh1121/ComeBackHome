@@ -20,7 +20,7 @@ const selectors = await read('../src/application/selectors/index.ts');
 
 for (const text of ['장소 이름','도로명·건물명 검색','상세주소','onCompositionStart','250','actions.places.save']) if (!place.includes(text)) failures.push('place missing ' + text);
 for (const text of ['경로 설정','경로 추가','savedRoutes','createSavedRoute','selectSavedRoute','자동 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
-for (const text of ['출발 교통수단 추가','경유 교통수단 추가','draggable','ArrowUp','ArrowDown','moveRouteVia','removeRouteVia']) if (!manual.includes(text)) failures.push('manual missing ' + text);
+for (const text of ['출발 교통수단 추가','경유 교통수단 추가','도착 교통수단 추가','routeRole=destination','draggable','ArrowUp','ArrowDown','moveRouteVia','removeRouteVia']) if (!manual.includes(text)) failures.push('manual missing ' + text);
 for (const text of ['KakaoTransitMap','근처 교통','actions.transitSearch.nearby','이 정류장 선택 후 버스 보기','정류장명·번호 직접 검색']) if (!access.includes(text)) failures.push('access missing ' + text);
 for (const text of ['정류장·역 직접 검색','정류장명·번호 또는 역 이름','routeId','routeRole','actions.transitSearch.addAccessPoint']) if (!search.includes(text)) failures.push('search missing ' + text);
 for (const text of ['버스 선택','이름 수정','listRoutes','이 정류장에서 이용 가능한 버스','actions.busRoutes.selectRoute','선택 완료']) if (!bus.includes(text)) failures.push('bus missing ' + text);
@@ -42,6 +42,8 @@ for (const path of [
 
 for (const text of ['places: PlaceActions','commute: CommuteActions','transitSearch: TransitSearchActions','busRoutes: BusRouteActions']) if (!runtime.includes(text)) failures.push('runtime missing ' + text);
 for (const text of ['upsertAccessPoint','listSavedRoutes','createSavedRoute','saveSavedRoute','setActiveSavedRoute','setSelectedBusRoute']) if (!repository.includes(text)) failures.push('repository missing ' + text);
+if (!manual.includes('destinationAccessPointId')) failures.push('saved route destination access read missing');
+if (!service.includes('setRouteDestinationAccess')) failures.push('saved route destination access action missing');
 for (const text of ['class PlaceService','class CommuteService','class TransitSearchService','class BusRouteService','nearby(','listRoutes(']) if (!service.includes(text)) failures.push('service missing ' + text);
 for (const text of ['routeMatchesAccessPoint','configuredPoints.every','matchesPreference: true',"policyLabels: ['설정 경로']"]) if (!providerRuntime.includes(text)) failures.push('saved-route provider matching missing ' + text);
 if (!selectors.includes('Number(b.matchesPreference === true) - Number(a.matchesPreference === true)')) failures.push('route ranking does not prioritize saved-route match');
