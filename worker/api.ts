@@ -108,6 +108,42 @@ function dedupeTransit(results: TransitSearchResult[]): TransitSearchResult[] {
     .sort((left, right) => (left.distanceM ?? Number.MAX_SAFE_INTEGER) - (right.distanceM ?? Number.MAX_SAFE_INTEGER));
 }
 
+function normalizeTransitName(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/정류장|정류소|역$/g, '');
+}
+
+function chooseTransitResolution(
+  candidates: TransitSearchResult[],
+  name: string,
+  near: Coordinate,
+  line?: string,
+): TransitSearchResult | null {
+  const target = normalizeTransitName(name);
+  const targetLine = line?.normalize('NFKC').replace(/\s+/g, '').toLocaleLowerCase() ?? '';
+  const scored = candidates.map((candidate) => {
+    const candidateName = normalizeTransitName(candidate.name);
+    const nameScore =
+      candidateName === target ? 0 :
+      candidateName.includes(target) || target.includes(candidateName) ? 1 :
+      3;
+    const lineValue = candidate.line?.normalize('NFKC').replace(/\s+/g, '').toLocaleLowerCase() ?? '';
+    const lineScore = targetLine && lineValue
+      ? lineValue === targetLine || lineValue.includes(targetLine) || targetLine.includes(lineValue) ? 0 : 1
+      : 0;
+    const distance = candidate.coordinate
+      ? coordinateDistanceMeters(near, candidate.coordinate)
+      : candidate.distanceM ?? Number.MAX_SAFE_INTEGER;
+    return { candidate, score: nameScore * 1_000_000 + lineScore * 100_000 + distance };
+  }).sort((left, right) => left.score - right.score);
+
+  const best = scored[0];
+  return best && best.score < 3_000_000 ? best.candidate : null;
+}
+
 export async function handleApiRequest(
   request: Request,
   env: WorkerEnv,
@@ -153,6 +189,11 @@ export async function handleApiRequest(
         return json({
           enabled,
           source: providerRuntime ? 'worker-provider' : enabled ? 'unavailable' : 'unconfigured',
+          capabilities: {
+            kakao: Boolean(env.KAKAO_REST_API_KEY?.trim()),
+            seoulBus: Boolean(env.SEOUL_BUS_SERVICE_KEY?.trim()),
+            seoulSubway: Boolean(env.SEOUL_SUBWAY_API_KEY?.trim()),
+          },
         });
       }
 
@@ -162,6 +203,7 @@ export async function handleApiRequest(
           segments[2] === 'place-search' ||
           segments[2] === 'transit-search' ||
           segments[2] === 'transit-nearby' ||
+          segments[2] === 'transit-resolve' ||
           segments[2] === 'static-map' ||
           segments[2] === 'routes' ||
           segments[2] === 'bus-arrivals' ||
@@ -172,14 +214,80 @@ export async function handleApiRequest(
           return json({ error: 'Provider runtime is disabled.' }, 503);
         }
 
-        if (
-          segments[2] === 'bus-arrivals' ||
-          segments[2] === 'subway-arrivals'
-        ) {
-          return json({ error: 'Seoul provider secure transport is unavailable.' }, 503);
-        }
-
         try {
+          if (segments[2] === 'transit-resolve') {
+            const mode = url.searchParams.get('mode');
+            const name = url.searchParams.get('name')?.trim() ?? '';
+            const line = url.searchParams.get('line')?.trim() || undefined;
+            const x = Number(url.searchParams.get('x'));
+            const y = Number(url.searchParams.get('y'));
+            if ((mode !== 'BUS' && mode !== 'SUBWAY') || !name || ![x, y].every(Number.isFinite)) {
+              return json({ error: 'mode/name/x/y are required.' }, 400);
+            }
+            const near = { x, y };
+
+            if (mode === 'BUS') {
+              let candidates: TransitSearchResult[] = [];
+              try {
+                candidates = await providerRuntime.seoulBus.searchStops(name, near);
+              } catch {
+                candidates = [];
+              }
+              const stop = chooseTransitResolution(candidates, name, near);
+              if (!stop) return json({ resolved: {} });
+
+              let busRoutes = stop.busRoutes ?? [];
+              if (stop.displayCode) {
+                try {
+                  busRoutes = await providerRuntime.seoulBus.routesByStop(stop.displayCode);
+                } catch {
+                  busRoutes = [];
+                }
+              }
+              return json({
+                resolved: {
+                  ...stop,
+                  ...(busRoutes.length ? {
+                    busRoutes,
+                    routeCount: busRoutes.length,
+                  } : {}),
+                },
+              });
+            }
+
+            let stations: TransitSearchResult[] = [];
+            try {
+              stations = await providerRuntime.seoulSubway.searchStations(name, near);
+            } catch {
+              stations = [];
+            }
+            const station = chooseTransitResolution(stations, name, near, line);
+            return json({ resolved: station ?? {} });
+          }
+
+          if (segments[2] === 'bus-arrivals') {
+            const stopProviderId = url.searchParams.get('stopProviderId')?.trim() ?? '';
+            const routeProviderId = url.searchParams.get('routeProviderId')?.trim() ?? '';
+            if (!stopProviderId || !routeProviderId) {
+              return json({ error: 'stopProviderId/routeProviderId are required.' }, 400);
+            }
+            if (!/^\d+$/.test(stopProviderId) || !/^\d+$/.test(routeProviderId)) {
+              return json({ arrivals: [] });
+            }
+            return json({
+              arrivals: await providerRuntime.seoulBus.arrivals(stopProviderId, routeProviderId),
+            });
+          }
+
+          if (segments[2] === 'subway-arrivals') {
+            const stationName = url.searchParams.get('stationName')?.trim() ?? '';
+            const line = url.searchParams.get('line')?.trim() || undefined;
+            if (!stationName) return json({ error: 'stationName is required.' }, 400);
+            return json({
+              arrivals: await providerRuntime.seoulSubway.arrivals(stationName, line),
+            });
+          }
+
           if (segments[2] === 'static-map') {
             const centerX = Number(url.searchParams.get('centerX'));
             const centerY = Number(url.searchParams.get('centerY'));
