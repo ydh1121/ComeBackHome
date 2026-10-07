@@ -33,7 +33,7 @@ export interface SeoulBusSource {
 }
 
 export interface SeoulSubwaySource {
-  searchStations(query: string, near: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
+  searchStations(query: string, near?: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
   arrivals(stationName: string, line?: string, context?: ProviderRequestContext): Promise<Arrival[]>;
   trainPositions(line: string, context?: ProviderRequestContext): Promise<SubwayTrainPosition[]>;
 }
