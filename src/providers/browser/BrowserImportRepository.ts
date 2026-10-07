@@ -114,7 +114,9 @@ export class BrowserImportRepository implements ImportRepository {
     if (!person) throw new Error('Detected person was not found.');
     person.matchedPersonId = personId;
     for (const item of batch.reviewItems) {
-      if (item.detectedPersonId === detectedPersonId) item.personId = personId;
+      if (item.detectedPersonId !== detectedPersonId) continue;
+      item.personId = personId;
+      if (personId && item.resolution == null) item.resolution = 'NEW';
     }
     this.persist();
   }
