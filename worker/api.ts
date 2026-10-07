@@ -734,6 +734,14 @@ export async function handleApiRequest(
               viaAccessPointIds,
               active: typeof body.active === 'boolean' ? body.active : current.active,
             };
+            if (Array.isArray(body.originAccessPointIds)) {
+              if (originAccessPointIds[0]) route.originAccessPointId = originAccessPointIds[0];
+              else delete route.originAccessPointId;
+            }
+            if (Array.isArray(body.destinationAccessPointIds)) {
+              if (destinationAccessPointIds[0]) route.destinationAccessPointId = destinationAccessPointIds[0];
+              else delete route.destinationAccessPointId;
+            }
             if (typeof body.originAccessPointId === 'string' && body.originAccessPointId.trim()) {
               route.originAccessPointId = body.originAccessPointId.trim();
             } else if (body.originAccessPointId === null) {
