@@ -34,6 +34,20 @@ jobs:
             throw new Error('Pages API health failed: HTTP ' + health.status);
           }
 
+          const clientConfig = await fetch(origin + '/api/client-config', {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          const clientConfigBody = await clientConfig.json().catch(() => null);
+          if (
+            !clientConfig.ok ||
+            clientConfigBody?.kakaoMaps?.configured !== true ||
+            typeof clientConfigBody?.kakaoMaps?.javaScriptKey !== 'string' ||
+            clientConfigBody.kakaoMaps.javaScriptKey.trim().length === 0
+          ) {
+            throw new Error('Pages interactive Kakao map client config is unavailable');
+          }
+
           let providerStatusBody = null;
           for (let attempt = 0; attempt < 30; attempt += 1) {
             const providerStatus = await fetch(origin + '/api/providers/status', {
@@ -234,6 +248,7 @@ jobs:
           console.log(JSON.stringify({
             pagesRootReachable: true,
             sameOriginHealth: true,
+            interactiveKakaoMapRuntimeConfig: true,
             providerRuntimeEnabled: true,
             realtimeProviderBindings: providerStatusBody.capabilities,
             busRealtimeResolved: true,
