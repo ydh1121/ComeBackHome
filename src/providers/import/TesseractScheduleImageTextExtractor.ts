@@ -2,6 +2,9 @@ import { createWorker, PSM } from 'tesseract.js';
 import type {
   ImageRasterPreprocessor,
   ImageTextExtractor,
+  RegionalImageTextExtractor,
+  ImageTextProbeRegion,
+  ImageTextProbeResult,
   ImportProgressReporter,
   ImageTextLayout,
   ImageTextToken,
@@ -437,7 +440,7 @@ function mergePersonRegionToken(
   return kept.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
-export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
+export class TesseractScheduleImageTextExtractor implements RegionalImageTextExtractor {
   private readonly languages: string[];
   private readonly minimumConfidence: number;
 
@@ -600,6 +603,123 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
 
       await onProgress?.(92);
       return refinedLayout;
+    } finally {
+      await worker.terminate();
+    }
+  }
+
+  async extractRegions(
+    file: File,
+    regions: ImageTextProbeRegion[],
+    onProgress?: ImportProgressReporter,
+  ): Promise<ImageTextProbeResult[]> {
+    if (!regions.length) return [];
+
+    const raster = await this.preprocessor.prepare(file);
+    const worker = await this.workers.create(this.languages);
+    const results: ImageTextProbeResult[] = [];
+
+    try {
+      for (let index = 0; index < regions.length; index += 1) {
+        const region = regions[index];
+        const rectangle = sourceRegionToRasterRectangle(
+          {
+            id: region.id,
+            kind: region.purpose === 'person' ? 'person-label' : 'start',
+            sourceRow: 0,
+            sourcePersonName: '',
+            date: null,
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height,
+          },
+          raster,
+        );
+
+        await worker.setParameters({
+          tessedit_pageseg_mode: String(
+            region.purpose === 'person' ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
+          ),
+          tessedit_char_whitelist:
+            region.purpose === 'person'
+              ? ''
+              : '0123456789.,:/-~',
+          preserve_interword_spaces: '1',
+        });
+
+        const response = await worker.recognize(
+          raster.image,
+          { rotateAuto: false, rectangle },
+          { text: true, blocks: true },
+        );
+        const words = flattenWords(response.data);
+
+        if (region.purpose === 'person') {
+          const candidate = personLabelCandidate(words, rectangle.height);
+          const token = candidate
+            ? regionToken(
+                {
+                  id: region.id,
+                  kind: 'person-label',
+                  sourceRow: 0,
+                  sourcePersonName: candidate.text,
+                  date: null,
+                  x: region.x,
+                  y: region.y,
+                  width: region.width,
+                  height: region.height,
+                },
+                candidate.text,
+                candidate.confidence,
+              )
+            : null;
+          results.push({
+            id: region.id,
+            purpose: region.purpose,
+            text: candidate?.text ?? '',
+            tokens: token ? [token] : [],
+            confidence: candidate?.confidence ?? 0,
+          });
+        } else {
+          const usable = words
+            .map((word) => ({
+              text: String(word.text ?? '').normalize('NFKC').trim(),
+              confidence: normalizeConfidence(word.confidence),
+              x0: Math.min(word.bbox.x0, word.bbox.x1),
+            }))
+            .filter((item) =>
+              item.text.length > 0 &&
+              numericShape(item.text) &&
+              item.confidence >= this.minimumConfidence
+            )
+            .sort((left, right) => left.x0 - right.x0);
+
+          const tokens = usable.map((item, itemIndex) => {
+            const slotWidth = region.width / Math.max(1, usable.length);
+            return {
+              text: item.text,
+              x: region.x + slotWidth * itemIndex + slotWidth * 0.18,
+              y: region.y + region.height * 0.2,
+              width: Math.max(1, slotWidth * 0.64),
+              height: Math.max(1, region.height * 0.6),
+              confidence: item.confidence,
+            };
+          });
+          results.push({
+            id: region.id,
+            purpose: region.purpose,
+            text: usable.map((item) => item.text).join(' '),
+            tokens,
+            confidence: usable.length
+              ? usable.reduce((sum, item) => sum + item.confidence, 0) / usable.length
+              : 0,
+          });
+        }
+
+        await onProgress?.(Math.round(((index + 1) / regions.length) * 100));
+      }
+      return results;
     } finally {
       await worker.terminate();
     }
