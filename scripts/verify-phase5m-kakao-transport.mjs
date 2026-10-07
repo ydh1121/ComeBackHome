@@ -15,7 +15,7 @@ const localConfig = JSON.parse(await readFile(new URL('../wrangler.local.jsonc',
 
 expect(networkSource.includes('class SecureProviderJsonTransport'), 'secure network transport missing');
 expect(networkSource.includes('assertProviderActivationReady'), 'security gate is not enforced by network transport');
-expect(networkSource.includes("url.protocol !== 'https:'"), 'final HTTPS assertion missing');
+expect(networkSource.includes('isDocumentedOfficialHttpEndpoint'), 'official Seoul HTTP allowlist assertion missing');
 expect(runtimeSource.includes("env.PROVIDER_RUNTIME_ENABLED !== '1'"), 'provider runtime disable gate missing');
 expect(pagesEntry.includes('createProviderRuntime'), 'Pages provider runtime wiring missing');
 expect(workerApi.includes("providerRuntime.kakao.searchPlaces"), 'Kakao place Pages wiring missing');
@@ -37,6 +37,8 @@ try {
   const calls = [];
   const placeFixture = await fixture('kakao-place.json');
   const routeFixture = await fixture('kakao-public-transit.json');
+  const busFixture = await fixture('seoul-bus-stops.json');
+  const subwayFixture = await fixture('seoul-subway-arrivals.json');
   const addressQuery = '서울특별시 문성로32길 20-4';
   const addressFixture = {
     meta: { total_count: 1, pageable_count: 1, is_end: true },
@@ -62,7 +64,11 @@ try {
     calls.push({ input, init });
     const url = new URL(String(input));
     let body = placeFixture;
-    if (url.pathname === '/v2/routing/publictraffic') {
+    if (url.hostname === 'ws.bus.go.kr') {
+      body = busFixture;
+    } else if (url.hostname === 'swopenapi.seoul.go.kr') {
+      body = subwayFixture;
+    } else if (url.pathname === '/v2/routing/publictraffic') {
       body = routeFixture;
     } else if (url.pathname === '/v2/local/search/address.json') {
       body = addressFixture;
@@ -89,6 +95,8 @@ try {
   const enabledRuntime = runtime.createProviderRuntime({
     PROVIDER_RUNTIME_ENABLED: '1',
     KAKAO_REST_API_KEY: fakeSecretValue,
+    SEOUL_BUS_SERVICE_KEY: 'fixture-bus-key',
+    SEOUL_SUBWAY_API_KEY: 'fixture-subway-key',
     DB: {},
   }, fakeFetch);
   expect(enabledRuntime !== null, 'enabled fixture runtime did not construct');
@@ -121,15 +129,18 @@ try {
   const authorization = new Headers(placeCall.init?.headers).get('Authorization');
   expect(authorization === 'KakaoAK ' + fakeSecretValue, 'Kakao Authorization materialization mismatch');
 
-  let seoulFetchCount = calls.length;
-  let seoulBlocked = '';
-  try {
-    await enabledRuntime.seoulBus.searchStops('강남역', { x: 127.03, y: 37.49 });
-  } catch (error) {
-    seoulBlocked = error instanceof Error ? error.message : String(error);
-  }
-  expect(seoulBlocked === 'Provider activation blocked: INSECURE_ENDPOINT', 'Seoul bus must fail before network');
-  expect(calls.length === seoulFetchCount, 'Seoul bus security block must occur before fake fetch');
+  const seoulFetchCount = calls.length;
+  const seoulStops = await enabledRuntime.seoulBus.searchStops('강남역', { x: 127.03, y: 37.49 });
+  const subwayArrivals = await enabledRuntime.seoulSubway.arrivals('강남', '02호선');
+  expect(seoulStops[0]?.providerId === '122000606', 'Seoul bus official HTTP transport mapping mismatch');
+  expect(subwayArrivals[0]?.providerVehicleId === '2258', 'Seoul subway official HTTP transport mapping mismatch');
+  expect(calls.length === seoulFetchCount + 2, 'Seoul official provider calls must reach fake transport');
+  const busUrl = new URL(calls[seoulFetchCount].input);
+  const subwayUrl = new URL(calls[seoulFetchCount + 1].input);
+  expect(busUrl.protocol === 'http:' && busUrl.hostname === 'ws.bus.go.kr', 'Seoul bus official HTTP allowlist URL mismatch');
+  expect(subwayUrl.protocol === 'http:' && subwayUrl.hostname === 'swopenapi.seoul.go.kr', 'Seoul subway official HTTP allowlist URL mismatch');
+  expect(busUrl.searchParams.get('serviceKey') === 'fixture-bus-key', 'Seoul bus service key materialization mismatch');
+  expect(subwayUrl.pathname.includes('fixture-subway-key'), 'Seoul subway path key materialization mismatch');
 
   const noSecretTransport = new network.SecureProviderJsonTransport(
     fakeFetch,
@@ -191,4 +202,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('phase 5M Kakao HTTPS network transport verification passed');
+console.log('phase 5M provider network transport verification passed');
