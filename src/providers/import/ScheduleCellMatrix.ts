@@ -97,7 +97,7 @@ function parseCalendarContext(tokens: BoxToken[]): { year: number | null; month:
   let year: number | null = null;
   let month: number | null = null;
   for (const token of tokens) {
-    const raw = String(token.text ?? '').normalize('NFKC').replace(/s+/g, '');
+    const raw = String(token.text ?? '').normalize('NFKC').replace(/\s+/g, '');
     const full = /(20d{2})년?[-./]?(1[0-2]|0?[1-9])월?/.exec(raw);
     if (full) return { year: Number(full[1]), month: Number(full[2]) };
     const yearOnly = /(20d{2})년?/.exec(raw);
@@ -115,7 +115,7 @@ function parseDateEvidence(
   const direct = parseScheduleDate(value);
   if (direct) return direct;
 
-  const raw = value.normalize('NFKC').trim().replace(/s+/g, '');
+  const raw = value.normalize('NFKC').trim().replace(/\s+/g, '');
   const dayOnly = /^(d{1,2})일$/.exec(raw);
   if (dayOnly && context.year != null && context.month != null) {
     return parseScheduleDate(
@@ -212,7 +212,7 @@ function tokenInside(token: BoxToken, bounds: SchedulePixelBounds): boolean {
 
 function likelyPersonText(token: BoxToken): boolean {
   if (!token.normalized || token.normalized.length > 30) return false;
-  if (/d/.test(token.normalized)) return false;
+  if (/\d/.test(token.normalized)) return false;
   if (classifyScheduleShiftLabel(token.text)) return false;
   if (/^(이름|성명|직원|사람|name|person|employee)$/.test(token.normalized)) return false;
   return /[가-힣a-z]/i.test(token.normalized);
