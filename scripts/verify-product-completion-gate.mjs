@@ -39,6 +39,9 @@ const [
   runtimeConfig,
   composition,
   commuteManual,
+  transitAccess,
+  transitSearch,
+  commuteService,
   commuteRuntime,
   providerContracts,
   importPage,
@@ -56,6 +59,9 @@ const [
   read('../src/config/runtime.ts'),
   read('../src/app/composition.ts'),
   read('../src/pages/CommuteManualPage.tsx'),
+  read('../src/pages/TransitAccessPage.tsx'),
+  read('../src/pages/TransitSearchPage.tsx'),
+  read('../src/application/services/CommuteWorkflowService.ts'),
   read('../src/providers/runtime/ProviderRuntimeRepositories.ts'),
   read('../src/application/contracts/providers.ts'),
   read('../src/pages/ImportPage.tsx'),
@@ -83,11 +89,20 @@ expect(composition.includes("providerData: providerMode === 'api' ? 'worker-api'
 
 for (const token of [
   'destinationAccessPointId',
-  "routeRole === 'destination'",
-  'setRouteDestinationAccess',
   'moveRouteVia',
   'removeRouteVia',
-]) expect(commuteManual.includes(token), 'saved-route completion missing: ' + token);
+]) expect(commuteManual.includes(token), 'saved-route editor missing: ' + token);
+expect(
+  transitAccess.includes("routeRole === 'destination'") &&
+  transitAccess.includes('setRouteDestinationAccess'),
+  'saved-route destination nearby flow is incomplete',
+);
+expect(
+  transitSearch.includes("routeRole === 'destination'") &&
+  transitSearch.includes('setRouteDestinationAccess'),
+  'saved-route destination search flow is incomplete',
+);
+expect(commuteService.includes('setRouteDestinationAccess'), 'saved-route destination persistence action missing');
 
 expect(commuteRuntime.includes('activeSavedRoute.destinationAccessPointId'), 'destination transit does not affect provider route matching');
 expect(commuteRuntime.includes('selectedAccess.providerId'), 'persisted transit provider ID does not reach realtime ETA');
