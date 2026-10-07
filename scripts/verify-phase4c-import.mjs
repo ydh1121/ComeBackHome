@@ -23,7 +23,7 @@ for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','새 사
 for (const text of ['표 구조 확인','머리글 행','근무시간 열','자동 인식이 확실하지 않을 때만']) {
   if (!structure.includes(text)) failures.push('structure missing ' + text);
 }
-for (const text of ['일정 확인','기존 일정','가져온 일정','visibleReviewItems.map','allReviewed','services.actions.importReview.setResolution','commitImportReview.execute']) {
+for (const text of ['일정 확인','가져오기','visibleReviewItems.map','allReviewed','exactDuplicate','SKIP','services.actions.importReview.setResolution','commitImportReview.execute']) {
   if (!review.includes(text)) failures.push('review missing ' + text);
 }
 for (const path of ['/import', '/import/:batchId/people', '/import/:batchId/structure', '/import/:batchId/review']) {
@@ -38,12 +38,13 @@ if (!composition.includes('new AdaptiveScheduleImageRecognizer')) failures.push(
 if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.push('production OCR extractor not composed');
 if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
 if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v1'")) failures.push('browser import persistence missing');
+if (!browserImports.includes('this.state.batches.filter((batch) => batch.committed)')) failures.push('new upload must replace stale unfinished import draft');
 if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근무표 이미지 가져오기')) failures.push('schedule-to-image-import entry missing');
 if (!commit.includes('await this.schedules.upsertMany(entries)')) failures.push('multi-person schedule atomic batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
 if (!commit.includes('ignoredDetectedIds') || !commit.includes('includedItems')) failures.push('ignored roster people must be excluded from commit');
 if (!review.includes('visibleReviewItems') || !review.includes('ignoredDetectedIds')) failures.push('ignored roster people must be excluded from review');
-if (!commit.includes("item.resolution === 'KEEP'")) failures.push('KEEP commit rule missing');
+if (!commit.includes("item.resolution === 'KEEP'") || !commit.includes("item.resolution === 'SKIP'")) failures.push('KEEP/SKIP commit rule missing');
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
 if (!css.includes('.import-page .upload')) failures.push('upload style missing');
 if (!css.includes('.import-page .review-choice')) failures.push('review style missing');
