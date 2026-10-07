@@ -53,6 +53,7 @@ for (const [name, source, required] of [
 
 for (const text of [
   "'SELECT 1 AS ok'",
+  "segments[1] === 'client-config'",
   "segments[1] === 'bootstrap'",
   "segments[1] === 'people'",
   "segments[3] === 'schedules'",
