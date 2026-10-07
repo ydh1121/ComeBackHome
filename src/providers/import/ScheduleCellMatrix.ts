@@ -285,7 +285,9 @@ export function buildScheduleCellMatrix(
 
   let rowBounds = detection.structure.rowBands
     .map((band) => band.bounds)
-    .filter((bounds) => bounds.y + bounds.height / 2 > headerBottom + 1)
+    .filter((bounds) =>
+      bounds.y >= headerBottom - Math.max(2, bounds.height * 0.1)
+    )
     .filter((bounds) => bounds.height >= 8);
 
   if (!rowBounds.length) {
