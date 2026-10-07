@@ -13,6 +13,7 @@ export interface TransitAccessSearchProvider {
   nearby(near: Coordinate): Promise<TransitSearchResult[]>;
   resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult>;
 }
+export interface BusRouteLookupProvider { listByStop(arsId: string): Promise<BusRouteOption[]>; }
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
 export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
