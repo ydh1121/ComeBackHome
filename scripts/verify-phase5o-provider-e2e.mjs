@@ -83,9 +83,16 @@ try {
       },
     },
     seoulSubway: {
-      async searchStations() {
+      async searchStations(query) {
         calls.transit += 1;
-        return [];
+        return [{
+          id: 'seoul-subway:0222',
+          providerId: '0222',
+          mode: 'SUBWAY',
+          name: query === '강남' ? '강남' : query,
+          line: '02호선',
+          selected: false,
+        }];
       },
       async arrivals() {
         calls.subway += 1;
@@ -154,9 +161,16 @@ try {
   expect(busArrivals[0]?.providerVehicleId === 'e2e-bus', 'bus realtime client -> Worker -> Seoul source mapping failed');
   expect(calls.bus === 1, 'Seoul bus fake source call count mismatch');
 
+  const transitCallsBeforeSubwayRealtime = calls.transit;
   const subwayArrivals = await subwayProvider.arrivals('0222', '강남', '02호선');
   expect(subwayArrivals[0]?.providerVehicleId === 'e2e-subway', 'subway realtime client -> Worker -> Seoul source mapping failed');
+  expect(calls.transit === transitCallsBeforeSubwayRealtime + 1, 'subway realtime must resolve the persisted provider station ID first');
   expect(calls.subway === 1, 'Seoul subway fake source call count mismatch');
+
+  const subwayCallsBeforeMismatch = calls.subway;
+  const mismatchedSubway = await subwayProvider.arrivals('9999', '강남', '02호선');
+  expect(mismatchedSubway.length === 0, 'mismatched persisted subway station ID must fail closed to no realtime evidence');
+  expect(calls.subway === subwayCallsBeforeMismatch, 'mismatched station ID must not reach realtime arrival source');
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   const places = new mocks.MockPlaceRepository(store);
