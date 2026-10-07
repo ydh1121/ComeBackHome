@@ -43,7 +43,8 @@ import {
   HttpScheduleRepository,
 } from '../providers/http/HttpRepositories';
 import { ReadExcelWorkbookParser } from '../providers/import/ReadExcelWorkbookParser';
-import { AdaptiveScheduleImageRecognizer } from '../providers/import/StructuredTableImageScheduleRecognizer';
+import { StructureFirstScheduleImageRecognizer } from '../providers/import/StructureFirstScheduleImageRecognizer';
+import { BrowserScheduleTableStructureDetector } from '../providers/import/ScheduleTableStructureDetector';
 import {
   BrowserScheduleOcrPreprocessor,
   TesseractJsWorkerFactory,
@@ -155,11 +156,14 @@ export async function createHybridApiApplicationServices(
   const transitSearchProvider = providerMode === 'api'
     ? new HttpTransitAccessSearchProvider(client)
     : disabledTransitAccessSearchProvider;
-  const imageRecognizer = new AdaptiveScheduleImageRecognizer(
-    new TesseractScheduleImageTextExtractor(
-      new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
-      new BrowserScheduleOcrPreprocessor(),
-    ),
+  const imageTextExtractor = new TesseractScheduleImageTextExtractor(
+    new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
+    new BrowserScheduleOcrPreprocessor(),
+    { useStructureFirstMode: true },
+  );
+  const imageRecognizer = new StructureFirstScheduleImageRecognizer(
+    new BrowserScheduleTableStructureDetector(),
+    imageTextExtractor,
   );
   const importFileSelection = new WorkbookImportFileSelectionAction(
     imports,
