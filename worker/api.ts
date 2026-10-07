@@ -108,6 +108,31 @@ function dedupeTransit(results: TransitSearchResult[]): TransitSearchResult[] {
     .sort((left, right) => (left.distanceM ?? Number.MAX_SAFE_INTEGER) - (right.distanceM ?? Number.MAX_SAFE_INTEGER));
 }
 
+function trimNearbyTransitByDistance(results: TransitSearchResult[]): TransitSearchResult[] {
+  const sorted = dedupeTransit(results);
+  const kept: TransitSearchResult[] = [];
+
+  for (const mode of ['BUS', 'SUBWAY'] as const) {
+    const group = sorted.filter((item) => item.mode === mode && item.distanceM != null);
+    if (!group.length) continue;
+    const nearest = group[0].distanceM ?? 0;
+    const baseRadius = mode === 'BUS' ? 450 : 650;
+    const delta = mode === 'BUS' ? 450 : 600;
+    const normalCap = mode === 'BUS' ? 800 : 950;
+    const threshold = nearest <= normalCap
+      ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
+      : nearest + 400;
+    kept.push(...group.filter((item) => (item.distanceM ?? Number.MAX_SAFE_INTEGER) <= threshold));
+  }
+
+  return kept
+    .sort((left, right) =>
+      (left.distanceM ?? Number.MAX_SAFE_INTEGER) -
+      (right.distanceM ?? Number.MAX_SAFE_INTEGER)
+    )
+    .slice(0, 24);
+}
+
 function normalizeTransitName(value: string): string {
   return value
     .normalize('NFKC')
@@ -381,10 +406,10 @@ export async function handleApiRequest(
               providerRuntime.kakao.searchPlaces('지하철역', near),
             ]);
             return json({
-              results: dedupeTransit([
+              results: trimNearbyTransitByDistance([
                 ...busPlaces.map((place) => placeToTransit(place, near, 'BUS')),
                 ...subwayPlaces.map((place) => placeToTransit(place, near, 'SUBWAY')),
-              ]).slice(0, 30),
+              ]),
             });
           }
 
