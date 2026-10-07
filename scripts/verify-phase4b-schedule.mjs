@@ -14,13 +14,13 @@ const css = await read('../src/pages/schedule-page.css');
 const router = await read('../src/app/router.tsx');
 const actions = await read('../src/application/services/ApplicationActions.ts');
 
-for (const text of ['1일','1주','2주','1개월','일괄 입력','일정 편집']) {
+for (const text of ['1일','1주','2주','1개월','일괄 입력','일정 편집','1일 일정 추가']) {
   if (!overview.includes(text)) failures.push('overview missing ' + text);
 }
 for (const text of ['일정 일괄 입력','기간 내 적용 요일','출근','퇴근','적용']) {
   if (!bulk.includes(text)) failures.push('bulk missing ' + text);
 }
-for (const text of ['일정 수정','근무일','출근','퇴근','저장']) {
+for (const text of ['일정 수정','1일 일정 추가','근무일','출근','퇴근','저장','type="date"']) {
   if (!day.includes(text)) failures.push('day missing ' + text);
 }
 for (const text of ['스크롤로 선택','직접 입력','달력에서 선택']) {
@@ -32,9 +32,10 @@ if (!actions.includes('saveDay(') || !actions.includes('applyBulk(')) failures.p
 if (!actions.includes('enumerateScheduleDates')) failures.push('bulk schedule date materialization missing');
 if (!bulk.includes('currentLocalIsoDate')) failures.push('empty schedule date fallback missing');
 if (!bulk.includes('!canApply')) failures.push('bulk empty-input apply guard missing');
-if (!range.includes("entries.length ? 'wheel' : 'calendar'")) failures.push('empty schedule range picker must default to calendar');
+if (!range.includes("useState<Mode>('wheel')") || !range.includes('buildWheelDates')) failures.push('schedule range wheel must work without existing schedules');
 if (!router.includes("path === '/schedule'")) failures.push('schedule route missing');
 if (!router.includes("path === '/schedule/edit'")) failures.push('bulk route missing');
+if (!router.includes("path === '/schedule/new'")) failures.push('single-day creation route missing');
 if (!router.includes("path === '/schedule/:date/edit'")) failures.push('day route missing');
 if (!css.includes('.schedule-page .segment')) failures.push('segment style missing');
 if (!css.includes('.schedule-page .weekday-grid')) failures.push('weekday style missing');
@@ -76,6 +77,23 @@ try {
   expect(emptyBatch.map((entry) => entry.date).join(',') === '2026-10-07,2026-10-09', 'bulk weekday materialization mismatch');
   expect(emptyBatch.every((entry) => entry.personId === 'person-1' && entry.enabled === true), 'bulk-created schedule identity/state mismatch');
   expect(emptyBatch.every((entry) => entry.start === '09:00' && entry.end === '18:00'), 'bulk-created schedule time mismatch');
+
+  let allDaysBatch = [];
+  const allDaysRepository = {
+    async list() { return []; },
+    async getByDate() { return null; },
+    async upsert() {},
+    async upsertMany(entries) { allDaysBatch = structuredClone(entries); },
+  };
+  const allDaysService = new ScheduleService(allDaysRepository, selection);
+  await allDaysService.applyBulk({
+    from: '2026-10-07',
+    to: '2026-10-10',
+    weekdays: [],
+    start: '09:00',
+    end: '18:00',
+  });
+  expect(allDaysBatch.length === 4, 'empty weekday filter must apply to every date in the range');
 
   const existingEntry = {
     id: 'existing-1',

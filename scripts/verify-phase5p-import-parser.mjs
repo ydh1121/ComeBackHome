@@ -97,7 +97,7 @@ try {
   expect(batch?.reviewItems.length === 2, 'parsed batch review item count mismatch');
   expect(batch?.reviewItems.every((item) => item.personId === 'mock-person-1'), 'review person ownership mismatch');
   expect(batch?.reviewItems.every((item) => item.detectedPersonId === batch.detectedPeople[0]?.id), 'review detected-person linkage mismatch');
-  expect(batch?.reviewItems.every((item) => item.resolution == null), 'parsed review items must start unreviewed');
+  expect(batch?.reviewItems.every((item) => item.resolution === 'NEW'), 'matched newly imported schedules must default selected');
 
   const commit = new commitModule.CommitImportReview(imports, schedules);
   const detectedId = batch?.detectedPeople[0]?.id;
@@ -114,22 +114,14 @@ try {
   if (detectedId) await imports.setDetectedPersonMatch(batchId, detectedId, 'mock-person-1');
   const rematched = await imports.getBatch(batchId);
   expect(rematched?.reviewItems.every((item) => item.personId === 'mock-person-1'), 'person rematch did not propagate to review items');
+  expect(rematched?.reviewItems.every((item) => item.resolution === 'NEW'), 'rematched import rows must default selected');
 
-  let unreviewedBlocked = false;
-  try {
-    await commit.execute(batchId);
-  } catch (error) {
-    unreviewedBlocked = error instanceof Error && error.message === 'Import contains unreviewed schedules.';
-  }
-  expect(unreviewedBlocked, 'unreviewed schedule decisions must block commit');
-
-  for (const item of rematched?.reviewItems ?? []) {
-    await imports.setResolution(batchId, item.id, 'NEW');
-  }
+  const skippedId = rematched?.reviewItems[0]?.id;
+  if (skippedId) await imports.setResolution(batchId, skippedId, 'SKIP');
   await commit.execute(batchId);
   const firstSaved = await schedules.getByDate('mock-person-1', '2099-01-04');
   const secondSaved = await schedules.getByDate('mock-person-1', '2099-01-05');
-  expect(firstSaved?.start === '09:00' && firstSaved?.end === '18:00', 'first parsed schedule commit mismatch');
+  expect(firstSaved === null, 'unchecked imported schedule must not be committed');
   expect(secondSaved?.start === '10:30' && secondSaved?.end === '19:30', 'second parsed schedule commit mismatch');
   expect((await imports.getBatch(batchId))?.committed === true, 'parsed import batch was not marked committed');
 

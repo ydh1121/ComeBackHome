@@ -12,15 +12,39 @@ interface Props {
   onChange(from: string, to: string): void;
 }
 
+function addIsoDays(value: string, days: number): string {
+  const date = new Date(value + 'T00:00:00Z');
+  if (!Number.isFinite(date.getTime())) return value;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildWheelDates(entries: ScheduleEntry[], from: string, to: string): string[] {
+  const existing = entries.map((entry) => entry.date).filter(isIsoDate);
+  if (!isIsoDate(from) || !isIsoDate(to)) return [...new Set(existing)].sort();
+
+  const start = addIsoDays(from, -45);
+  const end = addIsoDays(to, 365);
+  const values = new Set(existing);
+  let cursor = start;
+  for (let index = 0; index < 550 && cursor <= end; index += 1) {
+    values.add(cursor);
+    cursor = addIsoDays(cursor, 1);
+  }
+  values.add(from);
+  values.add(to);
+  return [...values].sort();
+}
+
 export function ScheduleRangePicker({ entries, from, to, onChange }: Props) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>(() => entries.length ? 'wheel' : 'calendar');
+  const [mode, setMode] = useState<Mode>('wheel');
   const [step, setStep] = useState<'start' | 'end'>('start');
   const [fromText, setFromText] = useState(from);
   const [toText, setToText] = useState(to);
   useEffect(() => setFromText(from), [from]);
   useEffect(() => setToText(to), [to]);
-  const dates = entries.map((entry) => entry.date);
+  const dates = buildWheelDates(entries, from, to);
 
   const setDate = (kind: 'from' | 'to', value: string) => {
     const next = normalizeRange(kind === 'from' ? value : from, kind === 'to' ? value : to);

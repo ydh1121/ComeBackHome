@@ -25,17 +25,26 @@ export function ImportReviewPage() {
   const ignoredDetectedIds = new Set(
     batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
   );
-  const visibleReviewItems = batch.reviewItems.filter((item) => !ignoredDetectedIds.has(item.detectedPersonId));
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
     item.imported.start != null && item.imported.end != null;
-  const allReviewed = visibleReviewItems.length > 0 &&
-    visibleReviewItems.every((item) =>
-      item.personId != null &&
-      (
-        item.resolution === 'KEEP' ||
-        (item.resolution === 'NEW' && importedTimeComplete(item))
-      )
-    );
+  const exactDuplicate = (item: (typeof batch.reviewItems)[number]) =>
+    item.existing != null &&
+    item.imported.start != null &&
+    item.imported.end != null &&
+    item.existing.start === item.imported.start &&
+    item.existing.end === item.imported.end;
+  const visibleReviewItems = batch.reviewItems.filter(
+    (item) =>
+      !ignoredDetectedIds.has(item.detectedPersonId) &&
+      !exactDuplicate(item),
+  );
+  const allReviewed = visibleReviewItems.every((item) =>
+    item.personId != null &&
+    (
+      item.resolution === 'SKIP' ||
+      (item.resolution === 'NEW' && importedTimeComplete(item))
+    )
+  );
 
   const save = async () => {
     if (!allReviewed) return;
@@ -106,35 +115,32 @@ export function ImportReviewPage() {
                 ) : null}
 
                 <div className="review-choice-list">
+                  {item.existing && !exactDuplicate(item) ? (
+                    <div className="review-existing-note">
+                      기존 {item.existing.start}–{item.existing.end}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
-                    className={'review-choice' + (item.resolution === 'KEEP' ? ' selected' : '')}
-                    aria-pressed={item.resolution === 'KEEP'}
-                    disabled={!item.existing || !item.personId}
-                    onClick={() => services.actions.importReview.setResolution(batch.id, item.id, 'KEEP')}
-                  >
-                    <span className="review-choice-label">기존 일정</span>
-                    <strong className="review-choice-time">{item.existing?.start ?? '—'}–{item.existing?.end ?? '—'}</strong>
-                    <span className="review-choice-check">{item.resolution === 'KEEP' ? <Icon name="check" /> : null}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={'review-choice' + (item.resolution === 'NEW' ? ' selected' : '')}
+                    className={'review-choice import-toggle' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
                     disabled={!item.personId || !importedComplete}
-                    onClick={() => services.actions.importReview.setResolution(batch.id, item.id, 'NEW')}
+                    onClick={() => services.actions.importReview.setResolution(
+                      batch.id,
+                      item.id,
+                      item.resolution === 'NEW' ? 'SKIP' : 'NEW',
+                    )}
                   >
-                    <span className="review-choice-label">가져온 일정</span>
-                    <strong className="review-choice-time">{item.imported.start ?? '입력 필요'}–{item.imported.end ?? '입력 필요'}</strong>
                     <span className="review-choice-check">{item.resolution === 'NEW' ? <Icon name="check" /> : null}</span>
+                    <span className="review-choice-label">가져오기</span>
+                    <strong className="review-choice-time">{item.imported.start ?? '입력 필요'}–{item.imported.end ?? '입력 필요'}</strong>
                   </button>
                 </div>
               </div>
             );
           })}
         </div>
-      ) : <div className="empty-product">확인할 일정이 없습니다.</div>}
+      ) : <div className="empty-product">새로 가져올 일정이 없습니다.</div>}
 
       {saveState === 'error' ? <div className="import-error" role="alert">저장하지 못했습니다.</div> : null}
 

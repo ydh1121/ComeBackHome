@@ -26,6 +26,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+      KAKAO_JAVASCRIPT_KEY: ${{ secrets.KAKAO_JAVASCRIPT_KEY }}
       SEOUL_BUS_SERVICE_KEY: ${{ secrets.SEOUL_BUS_SERVICE_KEY }}
       SEOUL_OPENAPI_KEY: ${{ secrets.SEOUL_OPENAPI_KEY }}
       SEOUL_SUBWAY_API_KEY: ${{ secrets.SEOUL_SUBWAY_API_KEY }}
@@ -92,6 +93,13 @@ jobs:
             VAPID_PRIVATE_KEY: { type: 'secret_text', value: process.env.VAPID_PRIVATE_KEY },
             PRESENCE_EVENT_INGEST_TOKEN: { type: 'secret_text', value: process.env.PRESENCE_EVENT_INGEST_TOKEN },
           };
+
+          if ((process.env.KAKAO_JAVASCRIPT_KEY ?? '').trim()) {
+            runtimeEnv.VITE_CBH_KAKAO_JAVASCRIPT_KEY = {
+              type: 'plain_text',
+              value: process.env.KAKAO_JAVASCRIPT_KEY.trim(),
+            };
+          }
 
           const directPagesConfig = {
             env_vars: runtimeEnv,
@@ -175,6 +183,7 @@ jobs:
             },
             d1BoundDirectly: true,
             providerSecretsBoundDirectly: true,
+            interactiveKakaoMapConfigured: Boolean(production.env_vars?.VITE_CBH_KAKAO_JAVASCRIPT_KEY),
             pushSecretsBoundDirectly: true,
             serviceBindingPresent: false,
             previewDeployments: 'none',

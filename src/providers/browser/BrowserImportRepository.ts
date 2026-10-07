@@ -53,7 +53,8 @@ export class BrowserImportRepository implements ImportRepository {
   }
 
   async getCurrentBatch(): Promise<ImportBatch | null> {
-    return clone(this.state.batches.find((batch) => !batch.committed) ?? null);
+    const current = [...this.state.batches].reverse().find((batch) => !batch.committed) ?? null;
+    return clone(current);
   }
 
   async getBatch(batchId: EntityId): Promise<ImportBatch | null> {
@@ -61,6 +62,10 @@ export class BrowserImportRepository implements ImportRepository {
   }
 
   async createBatch(): Promise<ImportBatch> {
+    // A new file selection starts a new draft. Keeping an older unfinished
+    // draft as "current" caused subsequent uploads to surface stale OCR data
+    // until localStorage was manually cleared.
+    this.state.batches = this.state.batches.filter((batch) => batch.committed);
     const batch: ImportBatch = {
       id: crypto.randomUUID(),
       files: [],
@@ -109,7 +114,9 @@ export class BrowserImportRepository implements ImportRepository {
     if (!person) throw new Error('Detected person was not found.');
     person.matchedPersonId = personId;
     for (const item of batch.reviewItems) {
-      if (item.detectedPersonId === detectedPersonId) item.personId = personId;
+      if (item.detectedPersonId !== detectedPersonId) continue;
+      item.personId = personId;
+      if (personId && item.resolution == null) item.resolution = 'NEW';
     }
     this.persist();
   }

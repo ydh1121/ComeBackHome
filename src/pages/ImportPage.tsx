@@ -98,7 +98,7 @@ export function ImportPage() {
       <button
         type="button"
         className="cta"
-        disabled={!batch || !files.length}
+        disabled={!batch || !files.some((file) => file.status === 'READY')}
         onClick={() => batch && navigate('/import/' + encodeURIComponent(batch.id) + '/people')}
       >
         인식 결과 보기

@@ -402,3 +402,8 @@
 
 .import-page .mapping-native-select{width:100%;min-height:44px;border:0;border-radius:11px;background:#fff;box-shadow:inset 0 0 0 1px rgba(16,24,40,.08);padding:0 34px 0 12px;font-weight:750;color:#344054}
 .import-page .mapping-summary{margin-top:12px;font-size:12px;color:#667085;text-align:right}
+.import-page .review-choice.import-toggle{grid-template-columns:44px minmax(0,1fr) auto;padding-left:0}
+.import-page .review-choice.import-toggle .review-choice-check{grid-column:1}
+.import-page .review-choice.import-toggle .review-choice-label{grid-column:2}
+.import-page .review-choice.import-toggle .review-choice-time{grid-column:3}
+.import-page .review-existing-note{margin:0 0 4px;padding:9px 12px;border-radius:10px;background:#f7f9fc;color:#667085;font-size:12px}
