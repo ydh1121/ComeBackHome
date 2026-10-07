@@ -32,8 +32,8 @@ for (const secret of [
 for (const source of ["'kakao-map'", "'seoul-bus'", "'seoul-subway'"]) {
   expect(plan.includes(source), 'source plan missing ' + source);
 }
-expect(plan.includes("externalRequestsAllowedInPhase5I: false"), 'Phase5I external request guard missing');
-expect(plan.includes("remoteActivationAllowedInPhase5I: false"), 'Phase5I remote activation guard missing');
+expect(plan.includes("officialSeoulHttpAllowlistRequired: true"), 'official Seoul HTTP allowlist policy missing');
+expect(plan.includes("missingRealtimeSecretBehavior: 'FALLBACK'"), 'missing realtime fallback policy missing');
 expect(plan.includes("fabricatedRealtimeAllowed: false"), 'fabricated realtime guard missing');
 
 for (const forbidden of ['KakaoAK ', 'serviceKey=', 'swopenAPI.seoul.go.kr/api/subway/']) {
@@ -43,18 +43,19 @@ for (const forbidden of ['KakaoAK ', 'serviceKey=', 'swopenAPI.seoul.go.kr/api/s
 
 expect(!contracts.includes('fetch('), 'Phase5I contracts must not perform external fetch');
 expect(!plan.includes('fetch('), 'Phase5I source plan must not perform external fetch');
-expect(!workerApi.includes('dapi.kakao.com'), 'Worker API activated Kakao request too early');
-expect(!workerApi.includes('swopenAPI.seoul.go.kr'), 'Worker API activated Seoul subway request too early');
+expect(workerApi.includes("segments[2] === 'bus-arrivals'"), 'Worker API realtime bus path missing');
+expect(workerApi.includes("segments[2] === 'subway-arrivals'"), 'Worker API realtime subway path missing');
+expect(workerApi.includes('providerRuntime.seoulBus.arrivals'), 'Worker API does not call Seoul bus source');
+expect(workerApi.includes('providerRuntime.seoulSubway.arrivals'), 'Worker API does not call Seoul subway source');
 expect(wranglerLocal.vars?.PROVIDER_RUNTIME_ENABLED === '0', 'local provider runtime must remain disabled');
 
 for (const text of [
+  'PRODUCT PATH ACTIVE / SERVER-SECRET-GATED',
   'Kakao Map REST API',
-  'public-transit route retrieval',
-  '100,000 requests/day',
-  '1,000 requests/day',
-  'recptnDt',
-  'FALLBACK or UNKNOWN',
-  'Exact LIVE/STALE duration thresholds are intentionally deferred',
+  'Realtime bus arrivals',
+  'Realtime subway arrivals',
+  'Fabricated realtime data is forbidden',
+  'route-based ETA remains available as FALLBACK',
 ]) {
   expect(docs.includes(text), 'feasibility docs missing ' + text);
 }
