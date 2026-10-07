@@ -209,12 +209,19 @@ function parseScheduleDateEvidence(value: string, context: CalendarContext): str
   const full = parseScheduleDate(value);
   if (full) return full;
 
-  const normalized = value
-    .normalize('NFKC')
-    .trim()
+  const raw = value.normalize('NFKC').trim().replace(/\s+/g, '');
+  const dayOnly = /^(\d{1,2})일$/.exec(raw);
+  if (dayOnly && context.year != null && context.month != null) {
+    return parseScheduleDate([
+      String(context.year),
+      String(context.month).padStart(2, '0'),
+      String(Number(dayOnly[1])).padStart(2, '0'),
+    ].join('-'));
+  }
+
+  const normalized = raw
     .replace(/[.]/g, '-')
     .replace(/\//g, '-')
-    .replace(/\s+/g, '')
     .replace(/월/g, '-')
     .replace(/일/g, '');
 
@@ -483,8 +490,9 @@ function buildCalendarStripDateBlocks(
   const maximumOrdinal = Math.max(...unwrapped.map((item) => item.ordinal));
   if (maximumOrdinal - minimumOrdinal < 2) return [];
 
+  const calendarContext = inferCalendarContext(tokens);
   const dateTokens = tokens
-    .map((token) => ({ token, date: parseScheduleDate(token.normalized) }))
+    .map((token) => ({ token, date: parseScheduleDateEvidence(token.text, calendarContext) }))
     .filter((item): item is { token: BoxToken; date: string } => item.date != null);
 
   const mappedDates: Array<{
@@ -677,8 +685,9 @@ function inferDateBlockMatrixGeometry(
   layout: ImageTextLayout,
   tokens: BoxToken[],
 ): DateBlockMatrixGeometry | null {
+  const calendarContext = inferCalendarContext(tokens);
   const dateTokens = tokens
-    .map((token) => ({ token, date: parseScheduleDate(token.normalized) }))
+    .map((token) => ({ token, date: parseScheduleDateEvidence(token.text, calendarContext) }))
     .filter((item): item is { token: BoxToken; date: string } => item.date != null);
 
   const calendarBlocks = buildCalendarStripDateBlocks(tokens, layout.width);
@@ -1208,7 +1217,8 @@ function rowTableStrategy(
     const sourceName = personTokens.map((token) => token.normalized).join('');
     if (!sourceName || !isLikelyPersonName(sourceName)) continue;
 
-    const date = dateTokens.map((token) => parseScheduleDate(token.normalized)).find((value) => value != null) ?? null;
+    const calendarContext = inferCalendarContext(tokens);
+    const date = dateTokens.map((token) => parseScheduleDateEvidence(token.text, calendarContext)).find((value) => value != null) ?? null;
     const startToken = startTokens.find((token) => parseScheduleImageClock(token.normalized) != null);
     const endToken = endTokens.find((token) => parseScheduleImageClock(token.normalized) != null);
     const start = startToken ? parseScheduleImageClock(startToken.normalized) : null;
