@@ -28,6 +28,7 @@ function componentFor(path: string) {
   if (path === '/') return TodayPage;
   if (path === '/schedule') return SchedulePage;
   if (path === '/schedule/edit') return ScheduleBulkEditPage;
+  if (path === '/schedule/new') return ScheduleDayEditPage;
   if (path === '/schedule/:date/edit') return ScheduleDayEditPage;
   if (path === '/import') return ImportPage;
   if (path === '/import/:batchId/people') return ImportPersonMatchPage;
