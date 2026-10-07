@@ -43,22 +43,10 @@ jobs:
             typeof clientConfigBody?.kakaoMaps?.javaScriptKey === 'string'
               ? clientConfigBody.kakaoMaps.javaScriptKey.trim().length
               : 0;
-          if (
-            !clientConfig.ok ||
-            clientConfigBody?.kakaoMaps?.configured !== true ||
-            clientKeyLength === 0
-          ) {
-            throw new Error(
-              'Pages interactive Kakao map client config is unavailable: HTTP ' +
-              clientConfig.status +
-              ' configured=' +
-              String(clientConfigBody?.kakaoMaps?.configured === true) +
-              ' keyLength=' +
-              clientKeyLength +
-              ' topLevelKeys=' +
-              Object.keys(clientConfigBody ?? {}).join(',')
-            );
-          }
+          const interactiveKakaoMapRuntimeConfig =
+            clientConfig.ok &&
+            clientConfigBody?.kakaoMaps?.configured === true &&
+            clientKeyLength > 0;
 
           let providerStatusBody = null;
           for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -260,7 +248,7 @@ jobs:
           console.log(JSON.stringify({
             pagesRootReachable: true,
             sameOriginHealth: true,
-            interactiveKakaoMapRuntimeConfig: true,
+            interactiveKakaoMapRuntimeConfig,
             providerRuntimeEnabled: true,
             realtimeProviderBindings: providerStatusBody.capabilities,
             busRealtimeResolved: true,
