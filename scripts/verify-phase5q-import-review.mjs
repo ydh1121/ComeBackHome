@@ -21,11 +21,12 @@ for (const text of [
   "disabled={!allReviewed || saveState === 'saving'}",
   "disabled={!item.personId || !importedComplete}",
   'services.actions.importReview.setImportedTime',
-  'type="time"',
+  'TimeRangeWheelPicker',
 ]) {
   expect(reviewSource.includes(text), 'multi-item review UI missing ' + text);
 }
 expect(!reviewSource.includes('batch.reviewItems[0]'), 'review UI must not collapse real import to first item');
+expect(!reviewSource.includes('type="time"'), 'import review must not use native time inputs on iPhone');
 expect(matchSource.includes('const allResolved'), 'person match completion gate missing');
 expect(matchSource.includes('<option value="">연결 안 됨</option>'), 'unmatched person label must be explicit');
 expect(matchSource.includes('새 사람으로 등록'), 'detected person create option missing');
