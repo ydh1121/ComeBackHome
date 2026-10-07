@@ -39,7 +39,7 @@ if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.p
 if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
 if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v1'")) failures.push('browser import persistence missing');
 if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근무표 이미지 가져오기')) failures.push('schedule-to-image-import entry missing');
-if (!commit.includes('entriesByPerson') || !commit.includes('for (const group of entriesByPerson.values())') || !commit.includes('schedules.upsertMany(group)')) failures.push('multi-person schedule batch boundary missing');
+if (!commit.includes('await this.schedules.upsertMany(entries)')) failures.push('multi-person schedule atomic batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
 if (!commit.includes('ignoredDetectedIds') || !commit.includes('includedItems')) failures.push('ignored roster people must be excluded from commit');
 if (!review.includes('visibleReviewItems') || !review.includes('ignoredDetectedIds')) failures.push('ignored roster people must be excluded from review');
