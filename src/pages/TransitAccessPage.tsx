@@ -103,6 +103,10 @@ export function TransitAccessPage() {
       await services.actions.commute.setRouteOriginAccess(personId, routeId, accessPointId);
       return;
     }
+    if (routeRole === 'destination') {
+      await services.actions.commute.setRouteDestinationAccess(personId, routeId, accessPointId);
+      return;
+    }
     if (routeRole === 'via') {
       if (routeEdit === 'replace') {
         await services.actions.commute.replaceRouteVia(personId, routeId, Math.max(0, routeIndex), accessPointId);
