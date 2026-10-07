@@ -291,10 +291,14 @@ export async function handleApiRequest(
           }
 
           if (segments[2] === 'subway-arrivals') {
+            const providerStationId = url.searchParams.get('providerStationId')?.trim() ?? '';
             const stationName = url.searchParams.get('stationName')?.trim() ?? '';
             const line = url.searchParams.get('line')?.trim() || undefined;
-            if (!stationName) return json({ error: 'stationName is required.' }, 400);
+            if (!providerStationId || !stationName) {
+              return json({ error: 'providerStationId/stationName are required.' }, 400);
+            }
             return json({
+              providerStationId,
               arrivals: await providerRuntime.seoulSubway.arrivals(stationName, line),
             });
           }
