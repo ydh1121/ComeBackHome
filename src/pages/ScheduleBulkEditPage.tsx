@@ -75,6 +75,8 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
           </div>
         </div>
         <TimeRangeWheelPicker
+          startLabel="출근"
+          endLabel="퇴근"
           start={start || null}
           end={end || null}
           onChange={(kind, value) => {
