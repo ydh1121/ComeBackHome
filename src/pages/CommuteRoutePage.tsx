@@ -17,6 +17,15 @@ function displayName(point: TransitAccessPoint | undefined): string {
   return point?.userLabel || point?.name || '미설정';
 }
 
+function routeAccessIds(route: SavedCommuteRoute, role: 'origin' | 'destination'): string[] {
+  if (role === 'origin') {
+    return route.originAccessPointIds ??
+      (route.originAccessPointId ? [route.originAccessPointId] : []);
+  }
+  return route.destinationAccessPointIds ??
+    (route.destinationAccessPointId ? [route.destinationAccessPointId] : []);
+}
+
 function RouteSteps({ route }: { route: RouteCandidate }) {
   return <div className="route-steps">{(route.steps ?? []).map((step, index) => (
     <div className="route-step" key={index}>
@@ -37,8 +46,12 @@ function SavedRouteSummary({
   onEdit: () => void;
   onSelect: () => void;
 }) {
-  const originPoint = points.find((point) => point.id === route.originAccessPointId);
-  const destinationPoint = points.find((point) => point.id === route.destinationAccessPointId);
+  const originPoints = routeAccessIds(route, 'origin')
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
+  const destinationPoints = routeAccessIds(route, 'destination')
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
   const viaPoints = route.viaAccessPointIds
     .map((id) => points.find((point) => point.id === id))
     .filter((point): point is TransitAccessPoint => Boolean(point));
@@ -60,9 +73,9 @@ function SavedRouteSummary({
         </button>
       </div>
       <button type="button" className="saved-route-setting-body" onClick={onEdit}>
-        <span className="saved-route-line"><b>출발</b><span>{displayName(originPoint)}</span></span>
+        <span className="saved-route-line"><b>출발</b><span>{originPoints.length ? originPoints.map(displayName).join(' · ') : '미설정'}</span></span>
         <span className="saved-route-line"><b>경유</b><span>{viaPoints.length ? viaPoints.map(displayName).join(' · ') : '없음'}</span></span>
-        <span className="saved-route-line"><b>도착</b><span>{displayName(destinationPoint)}</span></span>
+        <span className="saved-route-line"><b>도착</b><span>{destinationPoints.length ? destinationPoints.map(displayName).join(' · ') : '미설정'}</span></span>
       </button>
     </div>
   );
