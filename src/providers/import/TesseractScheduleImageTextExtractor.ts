@@ -2,6 +2,7 @@ import { createWorker, PSM } from 'tesseract.js';
 import type {
   ImageRasterPreprocessor,
   ImageTextExtractor,
+  ImportProgressReporter,
   ImageTextLayout,
   ImageTextToken,
   PreparedImageRaster,
@@ -449,9 +450,11 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
     this.minimumConfidence = options.minimumConfidence ?? 0.18;
   }
 
-  async extract(file: File): Promise<ImageTextLayout> {
+  async extract(file: File, onProgress?: ImportProgressReporter): Promise<ImageTextLayout> {
     const raster = await this.preprocessor.prepare(file);
+    await onProgress?.(20);
     const worker = await this.workers.create(this.languages);
+    await onProgress?.(30);
 
     try {
       await worker.setParameters({
@@ -463,6 +466,8 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
         { rotateAuto: true },
         { text: true, blocks: true },
       );
+
+      await onProgress?.(48);
 
       const general = flattenWords(generalResult.data)
         .map((word) => toToken(word, raster))
@@ -486,6 +491,7 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
           { rotateAuto: true },
           { text: true, blocks: true },
         );
+        await onProgress?.(58);
         semanticHeaders = flattenWords(semanticResult.data)
           .map((word) => toToken(word, raster))
           .filter((token): token is ImageTextToken => token != null)
@@ -503,6 +509,8 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
         { rotateAuto: false },
         { text: true, blocks: true },
       );
+
+      await onProgress?.(70);
 
       const numeric = flattenWords(numericResult.data)
         .map((word) => toToken(word, raster))
@@ -551,6 +559,8 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
           }
         }
 
+      await onProgress?.(82);
+
       const renamedPattern = analyzeScheduleImagePattern(refinedLayout);
         const numericRegions = (renamedPattern?.probeRegions ?? []).filter(
           (region) => region.kind === 'start' || region.kind === 'end',
@@ -588,6 +598,7 @@ export class TesseractScheduleImageTextExtractor implements ImageTextExtractor {
           }
         }
 
+      await onProgress?.(92);
       return refinedLayout;
     } finally {
       await worker.terminate();
