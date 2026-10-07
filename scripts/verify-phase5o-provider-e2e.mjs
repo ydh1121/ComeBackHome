@@ -157,6 +157,24 @@ try {
   expect(nearbyTransit.some((item) => item.mode === 'BUS'), 'nearby transit must include bus candidates');
   expect(nearbyTransit.some((item) => item.mode === 'SUBWAY'), 'nearby transit must include subway candidates');
 
+  const subwayResolveUrl = new URL('https://local.test/api/providers/transit-resolve');
+  subwayResolveUrl.searchParams.set('mode', 'SUBWAY');
+  subwayResolveUrl.searchParams.set('name', '강남역');
+  subwayResolveUrl.searchParams.set('line', '2호선');
+  subwayResolveUrl.searchParams.set('x', '127.03');
+  subwayResolveUrl.searchParams.set('y', '37.49');
+  const subwayResolveResponse = await workerApi.handleApiRequest(
+    new Request(subwayResolveUrl.toString()),
+    env,
+    providerRuntime,
+  );
+  const subwayResolveBody = await subwayResolveResponse.json();
+  expect(subwayResolveResponse.ok, 'subway station resolution endpoint failed');
+  expect(
+    subwayResolveBody?.resolved?.providerId === '0222',
+    'exact subway station without provider coordinate must remain resolvable',
+  );
+
   const busArrivals = await busProvider.arrivals('122000606', '100100118');
   expect(busArrivals[0]?.providerVehicleId === 'e2e-bus', 'bus realtime client -> Worker -> Seoul source mapping failed');
   expect(calls.bus === 1, 'Seoul bus fake source call count mismatch');
