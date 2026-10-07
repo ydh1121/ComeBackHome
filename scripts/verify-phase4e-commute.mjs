@@ -19,7 +19,7 @@ const providerRuntime = await read('../src/providers/runtime/ProviderRuntimeRepo
 const selectors = await read('../src/application/selectors/index.ts');
 
 for (const text of ['장소 이름','도로명·건물명 검색','상세주소','onCompositionStart','250','actions.places.save']) if (!place.includes(text)) failures.push('place missing ' + text);
-for (const text of ['경로 설정','경로 추가','savedRoutes','createSavedRoute','selectSavedRoute','자동 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
+for (const text of ['경로 설정','경로 추가','savedRoutes','createSavedRoute','selectSavedRoute','추천 경로','카카오 대중교통 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
 for (const text of ['출발 교통수단 추가','경유 교통수단 추가','도착 교통수단 추가','routeRole=destination','draggable','ArrowUp','ArrowDown','moveRouteVia','removeRouteVia']) if (!manual.includes(text)) failures.push('manual missing ' + text);
 for (const text of ['KakaoTransitMap','근처 교통','actions.transitSearch.nearby','actions.transitSearch.search','정류장명·번호 또는 역 이름 검색','addRouteOriginAccess','addRouteDestinationAccess','여러 곳을 선택할 수 있습니다']) if (!access.includes(text)) failures.push('access missing ' + text);
 if (access.includes("navigate(base + '/search")) failures.push('access must not navigate to a separate direct-search page');
