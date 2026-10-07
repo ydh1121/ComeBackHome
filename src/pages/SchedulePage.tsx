@@ -80,6 +80,9 @@ export function SchedulePage() {
       </> : null}
 
       <div className="schedule-primary-actions">
+        <button type="button" className="cta secondary schedule-day-add-cta" onClick={() => navigate('/schedule/new')}>
+          1일 일정 추가
+        </button>
         <button type="button" className="cta schedule-import-cta" onClick={() => navigate('/import')}>
           <Icon name="upload" /> 근무표 이미지 가져오기
         </button>
