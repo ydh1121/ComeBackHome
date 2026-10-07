@@ -1,7 +1,7 @@
 import type { EntityId } from '../../domain/common';
 import type { BusRouteOption, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
 import type { BusRouteActions, CommuteActions, PlaceActions, PlaceInput, TransitSearchActions } from '../contracts/actions';
-import type { PlaceSearchProvider, TransitAccessSearchProvider, TransitRouteProvider, TransitSearchResult } from '../contracts/providers';
+import type { BusRouteLookupProvider, PlaceSearchProvider, TransitAccessSearchProvider, TransitRouteProvider, TransitSearchResult } from '../contracts/providers';
 import type { CommuteRepository, PlaceRepository } from '../contracts/repositories';
 
 export class PlaceService implements PlaceActions {
@@ -199,12 +199,21 @@ export class BusRouteService implements BusRouteActions {
     private readonly commute: CommuteRepository,
     private readonly places: PlaceRepository,
     private readonly routeProvider?: TransitRouteProvider | null,
+    private readonly busRouteLookup?: BusRouteLookupProvider | null,
   ) {}
 
   async listRoutes(personId: EntityId, kind: PlaceKind, accessPointId: EntityId): Promise<BusRouteOption[]> {
     const point = (await this.commute.listAccessPoints(personId, kind))
       .find((candidate) => candidate.id === accessPointId);
     if (!point || point.mode !== 'BUS') return [];
+    if (point.displayCode && this.busRouteLookup) {
+      try {
+        const officialRoutes = await this.busRouteLookup.listByStop(point.displayCode);
+        if (officialRoutes.length) return officialRoutes;
+      } catch {
+        // Fall through to runtime/static route evidence.
+      }
+    }
     const officialRoutes = (point.busRoutes ?? []).filter((route) => /^\d+$/.test(route.providerRouteId));
     if (officialRoutes.length) return officialRoutes;
     if (!this.routeProvider) return point.busRoutes ?? [];
