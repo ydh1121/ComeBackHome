@@ -94,6 +94,19 @@ export function CommuteRoutePage() {
   const { overview } = state;
   const points = [...overview.originAccessPoints, ...overview.destinationAccessPoints];
   const candidates = overview.routeCandidates;
+  const activeSavedRoute = overview.savedRoutes.find((route) => route.active) ?? overview.savedRoutes[0];
+  const activeOriginIds = activeSavedRoute
+    ? activeSavedRoute.originAccessPointIds ??
+      (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
+    : [];
+  const activeDestinationIds = activeSavedRoute
+    ? activeSavedRoute.destinationAccessPointIds ??
+      (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
+    : [];
+  const hasTransitPreference =
+    activeOriginIds.length > 0 ||
+    activeDestinationIds.length > 0 ||
+    (activeSavedRoute?.viaAccessPointIds.length ?? 0) > 0;
   const visible = expanded ? candidates : candidates.slice(0, 3);
   const remain = Math.max(0, candidates.length - visible.length);
 
@@ -125,8 +138,13 @@ export function CommuteRoutePage() {
 
       <button type="button" className="cta secondary" onClick={addRoute}><Icon name="plus" /> 경로 추가</button>
 
-      <div className="route-section-head"><h2>자동 경로</h2></div>
-      {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 자동 경로가 없습니다.</div> : null}
+      <div className="route-section-head"><h2>추천 경로</h2></div>
+      <div className="route-recommendation-context">
+        {hasTransitPreference
+          ? '선택한 출발지·도착지 교통 중 실제 경로에 포함되는 조합을 우선해 카카오 대중교통 경로를 정렬합니다.'
+          : '선택한 교통이 없어 저장된 출발지·도착지 위치를 기준으로 카카오 대중교통 경로를 추천합니다.'}
+      </div>
+      {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 추천 경로가 없습니다.</div> : null}
       <div className="route-policy-list">
         {visible.map((route) => {
           const selected = route.id === overview.preferredRouteCandidateId;
