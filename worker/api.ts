@@ -136,7 +136,7 @@ function chooseTransitResolution(
       : 0;
     const distance = candidate.coordinate
       ? coordinateDistanceMeters(near, candidate.coordinate)
-      : candidate.distanceM ?? Number.MAX_SAFE_INTEGER;
+      : candidate.distanceM ?? 99_999;
     return { candidate, score: nameScore * 1_000_000 + lineScore * 100_000 + distance };
   }).sort((left, right) => left.score - right.score);
 
