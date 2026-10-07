@@ -22,7 +22,7 @@
           <span>근무표 이미지 선택</span>
           <input id="schedule-image" type="file" accept="image/png,image/jpeg,image/webp" multiple />
         </label>
-        <button id="run" type="button">선택 이미지 전체 OCR 실행</button>
+        <button id="run" type="button">선택 이미지 구조 복원 + OCR 실행</button>
         <button id="copy-all" type="button" class="secondary" disabled>전체 QA 결과 복사</button>
         <button id="save-all" type="button" class="secondary" disabled>결과 JSON 저장</button>
         <button id="clear" type="button" class="secondary">결과 지우기</button>
@@ -40,7 +40,7 @@
           <pre id="summary">아직 실행하지 않았습니다.</pre>
         </article>
         <article class="panel">
-          <h2>Adaptive parser 결과</h2>
+          <h2>Structure-first 인식 결과</h2>
           <pre id="parsed">아직 실행하지 않았습니다.</pre>
         </article>
       </section>
