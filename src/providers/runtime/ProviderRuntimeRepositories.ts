@@ -17,6 +17,7 @@ import type {
 import type {
   CommuteRepository,
   PlaceRepository,
+  PresenceRepository,
   ScheduleRepository,
   TodayRepository,
 } from '../../application/contracts/repositories';
@@ -234,6 +235,7 @@ export class ProviderTodayRepository implements TodayRepository {
   constructor(
     private readonly schedules: ScheduleRepository,
     private readonly commute: CommuteRepository,
+    private readonly presence: PresenceRepository,
     private readonly bus: RealtimeBusProvider,
     private readonly subway: RealtimeSubwayProvider,
     private readonly clock: RuntimeClock = systemRuntimeClock,
@@ -243,13 +245,16 @@ export class ProviderTodayRepository implements TodayRepository {
   async get(personId: EntityId): Promise<TodaySnapshot | null> {
     const now = this.clock.now();
     const date = kstDate(now);
-    const [schedule, routes, preferredRouteCandidateId, originAccessPoints, savedRoutes] = await Promise.all([
+    const [schedule, routes, preferredRouteCandidateId, originAccessPoints, savedRoutes, presence] = await Promise.all([
       this.schedules.getByDate(personId, date),
       this.commute.listRouteCandidates(personId),
       this.commute.getPreferredRouteCandidateId(personId),
       this.commute.listAccessPoints(personId, 'origin'),
       this.commute.listSavedRoutes(personId),
+      this.presence.get(personId),
     ]);
+
+    const currentPresence = presence?.workDate === date ? presence : null;
 
     const route =
       routes.find((candidate) => candidate.id === preferredRouteCandidateId) ??
@@ -257,6 +262,25 @@ export class ProviderTodayRepository implements TodayRepository {
       null;
 
     const shiftEnd = schedule?.enabled ? schedule.end : undefined;
+    const leftWorkAt = currentPresence?.leftWorkAt;
+    const arrivedHomeAt = currentPresence?.arrivedHomeAt;
+
+    if (arrivedHomeAt) {
+      return {
+        personId,
+        eta: {
+          personId,
+          status: 'ACTUAL',
+          arrivalTime: kstTime(new Date(arrivedHomeAt)),
+          calculatedAt: now.toISOString(),
+        },
+        ...(shiftEnd ? { shiftEnd } : {}),
+        ...(leftWorkAt ? { leftWorkAt } : {}),
+        arrivedHomeAt,
+        ...(route ? { routeCandidateId: route.id } : {}),
+      };
+    }
+
     if (!route) {
       return {
         personId,
@@ -266,13 +290,16 @@ export class ProviderTodayRepository implements TodayRepository {
           calculatedAt: now.toISOString(),
         },
         ...(shiftEnd ? { shiftEnd } : {}),
+        ...(leftWorkAt ? { leftWorkAt } : {}),
       };
     }
 
     const shiftEndTime = shiftEnd ? parseKstDateTime(date, shiftEnd) : null;
-    const departureMs = shiftEndTime == null
-      ? now.getTime()
-      : Math.max(now.getTime(), shiftEndTime);
+    const leftWorkTime = leftWorkAt ? Date.parse(leftWorkAt) : Number.NaN;
+    const baselineDepartureMs = shiftEndTime ?? now.getTime();
+    const departureMs = Number.isFinite(leftWorkTime)
+      ? Math.max(baselineDepartureMs, leftWorkTime)
+      : baselineDepartureMs;
     const arrivalAt = new Date(departureMs + route.totalMinutes * 60_000);
 
     const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
@@ -313,6 +340,7 @@ export class ProviderTodayRepository implements TodayRepository {
         calculatedAt: now.toISOString(),
       },
       ...(shiftEnd ? { shiftEnd } : {}),
+      ...(leftWorkAt ? { leftWorkAt } : {}),
       routeCandidateId: route.id,
     };
   }
