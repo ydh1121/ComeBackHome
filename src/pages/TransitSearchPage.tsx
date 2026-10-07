@@ -77,16 +77,18 @@ export function TransitSearchPage() {
     };
   }, [services, personId, kind, query, online]);
 
-  const savedRouteMode = Boolean(routeId && (routeRole === 'origin' || routeRole === 'via'));
+  const savedRouteMode = Boolean(routeId && (routeRole === 'origin' || routeRole === 'via' || routeRole === 'destination'));
   const legacyRouteMode = routeEdit === 'insert' || routeEdit === 'replace';
   const routeMode = savedRouteMode || legacyRouteMode;
   const placeLabel = kind === 'origin' ? '출발지' : '도착지';
   const context = savedRouteMode
     ? routeRole === 'origin'
       ? '출발 교통수단 직접 검색'
-      : routeEdit === 'replace'
-        ? '선택한 경유 교통수단 교체'
-        : '경유 교통수단 직접 검색'
+      : routeRole === 'destination'
+        ? '도착 교통수단 직접 검색'
+        : routeEdit === 'replace'
+          ? '선택한 경유 교통수단 교체'
+          : '경유 교통수단 직접 검색'
     : routeEdit === 'insert'
       ? '내 경로 ' + (Math.max(0, routeIndex) + 1) + '번째 위치에 추가'
       : routeEdit === 'replace'
@@ -99,6 +101,8 @@ export function TransitSearchPage() {
 
     if (routeId && routeRole === 'origin') {
       await services.actions.commute.setRouteOriginAccess(personId, routeId, point.id);
+    } else if (routeId && routeRole === 'destination') {
+      await services.actions.commute.setRouteDestinationAccess(personId, routeId, point.id);
     } else if (routeId && routeRole === 'via') {
       if (routeEdit === 'replace') {
         await services.actions.commute.replaceRouteVia(personId, routeId, Math.max(0, routeIndex), point.id);
