@@ -295,8 +295,12 @@ export class D1CommuteRepository implements CommuteRepository {
         route.personId,
         route.position,
         route.label,
-        route.originAccessPointIds?.[0] ?? route.originAccessPointId ?? null,
-        route.destinationAccessPointIds?.[0] ?? route.destinationAccessPointId ?? null,
+        route.originAccessPointIds
+          ? route.originAccessPointIds[0] ?? null
+          : route.originAccessPointId ?? null,
+        route.destinationAccessPointIds
+          ? route.destinationAccessPointIds[0] ?? null
+          : route.destinationAccessPointId ?? null,
         asInteger(route.active),
         now,
       ),
