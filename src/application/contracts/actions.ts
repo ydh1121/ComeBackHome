@@ -67,6 +67,10 @@ export interface CommuteActions {
   selectSavedRoute(personId: EntityId, routeId: EntityId): Promise<void>;
   setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
   setRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
+  addRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
+  removeRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
+  addRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
+  removeRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void>;
   moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void>;
   addRouteVia(personId: EntityId, routeId: EntityId, accessPointId: EntityId, index?: number): Promise<void>;
   replaceRouteVia(personId: EntityId, routeId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
