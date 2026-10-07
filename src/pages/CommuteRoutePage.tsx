@@ -38,6 +38,7 @@ function SavedRouteSummary({
   onSelect: () => void;
 }) {
   const originPoint = points.find((point) => point.id === route.originAccessPointId);
+  const destinationPoint = points.find((point) => point.id === route.destinationAccessPointId);
   const viaPoints = route.viaAccessPointIds
     .map((id) => points.find((point) => point.id === id))
     .filter((point): point is TransitAccessPoint => Boolean(point));
@@ -61,6 +62,7 @@ function SavedRouteSummary({
       <button type="button" className="saved-route-setting-body" onClick={onEdit}>
         <span className="saved-route-line"><b>출발</b><span>{displayName(originPoint)}</span></span>
         <span className="saved-route-line"><b>경유</b><span>{viaPoints.length ? viaPoints.map(displayName).join(' · ') : '없음'}</span></span>
+        <span className="saved-route-line"><b>도착</b><span>{displayName(destinationPoint)}</span></span>
       </button>
     </div>
   );
