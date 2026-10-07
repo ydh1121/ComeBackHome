@@ -49,7 +49,7 @@ if (!main.includes("import { registerPwaServiceWorker } from './pwa/registerServ
   failures.push('main service-worker bootstrap missing');
 }
 
-for (const text of ["self.addEventListener('install'","self.addEventListener('activate'","self.addEventListener('fetch'","cache.addAll(SHELL_URLS)","request.mode === 'navigate'","cache.match('/')"]) {
+for (const text of ["self.addEventListener('install'","self.addEventListener('activate'","self.addEventListener('fetch'","cache.addAll(SHELL_URLS)","request.mode === 'navigate'","cache.match('/')","url.pathname.startsWith('/api/')","cbh-shell-'","v2"]) {
   if (!sw.includes(text)) failures.push('service worker shell behavior missing ' + text);
 }
 if (failures.length) {

@@ -23,13 +23,42 @@ declare global {
 }
 
 let sdkPromise: Promise<any> | null = null;
+let sdkPromiseKey = '';
+let clientConfigPromise: Promise<string | null> | null = null;
+
+async function loadKakaoClientKey(): Promise<string | null> {
+  if (!clientConfigPromise) {
+    clientConfigPromise = (async () => {
+      const buildKey = String(import.meta.env.VITE_CBH_KAKAO_JAVASCRIPT_KEY ?? '').trim();
+      try {
+        const response = await fetch('/api/client-config', {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        });
+        if (response.ok) {
+          const payload = await response.json() as {
+            kakaoMaps?: { configured?: boolean; javaScriptKey?: string };
+          };
+          const runtimeKey = String(payload.kakaoMaps?.javaScriptKey ?? '').trim();
+          if (payload.kakaoMaps?.configured && runtimeKey) return runtimeKey;
+        }
+      } catch {
+        // The build-time value remains a compatibility fallback only.
+      }
+      return buildKey || null;
+    })();
+  }
+  return clientConfigPromise;
+}
 
 function loadKakaoMapsSdk(appKey: string): Promise<any> {
   if (window.kakao?.maps) {
     return new Promise((resolve) => window.kakao.maps.load(() => resolve(window.kakao)));
   }
-  if (sdkPromise) return sdkPromise;
+  if (sdkPromise && sdkPromiseKey === appKey) return sdkPromise;
 
+  sdkPromiseKey = appKey;
   sdkPromise = new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-cbh-kakao-map="1"]');
     const complete = () => {
@@ -58,6 +87,10 @@ function loadKakaoMapsSdk(appKey: string): Promise<any> {
     script.addEventListener('load', complete, { once: true });
     script.addEventListener('error', () => reject(new Error('Kakao Maps SDK failed to load.')), { once: true });
     document.head.appendChild(script);
+  }).catch((error) => {
+    sdkPromise = null;
+    sdkPromiseKey = '';
+    throw error;
   });
 
   return sdkPromise;
@@ -71,19 +104,19 @@ export function KakaoTransitMap({
   onSelect,
 }: KakaoTransitMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'static'>('loading');
-  const appKey = String(import.meta.env.VITE_CBH_KAKAO_JAVASCRIPT_KEY ?? '').trim();
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     let active = true;
     if (!containerRef.current) return () => { active = false; };
-    if (!appKey) {
-      setState('static');
-      return () => { active = false; };
-    }
 
     setState('loading');
-    loadKakaoMapsSdk(appKey)
+    loadKakaoClientKey()
+      .then((appKey) => {
+        if (!appKey) throw new Error('Kakao Maps JavaScript key is unavailable.');
+        return loadKakaoMapsSdk(appKey);
+      })
       .then((kakao) => {
         if (!active || !containerRef.current) return;
 
@@ -93,7 +126,7 @@ export function KakaoTransitMap({
           level: 4,
         });
 
-        const centerMarker = new kakao.maps.Marker({
+        new kakao.maps.Marker({
           map,
           position: centerPosition,
           title: centerLabel,
@@ -115,49 +148,47 @@ export function KakaoTransitMap({
           kakao.maps.event.addListener(marker, 'click', () => onSelect(point.id));
         }
 
-        if (points.length) {
-          map.setBounds(bounds, 38, 38, 38, 38);
-        } else {
-          map.setCenter(centerPosition);
-        }
+        if (points.length) map.setBounds(bounds, 38, 38, 38, 38);
+        else map.setCenter(centerPosition);
 
-        void centerMarker;
         setState('ready');
       })
       .catch(() => {
-        if (active) setState('static');
+        if (active) setState('error');
       });
 
     return () => {
       active = false;
       if (containerRef.current) containerRef.current.replaceChildren();
     };
-  }, [appKey, center.x, center.y, centerLabel, points, selectedId, onSelect]);
-
-  const markerPoints = [
-    ...points.filter((point) => point.id === selectedId),
-    ...points.filter((point) => point.id !== selectedId),
-  ].slice(0, 4);
-  const staticParams = new URLSearchParams({
-    centerX: String(center.x),
-    centerY: String(center.y),
-  });
-  for (const point of markerPoints) {
-    staticParams.append('marker', point.coordinate.x + ',' + point.coordinate.y);
-  }
-  const staticMapUrl = '/api/providers/static-map?' + staticParams.toString();
+  }, [center.x, center.y, centerLabel, points, selectedId, onSelect, retryNonce]);
 
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
-      {state === 'static' ? (
-        <>
-          <img className="kakao-transit-static-map" src={staticMapUrl} alt={centerLabel + ' 주변 카카오 지도'} />
-          <div className="kakao-static-map-note">카카오 지도 · 가까운 후보는 아래 목록에서 선택</div>
-        </>
-      ) : (
-        <div ref={containerRef} className="kakao-transit-map" aria-label="카카오 지도 주변 교통 선택" />
-      )}
-      {state === 'loading' ? <div className="kakao-map-status">카카오 지도를 불러오는 중</div> : null}
+      <div
+        ref={containerRef}
+        className="kakao-transit-map"
+        aria-label="카카오 지도 주변 교통 선택"
+        hidden={state === 'error'}
+      />
+      {state === 'loading' ? (
+        <div className="kakao-map-status">카카오 지도를 불러오는 중</div>
+      ) : null}
+      {state === 'error' ? (
+        <div className="kakao-map-error" role="status">
+          <b>대화형 지도를 불러오지 못했습니다.</b>
+          <span>아래 정류장·역 목록에서는 계속 선택할 수 있습니다.</span>
+          <button
+            type="button"
+            onClick={() => {
+              clientConfigPromise = null;
+              setRetryNonce((value) => value + 1);
+            }}
+          >
+            다시 시도
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

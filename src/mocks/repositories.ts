@@ -132,7 +132,7 @@ export class MockImportRepository implements ImportRepository {
   async getBatch(batchId: EntityId) { return clone(this.store.read().importBatches.find((batch) => batch.id === batchId) ?? null); }
   async createBatch() {
     this.store.mutate((state) => {
-      state.importBatches = state.importBatches.filter((batch) => batch.committed);
+      state.importBatches = [];
     });
     const batch = {
       id: crypto.randomUUID(),

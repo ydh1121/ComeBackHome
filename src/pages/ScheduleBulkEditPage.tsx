@@ -6,6 +6,7 @@ import { ScheduleRangePicker } from '../features/schedule/ScheduleRangePicker';
 import { isIsoDate } from '../features/schedule/date-format';
 import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { BackButton } from '../shared/components/BackButton';
+import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import './schedule-page.css';
 
@@ -73,10 +74,17 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
             ))}
           </div>
         </div>
-        <div className="form-row-2">
-          <label className="form-field"><span className="form-label">출근</span><input className="input" type="time" value={start} onChange={(event) => { setStart(event.target.value); form.markDirty(); }} /></label>
-          <label className="form-field"><span className="form-label">퇴근</span><input className="input" type="time" value={end} onChange={(event) => { setEnd(event.target.value); form.markDirty(); }} /></label>
-        </div>
+        <TimeRangeWheelPicker
+          startLabel="출근"
+          endLabel="퇴근"
+          start={start || null}
+          end={end || null}
+          onChange={(kind, value) => {
+            if (kind === 'start') setStart(value);
+            else setEnd(value);
+            form.markDirty();
+          }}
+        />
       </div>
       <button type="button" className="cta" disabled={form.state === 'SAVING' || !canApply} onClick={() => form.save(() => onApply({ from, to, weekdays, start, end }))}>{form.state === 'SAVING' ? '적용 중' : form.state === 'SAVED' ? '적용됨' : '적용'}</button>
     </section>

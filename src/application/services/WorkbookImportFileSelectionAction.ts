@@ -78,11 +78,12 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
           progress: 100,
           status: 'READY',
         };
-      } catch {
+      } catch (error) {
         completedRecords[index] = {
           ...completedRecords[index],
           progress: 100,
           status: 'ERROR',
+          message: error instanceof Error ? error.message : '이미지 인식 중 알 수 없는 오류가 발생했습니다.',
         };
       }
     }
@@ -90,7 +91,12 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     await this.imports.replaceFiles(batch.id, completedRecords);
 
     if (!parsedResults.length) {
-      throw new Error('선택한 파일에서 일정을 인식하지 못했습니다. 다른 이미지 또는 1일 일정 추가를 이용해 주세요.');
+      const detail = completedRecords.find((record) => record.status === 'ERROR' && record.message)?.message;
+      throw new Error(
+        detail
+          ? '일정을 인식하지 못했습니다. ' + detail
+          : '선택한 파일에서 일정을 인식하지 못했습니다. 다른 이미지 또는 1일 일정 추가를 이용해 주세요.'
+      );
     }
 
     const availablePeople = await this.people.list();

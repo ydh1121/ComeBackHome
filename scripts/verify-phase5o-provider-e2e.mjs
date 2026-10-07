@@ -112,10 +112,24 @@ try {
   let providerEnabled = true;
   const env = {
     DB: {},
+    VITE_CBH_KAKAO_JAVASCRIPT_KEY: 'fixture-public-kakao-js-key',
     get PROVIDER_RUNTIME_ENABLED() {
       return providerEnabled ? '1' : '0';
     },
   };
+
+  const clientConfigResponse = await workerApi.handleApiRequest(
+    new Request('https://local.test/api/client-config'),
+    env,
+    providerRuntime,
+  );
+  const clientConfigBody = await clientConfigResponse.json();
+  expect(clientConfigResponse.ok, 'client config endpoint failed');
+  expect(clientConfigBody?.kakaoMaps?.configured === true, 'Kakao Maps client config must report configured');
+  expect(
+    clientConfigBody?.kakaoMaps?.javaScriptKey === 'fixture-public-kakao-js-key',
+    'Kakao Maps public client key mapping mismatch',
+  );
 
   globalThis.fetch = async (input, init) => {
     if (typeof input !== 'string' || !input.startsWith('/api')) {

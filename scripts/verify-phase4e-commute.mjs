@@ -24,7 +24,8 @@ for (const text of ['출발 교통수단 추가','경유 교통수단 추가','�
 for (const text of ['KakaoTransitMap','근처 교통','actions.transitSearch.nearby','이 정류장 선택 후 버스 보기','정류장명·번호 직접 검색']) if (!access.includes(text)) failures.push('access missing ' + text);
 for (const text of ['정류장·역 직접 검색','정류장명·번호 또는 역 이름','routeId','routeRole','actions.transitSearch.addAccessPoint']) if (!search.includes(text)) failures.push('search missing ' + text);
 for (const text of ['버스 선택','이름 수정','listRoutes','이 정류장에서 이용 가능한 버스','actions.busRoutes.selectRoute','선택 완료']) if (!bus.includes(text)) failures.push('bus missing ' + text);
-for (const text of ['dapi.kakao.com/v2/maps/sdk.js','/api/providers/static-map','onSelect']) if (!map.includes(text)) failures.push('map missing ' + text);
+for (const text of ['dapi.kakao.com/v2/maps/sdk.js','/api/client-config','onSelect','kakao-map-error','다시 시도']) if (!map.includes(text)) failures.push('map missing ' + text);
+if (map.includes('/api/providers/static-map')) failures.push('transit map must not silently fall back to a static image');
 
 for (const path of [
   '/people/:personId/place/origin',

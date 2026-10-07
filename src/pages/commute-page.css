@@ -2,6 +2,10 @@
 .commute-page .kakao-transit-map-shell{position:relative;height:260px;margin:14px 0;border-radius:16px;overflow:hidden;background:#eef2f7;box-shadow:inset 0 0 0 1px rgba(16,24,40,.06)}
 .commute-page .kakao-transit-map{width:100%;height:100%}
 .commute-page .kakao-map-status{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:rgba(247,249,252,.92);color:#667085;font-size:13px;text-align:center}
+.commute-page .kakao-map-error{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:8px;padding:24px;background:#f7f9fc;color:#475467;text-align:center}
+.commute-page .kakao-map-error b{font-size:14px;color:#1d2939}
+.commute-page .kakao-map-error span{font-size:12px;line-height:1.45}
+.commute-page .kakao-map-error button{min-height:40px;border:0;border-radius:11px;background:#255cff;color:#fff;padding:0 16px;font-weight:800}
 .commute-page .transit-row.selected{background:#f1f5ff}
 .commute-page .cta:disabled{opacity:.45;box-shadow:none}
 .commute-page .saved-route-settings{display:grid;gap:10px}

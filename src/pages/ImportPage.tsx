@@ -89,6 +89,9 @@ export function ImportPage() {
               {file.status === 'PARSING' ? (
                 <div className="progress"><i style={{ width: Math.max(0, Math.min(100, file.progress)) + '%' }} /></div>
               ) : <div className="small">{statusLabel(file.status)}</div>}
+              {file.status === 'ERROR' && file.message ? (
+                <div className="import-file-diagnostic">{file.message}</div>
+              ) : null}
             </div>
             {file.status === 'PARSING' ? <span className="small">{file.progress}%</span> : null}
           </div>
