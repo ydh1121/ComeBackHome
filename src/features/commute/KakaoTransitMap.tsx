@@ -108,6 +108,7 @@ export function KakaoTransitMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryNonce, setRetryNonce] = useState(0);
+  const selectedKey = [...selectedIds].sort().join('|');
 
   useEffect(() => {
     let active = true;
@@ -138,7 +139,7 @@ export function KakaoTransitMap({
         const bounds = new kakao.maps.LatLngBounds();
         bounds.extend(centerPosition);
 
-        const selectedSet = new Set(selectedIds);
+        const selectedSet = new Set(selectedKey ? selectedKey.split('|') : []);
         if (selectedId) selectedSet.add(selectedId);
 
         for (const point of points) {
@@ -166,7 +167,7 @@ export function KakaoTransitMap({
       active = false;
       if (containerRef.current) containerRef.current.replaceChildren();
     };
-  }, [center.x, center.y, centerLabel, points, selectedId, selectedIds, onSelect, retryNonce]);
+  }, [center.x, center.y, centerLabel, points, selectedId, selectedKey, onSelect, retryNonce]);
 
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
