@@ -144,6 +144,7 @@ try {
   const failingProvider = new etaModule.ProviderNotificationEtaSource({
     schedules,
     places,
+    presence,
     commute,
     providers: {
       ...providers,
