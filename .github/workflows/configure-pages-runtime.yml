@@ -26,6 +26,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+      SEOUL_BUS_SERVICE_KEY: ${{ secrets.SEOUL_BUS_SERVICE_KEY }}
+      SEOUL_SUBWAY_API_KEY: ${{ secrets.SEOUL_SUBWAY_API_KEY }}
       VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
       PRESENCE_EVENT_INGEST_TOKEN: ${{ secrets.PRESENCE_EVENT_INGEST_TOKEN }}
       VAPID_PUBLIC_KEY_SECRET: ${{ secrets.VAPID_PUBLIC_KEY }}
@@ -83,6 +85,12 @@ jobs:
             WEB_PUSH_TTL_SECONDS: { type: 'plain_text', value: '300' },
             NOTIFICATION_RETRY_DELAYS_SECONDS: { type: 'plain_text', value: '30,90,300' },
             KAKAO_REST_API_KEY: { type: 'secret_text', value: process.env.KAKAO_REST_API_KEY },
+            ...((process.env.SEOUL_BUS_SERVICE_KEY ?? '').trim() ? {
+              SEOUL_BUS_SERVICE_KEY: { type: 'secret_text', value: process.env.SEOUL_BUS_SERVICE_KEY },
+            } : {}),
+            ...((process.env.SEOUL_SUBWAY_API_KEY ?? '').trim() ? {
+              SEOUL_SUBWAY_API_KEY: { type: 'secret_text', value: process.env.SEOUL_SUBWAY_API_KEY },
+            } : {}),
             VAPID_PRIVATE_KEY: { type: 'secret_text', value: process.env.VAPID_PRIVATE_KEY },
             PRESENCE_EVENT_INGEST_TOKEN: { type: 'secret_text', value: process.env.PRESENCE_EVENT_INGEST_TOKEN },
           };
@@ -159,6 +167,10 @@ jobs:
           console.log(JSON.stringify({
             canonicalRuntime: 'pages',
             canonicalOrigin: process.env.PAGES_ORIGIN,
+            realtimeProviderBindings: {
+              seoulBus: Boolean(production.env_vars?.SEOUL_BUS_SERVICE_KEY),
+              seoulSubway: Boolean(production.env_vars?.SEOUL_SUBWAY_API_KEY),
+            },
             d1BoundDirectly: true,
             providerSecretsBoundDirectly: true,
             pushSecretsBoundDirectly: true,
@@ -288,6 +300,7 @@ jobs:
 
           console.log(JSON.stringify({
             canonicalOrigin: origin + '/',
+            providerCapabilities: providerBody?.capabilities ?? null,
             directPagesApi: true,
             directPagesD1: true,
             providerRuntimeEnabled: true,
