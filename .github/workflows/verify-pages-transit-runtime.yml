@@ -34,12 +34,31 @@ jobs:
             throw new Error('Pages API health failed: HTTP ' + health.status);
           }
 
-          const providerStatus = await fetch(origin + '/api/providers/status', {
-            headers: { Accept: 'application/json' },
-          });
-          const providerStatusBody = await providerStatus.json().catch(() => null);
-          if (!providerStatus.ok || providerStatusBody?.enabled !== true) {
-            throw new Error('Pages provider runtime is not enabled');
+          let providerStatusBody = null;
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            const providerStatus = await fetch(origin + '/api/providers/status', {
+              headers: { Accept: 'application/json' },
+            });
+            providerStatusBody = await providerStatus.json().catch(() => null);
+            const capabilities = providerStatusBody?.capabilities ?? {};
+            if (
+              providerStatus.ok &&
+              providerStatusBody?.enabled === true &&
+              capabilities.kakao === true &&
+              capabilities.seoulBus === true &&
+              capabilities.seoulSubwayStationSearch === true &&
+              capabilities.seoulSubwayRealtime === true
+            ) break;
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+          if (
+            providerStatusBody?.enabled !== true ||
+            providerStatusBody?.capabilities?.kakao !== true ||
+            providerStatusBody?.capabilities?.seoulBus !== true ||
+            providerStatusBody?.capabilities?.seoulSubwayStationSearch !== true ||
+            providerStatusBody?.capabilities?.seoulSubwayRealtime !== true
+          ) {
+            throw new Error('Pages realtime provider bindings are not active');
           }
 
           const schedulerProbe = await fetch(origin + '/api/internal/scheduler-tick', {
@@ -125,6 +144,72 @@ jobs:
             throw new Error('Nearby transit returned no supported mode');
           }
 
+          const resolveBusUrl = new URL(origin + '/api/providers/transit-resolve');
+          resolveBusUrl.searchParams.set('mode', 'BUS');
+          resolveBusUrl.searchParams.set('name', '강남역');
+          resolveBusUrl.searchParams.set('x', String(publicCoordinate.x));
+          resolveBusUrl.searchParams.set('y', String(publicCoordinate.y));
+          const busResolve = await fetch(resolveBusUrl, {
+            headers: { Accept: 'application/json' },
+          });
+          const busResolveBody = await busResolve.json().catch(() => null);
+          const resolvedBus = busResolveBody?.resolved ?? {};
+          const busRoutes = Array.isArray(resolvedBus?.busRoutes) ? resolvedBus.busRoutes : [];
+          if (!busResolve.ok || !resolvedBus?.providerId || busRoutes.length === 0) {
+            throw new Error('Seoul bus realtime resolution failed');
+          }
+
+          let busArrivalCount = 0;
+          let busRoutesChecked = 0;
+          for (const route of busRoutes.slice(0, 5)) {
+            if (!route?.providerRouteId) continue;
+            const busArrivalUrl = new URL(origin + '/api/providers/bus-arrivals');
+            busArrivalUrl.searchParams.set('stopProviderId', String(resolvedBus.providerId));
+            busArrivalUrl.searchParams.set('routeProviderId', String(route.providerRouteId));
+            const busArrival = await fetch(busArrivalUrl, {
+              headers: { Accept: 'application/json' },
+            });
+            const busArrivalBody = await busArrival.json().catch(() => null);
+            if (!busArrival.ok || !Array.isArray(busArrivalBody?.arrivals)) {
+              throw new Error('Seoul bus realtime arrival endpoint failed');
+            }
+            busRoutesChecked += 1;
+            busArrivalCount += busArrivalBody.arrivals.length;
+          }
+          if (busRoutesChecked === 0) {
+            throw new Error('Seoul bus realtime route probe had no callable route');
+          }
+
+          const resolveSubwayUrl = new URL(origin + '/api/providers/transit-resolve');
+          resolveSubwayUrl.searchParams.set('mode', 'SUBWAY');
+          resolveSubwayUrl.searchParams.set('name', '강남역');
+          resolveSubwayUrl.searchParams.set('line', '2호선');
+          resolveSubwayUrl.searchParams.set('x', String(publicCoordinate.x));
+          resolveSubwayUrl.searchParams.set('y', String(publicCoordinate.y));
+          const subwayResolve = await fetch(resolveSubwayUrl, {
+            headers: { Accept: 'application/json' },
+          });
+          const subwayResolveBody = await subwayResolve.json().catch(() => null);
+          const resolvedSubway = subwayResolveBody?.resolved ?? {};
+          if (!subwayResolve.ok || !resolvedSubway?.providerId || !resolvedSubway?.name) {
+            throw new Error('Seoul subway station resolution failed');
+          }
+
+          const subwayArrivalUrl = new URL(origin + '/api/providers/subway-arrivals');
+          subwayArrivalUrl.searchParams.set('providerStationId', String(resolvedSubway.providerId));
+          subwayArrivalUrl.searchParams.set('stationName', String(resolvedSubway.name));
+          if (resolvedSubway.line) {
+            subwayArrivalUrl.searchParams.set('line', String(resolvedSubway.line));
+          }
+          const subwayArrival = await fetch(subwayArrivalUrl, {
+            headers: { Accept: 'application/json' },
+          });
+          const subwayArrivalBody = await subwayArrival.json().catch(() => null);
+          if (!subwayArrival.ok || !Array.isArray(subwayArrivalBody?.arrivals)) {
+            throw new Error('Seoul subway realtime arrival endpoint failed');
+          }
+          const subwayArrivalCount = subwayArrivalBody.arrivals.length;
+
           const firstMarkers = results
             .filter((item) => Number.isFinite(item?.coordinate?.x) && Number.isFinite(item?.coordinate?.y))
             .slice(0, 4);
@@ -150,6 +235,12 @@ jobs:
             pagesRootReachable: true,
             sameOriginHealth: true,
             providerRuntimeEnabled: true,
+            realtimeProviderBindings: providerStatusBody.capabilities,
+            busRealtimeResolved: true,
+            busRoutesChecked,
+            busArrivalCount,
+            subwayRealtimeResolved: true,
+            subwayArrivalCount,
             schedulerEndpointProtected: true,
             notificationSettingsRoundTrip: true,
             presenceEndpointProtected: true,

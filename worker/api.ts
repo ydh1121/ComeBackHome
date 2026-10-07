@@ -192,7 +192,12 @@ export async function handleApiRequest(
           capabilities: {
             kakao: Boolean(env.KAKAO_REST_API_KEY?.trim()),
             seoulBus: Boolean(env.SEOUL_BUS_SERVICE_KEY?.trim()),
-            seoulSubway: Boolean(env.SEOUL_SUBWAY_API_KEY?.trim()),
+            seoulSubwayStationSearch: Boolean(env.SEOUL_OPENAPI_KEY?.trim()),
+            seoulSubwayRealtime: Boolean(env.SEOUL_SUBWAY_API_KEY?.trim()),
+            seoulSubway: Boolean(
+              env.SEOUL_OPENAPI_KEY?.trim() &&
+              env.SEOUL_SUBWAY_API_KEY?.trim()
+            ),
           },
         });
       }
