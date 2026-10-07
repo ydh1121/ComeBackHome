@@ -30,14 +30,14 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
   async accept(files: ImportInputFile[]): Promise<string> {
     if (!files.length) throw new Error('No import files were selected.');
 
-    const batch = (await this.imports.getCurrentBatch()) ?? await this.imports.createBatch();
+    const batch = await this.imports.createBatch();
     const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
       const supported = kind === 'WORKBOOK' || this.imageRecognizer != null;
       return {
         id: crypto.randomUUID(),
         name: file.name,
         kind: kind === 'WORKBOOK' ? 'XLSX' : 'IMAGE',
-        progress: supported ? 10 : 100,
+        progress: supported ? 5 : 100,
         status: supported ? 'PARSING' : 'ERROR',
       };
     });
@@ -45,6 +45,15 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
     const parsedResults = [];
     const completedRecords = [...initialRecords];
+    const updateProgress = async (index: number, progress: number) => {
+      const current = completedRecords[index];
+      if (!current || current.status !== 'PARSING') return;
+      completedRecords[index] = {
+        ...current,
+        progress: Math.max(current.progress, Math.min(95, Math.round(progress))),
+      };
+      await this.imports.replaceFiles(batch.id, completedRecords);
+    };
 
     for (let index = 0; index < files.length; index += 1) {
       const input = files[index];
@@ -52,9 +61,17 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       if (!recognizer) continue;
 
       try {
+        await updateProgress(index, 12);
         const parsed = input.kind === 'WORKBOOK'
-          ? await this.parser.parse(await input.file.arrayBuffer())
-          : await this.imageRecognizer!.parse(input.file);
+          ? await (async () => {
+              const data = await input.file.arrayBuffer();
+              await updateProgress(index, 55);
+              return this.parser.parse(data);
+            })()
+          : await this.imageRecognizer!.parse(
+              input.file,
+              (progress) => updateProgress(index, progress),
+            );
         parsedResults.push(parsed);
         completedRecords[index] = {
           ...completedRecords[index],
@@ -93,10 +110,14 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
             sourceName: person.sourceName,
             matchedPersonId: matched?.id ?? null,
             confidence: person.confidence,
+            ignored: matched ? false : true,
           });
         } else {
           existing.confidence = Math.max(existing.confidence, person.confidence);
-          if (!existing.matchedPersonId && matched) existing.matchedPersonId = matched.id;
+          if (!existing.matchedPersonId && matched) {
+            existing.matchedPersonId = matched.id;
+            existing.ignored = false;
+          }
         }
       }
     }
@@ -170,6 +191,13 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       const existing = candidate.personId
         ? await this.schedules.getByDate(candidate.personId, candidate.date)
         : null;
+      const exactDuplicate = Boolean(
+        existing &&
+        candidate.start != null &&
+        candidate.end != null &&
+        existing.start === candidate.start &&
+        existing.end === candidate.end
+      );
       reviewItems.push({
         id: crypto.randomUUID(),
         detectedPersonId: candidate.detectedPersonId,
@@ -177,7 +205,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         date: candidate.date,
         ...(existing ? { existing: { start: existing.start, end: existing.end } } : {}),
         imported: { start: candidate.start, end: candidate.end },
-        resolution: null,
+        resolution: exactDuplicate ? 'SKIP' : candidate.personId ? 'NEW' : null,
       });
     }
 
