@@ -162,7 +162,12 @@ export class CommuteService implements CommuteActions {
 }
 
 export class TransitSearchService implements TransitSearchActions {
-  private readonly resultCache = new Map<string, TransitSearchResult[]>();
+  private readonly resultCache = new Map<string, TransitSearchResult>();
+
+  private remember(results: TransitSearchResult[]): TransitSearchResult[] {
+    for (const result of results) this.resultCache.set(result.id, result);
+    return results;
+  }
 
   constructor(
     private readonly places: PlaceRepository,
@@ -174,20 +179,18 @@ export class TransitSearchService implements TransitSearchActions {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate || query.trim().length < 1) return [];
     const results = await this.provider.search(query.trim(), place.coordinate);
-    this.resultCache.set(this.key(personId, kind), results);
-    return results;
+    return this.remember(results);
   }
 
   async nearby(personId: EntityId, kind: PlaceKind) {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate) return [];
     const results = await this.provider.nearby(place.coordinate);
-    this.resultCache.set(this.key(personId, kind), results);
-    return results;
+    return this.remember(results);
   }
 
   async addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint> {
-    const result = this.resultCache.get(this.key(personId, kind))?.find((item) => item.id === resultId);
+    const result = this.resultCache.get(resultId);
     if (!result) throw new Error('Transit search result was not found.');
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate) throw new Error('Transit place coordinate is required.');
@@ -211,9 +214,6 @@ export class TransitSearchService implements TransitSearchActions {
     return point;
   }
 
-  private key(personId: EntityId, kind: PlaceKind) {
-    return personId + ':' + kind;
-  }
 }
 
 function normalizeStopName(value: string): string {
