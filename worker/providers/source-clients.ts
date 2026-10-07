@@ -188,7 +188,7 @@ export class SeoulBusRequestClient implements SeoulBusSource {
 export class SeoulSubwayRequestClient implements SeoulSubwaySource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
-  async searchStations(query: string, _near: Coordinate, context?: ProviderRequestContext) {
+  async searchStations(query: string, _near?: Coordinate, context?: ProviderRequestContext) {
     const request: ProviderJsonRequest = {
       source: 'seoul-subway',
       capability: 'subway-station-name-search',
