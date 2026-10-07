@@ -61,7 +61,7 @@ try {
 
   for (const urlTemplate of [
     'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName',
-    'http://openAPI.seoul.go.kr:8088/{SEOUL_SUBWAY_API_KEY}/json/SearchInfoBySubwayNameService/1/20/{stationName}/',
+    'http://openAPI.seoul.go.kr:8088/{SEOUL_OPENAPI_KEY}/json/SearchInfoBySubwayNameService/1/20/{stationName}/',
     'http://swopenAPI.seoul.go.kr/api/subway/{SEOUL_SUBWAY_API_KEY}/json/realtimeStationArrival/0/20/{stationName}',
   ]) {
     const blocked = security.assessProviderActivation({
@@ -70,7 +70,11 @@ try {
       method: 'GET',
       urlTemplate,
       auth: {
-        secretName: urlTemplate.includes('bus.go.kr') ? 'SEOUL_BUS_SERVICE_KEY' : 'SEOUL_SUBWAY_API_KEY',
+        secretName: urlTemplate.includes('bus.go.kr')
+          ? 'SEOUL_BUS_SERVICE_KEY'
+          : urlTemplate.includes('openAPI.seoul.go.kr:8088')
+            ? 'SEOUL_OPENAPI_KEY'
+            : 'SEOUL_SUBWAY_API_KEY',
         placement: urlTemplate.includes('bus.go.kr') ? 'query' : 'path',
         target: 'credential',
       },
