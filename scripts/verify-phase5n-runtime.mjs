@@ -19,7 +19,8 @@ for (const text of [
   expect(compositionSource.includes(text), 'Phase5N composition missing ' + text);
 }
 expect(runtimeSource.includes("status: 'UNKNOWN'"), 'UNKNOWN ETA boundary missing');
-expect(runtimeSource.includes(": 'FALLBACK';"), 'default FALLBACK ETA boundary missing');
+expect(runtimeSource.includes("status: 'ACTUAL'"), 'ACTUAL arrival boundary missing');
+expect(runtimeSource.includes('calculateArrivalEta'), 'realtime ETA overlay calculator missing');
 expect(!runtimeSource.includes('fetch('), 'application provider runtime must not perform network fetch directly');
 
 const vite = await createViteServer({
@@ -38,6 +39,7 @@ try {
   const places = new mocks.MockPlaceRepository(store);
   const schedules = new mocks.MockScheduleRepository(store);
   const persistedCommute = new mocks.MockCommuteRepository(store);
+  const presence = new mocks.MockPresenceRepository();
 
   const routeProvider = {
     async search() {
@@ -55,6 +57,8 @@ try {
           totalMinutes: 38,
           transferCount: 2,
           walkMinutes: 7,
+          accessMinutes: 3,
+          egressMinutes: 4,
           fare: 1550,
           steps: [
             { type: 'WALKING', label: 'fixture walk' },
@@ -80,46 +84,63 @@ try {
 
   await persistedCommute.setPreferredRouteCandidateId('mock-person-1', 'provider-route-fast');
 
-  const clock = {
-    now: () => new Date('2026-10-05T12:00:00.000Z'),
-  };
-  const bus = {
-    async arrivals() {
-      return [
-        {
-          providerVehicleId: 'fixture-bus',
-          minutes: 2,
-          observedAt: '2026-10-05T20:59:00+09:00',
-        },
-      ];
-    },
-  };
   const subway = {
     async arrivals() {
       return [];
     },
   };
-  const freshnessPolicy = {
-    classify(observedAt, now) {
-      return (now.getTime() - Date.parse(observedAt)) <= 2 * 60_000 ? 'LIVE' : 'STALE';
-    },
-  };
 
-  const today = new runtime.ProviderTodayRepository(
+  const scheduledClock = {
+    now: () => new Date('2026-10-05T12:00:00.000Z'),
+  };
+  const scheduledToday = new runtime.ProviderTodayRepository(
     schedules,
     commute,
-    bus,
+    presence,
+    { async arrivals() { return []; } },
     subway,
-    clock,
-    freshnessPolicy,
+    scheduledClock,
   );
-  const snapshot = await today.get('mock-person-1');
-  expect(snapshot?.routeCandidateId === 'provider-route-fast', 'Today preferred provider route mismatch');
-  expect(snapshot?.shiftEnd === '22:10', 'Today shift-end mapping mismatch');
-  expect(snapshot?.eta.status === 'LIVE', 'injected freshness policy did not promote LIVE');
-  expect(snapshot?.eta.freshnessMinutes === 1, 'realtime freshness calculation mismatch');
-  expect(snapshot?.eta.arrivalTime === '22:48', 'fallback ETA calculation mismatch');
-  expect(snapshot?.eta.calculatedAt === '2026-10-05T12:00:00.000Z', 'ETA calculatedAt clock mismatch');
+  const scheduled = await scheduledToday.get('mock-person-1');
+  expect(scheduled?.routeCandidateId === 'provider-route-fast', 'Today preferred provider route mismatch');
+  expect(scheduled?.shiftEnd === '22:10', 'Today shift-end mapping mismatch');
+  expect(scheduled?.eta.status === 'FALLBACK', 'future scheduled departure must remain route-based FALLBACK');
+  expect(scheduled?.eta.arrivalTime === '22:48', 'scheduled route ETA mismatch');
+  expect(scheduled?.eta.calculatedAt === '2026-10-05T12:00:00.000Z', 'ETA calculatedAt clock mismatch');
+
+  await presence.record({
+    eventId: 'left-work-runtime-001',
+    personId: 'mock-person-1',
+    type: 'LEFT_WORK',
+    acceptedAt: '2026-10-05T13:15:00.000Z',
+    workDate: '2026-10-05',
+  });
+
+  const liveClock = {
+    now: () => new Date('2026-10-05T13:16:00.000Z'),
+  };
+  const liveBus = {
+    async arrivals() {
+      return [{
+        providerVehicleId: 'fixture-bus',
+        minutes: 5,
+        observedAt: '2026-10-05T13:15:00.000Z',
+      }];
+    },
+  };
+  const liveToday = new runtime.ProviderTodayRepository(
+    schedules,
+    commute,
+    presence,
+    liveBus,
+    subway,
+    liveClock,
+  );
+  const live = await liveToday.get('mock-person-1');
+  expect(live?.leftWorkAt === '2026-10-05T13:15:00.000Z', 'actual LEFT_WORK state missing from Today');
+  expect(live?.eta.status === 'LIVE', 'fresh realtime arrival must promote LIVE ETA');
+  expect(live?.eta.freshnessMinutes === 1, 'realtime freshness calculation mismatch');
+  expect(live?.eta.arrivalTime === '22:55', 'realtime wait overlay ETA mismatch');
 
   const failingBus = {
     async arrivals() {
@@ -129,25 +150,40 @@ try {
   const fallbackToday = new runtime.ProviderTodayRepository(
     schedules,
     commute,
+    presence,
     failingBus,
     subway,
-    clock,
+    liveClock,
   );
   const fallback = await fallbackToday.get('mock-person-1');
-  expect(fallback?.eta.status === 'FALLBACK', 'missing freshness policy/provider failure must remain FALLBACK');
-  expect(fallback?.eta.arrivalTime === '22:48', 'provider failure must preserve route-based ETA');
+  expect(fallback?.eta.status === 'FALLBACK', 'provider failure must remain FALLBACK');
+  expect(fallback?.eta.arrivalTime === '22:53', 'provider failure must preserve actual-departure route ETA');
+
+  await presence.record({
+    eventId: 'arrived-home-runtime-001',
+    personId: 'mock-person-1',
+    type: 'ARRIVED_HOME',
+    acceptedAt: '2026-10-05T14:01:00.000Z',
+    workDate: '2026-10-05',
+  });
+  const arrived = await liveToday.get('mock-person-1');
+  expect(arrived?.eta.status === 'ACTUAL', 'ARRIVED_HOME must promote ACTUAL state');
+  expect(arrived?.eta.arrivalTime === '23:01', 'actual home arrival time mismatch');
+  expect(arrived?.arrivedHomeAt === '2026-10-05T14:01:00.000Z', 'actual ARRIVED_HOME state missing');
 
   const noRouteCommute = new runtime.ProviderCommuteRepository(
     persistedCommute,
     places,
     { async search() { return []; } },
   );
+  const emptyPresence = new mocks.MockPresenceRepository();
   const unknownToday = new runtime.ProviderTodayRepository(
     schedules,
     noRouteCommute,
-    bus,
+    emptyPresence,
+    liveBus,
     subway,
-    clock,
+    scheduledClock,
   );
   const unknown = await unknownToday.get('mock-person-1');
   expect(unknown?.eta.status === 'UNKNOWN', 'missing route must produce UNKNOWN ETA');
