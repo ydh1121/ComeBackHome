@@ -161,6 +161,29 @@ try {
   expect(rowTarget[0]?.start === '10:30', 'row-table target start mismatch');
   expect(rowTarget[0]?.end === '20:00', 'row-table target end mismatch');
 
+  const genericRow = {
+    width: 1080,
+    height: 520,
+    tokens: [
+      { text: '2026년10월', x: 40, y: 24, width: 150, height: 24, confidence: 0.98 },
+      { text: '10/22', x: 40, y: 110, width: 70, height: 24, confidence: 0.96 },
+      { text: '여자친구', x: 180, y: 110, width: 100, height: 24, confidence: 0.97 },
+      { text: '09:00~18:00', x: 400, y: 110, width: 180, height: 24, confidence: 0.98 },
+      { text: '10/23', x: 40, y: 170, width: 70, height: 24, confidence: 0.96 },
+      { text: '여자친구', x: 180, y: 170, width: 100, height: 24, confidence: 0.97 },
+      { text: '10:30-19:30', x: 400, y: 170, width: 180, height: 24, confidence: 0.98 },
+    ],
+  };
+  const genericParsed = imageModule.parseScheduleImageLayout(genericRow);
+  expect(genericParsed.structure.sheet.includes('generic-row'), 'generic row fixture must use generic-row strategy');
+  expect(genericParsed.scheduleCandidates.length === 2, 'generic row schedule count mismatch');
+  expect(genericParsed.scheduleCandidates[0]?.date === '2026-10-22', 'generic row inferred date mismatch');
+  expect(
+    genericParsed.scheduleCandidates[0]?.start === '09:00' &&
+      genericParsed.scheduleCandidates[0]?.end === '18:00',
+    'generic row time range mismatch',
+  );
+
   let unknownBlocked = false;
   try {
     imageModule.parseScheduleImageLayout({
@@ -233,7 +256,7 @@ try {
 
   const reviewItems = (batch?.reviewItems ?? []).filter((item) => item.personId === 'mock-person-1');
   expect(reviewItems.length === 5, 'image import target review item count mismatch');
-  expect(reviewItems.every((item) => item.resolution == null), 'image-derived review items must start unreviewed');
+  expect(reviewItems.every((item) => item.resolution === 'NEW'), 'matched image-derived review items must default selected');
   expect(batch?.structure.needsReview === true, 'image-derived batch must force structure review');
 
   const unseenRecognizer = new imageModule.AdaptiveScheduleImageRecognizer({
@@ -270,8 +293,9 @@ try {
   );
   expect(unseenReviewItems.length === 5, 'unseen row label review item count mismatch');
   expect(
-    unseenReviewItems.every((item) => item.personId == null && item.resolution == null),
-    'unseen row label schedules must stay unresolved until explicit person matching/review',
+    unseenDetected?.ignored === true &&
+      unseenReviewItems.every((item) => item.personId == null && item.resolution == null),
+    'unseen row label must default ignored and remain unresolved until explicitly included',
   );
 
   const unavailableStore = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
