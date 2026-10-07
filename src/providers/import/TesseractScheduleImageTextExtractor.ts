@@ -70,6 +70,7 @@ export interface TesseractAssetPaths {
 export interface ScheduleOcrExtractorOptions {
   languages?: string[];
   minimumConfidence?: number;
+  useStructureFirstMode?: boolean;
 }
 
 function assertRootRelative(path: string, label: string): void {
