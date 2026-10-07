@@ -1,15 +1,28 @@
 import type { ApplicationServices, RepositoryBundle } from '../application/contracts/runtime';
+import type {
+  PlaceSearchProvider,
+  RealtimeBusProvider,
+  RealtimeSubwayProvider,
+  TransitAccessSearchProvider,
+} from '../application/contracts/providers';
 import { ComeBackHomeQueries } from '../application/queries/ComeBackHomeQueries';
-import { NotificationService, PersonSelectionService, PersonService, ScheduleService, TransitAccessService } from '../application/services/ApplicationActions';
+import {
+  NotificationService,
+  PersonSelectionService,
+  PersonService,
+  ScheduleService,
+  TransitAccessService,
+} from '../application/services/ApplicationActions';
 import { ImportWorkflowService } from '../application/services/ImportWorkflowService';
 import { WorkbookImportFileSelectionAction } from '../application/services/WorkbookImportFileSelectionAction';
-import { BusRouteService, CommuteService, PlaceService, TransitSearchService } from '../application/services/CommuteWorkflowService';
+import {
+  BusRouteService,
+  CommuteService,
+  PlaceService,
+  TransitSearchService,
+} from '../application/services/CommuteWorkflowService';
 import { CommitImportReview } from '../application/use-cases/commitImportReview';
 import type { AppRuntimeMode, ProviderRuntimeMode } from '../config/runtime';
-import { MockPlaceSearchProvider, MockTransitAccessSearchProvider } from '../mocks/commute-providers';
-import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPresenceAutomationGateway, MockPushSubscriptionProvider } from '../mocks/providers';
-import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockPresenceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
-import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
 import {
   HttpBusRouteLookupProvider,
   HttpPlaceSearchProvider,
@@ -28,7 +41,6 @@ import {
   HttpPersonRepository,
   HttpPlaceRepository,
   HttpScheduleRepository,
-  HybridCommuteRepository,
 } from '../providers/http/HttpRepositories';
 import { ReadExcelWorkbookParser } from '../providers/import/ReadExcelWorkbookParser';
 import { AdaptiveScheduleImageRecognizer } from '../providers/import/StructuredTableImageScheduleRecognizer';
@@ -44,6 +56,24 @@ import { createBrowserNotificationRuntime } from './browserNotificationRuntime';
 import { createChangeSignalController } from './changeSignal';
 
 const SELECTED_PERSON_STORAGE_KEY = 'cbh:selected-person-id';
+
+const disabledPlaceSearchProvider: PlaceSearchProvider = {
+  async search() { return []; },
+};
+
+const disabledTransitAccessSearchProvider: TransitAccessSearchProvider = {
+  async search() { return []; },
+  async nearby() { return []; },
+  async resolve(result) { return result; },
+};
+
+const disabledRealtimeBusProvider: RealtimeBusProvider = {
+  async arrivals() { return []; },
+};
+
+const disabledRealtimeSubwayProvider: RealtimeSubwayProvider = {
+  async arrivals() { return []; },
+};
 
 function readStoredPersonId(): string | null {
   try {
@@ -61,75 +91,10 @@ function writeStoredPersonId(personId: string): void {
   }
 }
 
-export function createMockApplicationServices(): ApplicationServices {
-  const store = new MockStateStore(structuredClone(MOCK_FIXTURE));
-  const repositories: RepositoryBundle = {
-    people: new MockPersonRepository(store),
-    schedules: new MockScheduleRepository(store),
-    places: new MockPlaceRepository(store),
-    presence: new MockPresenceRepository(),
-    commute: new MockCommuteRepository(store),
-    imports: new MockImportRepository(store),
-    notifications: new MockNotificationRepository(store),
-    today: new MockTodayRepository(store),
-  };
-  const personSelection = new PersonSelectionService(
-    store.read().selectedPersonId ?? store.read().people[0]?.id ?? null,
-    () => store.mutate(() => undefined),
-  );
-  const queries = new ComeBackHomeQueries(repositories, personSelection);
-  const importWorkflow = new ImportWorkflowService(repositories.imports, repositories.people);
-  const placeSearchProvider = new MockPlaceSearchProvider();
-  const transitSearchProvider = new MockTransitAccessSearchProvider();
-  const importFileSelection = new WorkbookImportFileSelectionAction(
-    repositories.imports,
-    repositories.people,
-    repositories.schedules,
-    new ReadExcelWorkbookParser(),
-  );
-
-  return {
-    runtime: {
-      mode: 'mock',
-      persistence: 'mock',
-      providerData: 'mock',
-    },
-    repositories,
-    queries,
-    actions: {
-      commitImportReview: new CommitImportReview(repositories.imports, repositories.schedules),
-      transitAccess: new TransitAccessService(repositories.commute, () => store.mutate(() => undefined)),
-      notifications: new NotificationService(
-        repositories.notifications,
-        new MockNotificationPermissionProvider(),
-        new MockPushSubscriptionProvider(),
-        new MockNotificationTestGateway(),
-      ),
-      personSelection,
-      people: new PersonService(repositories.people, personSelection),
-      places: new PlaceService(repositories.places, placeSearchProvider),
-      commute: new CommuteService(repositories.commute),
-      transitSearch: new TransitSearchService(repositories.places, repositories.commute, transitSearchProvider),
-      busRoutes: new BusRouteService(repositories.commute, repositories.places, null),
-      schedule: new ScheduleService(repositories.schedules, personSelection),
-      importFiles: importFileSelection,
-      importMatch: importWorkflow,
-      importReview: importWorkflow,
-      presenceAutomation: new MockPresenceAutomationGateway(),
-    },
-    changes: {
-      subscribe: (listener) => store.subscribe(listener),
-      getVersion: () => store.getVersion(),
-    },
-  };
-}
-
 export async function createHybridApiApplicationServices(
-  providerMode: ProviderRuntimeMode = 'mock',
+  providerMode: ProviderRuntimeMode = 'api',
 ): Promise<ApplicationServices> {
-  const runtimeStore = new MockStateStore(structuredClone(MOCK_FIXTURE));
   const changes = createChangeSignalController();
-  runtimeStore.subscribe(() => changes.emit());
 
   const client = new HttpJsonClient('/api', () => changes.emit());
   const browserNotifications = createBrowserNotificationRuntime(client);
@@ -138,25 +103,25 @@ export async function createHybridApiApplicationServices(
   const places = new HttpPlaceRepository(client);
   const presence = new HttpPresenceRepository(client);
   const persistedCommute = new HttpCommuteRepository(client);
-  const runtimeCommute = new MockCommuteRepository(runtimeStore);
+
   const routeProvider = providerMode === 'api' ? new HttpTransitRouteProvider(client) : null;
   const busRouteLookupProvider = providerMode === 'api' ? new HttpBusRouteLookupProvider(client) : null;
-  const realtimeBusProvider = providerMode === 'api' ? new HttpRealtimeBusProvider(client) : null;
-  const realtimeSubwayProvider = providerMode === 'api' ? new HttpRealtimeSubwayProvider(client) : null;
+  const realtimeBusProvider = providerMode === 'api' ? new HttpRealtimeBusProvider(client) : disabledRealtimeBusProvider;
+  const realtimeSubwayProvider = providerMode === 'api' ? new HttpRealtimeSubwayProvider(client) : disabledRealtimeSubwayProvider;
+
   const commute = providerMode === 'api' && routeProvider
     ? new ProviderCommuteRepository(persistedCommute, places, routeProvider)
-    : new HybridCommuteRepository(persistedCommute, runtimeCommute);
+    : persistedCommute;
+
   const imports = new BrowserImportRepository(() => changes.emit());
   const notifications = new HttpNotificationRepository(client, () => changes.emit());
-  const today = providerMode === 'api' && realtimeBusProvider && realtimeSubwayProvider
-    ? new ProviderTodayRepository(
-        schedules,
-        commute,
-        presence,
-        realtimeBusProvider,
-        realtimeSubwayProvider,
-      )
-    : new MockTodayRepository(runtimeStore);
+  const today = new ProviderTodayRepository(
+    schedules,
+    commute,
+    presence,
+    realtimeBusProvider,
+    realtimeSubwayProvider,
+  );
 
   const repositories: RepositoryBundle = {
     people,
@@ -186,10 +151,10 @@ export async function createHybridApiApplicationServices(
   const importWorkflow = new ImportWorkflowService(imports, people);
   const placeSearchProvider = providerMode === 'api'
     ? new HttpPlaceSearchProvider(client)
-    : new MockPlaceSearchProvider();
+    : disabledPlaceSearchProvider;
   const transitSearchProvider = providerMode === 'api'
     ? new HttpTransitAccessSearchProvider(client)
-    : new MockTransitAccessSearchProvider();
+    : disabledTransitAccessSearchProvider;
   const imageRecognizer = new AdaptiveScheduleImageRecognizer(
     new TesseractScheduleImageTextExtractor(
       new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
@@ -208,7 +173,7 @@ export async function createHybridApiApplicationServices(
     runtime: {
       mode: 'hybrid-api',
       persistence: 'worker-api',
-      providerData: providerMode === 'api' ? 'worker-api' : 'mock',
+      providerData: providerMode === 'api' ? 'worker-api' : 'disabled',
     },
     repositories,
     queries,
@@ -240,12 +205,13 @@ export async function createHybridApiApplicationServices(
 
 export async function createApplicationServices(
   mode: AppRuntimeMode,
-  providerMode: ProviderRuntimeMode = 'mock',
+  providerMode: ProviderRuntimeMode = 'api',
 ): Promise<ApplicationServices> {
   if (providerMode === 'api' && mode !== 'api') {
     throw new Error('Provider API runtime requires VITE_CBH_RUNTIME=api.');
   }
-  return mode === 'api'
-    ? createHybridApiApplicationServices(providerMode)
-    : createMockApplicationServices();
+  if (mode !== 'api') {
+    throw new Error('Mock runtime is development-only.');
+  }
+  return createHybridApiApplicationServices(providerMode);
 }
