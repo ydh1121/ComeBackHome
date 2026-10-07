@@ -48,12 +48,40 @@ export class CommuteService implements CommuteActions {
 
   async setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
     const route = await this.requireSavedRoute(personId, routeId);
-    await this.commute.saveSavedRoute({ ...route, originAccessPointId: accessPointId });
+    await this.commute.saveSavedRoute({ ...route, originAccessPointIds: [accessPointId], originAccessPointId: accessPointId });
   }
 
   async setRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
     const route = await this.requireSavedRoute(personId, routeId);
-    await this.commute.saveSavedRoute({ ...route, destinationAccessPointId: accessPointId });
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointIds: [accessPointId], destinationAccessPointId: accessPointId });
+  }
+
+  async addRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = route.originAccessPointIds ?? (route.originAccessPointId ? [route.originAccessPointId] : []);
+    const next = [...ids.filter((id) => id !== accessPointId), accessPointId];
+    await this.commute.saveSavedRoute({ ...route, originAccessPointIds: next, originAccessPointId: next[0] });
+  }
+
+  async removeRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const next = (route.originAccessPointIds ?? (route.originAccessPointId ? [route.originAccessPointId] : []))
+      .filter((id) => id !== accessPointId);
+    await this.commute.saveSavedRoute({ ...route, originAccessPointIds: next, originAccessPointId: next[0] });
+  }
+
+  async addRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = route.destinationAccessPointIds ?? (route.destinationAccessPointId ? [route.destinationAccessPointId] : []);
+    const next = [...ids.filter((id) => id !== accessPointId), accessPointId];
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointIds: next, destinationAccessPointId: next[0] });
+  }
+
+  async removeRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const next = (route.destinationAccessPointIds ?? (route.destinationAccessPointId ? [route.destinationAccessPointId] : []))
+      .filter((id) => id !== accessPointId);
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointIds: next, destinationAccessPointId: next[0] });
   }
 
   async moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void> {
@@ -173,6 +201,8 @@ export class TransitSearchService implements TransitSearchActions {
       name: resolved.name,
       displayCode: resolved.displayCode,
       line: resolved.line,
+      coordinate: resolved.coordinate,
+      distanceM: resolved.distanceM,
       walkMinutes: resolved.walkMinutes,
       selected: true,
       busRoutes: resolved.busRoutes,
