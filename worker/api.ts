@@ -550,6 +550,11 @@ export async function handleApiRequest(
             } else if (body.originAccessPointId === null) {
               delete route.originAccessPointId;
             }
+            if (typeof body.destinationAccessPointId === 'string' && body.destinationAccessPointId.trim()) {
+              route.destinationAccessPointId = body.destinationAccessPointId.trim();
+            } else if (body.destinationAccessPointId === null) {
+              delete route.destinationAccessPointId;
+            }
             await commute.saveSavedRoute(route);
             return json({ route });
           }
