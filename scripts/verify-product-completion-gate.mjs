@@ -92,6 +92,8 @@ for (const token of [
 expect(commuteRuntime.includes('activeSavedRoute.destinationAccessPointId'), 'destination transit does not affect provider route matching');
 expect(commuteRuntime.includes('selectedAccess.providerId'), 'persisted transit provider ID does not reach realtime ETA');
 expect(providerContracts.includes('arrivals(providerStationId: string'), 'subway realtime contract does not carry providerStationId');
+expect(workerApi.includes("stations.find((candidate) => candidate.providerId === providerStationId)"), 'persisted subway station ID is not verified at the Worker realtime boundary');
+expect(workerApi.includes("providerRuntime.seoulSubway.searchStations(stationName)"), 'subway realtime does not resolve canonical station identity before arrival lookup');
 
 for (const token of [
   '근무표 이미지 추가',
