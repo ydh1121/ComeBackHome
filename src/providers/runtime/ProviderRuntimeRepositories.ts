@@ -298,6 +298,7 @@ export class ProviderTodayRepository implements TodayRepository {
           );
         } else if (selectedAccess?.mode === 'SUBWAY') {
           arrivals = await this.subway.arrivals(
+            selectedAccess.providerId,
             selectedAccess.name,
             selectedAccess.line,
           );
