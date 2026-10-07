@@ -22,9 +22,9 @@ function normalizePersonCandidate(value: string): string | null {
   const normalized = String(value ?? '')
     .normalize('NFKC')
     .trim()
-    .replace(/s+/g, '');
+    .replace(/\s+/g, '');
   if (normalized.length < 2 || normalized.length > 30) return null;
-  if (/d/.test(normalized)) return null;
+  if (/\d/.test(normalized)) return null;
   if (!/[가-힣a-z]/i.test(normalized)) return null;
   return normalized.toLowerCase();
 }
