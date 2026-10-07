@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { useImportWorkflow } from '../features/import/useImportWorkflow';
@@ -9,6 +10,7 @@ export function ImportPersonMatchPage() {
   const navigate = useNavigate();
   const services = useApplicationServices();
   const workflow = useImportWorkflow(batchId);
+  const [creatingDetectedId, setCreatingDetectedId] = useState<string | null>(null);
 
   if (workflow.status === 'loading') {
     return <section className="import-page"><div className="import-message">사람 연결 정보를 불러오는 중</div></section>;
@@ -40,13 +42,31 @@ export function ImportPersonMatchPage() {
                 className="mapping-native-select"
                 aria-label={detected.sourceName + ' 일정 대상 연결'}
                 value={value}
-                onChange={(event) => {
+                disabled={creatingDetectedId === detected.id}
+                onChange={async (event) => {
                   const next = event.target.value;
                   if (next === '__ignore__') {
-                    void services.actions.importMatch.setPersonIgnored(batch.id, detected.id, true);
+                    await services.actions.importMatch.setPersonIgnored(batch.id, detected.id, true);
                     return;
                   }
-                  void services.actions.importMatch.setPersonMatch(
+                  if (next === '__create__') {
+                    setCreatingDetectedId(detected.id);
+                    try {
+                      const person = await services.actions.people.create({
+                        name: detected.sourceName,
+                        relation: '',
+                      });
+                      await services.actions.importMatch.setPersonMatch(
+                        batch.id,
+                        detected.id,
+                        person.id,
+                      );
+                    } finally {
+                      setCreatingDetectedId(null);
+                    }
+                    return;
+                  }
+                  await services.actions.importMatch.setPersonMatch(
                     batch.id,
                     detected.id,
                     next || null,
@@ -57,6 +77,7 @@ export function ImportPersonMatchPage() {
                 {workflow.people.map((person) => (
                   <option value={person.id} key={person.id}>{person.name}{person.relation ? ' · ' + person.relation : ''}</option>
                 ))}
+                <option value="__create__">“{detected.sourceName}” 새 사람으로 등록</option>
                 <option value="__ignore__">가져오지 않음</option>
               </select>
             </div>
