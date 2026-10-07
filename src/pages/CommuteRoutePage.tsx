@@ -141,7 +141,7 @@ export function CommuteRoutePage() {
       <div className="route-section-head"><h2>추천 경로</h2></div>
       <div className="route-recommendation-context">
         {hasTransitPreference
-          ? '선택한 출발지·도착지 교통 중 실제 경로에 포함되는 조합을 우선해 카카오 대중교통 경로를 정렬합니다.'
+          ? '선택한 출발지·도착지 교통의 위치 조합을 실제 출발·도착 기준으로 사용해 카카오 대중교통 경로를 추천합니다.'
           : '선택한 교통이 없어 저장된 출발지·도착지 위치를 기준으로 카카오 대중교통 경로를 추천합니다.'}
       </div>
       {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 추천 경로가 없습니다.</div> : null}
