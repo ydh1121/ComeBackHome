@@ -52,6 +52,7 @@ const [
   today,
   appShell,
   scrollRestore,
+  httpRepositories,
 ] = await Promise.all([
   read('../src/application/route-manifest.ts'),
   read('../src/app/router.tsx'),
@@ -72,6 +73,7 @@ const [
   read('../src/pages/TodayPage.tsx'),
   read('../src/shared/layout/AppShell.tsx'),
   read('../src/app/useRouteScrollRestoration.ts'),
+  read('../src/providers/http/HttpRepositories.ts'),
 ]);
 
 for (const route of expectedRoutes) {
@@ -154,6 +156,28 @@ for (const token of [
 expect(appShell.includes('useRouteScrollRestoration()'), 'AppShell does not restore route scroll');
 expect(scrollRestore.includes("navigationType === 'POP'"), 'Back navigation scroll restoration missing');
 expect(scrollRestore.includes('scrollPositions.set'), 'route scroll position persistence missing');
+expect(!httpRepositories.includes('class HybridCommuteRepository'), 'obsolete hybrid commute adapter remains');
+
+const migrationDir = new URL('../db/migrations/', import.meta.url);
+const migrationNames = (await readdir(migrationDir)).filter((name) => name.endsWith('.sql')).sort();
+const expectedMigrations = [
+  '0001_initial.sql',
+  '0002_notification_planner_state.sql',
+  '0003_presence_notification_settings.sql',
+  '0004_saved_commute_routes.sql',
+  '0005_presence_state.sql',
+  '0006_saved_route_destination_access.sql',
+];
+expect(
+  JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),
+  'migration ledger is not contiguous/canonical: ' + migrationNames.join(','),
+);
+for (const name of migrationNames.slice(1)) {
+  const sql = await readFile(new URL(name, migrationDir), 'utf8');
+  if (/\bDROP\s+TABLE\b|\bDROP\s+COLUMN\b|\bTRUNCATE\b|\bDELETE\s+FROM\b/i.test(sql)) {
+    failures.push('destructive migration operation detected: ' + name);
+  }
+}
 
 async function collect(dirUrl) {
   const files = [];
@@ -176,8 +200,11 @@ for (const rootPath of ['../src/', '../worker/', '../functions/']) {
     if (path.includes('/mocks/') || path.endsWith('mockComposition.ts') || path.includes('/pages/Qa')) continue;
     const source = await readFile(file, 'utf8');
     if (/\bTODO\b|\bFIXME\b|not implemented/i.test(source)) failures.push('unresolved product TODO: ' + path);
-    for (const forbidden of ['mock-person-1', 'MOCK_FIXTURE', 'fixture-person']) {
+    for (const forbidden of ['mock-person-1', 'MOCK_FIXTURE', 'fixture-person', 'e2e-place-', 'e2e-bus', 'e2e-subway']) {
       if (source.includes(forbidden)) failures.push('mock/fixture leakage in production source: ' + path + ' -> ' + forbidden);
+    }
+    if (/\bprovider(?:Id|RouteId)\s*:\s*['"]\d+['"]/.test(source)) {
+      failures.push('hard-coded provider identifier in production source: ' + path);
     }
     if (
       path.startsWith('src/pages/') &&
