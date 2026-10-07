@@ -210,8 +210,8 @@ jobs:
               .sort((left, right) => left - right);
             if (!distances.length) return { nearest: null, max: null, threshold: null };
             const nearest = distances[0];
-            const baseRadius = mode === 'BUS' ? 450 : 550;
-            const delta = mode === 'BUS' ? 450 : 450;
+            const baseRadius = mode === 'BUS' ? 450 : 450;
+            const delta = mode === 'BUS' ? 450 : 250;
             const normalCap = mode === 'BUS' ? 800 : 900;
             const threshold = nearest <= normalCap
               ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
