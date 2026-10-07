@@ -13,6 +13,7 @@ import type {
   RealtimeBusProvider,
   RealtimeSubwayProvider,
   TransitRouteProvider,
+  TransitRouteResult,
 } from '../../application/contracts/providers';
 import { calculateArrivalEta } from '../../application/services/ArrivalEtaCalculator';
 import type {
@@ -229,7 +230,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
       );
 
       const deduped = new Map<string, {
-        result: import('../../application/contracts/providers').TransitRouteResult;
+        result: TransitRouteResult;
         originFromSelectedAccess: boolean;
         destinationFromSelectedAccess: boolean;
       }>();
