@@ -569,7 +569,9 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
 
       await onProgress?.(82);
 
-      const renamedPattern = analyzeScheduleImagePattern(refinedLayout);
+      const renamedPattern = this.useStructureFirstMode
+        ? null
+        : analyzeScheduleImagePattern(refinedLayout);
         const numericRegions = (renamedPattern?.probeRegions ?? []).filter(
           (region) => region.kind === 'start' || region.kind === 'end',
         );
