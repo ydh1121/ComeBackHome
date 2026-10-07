@@ -13,6 +13,7 @@ interface KakaoTransitMapProps {
   centerLabel: string;
   points: KakaoTransitMapPoint[];
   selectedId?: string | null;
+  selectedIds?: string[];
   onSelect(id: string): void;
 }
 
@@ -101,6 +102,7 @@ export function KakaoTransitMap({
   centerLabel,
   points,
   selectedId,
+  selectedIds = [],
   onSelect,
 }: KakaoTransitMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -136,6 +138,9 @@ export function KakaoTransitMap({
         const bounds = new kakao.maps.LatLngBounds();
         bounds.extend(centerPosition);
 
+        const selectedSet = new Set(selectedIds);
+        if (selectedId) selectedSet.add(selectedId);
+
         for (const point of points) {
           const position = new kakao.maps.LatLng(point.coordinate.y, point.coordinate.x);
           bounds.extend(position);
@@ -143,7 +148,7 @@ export function KakaoTransitMap({
             map,
             position,
             title: (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name,
-            zIndex: point.id === selectedId ? 10 : 2,
+            zIndex: selectedSet.has(point.id) ? 10 : 2,
           });
           kakao.maps.event.addListener(marker, 'click', () => onSelect(point.id));
         }
@@ -161,7 +166,7 @@ export function KakaoTransitMap({
       active = false;
       if (containerRef.current) containerRef.current.replaceChildren();
     };
-  }, [center.x, center.y, centerLabel, points, selectedId, onSelect, retryNonce]);
+  }, [center.x, center.y, centerLabel, points, selectedId, selectedIds, onSelect, retryNonce]);
 
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
