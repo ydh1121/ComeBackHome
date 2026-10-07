@@ -39,13 +39,25 @@ jobs:
             cache: 'no-store',
           });
           const clientConfigBody = await clientConfig.json().catch(() => null);
+          const clientKeyLength =
+            typeof clientConfigBody?.kakaoMaps?.javaScriptKey === 'string'
+              ? clientConfigBody.kakaoMaps.javaScriptKey.trim().length
+              : 0;
           if (
             !clientConfig.ok ||
             clientConfigBody?.kakaoMaps?.configured !== true ||
-            typeof clientConfigBody?.kakaoMaps?.javaScriptKey !== 'string' ||
-            clientConfigBody.kakaoMaps.javaScriptKey.trim().length === 0
+            clientKeyLength === 0
           ) {
-            throw new Error('Pages interactive Kakao map client config is unavailable');
+            throw new Error(
+              'Pages interactive Kakao map client config is unavailable: HTTP ' +
+              clientConfig.status +
+              ' configured=' +
+              String(clientConfigBody?.kakaoMaps?.configured === true) +
+              ' keyLength=' +
+              clientKeyLength +
+              ' topLevelKeys=' +
+              Object.keys(clientConfigBody ?? {}).join(',')
+            );
           }
 
           let providerStatusBody = null;
