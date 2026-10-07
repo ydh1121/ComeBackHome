@@ -23,9 +23,22 @@ function stepIcon(type: CommuteStepType): IconName {
   return type === 'BUS' ? 'bus' : 'train';
 }
 
+function kstTimeFromIso(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
 function freshnessLabel(data: TodayOverviewQueryResult): string {
   const eta = data.eta;
   if (!eta) return '정보 확인 중';
+  if (eta.status === 'ACTUAL') return '집 도착 확인';
   if (eta.status === 'LIVE') return `실시간 · ${eta.freshnessMinutes ?? 0}분 전`;
   if (eta.status === 'STALE') return `최근 정보 · ${eta.freshnessMinutes ?? 0}분 전`;
   if (eta.status === 'FALLBACK') return '예상 경로 기준';
@@ -60,9 +73,18 @@ export function TodayPage() {
 
   const data = loadState.data;
   const nonWalkingSteps = data.route?.steps?.filter((step) => step.type !== 'WALKING') ?? [];
+  const actualLeftWork = kstTimeFromIso(data.leftWorkAt);
+  const actualHomeArrival = kstTimeFromIso(data.arrivedHomeAt);
+  const statusState = actualHomeArrival
+    ? 'ARRIVED_HOME'
+    : actualLeftWork
+      ? 'LEFT_WORK'
+      : data.shiftEnd
+        ? 'WORKING'
+        : 'NO_SCHEDULE_TODAY';
 
   return (
-    <section className="today-page" data-route="/" data-page="TodayPage" data-state={(online ? 'WORKING ARRIVAL_ESTIMATED NEXT_SHIFT_KNOWN' : 'OFFLINE ARRIVAL_ESTIMATED NEXT_SHIFT_KNOWN')}>
+    <section className="today-page" data-route="/" data-page="TodayPage" data-state={(online ? statusState : 'OFFLINE ' + statusState)}>
       <div className="person-switch">
         <button type="button" className="person-select" onClick={() => setPickerOpen((open) => !open)} aria-expanded={pickerOpen}>
           {data.person?.name ?? '사람 선택'}
@@ -100,8 +122,8 @@ export function TodayPage() {
 
       <div className="hero anti-ai-hero" data-component="TodayStatus">
         <div className="today-statusline">{online ? freshnessLabel(data) : '오프라인 · 마지막 정보'}</div>
-        <div className="time-label">집 도착 예정</div>
-        <div className="big-time">{data.eta?.arrivalTime ?? '—'}</div>
+        <div className="time-label">{actualHomeArrival ? '집 도착' : '집 도착 예정'}</div>
+        <div className="big-time">{actualHomeArrival ?? data.eta?.arrivalTime ?? '—'}</div>
         <div className="commute-simple">
           {nonWalkingSteps.map((step, index) => (
             <div className="commute-simple-row" key={`${step.type}-${index}`}>
@@ -111,9 +133,18 @@ export function TodayPage() {
           ))}
         </div>
         <div className="today-meta-row">
-          <div className="today-meta"><span>퇴근</span><b>{data.shiftEnd ?? '—'}</b></div>
+          <div className="today-meta">
+            <span>{actualLeftWork ? '실제 퇴근' : '예정 퇴근'}</span>
+            <b>{actualLeftWork ?? data.shiftEnd ?? '—'}</b>
+          </div>
           <div className="today-meta"><span>다음 출근</span><b>{data.nextShiftLabel ?? '—'}</b></div>
         </div>
+        {actualLeftWork || actualHomeArrival ? (
+          <div className="presence-status-row" aria-label="오늘 이동 상태">
+            {actualLeftWork ? <span>퇴근 {actualLeftWork}</span> : null}
+            {actualHomeArrival ? <span>집 도착 {actualHomeArrival}</span> : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="action-row anti-ai-actions">
