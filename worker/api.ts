@@ -108,6 +108,31 @@ function dedupeTransit(results: TransitSearchResult[]): TransitSearchResult[] {
     .sort((left, right) => (left.distanceM ?? Number.MAX_SAFE_INTEGER) - (right.distanceM ?? Number.MAX_SAFE_INTEGER));
 }
 
+function trimNearbyTransitByDistance(results: TransitSearchResult[]): TransitSearchResult[] {
+  const sorted = dedupeTransit(results);
+  const kept: TransitSearchResult[] = [];
+
+  for (const mode of ['BUS', 'SUBWAY'] as const) {
+    const group = sorted.filter((item) => item.mode === mode && item.distanceM != null);
+    if (!group.length) continue;
+    const nearest = group[0].distanceM ?? 0;
+    const baseRadius = mode === 'BUS' ? 450 : 650;
+    const delta = mode === 'BUS' ? 450 : 600;
+    const normalCap = mode === 'BUS' ? 800 : 950;
+    const threshold = nearest <= normalCap
+      ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
+      : nearest + 400;
+    kept.push(...group.filter((item) => (item.distanceM ?? Number.MAX_SAFE_INTEGER) <= threshold));
+  }
+
+  return kept
+    .sort((left, right) =>
+      (left.distanceM ?? Number.MAX_SAFE_INTEGER) -
+      (right.distanceM ?? Number.MAX_SAFE_INTEGER)
+    )
+    .slice(0, 24);
+}
+
 function normalizeTransitName(value: string): string {
   return value
     .normalize('NFKC')
@@ -381,10 +406,10 @@ export async function handleApiRequest(
               providerRuntime.kakao.searchPlaces('지하철역', near),
             ]);
             return json({
-              results: dedupeTransit([
+              results: trimNearbyTransitByDistance([
                 ...busPlaces.map((place) => placeToTransit(place, near, 'BUS')),
                 ...subwayPlaces.map((place) => placeToTransit(place, near, 'SUBWAY')),
-              ]).slice(0, 30),
+              ]),
             });
           }
 
@@ -695,12 +720,28 @@ export async function handleApiRequest(
             const viaAccessPointIds = Array.isArray(body.viaAccessPointIds)
               ? body.viaAccessPointIds.filter((value): value is string => typeof value === 'string')
               : current.viaAccessPointIds;
+            const originAccessPointIds = Array.isArray(body.originAccessPointIds)
+              ? body.originAccessPointIds.filter((value): value is string => typeof value === 'string')
+              : current.originAccessPointIds ?? (current.originAccessPointId ? [current.originAccessPointId] : []);
+            const destinationAccessPointIds = Array.isArray(body.destinationAccessPointIds)
+              ? body.destinationAccessPointIds.filter((value): value is string => typeof value === 'string')
+              : current.destinationAccessPointIds ?? (current.destinationAccessPointId ? [current.destinationAccessPointId] : []);
             const route: SavedCommuteRoute = {
               ...current,
               label: typeof body.label === 'string' && body.label.trim() ? body.label.trim() : current.label,
+              originAccessPointIds,
+              destinationAccessPointIds,
               viaAccessPointIds,
               active: typeof body.active === 'boolean' ? body.active : current.active,
             };
+            if (Array.isArray(body.originAccessPointIds)) {
+              if (originAccessPointIds[0]) route.originAccessPointId = originAccessPointIds[0];
+              else delete route.originAccessPointId;
+            }
+            if (Array.isArray(body.destinationAccessPointIds)) {
+              if (destinationAccessPointIds[0]) route.destinationAccessPointId = destinationAccessPointIds[0];
+              else delete route.destinationAccessPointId;
+            }
             if (typeof body.originAccessPointId === 'string' && body.originAccessPointId.trim()) {
               route.originAccessPointId = body.originAccessPointId.trim();
             } else if (body.originAccessPointId === null) {
@@ -729,6 +770,16 @@ export async function handleApiRequest(
             selected: typeof body.selected === 'boolean' ? body.selected : true,
             ...(asOptionalString(body.displayCode) ? { displayCode: asOptionalString(body.displayCode) } : {}),
             ...(asOptionalString(body.line) ? { line: asOptionalString(body.line) } : {}),
+            ...(typeof body.coordinate === 'object' && body.coordinate != null &&
+              Number.isFinite(Number((body.coordinate as Record<string, unknown>).x)) &&
+              Number.isFinite(Number((body.coordinate as Record<string, unknown>).y))
+              ? { coordinate: {
+                  x: Number((body.coordinate as Record<string, unknown>).x),
+                  y: Number((body.coordinate as Record<string, unknown>).y),
+                } }
+              : {}),
+            ...(Number.isFinite(Number(body.distanceM)) ? { distanceM: Number(body.distanceM) } : {}),
+            ...(Number.isFinite(Number(body.walkMinutes)) ? { walkMinutes: Number(body.walkMinutes) } : {}),
             ...(asOptionalString(body.userLabel) ? { userLabel: asOptionalString(body.userLabel) } : {}),
             ...(asOptionalString(body.selectedBusRouteId) ? { selectedBusRouteId: asOptionalString(body.selectedBusRouteId) } : {}),
           };

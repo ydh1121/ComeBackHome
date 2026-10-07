@@ -17,6 +17,15 @@ function displayName(point: TransitAccessPoint | undefined): string {
   return point?.userLabel || point?.name || '미설정';
 }
 
+function routeAccessIds(route: SavedCommuteRoute, role: 'origin' | 'destination'): string[] {
+  if (role === 'origin') {
+    return route.originAccessPointIds ??
+      (route.originAccessPointId ? [route.originAccessPointId] : []);
+  }
+  return route.destinationAccessPointIds ??
+    (route.destinationAccessPointId ? [route.destinationAccessPointId] : []);
+}
+
 function RouteSteps({ route }: { route: RouteCandidate }) {
   return <div className="route-steps">{(route.steps ?? []).map((step, index) => (
     <div className="route-step" key={index}>
@@ -37,8 +46,12 @@ function SavedRouteSummary({
   onEdit: () => void;
   onSelect: () => void;
 }) {
-  const originPoint = points.find((point) => point.id === route.originAccessPointId);
-  const destinationPoint = points.find((point) => point.id === route.destinationAccessPointId);
+  const originPoints = routeAccessIds(route, 'origin')
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
+  const destinationPoints = routeAccessIds(route, 'destination')
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
   const viaPoints = route.viaAccessPointIds
     .map((id) => points.find((point) => point.id === id))
     .filter((point): point is TransitAccessPoint => Boolean(point));
@@ -60,9 +73,9 @@ function SavedRouteSummary({
         </button>
       </div>
       <button type="button" className="saved-route-setting-body" onClick={onEdit}>
-        <span className="saved-route-line"><b>출발</b><span>{displayName(originPoint)}</span></span>
+        <span className="saved-route-line"><b>출발</b><span>{originPoints.length ? originPoints.map(displayName).join(' · ') : '미설정'}</span></span>
         <span className="saved-route-line"><b>경유</b><span>{viaPoints.length ? viaPoints.map(displayName).join(' · ') : '없음'}</span></span>
-        <span className="saved-route-line"><b>도착</b><span>{displayName(destinationPoint)}</span></span>
+        <span className="saved-route-line"><b>도착</b><span>{destinationPoints.length ? destinationPoints.map(displayName).join(' · ') : '미설정'}</span></span>
       </button>
     </div>
   );
@@ -81,6 +94,19 @@ export function CommuteRoutePage() {
   const { overview } = state;
   const points = [...overview.originAccessPoints, ...overview.destinationAccessPoints];
   const candidates = overview.routeCandidates;
+  const activeSavedRoute = overview.savedRoutes.find((route) => route.active) ?? overview.savedRoutes[0];
+  const activeOriginIds = activeSavedRoute
+    ? activeSavedRoute.originAccessPointIds ??
+      (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
+    : [];
+  const activeDestinationIds = activeSavedRoute
+    ? activeSavedRoute.destinationAccessPointIds ??
+      (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
+    : [];
+  const hasTransitPreference =
+    activeOriginIds.length > 0 ||
+    activeDestinationIds.length > 0 ||
+    (activeSavedRoute?.viaAccessPointIds.length ?? 0) > 0;
   const visible = expanded ? candidates : candidates.slice(0, 3);
   const remain = Math.max(0, candidates.length - visible.length);
 
@@ -112,8 +138,13 @@ export function CommuteRoutePage() {
 
       <button type="button" className="cta secondary" onClick={addRoute}><Icon name="plus" /> 경로 추가</button>
 
-      <div className="route-section-head"><h2>자동 경로</h2></div>
-      {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 자동 경로가 없습니다.</div> : null}
+      <div className="route-section-head"><h2>추천 경로</h2></div>
+      <div className="route-recommendation-context">
+        {hasTransitPreference
+          ? '선택한 출발지·도착지 교통의 위치 조합을 실제 출발·도착 기준으로 사용해 카카오 대중교통 경로를 추천합니다.'
+          : '선택한 교통이 없어 저장된 출발지·도착지 위치를 기준으로 카카오 대중교통 경로를 추천합니다.'}
+      </div>
+      {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 추천 경로가 없습니다.</div> : null}
       <div className="route-policy-list">
         {visible.map((route) => {
           const selected = route.id === overview.preferredRouteCandidateId;

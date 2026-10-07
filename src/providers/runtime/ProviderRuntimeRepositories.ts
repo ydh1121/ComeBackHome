@@ -13,6 +13,7 @@ import type {
   RealtimeBusProvider,
   RealtimeSubwayProvider,
   TransitRouteProvider,
+  TransitRouteResult,
 } from '../../application/contracts/providers';
 import { calculateArrivalEta } from '../../application/services/ArrivalEtaCalculator';
 import type {
@@ -33,6 +34,7 @@ export const systemRuntimeClock: RuntimeClock = {
 
 function compareRoutes(left: RouteCandidate, right: RouteCandidate): number {
   return (
+    (right.preferenceMatchScore ?? 0) - (left.preferenceMatchScore ?? 0) ||
     Number(right.matchesPreference === true) - Number(left.matchesPreference === true) ||
     left.totalMinutes - right.totalMinutes ||
     left.transferCount - right.transferCount ||
@@ -168,24 +170,120 @@ export class ProviderCommuteRepository implements CommuteRepository {
     const pointsById = new Map(
       [...originPoints, ...destinationPoints].map((point) => [point.id, point]),
     );
-    const configuredPointIds = activeSavedRoute
-      ? [
-          ...(activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : []),
-          ...activeSavedRoute.viaAccessPointIds,
-          ...(activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : []),
-        ]
+    const originIds = activeSavedRoute
+      ? activeSavedRoute.originAccessPointIds ??
+        (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
       : [];
-    const configuredPoints = configuredPointIds
+    const destinationIds = activeSavedRoute
+      ? activeSavedRoute.destinationAccessPointIds ??
+        (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
+      : [];
+    const viaIds = activeSavedRoute?.viaAccessPointIds ?? [];
+    const originConfiguredPoints = originIds
+      .map((id) => pointsById.get(id))
+      .filter((point): point is TransitAccessPoint => point != null);
+    const destinationConfiguredPoints = destinationIds
+      .map((id) => pointsById.get(id))
+      .filter((point): point is TransitAccessPoint => point != null);
+    const viaConfiguredPoints = viaIds
       .map((id) => pointsById.get(id))
       .filter((point): point is TransitAccessPoint => point != null);
 
+    const originSearchTargets = originConfiguredPoints
+      .filter((point) => point.coordinate != null)
+      .map((point) => ({ coordinate: point.coordinate!, fromSelectedAccess: true }));
+    const destinationSearchTargets = destinationConfiguredPoints
+      .filter((point) => point.coordinate != null)
+      .map((point) => ({ coordinate: point.coordinate!, fromSelectedAccess: true }));
+
+    const resolvedOriginTargets = originSearchTargets.length
+      ? originSearchTargets
+      : [{ coordinate: origin.coordinate, fromSelectedAccess: false }];
+    const resolvedDestinationTargets = destinationSearchTargets.length
+      ? destinationSearchTargets
+      : [{ coordinate: destination.coordinate, fromSelectedAccess: false }];
+
+    const searchPairs = resolvedOriginTargets.flatMap((originTarget) =>
+      resolvedDestinationTargets.map((destinationTarget) => ({
+        originTarget,
+        destinationTarget,
+      }))
+    );
+
     try {
-      const results = await this.routeProvider.search(origin.coordinate, destination.coordinate);
-      return results
-        .map((result): RouteCandidate => {
+      const pairResults = await Promise.all(
+        searchPairs.map(async ({ originTarget, destinationTarget }) => {
+          try {
+            const results = await this.routeProvider.search(
+              originTarget.coordinate,
+              destinationTarget.coordinate,
+            );
+            return results.map((result) => ({
+              result,
+              originFromSelectedAccess: originTarget.fromSelectedAccess,
+              destinationFromSelectedAccess: destinationTarget.fromSelectedAccess,
+            }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+
+      const deduped = new Map<string, {
+        result: TransitRouteResult;
+        originFromSelectedAccess: boolean;
+        destinationFromSelectedAccess: boolean;
+      }>();
+
+      for (const item of pairResults.flat()) {
+        const existing = deduped.get(item.result.id);
+        const itemEndpointScore =
+          Number(item.originFromSelectedAccess) + Number(item.destinationFromSelectedAccess);
+        const existingEndpointScore = existing
+          ? Number(existing.originFromSelectedAccess) + Number(existing.destinationFromSelectedAccess)
+          : -1;
+        if (
+          !existing ||
+          itemEndpointScore > existingEndpointScore ||
+          (
+            itemEndpointScore === existingEndpointScore &&
+            item.result.totalMinutes < existing.result.totalMinutes
+          )
+        ) {
+          deduped.set(item.result.id, item);
+        }
+      }
+
+      return [...deduped.values()]
+        .map(({ result, originFromSelectedAccess, destinationFromSelectedAccess }): RouteCandidate => {
+          const originConfigured = originConfiguredPoints.length > 0;
+          const destinationConfigured = destinationConfiguredPoints.length > 0;
+          const viaConfigured = viaConfiguredPoints.length > 0;
+          const originMatch =
+            !originConfigured ||
+            originFromSelectedAccess ||
+            originConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
+          const destinationMatch =
+            !destinationConfigured ||
+            destinationFromSelectedAccess ||
+            destinationConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
+          const viaMatch =
+            !viaConfigured ||
+            viaConfiguredPoints.every((point) => routeMatchesAccessPoint(result, point));
+          const configuredGroupCount =
+            Number(originConfigured) + Number(destinationConfigured) + Number(viaConfigured);
+          const matchedGroupCount =
+            Number(originConfigured && originMatch) +
+            Number(destinationConfigured && destinationMatch) +
+            Number(viaConfigured && viaMatch);
+          const preferenceMatchScore = configuredGroupCount
+            ? matchedGroupCount / configuredGroupCount
+            : 0;
           const matchesPreference =
-            configuredPoints.length > 0 &&
-            configuredPoints.every((point) => routeMatchesAccessPoint(result, point));
+            configuredGroupCount > 0 &&
+            originMatch &&
+            destinationMatch &&
+            viaMatch;
           return {
             id: result.id,
             personId,
@@ -196,8 +294,9 @@ export class ProviderCommuteRepository implements CommuteRepository {
             ...(result.egressMinutes == null ? {} : { egressMinutes: result.egressMinutes }),
             ...(result.fare == null ? {} : { fare: result.fare }),
             ...(result.steps ? { steps: result.steps } : {}),
+            ...(preferenceMatchScore > 0 ? { preferenceMatchScore } : {}),
             ...(matchesPreference
-              ? { matchesPreference: true, policyLabels: ['설정 경로'] }
+              ? { matchesPreference: true, policyLabels: ['선택 교통 반영'] }
               : {}),
           };
         })
@@ -285,8 +384,12 @@ export class ProviderTodayRepository implements TodayRepository {
       ? Math.max(baselineDepartureMs, leftWorkTime)
       : baselineDepartureMs;
      const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
-    const selectedAccess = activeSavedRoute?.originAccessPointId
-      ? originAccessPoints.find((point) => point.id === activeSavedRoute.originAccessPointId)
+    const activeOriginIds = activeSavedRoute
+      ? activeSavedRoute.originAccessPointIds ??
+        (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
+      : [];
+    const selectedAccess = activeOriginIds.length
+      ? originAccessPoints.find((point) => activeOriginIds.includes(point.id))
       : originAccessPoints.find((point) => point.selected);
     let arrivals: Arrival[] = [];
     if (departureMs <= now.getTime()) {

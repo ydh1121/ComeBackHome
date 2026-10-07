@@ -48,12 +48,40 @@ export class CommuteService implements CommuteActions {
 
   async setRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
     const route = await this.requireSavedRoute(personId, routeId);
-    await this.commute.saveSavedRoute({ ...route, originAccessPointId: accessPointId });
+    await this.commute.saveSavedRoute({ ...route, originAccessPointIds: [accessPointId], originAccessPointId: accessPointId });
   }
 
   async setRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
     const route = await this.requireSavedRoute(personId, routeId);
-    await this.commute.saveSavedRoute({ ...route, destinationAccessPointId: accessPointId });
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointIds: [accessPointId], destinationAccessPointId: accessPointId });
+  }
+
+  async addRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = route.originAccessPointIds ?? (route.originAccessPointId ? [route.originAccessPointId] : []);
+    const next = [...ids.filter((id) => id !== accessPointId), accessPointId];
+    await this.commute.saveSavedRoute({ ...route, originAccessPointIds: next, originAccessPointId: next[0] });
+  }
+
+  async removeRouteOriginAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const next = (route.originAccessPointIds ?? (route.originAccessPointId ? [route.originAccessPointId] : []))
+      .filter((id) => id !== accessPointId);
+    await this.commute.saveSavedRoute({ ...route, originAccessPointIds: next, originAccessPointId: next[0] });
+  }
+
+  async addRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const ids = route.destinationAccessPointIds ?? (route.destinationAccessPointId ? [route.destinationAccessPointId] : []);
+    const next = [...ids.filter((id) => id !== accessPointId), accessPointId];
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointIds: next, destinationAccessPointId: next[0] });
+  }
+
+  async removeRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    const next = (route.destinationAccessPointIds ?? (route.destinationAccessPointId ? [route.destinationAccessPointId] : []))
+      .filter((id) => id !== accessPointId);
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointIds: next, destinationAccessPointId: next[0] });
   }
 
   async moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void> {
@@ -134,7 +162,12 @@ export class CommuteService implements CommuteActions {
 }
 
 export class TransitSearchService implements TransitSearchActions {
-  private readonly resultCache = new Map<string, TransitSearchResult[]>();
+  private readonly resultCache = new Map<string, TransitSearchResult>();
+
+  private remember(results: TransitSearchResult[]): TransitSearchResult[] {
+    for (const result of results) this.resultCache.set(result.id, result);
+    return results;
+  }
 
   constructor(
     private readonly places: PlaceRepository,
@@ -146,20 +179,18 @@ export class TransitSearchService implements TransitSearchActions {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate || query.trim().length < 1) return [];
     const results = await this.provider.search(query.trim(), place.coordinate);
-    this.resultCache.set(this.key(personId, kind), results);
-    return results;
+    return this.remember(results);
   }
 
   async nearby(personId: EntityId, kind: PlaceKind) {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate) return [];
     const results = await this.provider.nearby(place.coordinate);
-    this.resultCache.set(this.key(personId, kind), results);
-    return results;
+    return this.remember(results);
   }
 
   async addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint> {
-    const result = this.resultCache.get(this.key(personId, kind))?.find((item) => item.id === resultId);
+    const result = this.resultCache.get(resultId);
     if (!result) throw new Error('Transit search result was not found.');
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate) throw new Error('Transit place coordinate is required.');
@@ -173,6 +204,8 @@ export class TransitSearchService implements TransitSearchActions {
       name: resolved.name,
       displayCode: resolved.displayCode,
       line: resolved.line,
+      coordinate: resolved.coordinate,
+      distanceM: resolved.distanceM,
       walkMinutes: resolved.walkMinutes,
       selected: true,
       busRoutes: resolved.busRoutes,
@@ -181,9 +214,6 @@ export class TransitSearchService implements TransitSearchActions {
     return point;
   }
 
-  private key(personId: EntityId, kind: PlaceKind) {
-    return personId + ':' + kind;
-  }
 }
 
 function normalizeStopName(value: string): string {

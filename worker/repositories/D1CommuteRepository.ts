@@ -14,6 +14,10 @@ interface AccessPointRow {
   user_label: string | null;
   display_code: string | null;
   line: string | null;
+  coordinate_x: number | null;
+  coordinate_y: number | null;
+  distance_m: number | null;
+  walk_minutes: number | null;
   selected: number;
   selected_bus_route_id: string | null;
 }
@@ -54,6 +58,11 @@ function toAccessPoint(row: AccessPointRow): TransitAccessPoint {
     ...(row.user_label ? { userLabel: row.user_label } : {}),
     ...(row.display_code ? { displayCode: row.display_code } : {}),
     ...(row.line ? { line: row.line } : {}),
+    ...(row.coordinate_x != null && row.coordinate_y != null
+      ? { coordinate: { x: row.coordinate_x, y: row.coordinate_y } }
+      : {}),
+    ...(row.distance_m != null ? { distanceM: row.distance_m } : {}),
+    ...(row.walk_minutes != null ? { walkMinutes: row.walk_minutes } : {}),
     ...(row.selected_bus_route_id ? { selectedBusRouteId: row.selected_bus_route_id } : {}),
   };
 }
@@ -65,7 +74,8 @@ export class D1CommuteRepository implements CommuteRepository {
     const result = await this.db.prepare(
       `SELECT
         id, person_id, place_kind, provider_id, mode, canonical_name, user_label,
-        display_code, line, selected, selected_bus_route_id
+        display_code, line, coordinate_x, coordinate_y, distance_m, walk_minutes,
+        selected, selected_bus_route_id
       FROM transit_access_points
       WHERE person_id = ?1 AND place_kind = ?2
       ORDER BY selected DESC, canonical_name ASC, id ASC`,
@@ -78,14 +88,19 @@ export class D1CommuteRepository implements CommuteRepository {
     await this.db.prepare(
       `INSERT INTO transit_access_points (
         id, person_id, place_kind, provider_id, mode, canonical_name, user_label,
-        display_code, line, selected, selected_bus_route_id, created_at, updated_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)
+        display_code, line, coordinate_x, coordinate_y, distance_m, walk_minutes,
+        selected, selected_bus_route_id, created_at, updated_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16)
       ON CONFLICT(person_id, place_kind, provider_id) DO UPDATE SET
         mode = excluded.mode,
         canonical_name = excluded.canonical_name,
         user_label = excluded.user_label,
         display_code = excluded.display_code,
         line = excluded.line,
+        coordinate_x = excluded.coordinate_x,
+        coordinate_y = excluded.coordinate_y,
+        distance_m = excluded.distance_m,
+        walk_minutes = excluded.walk_minutes,
         selected = excluded.selected,
         selected_bus_route_id = excluded.selected_bus_route_id,
         updated_at = excluded.updated_at`,
@@ -99,6 +114,10 @@ export class D1CommuteRepository implements CommuteRepository {
       point.userLabel ?? null,
       point.displayCode ?? null,
       point.line ?? null,
+      point.coordinate?.x ?? null,
+      point.coordinate?.y ?? null,
+      point.distanceM ?? null,
+      point.walkMinutes ?? null,
       asInteger(point.selected),
       point.selectedBusRouteId ?? null,
       now,
@@ -170,32 +189,64 @@ export class D1CommuteRepository implements CommuteRepository {
       ORDER BY position ASC, id ASC`,
     ).bind(personId).all<SavedRouteRow>();
 
-    const viaResult = await this.db.prepare(
-      `SELECT route_id, access_point_id
-      FROM saved_commute_route_vias
-      WHERE route_id IN (
-        SELECT id FROM saved_commute_routes WHERE person_id = ?1
-      )
-      ORDER BY route_id ASC, position ASC`,
-    ).bind(personId).all<SavedRouteViaRow>();
+    const [viaResult, originResult, destinationResult] = await Promise.all([
+      this.db.prepare(
+        `SELECT route_id, access_point_id
+        FROM saved_commute_route_vias
+        WHERE route_id IN (
+          SELECT id FROM saved_commute_routes WHERE person_id = ?1
+        )
+        ORDER BY route_id ASC, position ASC`,
+      ).bind(personId).all<SavedRouteViaRow>(),
+      this.db.prepare(
+        `SELECT route_id, access_point_id
+        FROM saved_commute_route_origins
+        WHERE route_id IN (
+          SELECT id FROM saved_commute_routes WHERE person_id = ?1
+        )
+        ORDER BY route_id ASC, position ASC`,
+      ).bind(personId).all<SavedRouteViaRow>(),
+      this.db.prepare(
+        `SELECT route_id, access_point_id
+        FROM saved_commute_route_destinations
+        WHERE route_id IN (
+          SELECT id FROM saved_commute_routes WHERE person_id = ?1
+        )
+        ORDER BY route_id ASC, position ASC`,
+      ).bind(personId).all<SavedRouteViaRow>(),
+    ]);
 
-    const viasByRoute = new Map<string, string[]>();
-    for (const row of viaResult.results) {
-      const ids = viasByRoute.get(row.route_id) ?? [];
-      ids.push(row.access_point_id);
-      viasByRoute.set(row.route_id, ids);
-    }
+    const groupByRoute = (rows: SavedRouteViaRow[]) => {
+      const grouped = new Map<string, string[]>();
+      for (const row of rows) {
+        const ids = grouped.get(row.route_id) ?? [];
+        ids.push(row.access_point_id);
+        grouped.set(row.route_id, ids);
+      }
+      return grouped;
+    };
+    const viasByRoute = groupByRoute(viaResult.results);
+    const originsByRoute = groupByRoute(originResult.results);
+    const destinationsByRoute = groupByRoute(destinationResult.results);
 
-    return routeResult.results.map((row) => ({
-      id: row.id,
-      personId: row.person_id,
-      position: row.position,
-      label: row.label,
-      ...(row.origin_access_point_id ? { originAccessPointId: row.origin_access_point_id } : {}),
-      ...(row.destination_access_point_id ? { destinationAccessPointId: row.destination_access_point_id } : {}),
-      viaAccessPointIds: viasByRoute.get(row.id) ?? [],
-      active: asBoolean(row.active),
-    }));
+    return routeResult.results.map((row) => {
+      const originAccessPointIds = originsByRoute.get(row.id) ??
+        (row.origin_access_point_id ? [row.origin_access_point_id] : []);
+      const destinationAccessPointIds = destinationsByRoute.get(row.id) ??
+        (row.destination_access_point_id ? [row.destination_access_point_id] : []);
+      return {
+        id: row.id,
+        personId: row.person_id,
+        position: row.position,
+        label: row.label,
+        originAccessPointIds,
+        destinationAccessPointIds,
+        ...(originAccessPointIds[0] ? { originAccessPointId: originAccessPointIds[0] } : {}),
+        ...(destinationAccessPointIds[0] ? { destinationAccessPointId: destinationAccessPointIds[0] } : {}),
+        viaAccessPointIds: viasByRoute.get(row.id) ?? [],
+        active: asBoolean(row.active),
+      };
+    });
   }
 
   async createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
@@ -206,6 +257,8 @@ export class D1CommuteRepository implements CommuteRepository {
       personId,
       position,
       label: '경로 ' + position,
+      originAccessPointIds: [],
+      destinationAccessPointIds: [],
       viaAccessPointIds: [],
       active: routes.length === 0,
     };
@@ -242,14 +295,36 @@ export class D1CommuteRepository implements CommuteRepository {
         route.personId,
         route.position,
         route.label,
-        route.originAccessPointId ?? null,
-        route.destinationAccessPointId ?? null,
+        route.originAccessPointIds
+          ? route.originAccessPointIds[0] ?? null
+          : route.originAccessPointId ?? null,
+        route.destinationAccessPointIds
+          ? route.destinationAccessPointIds[0] ?? null
+          : route.destinationAccessPointId ?? null,
         asInteger(route.active),
         now,
       ),
       this.db.prepare(
         'DELETE FROM saved_commute_route_vias WHERE route_id = ?1',
       ).bind(route.id),
+      this.db.prepare(
+        'DELETE FROM saved_commute_route_origins WHERE route_id = ?1',
+      ).bind(route.id),
+      this.db.prepare(
+        'DELETE FROM saved_commute_route_destinations WHERE route_id = ?1',
+      ).bind(route.id),
+      ...(route.originAccessPointIds ?? (route.originAccessPointId ? [route.originAccessPointId] : [])).map(
+        (accessPointId, position) => this.db.prepare(
+          `INSERT INTO saved_commute_route_origins (route_id, position, access_point_id)
+          VALUES (?1, ?2, ?3)`,
+        ).bind(route.id, position, accessPointId),
+      ),
+      ...(route.destinationAccessPointIds ?? (route.destinationAccessPointId ? [route.destinationAccessPointId] : [])).map(
+        (accessPointId, position) => this.db.prepare(
+          `INSERT INTO saved_commute_route_destinations (route_id, position, access_point_id)
+          VALUES (?1, ?2, ?3)`,
+        ).bind(route.id, position, accessPointId),
+      ),
       ...route.viaAccessPointIds.map((accessPointId, position) => this.db.prepare(
         `INSERT INTO saved_commute_route_vias (route_id, position, access_point_id)
         VALUES (?1, ?2, ?3)`,

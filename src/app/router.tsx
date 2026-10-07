@@ -13,7 +13,6 @@ import { OriginPlaceEditPage, DestinationPlaceEditPage } from '../pages/PlaceEdi
 import { CommuteRoutePage } from '../pages/CommuteRoutePage';
 import { CommuteManualPage } from '../pages/CommuteManualPage';
 import { TransitAccessPage } from '../pages/TransitAccessPage';
-import { TransitSearchPage } from '../pages/TransitSearchPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
 import { NotificationPage } from '../pages/NotificationPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -44,7 +43,6 @@ function componentFor(path: string) {
   if (path === '/people/:personId/commute/manual') return CommuteManualPage;
   if (path === '/people/:personId/commute/routes/:routeId') return CommuteManualPage;
   if (path === '/people/:personId/commute/:placeKind/access') return TransitAccessPage;
-  if (path === '/people/:personId/commute/:placeKind/access/search') return TransitSearchPage;
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;
   if (path === '/notifications') return NotificationPage;
   if (path === '/settings') return SettingsPage;

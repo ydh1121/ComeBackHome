@@ -23,6 +23,15 @@ function selectedRoute(routes: SavedCommuteRoute[], routeId?: string): SavedComm
   return routes.find((route) => route.id === routeId) ?? routes.find((route) => route.active) ?? routes[0] ?? null;
 }
 
+function routeAccessIds(route: SavedCommuteRoute, role: 'origin' | 'destination'): string[] {
+  if (role === 'origin') {
+    return route.originAccessPointIds ??
+      (route.originAccessPointId ? [route.originAccessPointId] : []);
+  }
+  return route.destinationAccessPointIds ??
+    (route.destinationAccessPointId ? [route.destinationAccessPointId] : []);
+}
+
 export function CommuteManualPage() {
   const { personId = '', routeId } = useParams();
   const navigate = useNavigate();
@@ -57,8 +66,14 @@ export function CommuteManualPage() {
     );
   }
 
-  const originPoint = points.find((point) => point.id === route.originAccessPointId);
-  const destinationPoint = points.find((point) => point.id === route.destinationAccessPointId);
+  const originIds = routeAccessIds(route, 'origin');
+  const destinationIds = routeAccessIds(route, 'destination');
+  const originPoints = originIds
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
+  const destinationPoints = destinationIds
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point): point is TransitAccessPoint => Boolean(point));
   const viaPoints = route.viaAccessPointIds
     .map((id) => points.find((point) => point.id === id))
     .filter((point): point is TransitAccessPoint => Boolean(point));
@@ -96,19 +111,29 @@ export function CommuteManualPage() {
           <Icon name="chevron-right" />
         </button>
 
-        {originPoint ? (
+        {originPoints.length ? (
           <div className="manual-route-transport">
-            <div className="manual-route-transport-label">출발 교통수단</div>
-            <button type="button" className="manual-route-edit" onClick={() => navigate(originAccessPath)}>
-              <span className="manual-route-mode"><Icon name={originPoint.mode === 'BUS' ? 'bus' : 'train'} /></span>
-              <span><b>{displayName(originPoint)}</b>{accessMeta(originPoint) ? <span className="manual-route-meta">{accessMeta(originPoint)}</span> : null}</span>
-              <span className="node-trailing"><Icon name="chevron-right" /></span>
-            </button>
+            <div className="manual-route-transport-label">출발 교통수단 · 복수 선택</div>
+            {originPoints.map((point) => (
+              <div className="manual-route-selected-access" key={point.id}>
+                <button type="button" className="manual-route-edit" onClick={() => navigate(originAccessPath)}>
+                  <span className="manual-route-mode"><Icon name={point.mode === 'BUS' ? 'bus' : 'train'} /></span>
+                  <span><b>{displayName(point)}</b>{accessMeta(point) ? <span className="manual-route-meta">{accessMeta(point)}</span> : null}</span>
+                  <span className="node-trailing"><Icon name="chevron-right" /></span>
+                </button>
+                <button
+                  type="button"
+                  className="route-via-remove"
+                  aria-label={displayName(point) + ' 출발 교통 삭제'}
+                  onClick={() => services.actions.commute.removeRouteOriginAccess(personId, route.id, point.id)}
+                >×</button>
+              </div>
+            ))}
           </div>
         ) : null}
 
         <button type="button" className="cta secondary route-leg-add" onClick={() => navigate(originAccessPath)}>
-          <Icon name="plus" /> {originPoint ? '출발 교통수단 변경' : '출발 교통수단 추가'}
+          <Icon name="plus" /> 출발 교통수단 추가
         </button>
 
         <div className="manual-route-section-title">경유 교통수단</div>
@@ -162,19 +187,29 @@ export function CommuteManualPage() {
           <Icon name="plus" /> 경유 교통수단 추가
         </button>
 
-        {destinationPoint ? (
+        {destinationPoints.length ? (
           <div className="manual-route-transport">
-            <div className="manual-route-transport-label">도착 교통수단</div>
-            <button type="button" className="manual-route-edit" onClick={() => navigate(destinationAccessPath)}>
-              <span className="manual-route-mode"><Icon name={destinationPoint.mode === 'BUS' ? 'bus' : 'train'} /></span>
-              <span><b>{displayName(destinationPoint)}</b>{accessMeta(destinationPoint) ? <span className="manual-route-meta">{accessMeta(destinationPoint)}</span> : null}</span>
-              <span className="node-trailing"><Icon name="chevron-right" /></span>
-            </button>
+            <div className="manual-route-transport-label">도착 교통수단 · 복수 선택</div>
+            {destinationPoints.map((point) => (
+              <div className="manual-route-selected-access" key={point.id}>
+                <button type="button" className="manual-route-edit" onClick={() => navigate(destinationAccessPath)}>
+                  <span className="manual-route-mode"><Icon name={point.mode === 'BUS' ? 'bus' : 'train'} /></span>
+                  <span><b>{displayName(point)}</b>{accessMeta(point) ? <span className="manual-route-meta">{accessMeta(point)}</span> : null}</span>
+                  <span className="node-trailing"><Icon name="chevron-right" /></span>
+                </button>
+                <button
+                  type="button"
+                  className="route-via-remove"
+                  aria-label={displayName(point) + ' 도착 교통 삭제'}
+                  onClick={() => services.actions.commute.removeRouteDestinationAccess(personId, route.id, point.id)}
+                >×</button>
+              </div>
+            ))}
           </div>
         ) : null}
 
         <button type="button" className="cta secondary route-leg-add" onClick={() => navigate(destinationAccessPath)}>
-          <Icon name="plus" /> {destinationPoint ? '도착 교통수단 변경' : '도착 교통수단 추가'}
+          <Icon name="plus" /> 도착 교통수단 추가
         </button>
 
                 <button type="button" className="manual-route-node" onClick={() => navigate('/people/' + encodeURIComponent(personId) + '/place/destination')}>

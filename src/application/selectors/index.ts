@@ -2,6 +2,6 @@ import type { ISODate } from '../../domain/common';
 import type { RouteCandidate, ScheduleEntry, TransitAccessPoint } from '../../domain/models';
 import type { TransitAccessFilter } from '../contracts/actions';
 export function selectVisibleAccessPoints(points: TransitAccessPoint[], filter: TransitAccessFilter): TransitAccessPoint[] { if (filter === 'all') return points; const mode = filter === 'bus' ? 'BUS' : 'SUBWAY'; return points.filter((point) => point.mode === mode); }
-export function rankRouteCandidates(candidates: RouteCandidate[]): RouteCandidate[] { return [...candidates].sort((a, b) => Number(b.matchesPreference === true) - Number(a.matchesPreference === true) || a.totalMinutes - b.totalMinutes || a.transferCount - b.transferCount || a.walkMinutes - b.walkMinutes); }
+export function rankRouteCandidates(candidates: RouteCandidate[]): RouteCandidate[] { return [...candidates].sort((a, b) => (b.preferenceMatchScore ?? 0) - (a.preferenceMatchScore ?? 0) || Number(b.matchesPreference === true) - Number(a.matchesPreference === true) || a.totalMinutes - b.totalMinutes || a.transferCount - b.transferCount || a.walkMinutes - b.walkMinutes); }
 export function selectEnabledSchedule(entries: ScheduleEntry[]): ScheduleEntry[] { return entries.filter((entry) => entry.enabled).sort((a, b) => a.date.localeCompare(b.date)); }
 export function selectNextShift(entries: ScheduleEntry[], after: ISODate): ScheduleEntry | null { return selectEnabledSchedule(entries).find((entry) => entry.date >= after) ?? null; }
