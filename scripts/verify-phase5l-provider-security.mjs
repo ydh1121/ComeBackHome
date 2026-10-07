@@ -17,10 +17,11 @@ expect(securitySource.includes("'UNVERIFIED_TRANSPORT'"), 'unverified transport 
 expect(securitySource.includes("'MISSING_SECRET'"), 'missing secret reason missing');
 
 for (const text of [
-  'http://openapi.seoul.go.kr:8088',
-  'http://ws.bus.go.kr',
+  'ws.bus.go.kr',
+  'swopenapi.seoul.go.kr',
+  'openapi.seoul.go.kr',
   'OFFICIAL SEOUL HTTP ALLOWLIST ACTIVE / SECRET-GATED',
-  'No secret value is returned',
+  'never returned to the browser',
 ]) {
   expect(docs.includes(text), 'secure-transport docs missing ' + text);
 }
