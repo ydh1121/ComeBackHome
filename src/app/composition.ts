@@ -11,6 +11,7 @@ import { MockNotificationPermissionProvider, MockNotificationTestGateway, MockPr
 import { MockCommuteRepository, MockImportRepository, MockNotificationRepository, MockPersonRepository, MockPlaceRepository, MockPresenceRepository, MockScheduleRepository, MockTodayRepository } from '../mocks/repositories';
 import { MOCK_FIXTURE, MockStateStore } from '../mocks/state';
 import {
+  HttpBusRouteLookupProvider,
   HttpPlaceSearchProvider,
   HttpRealtimeBusProvider,
   HttpRealtimeSubwayProvider,
@@ -139,6 +140,7 @@ export async function createHybridApiApplicationServices(
   const persistedCommute = new HttpCommuteRepository(client);
   const runtimeCommute = new MockCommuteRepository(runtimeStore);
   const routeProvider = providerMode === 'api' ? new HttpTransitRouteProvider(client) : null;
+  const busRouteLookupProvider = providerMode === 'api' ? new HttpBusRouteLookupProvider(client) : null;
   const realtimeBusProvider = providerMode === 'api' ? new HttpRealtimeBusProvider(client) : null;
   const realtimeSubwayProvider = providerMode === 'api' ? new HttpRealtimeSubwayProvider(client) : null;
   const commute = providerMode === 'api' && routeProvider
@@ -225,7 +227,7 @@ export async function createHybridApiApplicationServices(
       places: new PlaceService(places, placeSearchProvider),
       commute: new CommuteService(commute),
       transitSearch: new TransitSearchService(places, commute, transitSearchProvider),
-      busRoutes: new BusRouteService(commute, places, routeProvider),
+      busRoutes: new BusRouteService(commute, places, routeProvider, busRouteLookupProvider),
       schedule: new ScheduleService(schedules, personSelection),
       importFiles: importFileSelection,
       importMatch: importWorkflow,
