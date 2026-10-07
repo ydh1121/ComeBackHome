@@ -23,8 +23,9 @@ for (const name of [
 
 for (const secret of [
   'KAKAO_REST_API_KEY',
-  'SEOUL_SUBWAY_API_KEY',
   'SEOUL_BUS_SERVICE_KEY',
+  'SEOUL_OPENAPI_KEY',
+  'SEOUL_SUBWAY_API_KEY',
 ]) {
   expect(contracts.includes(secret), 'secret binding contract missing ' + secret);
 }
@@ -33,6 +34,8 @@ for (const source of ["'kakao-map'", "'seoul-bus'", "'seoul-subway'"]) {
   expect(plan.includes(source), 'source plan missing ' + source);
 }
 expect(plan.includes("officialSeoulHttpAllowlistRequired: true"), 'official Seoul HTTP allowlist policy missing');
+expect(plan.includes("'SEOUL_OPENAPI_KEY'"), 'general Seoul Open Data key missing from production activation policy');
+expect(plan.includes("'SEOUL_SUBWAY_API_KEY'"), 'realtime subway key missing from production activation policy');
 expect(plan.includes("missingRealtimeSecretBehavior: 'FALLBACK'"), 'missing realtime fallback policy missing');
 expect(plan.includes("fabricatedRealtimeAllowed: false"), 'fabricated realtime guard missing');
 
