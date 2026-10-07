@@ -16,6 +16,8 @@ const manifest = await read('../src/application/route-manifest.ts');
 const css = await read('../src/pages/commute-page.css');
 const providerRuntime = await read('../src/providers/runtime/ProviderRuntimeRepositories.ts');
 const selectors = await read('../src/application/selectors/index.ts');
+const workerApi = await read('../worker/api.ts');
+const migration = await read('../db/migrations/0007_multi_access_route_sets.sql');
 
 for (const text of ['장소 이름','도로명·건물명 검색','상세주소','onCompositionStart','250','actions.places.save']) if (!place.includes(text)) failures.push('place missing ' + text);
 for (const text of ['경로 설정','경로 추가','savedRoutes','createSavedRoute','selectSavedRoute','추천 경로','카카오 대중교통 경로']) if (!route.includes(text)) failures.push('route missing ' + text);
@@ -46,6 +48,8 @@ for (const text of ['addRouteOriginAccess','removeRouteOriginAccess','addRouteDe
 for (const text of ['class PlaceService','class CommuteService','class TransitSearchService','class BusRouteService','nearby(','listRoutes(']) if (!service.includes(text)) failures.push('service missing ' + text);
 for (const text of ['routeMatchesAccessPoint','originConfiguredPoints.some','destinationConfiguredPoints.some','viaConfiguredPoints.every','matchesPreference: true',"policyLabels: ['선택 교통 반영']"]) if (!providerRuntime.includes(text)) failures.push('saved-route provider matching missing ' + text);
 if (!selectors.includes('(b.preferenceMatchScore ?? 0) - (a.preferenceMatchScore ?? 0)')) failures.push('route ranking does not prioritize multi-access match score');
+for (const text of ['trimNearbyTransitByDistance','nearest + delta','normalCap','distanceM']) if (!workerApi.includes(text)) failures.push('distance-scoped nearby transit missing ' + text);
+for (const text of ['saved_commute_route_origins','saved_commute_route_destinations','coordinate_x','distance_m']) if (!migration.includes(text)) failures.push('multi-access migration missing ' + text);
 if (!manual.includes('aria-label="경유 교통수단 순서 이동"')) failures.push('manual reorder aria label missing');
 if (manifest.includes('/commute/edit') || manifest.includes('/access/bus')) failures.push('prototype route aliases leaked into canonical manifest');
 for (const text of ['.commute-page .route-candidate','.commute-page .transit-row','.commute-page .bus-route-option','.commute-page .kakao-transit-map-shell','.commute-page .saved-route-setting']) if (!css.includes(text)) failures.push('commute styles missing ' + text);
