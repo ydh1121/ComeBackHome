@@ -189,32 +189,64 @@ export class D1CommuteRepository implements CommuteRepository {
       ORDER BY position ASC, id ASC`,
     ).bind(personId).all<SavedRouteRow>();
 
-    const viaResult = await this.db.prepare(
-      `SELECT route_id, access_point_id
-      FROM saved_commute_route_vias
-      WHERE route_id IN (
-        SELECT id FROM saved_commute_routes WHERE person_id = ?1
-      )
-      ORDER BY route_id ASC, position ASC`,
-    ).bind(personId).all<SavedRouteViaRow>();
+    const [viaResult, originResult, destinationResult] = await Promise.all([
+      this.db.prepare(
+        `SELECT route_id, access_point_id
+        FROM saved_commute_route_vias
+        WHERE route_id IN (
+          SELECT id FROM saved_commute_routes WHERE person_id = ?1
+        )
+        ORDER BY route_id ASC, position ASC`,
+      ).bind(personId).all<SavedRouteViaRow>(),
+      this.db.prepare(
+        `SELECT route_id, access_point_id
+        FROM saved_commute_route_origins
+        WHERE route_id IN (
+          SELECT id FROM saved_commute_routes WHERE person_id = ?1
+        )
+        ORDER BY route_id ASC, position ASC`,
+      ).bind(personId).all<SavedRouteViaRow>(),
+      this.db.prepare(
+        `SELECT route_id, access_point_id
+        FROM saved_commute_route_destinations
+        WHERE route_id IN (
+          SELECT id FROM saved_commute_routes WHERE person_id = ?1
+        )
+        ORDER BY route_id ASC, position ASC`,
+      ).bind(personId).all<SavedRouteViaRow>(),
+    ]);
 
-    const viasByRoute = new Map<string, string[]>();
-    for (const row of viaResult.results) {
-      const ids = viasByRoute.get(row.route_id) ?? [];
-      ids.push(row.access_point_id);
-      viasByRoute.set(row.route_id, ids);
-    }
+    const groupByRoute = (rows: SavedRouteViaRow[]) => {
+      const grouped = new Map<string, string[]>();
+      for (const row of rows) {
+        const ids = grouped.get(row.route_id) ?? [];
+        ids.push(row.access_point_id);
+        grouped.set(row.route_id, ids);
+      }
+      return grouped;
+    };
+    const viasByRoute = groupByRoute(viaResult.results);
+    const originsByRoute = groupByRoute(originResult.results);
+    const destinationsByRoute = groupByRoute(destinationResult.results);
 
-    return routeResult.results.map((row) => ({
-      id: row.id,
-      personId: row.person_id,
-      position: row.position,
-      label: row.label,
-      ...(row.origin_access_point_id ? { originAccessPointId: row.origin_access_point_id } : {}),
-      ...(row.destination_access_point_id ? { destinationAccessPointId: row.destination_access_point_id } : {}),
-      viaAccessPointIds: viasByRoute.get(row.id) ?? [],
-      active: asBoolean(row.active),
-    }));
+    return routeResult.results.map((row) => {
+      const originAccessPointIds = originsByRoute.get(row.id) ??
+        (row.origin_access_point_id ? [row.origin_access_point_id] : []);
+      const destinationAccessPointIds = destinationsByRoute.get(row.id) ??
+        (row.destination_access_point_id ? [row.destination_access_point_id] : []);
+      return {
+        id: row.id,
+        personId: row.person_id,
+        position: row.position,
+        label: row.label,
+        originAccessPointIds,
+        destinationAccessPointIds,
+        ...(originAccessPointIds[0] ? { originAccessPointId: originAccessPointIds[0] } : {}),
+        ...(destinationAccessPointIds[0] ? { destinationAccessPointId: destinationAccessPointIds[0] } : {}),
+        viaAccessPointIds: viasByRoute.get(row.id) ?? [],
+        active: asBoolean(row.active),
+      };
+    });
   }
 
   async createSavedRoute(personId: EntityId): Promise<SavedCommuteRoute> {
@@ -225,6 +257,8 @@ export class D1CommuteRepository implements CommuteRepository {
       personId,
       position,
       label: '경로 ' + position,
+      originAccessPointIds: [],
+      destinationAccessPointIds: [],
       viaAccessPointIds: [],
       active: routes.length === 0,
     };
@@ -261,14 +295,32 @@ export class D1CommuteRepository implements CommuteRepository {
         route.personId,
         route.position,
         route.label,
-        route.originAccessPointId ?? null,
-        route.destinationAccessPointId ?? null,
+        route.originAccessPointIds?.[0] ?? route.originAccessPointId ?? null,
+        route.destinationAccessPointIds?.[0] ?? route.destinationAccessPointId ?? null,
         asInteger(route.active),
         now,
       ),
       this.db.prepare(
         'DELETE FROM saved_commute_route_vias WHERE route_id = ?1',
       ).bind(route.id),
+      this.db.prepare(
+        'DELETE FROM saved_commute_route_origins WHERE route_id = ?1',
+      ).bind(route.id),
+      this.db.prepare(
+        'DELETE FROM saved_commute_route_destinations WHERE route_id = ?1',
+      ).bind(route.id),
+      ...(route.originAccessPointIds ?? (route.originAccessPointId ? [route.originAccessPointId] : [])).map(
+        (accessPointId, position) => this.db.prepare(
+          `INSERT INTO saved_commute_route_origins (route_id, position, access_point_id)
+          VALUES (?1, ?2, ?3)`,
+        ).bind(route.id, position, accessPointId),
+      ),
+      ...(route.destinationAccessPointIds ?? (route.destinationAccessPointId ? [route.destinationAccessPointId] : [])).map(
+        (accessPointId, position) => this.db.prepare(
+          `INSERT INTO saved_commute_route_destinations (route_id, position, access_point_id)
+          VALUES (?1, ?2, ?3)`,
+        ).bind(route.id, position, accessPointId),
+      ),
       ...route.viaAccessPointIds.map((accessPointId, position) => this.db.prepare(
         `INSERT INTO saved_commute_route_vias (route_id, position, access_point_id)
         VALUES (?1, ?2, ?3)`,
