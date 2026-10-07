@@ -57,18 +57,17 @@ for (const path of [
   '../src/pages/PlaceEditPage.tsx',
   '../src/pages/CommuteRoutePage.tsx',
   '../src/pages/TransitAccessPage.tsx',
-  '../src/pages/TransitSearchPage.tsx',
   '../src/pages/BusRoutePage.tsx',
   '../src/pages/NotificationPage.tsx',
 ]) files[path] = await read(path);
 
-for (const path of ['../src/pages/TodayPage.tsx','../src/pages/PlaceEditPage.tsx','../src/pages/TransitSearchPage.tsx']) {
+for (const path of ['../src/pages/TodayPage.tsx','../src/pages/PlaceEditPage.tsx']) {
   if (!files[path].includes('OFFLINE')) failures.push('offline state missing ' + path);
 }
 for (const path of ['../src/pages/ScheduleBulkEditPage.tsx','../src/pages/ScheduleDayEditPage.tsx','../src/pages/PersonCreatePage.tsx','../src/pages/PersonEditPage.tsx','../src/pages/PlaceEditPage.tsx']) {
   if (!files[path].includes('useFormRuntimeState')) failures.push('form runtime hook missing ' + path);
 }
-for (const path of ['../src/pages/SchedulePage.tsx','../src/pages/CommuteRoutePage.tsx','../src/pages/TransitAccessPage.tsx','../src/pages/TransitSearchPage.tsx','../src/pages/BusRoutePage.tsx','../src/pages/PeoplePage.tsx','../src/pages/ImportReviewPage.tsx']) {
+for (const path of ['../src/pages/SchedulePage.tsx','../src/pages/CommuteRoutePage.tsx','../src/pages/TransitAccessPage.tsx','../src/pages/BusRoutePage.tsx','../src/pages/PeoplePage.tsx','../src/pages/ImportReviewPage.tsx']) {
   const source = files[path];
   if (!(source.includes('NO_RESULT') || source.includes('EMPTY') || source.includes('검색 결과가 없습니다') || source.includes('없습니다.') || source.includes('대기 중'))) {
     failures.push('no-result/empty state missing ' + path);
@@ -79,6 +78,10 @@ for (const path of ['../src/pages/TodayPage.tsx','../src/pages/SchedulePage.tsx'
   if (!source.includes('loading') && !source.includes('LOADING')) failures.push('loading state missing ' + path);
   if (!source.includes('error') && !source.includes('ERROR')) failures.push('error state missing ' + path);
 }
+for (const text of ['type="search"','actions.transitSearch.search','검색 결과가 없습니다.']) {
+  if (!files['../src/pages/TransitAccessPage.tsx'].includes(text)) failures.push('inline transit search runtime state missing ' + text);
+}
+
 for (const text of ['PERMISSION_DEFAULT','PERMISSION_DENIED','PERMISSION_GRANTED','SUBSCRIBED','PERMISSION_ERROR']) {
   if (!files['../src/pages/NotificationPage.tsx'].includes(text)) failures.push('permission state missing ' + text);
 }
