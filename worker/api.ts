@@ -182,6 +182,19 @@ export async function handleApiRequest(
       return json({ ok: row?.ok === 1 });
     }
 
+    if (segments.length === 2 && segments[1] === 'client-config' && request.method === 'GET') {
+      const kakaoMapsJavaScriptKey =
+        env.CBH_KAKAO_MAPS_JAVASCRIPT_KEY?.trim() ||
+        env.VITE_CBH_KAKAO_JAVASCRIPT_KEY?.trim() ||
+        '';
+      return json({
+        kakaoMaps: {
+          configured: Boolean(kakaoMapsJavaScriptKey),
+          javaScriptKey: kakaoMapsJavaScriptKey,
+        },
+      });
+    }
+
     if (segments[1] === 'providers' && request.method === 'GET') {
       const enabled = env.PROVIDER_RUNTIME_ENABLED === '1';
 
