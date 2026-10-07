@@ -50,7 +50,15 @@ export class CommitImportReview implements CommitImportReviewAction {
         end,
       });
     }
-    await this.schedules.upsertMany(entries);
+    const entriesByPerson = new Map<string, typeof entries>();
+    for (const entry of entries) {
+      const group = entriesByPerson.get(entry.personId) ?? [];
+      group.push(entry);
+      entriesByPerson.set(entry.personId, group);
+    }
+    for (const group of entriesByPerson.values()) {
+      await this.schedules.upsertMany(group);
+    }
 
     await this.imports.markCommitted(batchId);
   }
