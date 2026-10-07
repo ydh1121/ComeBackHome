@@ -206,6 +206,8 @@ export class BusRouteService implements BusRouteActions {
     const point = (await this.commute.listAccessPoints(personId, kind))
       .find((candidate) => candidate.id === accessPointId);
     if (!point || point.mode !== 'BUS') return [];
+    const officialRoutes = (point.busRoutes ?? []).filter((route) => /^\d+$/.test(route.providerRouteId));
+    if (officialRoutes.length) return officialRoutes;
     if (!this.routeProvider) return point.busRoutes ?? [];
 
     const [origin, destination] = await Promise.all([
