@@ -110,7 +110,7 @@ for (const text of [
   if (!main.includes(text)) failures.push('main runtime bootstrap missing ' + text);
 }
 
-if (!today.includes('services.runtime.persistence') || !today.includes('services.runtime.providerData')) failures.push('Today runtime source label missing');
+if (today.includes('services.runtime.persistence') || today.includes('services.runtime.providerData')) failures.push('developer runtime source label leaked into Today');
 if (!qa.includes('services.runtime.persistence') || !qa.includes('services.runtime.providerData')) failures.push('QA runtime source label missing');
 
 for (const text of [
