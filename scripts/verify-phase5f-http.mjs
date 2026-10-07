@@ -42,7 +42,6 @@ for (const name of [
   'HttpScheduleRepository',
   'HttpPlaceRepository',
   'HttpCommuteRepository',
-  'HybridCommuteRepository',
   'HttpNotificationRepository',
   'HttpPushSubscriptionTransport',
 ]) {
@@ -52,7 +51,6 @@ for (const name of [
 for (const text of [
   "await this.client.put(\n      '/people/' + encodeURIComponent(personId) + '/schedules'",
   'Schedule batch must belong to one person.',
-  'return this.runtime.listRouteCandidates(personId)',
   'permission: this.permission',
   'subscription: this.subscription',
   "await this.client.put('/notifications/settings'",
@@ -79,6 +77,7 @@ for (const text of [
 ]) {
   if (!composition.includes(text)) failures.push('hybrid composition missing ' + text);
 }
+if (httpRepositories.includes('class HybridCommuteRepository')) failures.push('obsolete hybrid commute adapter remains in production source');
 if (composition.includes('BrowserPushSubscriptionProvider')) failures.push('browser push adapter activated in hybrid composition');
 if (composition.includes('HttpPushSubscriptionTransport')) failures.push('push transport activated in hybrid composition');
 
