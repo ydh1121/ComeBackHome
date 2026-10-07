@@ -444,6 +444,7 @@ function mergePersonRegionToken(
 export class TesseractScheduleImageTextExtractor implements RegionalImageTextExtractor {
   private readonly languages: string[];
   private readonly minimumConfidence: number;
+  private readonly useStructureFirstMode: boolean;
 
   constructor(
     private readonly workers: ScheduleOcrWorkerFactory,
