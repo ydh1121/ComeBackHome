@@ -19,7 +19,8 @@ const normalizedDocs = docs.replaceAll('`', '');
 
 for (const text of [
   "export type ProviderRuntimeMode = 'mock' | 'api'",
-  "value == null || value === '' || value === 'mock'",
+  "import.meta.env.DEV ? 'mock' : 'api'",
+  "if (value === 'mock') return 'mock'",
   "if (value === 'api') return 'api'",
   'Unsupported VITE_CBH_PROVIDER_RUNTIME value',
 ]) {
@@ -50,7 +51,7 @@ for (const forbidden of ['http://', 'https://', 'VITE_', 'API_BASE_URL']) {
 }
 
 for (const text of [
-  "providerData: 'mock' | 'worker-api'",
+  "providerData: 'mock' | 'worker-api' | 'disabled'",
 ]) {
   expect(runtimeContracts.includes(text), 'runtime provider metadata missing ' + text);
 }
@@ -59,7 +60,8 @@ for (const text of [
   'ProviderRuntimeMode',
   'new HttpPlaceSearchProvider(client)',
   'new HttpTransitAccessSearchProvider(client)',
-  "providerData: providerMode === 'api' ? 'worker-api' : 'mock'",
+  "providerData: providerMode === 'api' ? 'worker-api' : 'disabled'",
+  "Mock runtime is development-only.",
   "Provider API runtime requires VITE_CBH_RUNTIME=api.",
 ]) {
   expect(composition.includes(text), 'provider composition missing ' + text);
@@ -67,7 +69,10 @@ for (const text of [
 
 for (const text of [
   'resolveProviderRuntimeMode',
-  'createApplicationServices(resolveRuntimeMode(), resolveProviderRuntimeMode())',
+  'const runtimeMode = resolveRuntimeMode()',
+  'const providerMode = resolveProviderRuntimeMode()',
+  "import.meta.env.DEV && runtimeMode === 'mock'",
+  "import('./app/mockComposition')",
 ]) {
   expect(main.includes(text), 'main provider bootstrap missing ' + text);
 }
@@ -92,11 +97,11 @@ expect(!workerApi.includes('fetch('), 'Worker API must not perform external prov
 expect(wranglerLocal.vars?.PROVIDER_RUNTIME_ENABLED === '0', 'local provider runtime must remain disabled');
 
 for (const text of [
-  'default provider mode = mock',
-  'VITE_CBH_PROVIDER_RUNTIME=api',
+  'production default provider mode = api',
+  'mock runtime is development-only',
   'same-origin /api/providers/*',
   'PROVIDER_RUNTIME_ENABLED=0',
-  'no external provider request',
+  'never fixture data',
 ]) {
   expect(normalizedDocs.includes(text), 'provider runtime docs missing ' + text);
 }
