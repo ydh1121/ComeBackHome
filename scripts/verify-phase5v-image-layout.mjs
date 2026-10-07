@@ -312,7 +312,7 @@ try {
     await unavailableAction.accept([{ kind: 'IMAGE', file: imageFile }]);
   } catch (error) {
     unavailableBlocked = error instanceof Error &&
-      error.message === 'No supported import file could be parsed.';
+      error.message.includes('일정을 인식하지 못했습니다');
   }
   expect(unavailableBlocked, 'runtime without image recognizer must fail closed');
 } finally {
