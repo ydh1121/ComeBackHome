@@ -115,6 +115,8 @@ try {
   const busArrivals = await bus.arrivals('122000606', '100100118');
   expect(stops[0]?.providerId === '122000606', 'Seoul bus client XML stop mapping mismatch');
   expect(stops[0]?.name === '강남역', 'Seoul bus CDATA decoding mismatch');
+  expect(stops[0]?.coordinate?.x === 127.0300921798, 'Seoul bus client tmX mapping mismatch');
+  expect(stops[0]?.coordinate?.y === 37.4985037086, 'Seoul bus client tmY mapping mismatch');
   expect(busRoutes[0]?.providerRouteId === '100100118', 'Seoul bus XML route mapping mismatch');
   expect(busRoutes[0]?.routeNo === '146', 'Seoul bus XML route number mismatch');
   expect(busArrivals.length === 2, 'Seoul bus XML route-all stop filter mismatch');

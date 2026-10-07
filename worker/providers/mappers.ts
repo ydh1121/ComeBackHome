@@ -262,8 +262,8 @@ export function mapSeoulBusStops(payload: unknown): TransitSearchResult[] {
     if (!providerId || !name) return [];
 
     const distanceM = numberValue(item.dist);
-    const x = numberValue(item.gpsX) ?? numberValue(item.x);
-    const y = numberValue(item.gpsY) ?? numberValue(item.y);
+    const x = numberValue(item.gpsX) ?? numberValue(item.tmX) ?? numberValue(item.x);
+    const y = numberValue(item.gpsY) ?? numberValue(item.tmY) ?? numberValue(item.y);
     return [{
       id: 'seoul-bus:' + providerId,
       providerId,
