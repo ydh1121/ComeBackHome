@@ -154,7 +154,7 @@ try {
   expect(busArrivals[0]?.providerVehicleId === 'e2e-bus', 'bus realtime client -> Worker -> Seoul source mapping failed');
   expect(calls.bus === 1, 'Seoul bus fake source call count mismatch');
 
-  const subwayArrivals = await subwayProvider.arrivals('강남', '02호선');
+  const subwayArrivals = await subwayProvider.arrivals('0222', '강남', '02호선');
   expect(subwayArrivals[0]?.providerVehicleId === 'e2e-subway', 'subway realtime client -> Worker -> Seoul source mapping failed');
   expect(calls.subway === 1, 'Seoul subway fake source call count mismatch');
 
