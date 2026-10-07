@@ -210,9 +210,9 @@ jobs:
               .sort((left, right) => left - right);
             if (!distances.length) return { nearest: null, max: null, threshold: null };
             const nearest = distances[0];
-            const baseRadius = mode === 'BUS' ? 450 : 650;
-            const delta = mode === 'BUS' ? 450 : 600;
-            const normalCap = mode === 'BUS' ? 800 : 950;
+            const baseRadius = mode === 'BUS' ? 450 : 550;
+            const delta = mode === 'BUS' ? 450 : 450;
+            const normalCap = mode === 'BUS' ? 800 : 900;
             const threshold = nearest <= normalCap
               ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
               : nearest + 400;
@@ -241,6 +241,23 @@ jobs:
           ) {
             throw new Error(
               'Eonju coordinate did not rank Eonju station as the nearest subway'
+            );
+          }
+          const forbiddenEonjuStations = ['압구정', '신사', '학동'];
+          const leakedEonjuStations = eonjuSubwayItems
+            .filter((item) =>
+              forbiddenEonjuStations.some((name) =>
+                String(item?.name ?? '').includes(name)
+              )
+            )
+            .map((item) => ({
+              name: item.name,
+              distanceM: item.distanceM,
+            }));
+          if (leakedEonjuStations.length) {
+            throw new Error(
+              'Eonju nearby subway leaked out-of-scope stations: ' +
+              JSON.stringify(leakedEonjuStations)
             );
           }
 
@@ -352,6 +369,7 @@ jobs:
             eonjuNearestSubway: nearestEonjuSubway.name,
             eonjuBusDistance,
             eonjuSubwayDistance,
+            eonjuForbiddenStationLeakCount: leakedEonjuStations.length,
             markerCandidates: firstMarkers.length,
             staticMapContentType: contentType,
             staticMapBytes: mapBytes,
