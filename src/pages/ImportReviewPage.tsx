@@ -27,13 +27,21 @@ export function ImportReviewPage() {
     batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
   );
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
-    item.imported.start != null && item.imported.end != null;
+    item.imported.enabled === false ||
+    (item.imported.start != null && item.imported.end != null);
   const exactDuplicate = (item: (typeof batch.reviewItems)[number]) =>
     item.existing != null &&
-    item.imported.start != null &&
-    item.imported.end != null &&
-    item.existing.start === item.imported.start &&
-    item.existing.end === item.imported.end;
+    (
+      (item.imported.enabled === false && item.existing.enabled === false) ||
+      (
+        item.imported.enabled !== false &&
+        item.existing.enabled !== false &&
+        item.imported.start != null &&
+        item.imported.end != null &&
+        item.existing.start === item.imported.start &&
+        item.existing.end === item.imported.end
+      )
+    );
   const visibleReviewItems = batch.reviewItems.filter(
     (item) =>
       !ignoredDetectedIds.has(item.detectedPersonId) &&
@@ -77,8 +85,20 @@ export function ImportReviewPage() {
                   </div>
                 </div>
 
-                {!importedComplete ? (
-                  <div className="review-time-editor" data-state="INCOMPLETE_TIME">
+                {item.recognitionState ? (
+                  <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()}>
+                    {item.recognitionState === 'OFF'
+                      ? '휴무로 인식'
+                      : item.recognitionState === 'UNREADABLE'
+                        ? '인식 불확실 — 이미지에 내용은 있으나 시간을 읽지 못함'
+                        : item.recognitionState === 'INCOMPLETE'
+                          ? '근무시간 일부만 인식'
+                          : '근무로 인식'}
+                  </div>
+                ) : null}
+
+                {item.imported.enabled !== false && !importedComplete ? (
+                  <div className="review-time-editor" data-state={item.recognitionState === 'UNREADABLE' ? 'UNREADABLE_TIME' : 'INCOMPLETE_TIME'}>
                     <TimeRangeWheelPicker
                       start={item.imported.start}
                       end={item.imported.end}
@@ -97,7 +117,9 @@ export function ImportReviewPage() {
                 <div className="review-choice-list">
                   {item.existing && !exactDuplicate(item) ? (
                     <div className="review-existing-note">
-                      기존 {item.existing.start}–{item.existing.end}
+                      {item.existing.enabled === false
+                        ? '기존 휴무'
+                        : '기존 ' + item.existing.start + '–' + item.existing.end}
                     </div>
                   ) : null}
                   <button
@@ -113,7 +135,11 @@ export function ImportReviewPage() {
                   >
                     <span className="review-choice-check">{item.resolution === 'NEW' ? <Icon name="check" /> : null}</span>
                     <span className="review-choice-label">가져오기</span>
-                    <strong className="review-choice-time">{item.imported.start ?? '입력 필요'}–{item.imported.end ?? '입력 필요'}</strong>
+                    <strong className="review-choice-time">
+                      {item.imported.enabled === false
+                        ? '휴무'
+                        : (item.imported.start ?? '입력 필요') + '–' + (item.imported.end ?? '입력 필요')}
+                    </strong>
                   </button>
                 </div>
               </div>

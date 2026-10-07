@@ -3,12 +3,8 @@ import {
   TesseractJsWorkerFactory,
   TesseractScheduleImageTextExtractor,
 } from '../../src/providers/import/TesseractScheduleImageTextExtractor';
-import {
-  analyzeScheduleImagePattern,
-  parseScheduleImageLayout,
-  type ScheduleImagePatternAnalysis,
-} from '../../src/providers/import/StructuredTableImageScheduleRecognizer';
-import { buildScheduleBatchPatternSummary } from '../../src/providers/import/ScheduleBatchPatternSummary';
+import { BrowserScheduleTableStructureDetector } from '../../src/providers/import/ScheduleTableStructureDetector';
+import { StructureFirstScheduleImageRecognizer } from '../../src/providers/import/StructureFirstScheduleImageRecognizer';
 import { SAME_ORIGIN_TESSERACT_ASSETS } from '../../src/providers/import/ocrRuntimeConfig';
 
 const input = document.querySelector<HTMLInputElement>('#schedule-image');
@@ -40,6 +36,11 @@ if (
 const extractor = new TesseractScheduleImageTextExtractor(
   new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
   new BrowserScheduleOcrPreprocessor(),
+  { useStructureFirstMode: true },
+);
+const recognizer = new StructureFirstScheduleImageRecognizer(
+  new BrowserScheduleTableStructureDetector(),
+  extractor,
 );
 
 interface FileEvaluationResult {
@@ -55,38 +56,46 @@ interface FileEvaluationResult {
     externalImageUpload: 0;
     imagePersistence: 0;
   };
-  image?: {
-    width: number;
-    height: number;
+  structure?: {
+    imageWidth: number;
+    imageHeight: number;
+    confidence: number;
+    evidence: unknown;
+    detectedRowBands: number;
+    detectedColumnBands: number;
   };
-  evidence?: {
-    tokenCount: number;
-    averageConfidence: number;
+  matrix?: {
+    rows: unknown[];
+    dates: unknown[];
+    cells: unknown[];
+    workCount: number;
+    offCount: number;
+    incompleteCount: number;
+    unreadableCount: number;
   };
-  pattern?: ScheduleImagePatternAnalysis | null;
   timingMs: {
-    ocr?: number;
-    parser?: number;
+    preprocessing?: number;
+    structureDetection?: number;
+    initialOcr?: number;
+    regionalOcr?: number;
     total: number;
   };
+  roiCount?: number;
+  initialOcrTokenCount?: number;
   parser:
     | {
         result: 'PARSED_REVIEW_REQUIRED';
         parsed: unknown;
       }
     | {
-        result: 'REVIEW_REQUIRED';
-        error: string;
-      }
-    | {
         result: 'FAILED_CLOSED';
         error: string;
       };
-  tokens: unknown[];
+  regionalOcr: unknown[];
 }
 
 interface EvaluationBundle {
-  schema: 'comebackhome-private-ocr-eval/v2';
+  schema: 'comebackhome-private-ocr-eval/v3';
   generatedAt: string;
   runtime: {
     workerPath: string;
@@ -95,9 +104,9 @@ interface EvaluationBundle {
     externalImageUpload: 0;
     sourceImagePersistence: 0;
     derivedEvidenceExport: 'user-triggered-only';
+    recognitionArchitecture: 'structure-first';
   };
   fileCount: number;
-  batchPattern: ReturnType<typeof buildScheduleBatchPatternSummary>;
   files: FileEvaluationResult[];
 }
 
@@ -131,16 +140,26 @@ function reset(): void {
 }
 
 function formatError(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : String(error);
+  return error instanceof Error ? error.message : String(error);
 }
 
 function bundleText(): string {
-  if (!latestBundle) {
-    throw new Error('복사할 QA 결과가 없습니다.');
-  }
+  if (!latestBundle) throw new Error('복사할 QA 결과가 없습니다.');
   return JSON.stringify(latestBundle, null, 2);
+}
+
+function cellStateCounts(parsedImport: any) {
+  const review = Array.isArray(parsedImport?.reviewCandidates)
+    ? parsedImport.reviewCandidates
+    : [];
+  return {
+    workCount: Array.isArray(parsedImport?.scheduleCandidates)
+      ? parsedImport.scheduleCandidates.length
+      : 0,
+    offCount: review.filter((item: any) => item?.recognitionState === 'OFF').length,
+    incompleteCount: review.filter((item: any) => item?.recognitionState === 'INCOMPLETE').length,
+    unreadableCount: review.filter((item: any) => item?.recognitionState === 'UNREADABLE').length,
+  };
 }
 
 function renderBundle(bundle: EvaluationBundle): void {
@@ -149,13 +168,22 @@ function renderBundle(bundle: EvaluationBundle): void {
     generatedAt: bundle.generatedAt,
     runtime: bundle.runtime,
     fileCount: bundle.fileCount,
-    batchPattern: bundle.batchPattern,
     files: bundle.files.map((item) => ({
       source: item.source,
-      image: item.image,
-      evidence: item.evidence,
-      pattern: item.pattern,
+      structure: item.structure,
+      matrix: item.matrix
+        ? {
+            rowCount: item.matrix.rows.length,
+            dateCount: item.matrix.dates.length,
+            cellCount: item.matrix.cells.length,
+            workCount: item.matrix.workCount,
+            offCount: item.matrix.offCount,
+            incompleteCount: item.matrix.incompleteCount,
+            unreadableCount: item.matrix.unreadableCount,
+          }
+        : null,
       timingMs: item.timingMs,
+      roiCount: item.roiCount,
       parserResult: item.parser.result,
     })),
   }, null, 2);
@@ -164,6 +192,7 @@ function renderBundle(bundle: EvaluationBundle): void {
     bundle.files.map((item) => ({
       sourceName: item.source.name,
       parser: item.parser,
+      matrix: item.matrix,
     })),
     null,
     2,
@@ -172,7 +201,8 @@ function renderBundle(bundle: EvaluationBundle): void {
   tokens.textContent = JSON.stringify(
     bundle.files.map((item) => ({
       sourceName: item.source.name,
-      tokens: item.tokens,
+      initialOcrTokenCount: item.initialOcrTokenCount,
+      regionalOcr: item.regionalOcr,
     })),
     null,
     2,
@@ -184,25 +214,8 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
   const runtime = runtimeMetadata();
 
   try {
-    const layout = await extractor.extract(file);
-    const ocrElapsedMs = performance.now() - startedAt;
-    const parserStartedAt = performance.now();
-
-    let parserResult: unknown = null;
-    let parserError: string | null = null;
-
-    try {
-      parserResult = parseScheduleImageLayout(layout);
-    } catch (error) {
-      parserError = formatError(error);
-    }
-
-    const parserElapsedMs = performance.now() - parserStartedAt;
-    const confidenceValues = layout.tokens.map((token) => token.confidence);
-    const averageConfidence = confidenceValues.length
-      ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
-      : 0;
-
+    const diagnostic = await recognizer.evaluate(file);
+    const counts = cellStateCounts(diagnostic.parsed);
     return {
       source: {
         name: file.name,
@@ -210,30 +223,28 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
         bytes: file.size,
       },
       runtime,
-      image: {
-        width: layout.width,
-        height: layout.height,
+      structure: {
+        imageWidth: diagnostic.detection.structure.imageWidth,
+        imageHeight: diagnostic.detection.structure.imageHeight,
+        confidence: diagnostic.detection.structure.confidence,
+        evidence: diagnostic.detection.structure.evidence,
+        detectedRowBands: diagnostic.detection.structure.rowBands.length,
+        detectedColumnBands: diagnostic.detection.structure.columnBands.length,
       },
-      evidence: {
-        tokenCount: layout.tokens.length,
-        averageConfidence: Number(averageConfidence.toFixed(4)),
+      matrix: {
+        rows: diagnostic.matrix.rows,
+        dates: diagnostic.matrix.dates,
+        cells: diagnostic.matrix.cells,
+        ...counts,
       },
-      pattern: analyzeScheduleImagePattern(layout),
-      timingMs: {
-        ocr: Number(ocrElapsedMs.toFixed(1)),
-        parser: Number(parserElapsedMs.toFixed(1)),
-        total: Number((performance.now() - startedAt).toFixed(1)),
+      timingMs: diagnostic.timingMs,
+      roiCount: diagnostic.roiCount,
+      initialOcrTokenCount: diagnostic.layoutTokenCount,
+      parser: {
+        result: 'PARSED_REVIEW_REQUIRED',
+        parsed: diagnostic.parsed,
       },
-      parser: parserError
-        ? {
-            result: 'REVIEW_REQUIRED',
-            error: parserError,
-          }
-        : {
-            result: 'PARSED_REVIEW_REQUIRED',
-            parsed: parserResult,
-          },
-      tokens: layout.tokens,
+      regionalOcr: diagnostic.regionResults,
     };
   } catch (error) {
     return {
@@ -250,7 +261,7 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
         result: 'FAILED_CLOSED',
         error: formatError(error),
       },
-      tokens: [],
+      regionalOcr: [],
     };
   }
 }
@@ -276,12 +287,12 @@ async function runEvaluation(): Promise<void> {
   try {
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
-      status.textContent = `로컬 OCR 실행 중… ${index + 1}/${files.length} · ${file.name}`;
+      status.textContent = `구조 복원 + 로컬 OCR 실행 중… ${index + 1}/${files.length} · ${file.name}`;
       results.push(await evaluateFile(file));
     }
 
     latestBundle = {
-      schema: 'comebackhome-private-ocr-eval/v2',
+      schema: 'comebackhome-private-ocr-eval/v3',
       generatedAt: new Date().toISOString(),
       runtime: {
         workerPath: SAME_ORIGIN_TESSERACT_ASSETS.workerPath,
@@ -290,14 +301,9 @@ async function runEvaluation(): Promise<void> {
         externalImageUpload: 0,
         sourceImagePersistence: 0,
         derivedEvidenceExport: 'user-triggered-only',
+        recognitionArchitecture: 'structure-first',
       },
       fileCount: results.length,
-      batchPattern: buildScheduleBatchPatternSummary(
-        results.map((item) => ({
-          sourceName: item.source.name,
-          pattern: item.pattern ?? null,
-        })),
-      ),
       files: results,
     };
 
@@ -305,18 +311,10 @@ async function runEvaluation(): Promise<void> {
     copyAllButton.disabled = false;
     saveAllButton.disabled = false;
 
-    const parsedCount = results.filter(
-      (item) => item.parser.result === 'PARSED_REVIEW_REQUIRED',
-    ).length;
-    const reviewCount = results.filter(
-      (item) => item.parser.result === 'REVIEW_REQUIRED',
-    ).length;
-    const failedCount = results.filter(
-      (item) => item.parser.result === 'FAILED_CLOSED',
-    ).length;
-
+    const parsedCount = results.filter((item) => item.parser.result === 'PARSED_REVIEW_REQUIRED').length;
+    const failedCount = results.length - parsedCount;
     status.textContent =
-      `전체 완료 · ${results.length}개 · parsed ${parsedCount} · review ${reviewCount} · failed ${failedCount}`;
+      `전체 완료 · ${results.length}개 · parsed ${parsedCount} · failed ${failedCount}`;
   } finally {
     runButton.disabled = false;
     input.disabled = false;
@@ -325,10 +323,9 @@ async function runEvaluation(): Promise<void> {
 
 async function copyAllResults(): Promise<void> {
   const text = bundleText();
-
   try {
     await navigator.clipboard.writeText(text);
-    status.textContent = '전체 QA 결과를 클립보드에 복사했습니다. ChatGPT에 한 번만 붙여넣으면 됩니다.';
+    status.textContent = '전체 QA 결과를 클립보드에 복사했습니다.';
   } catch {
     const area = document.createElement('textarea');
     area.value = text;
@@ -339,10 +336,8 @@ async function copyAllResults(): Promise<void> {
     area.select();
     const copied = document.execCommand('copy');
     area.remove();
-    if (!copied) {
-      throw new Error('클립보드 복사에 실패했습니다. JSON 저장 버튼을 사용하세요.');
-    }
-    status.textContent = '전체 QA 결과를 클립보드에 복사했습니다. ChatGPT에 한 번만 붙여넣으면 됩니다.';
+    if (!copied) throw new Error('클립보드 복사에 실패했습니다. JSON 저장 버튼을 사용하세요.');
+    status.textContent = '전체 QA 결과를 클립보드에 복사했습니다.';
   }
 }
 
@@ -358,27 +353,15 @@ function saveAllResults(): void {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-  status.textContent = '전체 QA 결과 JSON을 저장했습니다. 필요하면 그 파일 하나만 첨부하면 됩니다.';
+  status.textContent = '전체 QA 결과 JSON을 저장했습니다.';
 }
 
 input.addEventListener('change', updateSelection);
-
-runButton.addEventListener('click', () => {
-  void runEvaluation();
-});
-
+runButton.addEventListener('click', () => { void runEvaluation(); });
 copyAllButton.addEventListener('click', () => {
-  void copyAllResults().catch((error) => {
-    status.textContent = formatError(error);
-  });
+  void copyAllResults().catch((error) => { status.textContent = formatError(error); });
 });
-
 saveAllButton.addEventListener('click', () => {
-  try {
-    saveAllResults();
-  } catch (error) {
-    status.textContent = formatError(error);
-  }
+  try { saveAllResults(); } catch (error) { status.textContent = formatError(error); }
 });
-
 clearButton.addEventListener('click', reset);

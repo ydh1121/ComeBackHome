@@ -18,13 +18,36 @@ export interface RealtimeBusProvider { arrivals(stopProviderId: string, routePro
 export interface RealtimeSubwayProvider { arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
 export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
-export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; sourceRow: number; confidence: number; }
+export type ImageScheduleCellState = 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
+export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; sourceRow: number; confidence: number; recognitionState?: ImageScheduleCellState; enabled?: boolean; }
 export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; reviewCandidates?: ParsedScheduleReviewCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageTextToken { text: string; x: number; y: number; width: number; height: number; confidence: number; }
 export interface ImageTextLayout { width: number; height: number; tokens: ImageTextToken[]; }
 export type ImportProgressReporter = (progress: number) => void | Promise<void>;
 export interface ImageTextExtractor { extract(file: File, onProgress?: ImportProgressReporter): Promise<ImageTextLayout>; }
+export interface ImageTextProbeRegion {
+  id: string;
+  purpose: 'person' | 'cell';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+export interface ImageTextProbeResult {
+  id: string;
+  purpose: ImageTextProbeRegion['purpose'];
+  text: string;
+  tokens: ImageTextToken[];
+  confidence: number;
+}
+export interface RegionalImageTextExtractor extends ImageTextExtractor {
+  extractRegions(
+    file: File,
+    regions: ImageTextProbeRegion[],
+    onProgress?: ImportProgressReporter,
+  ): Promise<ImageTextProbeResult[]>;
+}
 export interface PreparedImageRaster {
   image: File | Blob;
   sourceWidth: number;

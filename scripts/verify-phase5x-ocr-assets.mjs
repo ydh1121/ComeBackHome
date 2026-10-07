@@ -115,7 +115,8 @@ try {
   assert(runtimeConfig.includes(manifest.publicPaths.langPath), 'OCR runtime lang path differs from manifest');
   assert(gitignore.split(/\r?\n/).includes('public/ocr/'), 'Generated OCR runtime tree must remain gitignored');
   assert(composition.includes('TesseractScheduleImageTextExtractor'), 'Production OCR extractor must be active in application composition');
-  assert(composition.includes('AdaptiveScheduleImageRecognizer'), 'Production image schedule recognizer must be active');
+  assert(composition.includes('StructureFirstScheduleImageRecognizer'), 'Production structure-first image schedule recognizer must be active');
+  assert(composition.includes('BrowserScheduleTableStructureDetector'), 'Production pixel table structure detector must be active');
   assert(
     packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets',
     'Production build must stage same-origin OCR assets before Vite build',

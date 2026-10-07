@@ -408,3 +408,8 @@
 .import-page .review-choice.import-toggle .review-choice-time{grid-column:3}
 .import-page .review-existing-note{margin:0 0 4px;padding:9px 12px;border-radius:10px;background:#f7f9fc;color:#667085;font-size:12px}
 .import-page .import-file-diagnostic{margin-top:4px;color:#b42318;font-size:11px;line-height:1.4;word-break:keep-all}
+.import-page .review-recognition-state{margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:#f2f4f7;color:#475467;font-size:12px;font-weight:700;line-height:1.45}
+.import-page .review-recognition-state.off{background:#f8fafc;color:#475467}
+.import-page .review-recognition-state.unreadable{background:#fff4ed;color:#b54708}
+.import-page .review-recognition-state.incomplete{background:#fffaeb;color:#b54708}
+.import-page .review-recognition-state.work{background:#ecfdf3;color:#027a48}
