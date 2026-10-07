@@ -453,6 +453,7 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
   ) {
     this.languages = options.languages ?? ['kor', 'eng'];
     this.minimumConfidence = options.minimumConfidence ?? 0.18;
+    this.useStructureFirstMode = options.useStructureFirstMode ?? false;
   }
 
   async extract(file: File, onProgress?: ImportProgressReporter): Promise<ImageTextLayout> {
