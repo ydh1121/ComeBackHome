@@ -90,7 +90,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     await this.imports.replaceFiles(batch.id, completedRecords);
 
     if (!parsedResults.length) {
-      throw new Error('No supported import file could be parsed.');
+      throw new Error('선택한 파일에서 일정을 인식하지 못했습니다. 다른 이미지 또는 1일 일정 추가를 이용해 주세요.');
     }
 
     const availablePeople = await this.people.list();
