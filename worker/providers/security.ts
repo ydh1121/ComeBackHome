@@ -15,23 +15,45 @@ export interface ProviderActivationAssessment {
   reason?: ProviderActivationBlockReason;
 }
 
-function protocolOf(urlTemplate: string): 'https:' | 'http:' | 'unknown' {
-  if (urlTemplate.startsWith('https://')) return 'https:';
-  if (urlTemplate.startsWith('http://')) return 'http:';
-  return 'unknown';
+const DOCUMENTED_HTTP_HOSTS = new Set([
+  'ws.bus.go.kr',
+  'swopenapi.seoul.go.kr',
+  'openapi.seoul.go.kr',
+]);
+
+function parsedUrl(urlTemplate: string): URL | null {
+  try {
+    return new URL(urlTemplate.replace(/\{[^}]+\}/g, 'placeholder'));
+  } catch {
+    return null;
+  }
+}
+
+export function isDocumentedOfficialHttpEndpoint(urlTemplate: string): boolean {
+  const url = parsedUrl(urlTemplate);
+  return Boolean(
+    url &&
+    url.protocol === 'http:' &&
+    DOCUMENTED_HTTP_HOSTS.has(url.hostname.toLocaleLowerCase()),
+  );
 }
 
 export function assessProviderActivation(
   request: ProviderJsonRequest,
   secrets: ProviderSecretPresenceResolver,
 ): ProviderActivationAssessment {
-  const protocol = protocolOf(request.urlTemplate);
+  const url = parsedUrl(request.urlTemplate);
+  if (!url) return { ready: false, reason: 'INSECURE_ENDPOINT' };
 
-  if (protocol !== 'https:') {
-    return { ready: false, reason: 'INSECURE_ENDPOINT' };
-  }
-
-  if (request.security !== 'TLS_VERIFIED') {
+  if (request.security === 'TLS_VERIFIED') {
+    if (url.protocol !== 'https:') {
+      return { ready: false, reason: 'INSECURE_ENDPOINT' };
+    }
+  } else if (request.security === 'DOCUMENTED_HTTP_REQUIRES_VALIDATION') {
+    if (!isDocumentedOfficialHttpEndpoint(request.urlTemplate)) {
+      return { ready: false, reason: 'UNVERIFIED_TRANSPORT' };
+    }
+  } else {
     return { ready: false, reason: 'UNVERIFIED_TRANSPORT' };
   }
 
