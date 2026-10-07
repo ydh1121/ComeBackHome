@@ -31,6 +31,10 @@ export interface ProviderJsonTransport {
     request: ProviderJsonRequest,
     context?: ProviderRequestContext,
   ): Promise<unknown>;
+  getText?(
+    request: ProviderJsonRequest,
+    context?: ProviderRequestContext,
+  ): Promise<string>;
   getBytes(
     request: ProviderJsonRequest,
     context?: ProviderRequestContext,

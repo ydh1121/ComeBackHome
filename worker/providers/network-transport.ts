@@ -131,6 +131,17 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
     return (await this.request(request, context, 'application/json')).json();
   }
 
+  async getText(
+    request: ProviderJsonRequest,
+    context?: ProviderRequestContext,
+  ): Promise<string> {
+    return (await this.request(
+      request,
+      context,
+      'application/xml, text/xml;q=0.9, application/json;q=0.8, */*;q=0.1',
+    )).text();
+  }
+
   async getBytes(
     request: ProviderJsonRequest,
     context?: ProviderRequestContext,

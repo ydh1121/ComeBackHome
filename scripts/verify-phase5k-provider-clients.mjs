@@ -26,8 +26,61 @@ const fixtureByCapability = new Map([
   ['realtime-subway-position', await fixture('seoul-subway-positions.json')],
 ]);
 
+const busXmlByCapability = new Map([
+  ['bus-stop-name-search', `<?xml version="1.0" encoding="UTF-8"?>
+<ServiceResult>
+  <msgHeader><headerCd>0</headerCd><headerMsg>정상 처리되었습니다.</headerMsg></msgHeader>
+  <msgBody>
+    <itemList>
+      <arsId>23813</arsId>
+      <stId>122000606</stId>
+      <stNm><![CDATA[강남역]]></stNm>
+      <tmX>127.0300921798</tmX>
+      <tmY>37.4985037086</tmY>
+      <dist>153</dist>
+    </itemList>
+  </msgBody>
+</ServiceResult>`],
+  ['bus-routes-by-stop', `<?xml version="1.0" encoding="UTF-8"?>
+<ServiceResult>
+  <msgHeader><headerCd>0</headerCd><headerMsg>정상 처리되었습니다.</headerMsg></msgHeader>
+  <msgBody>
+    <itemList>
+      <busRouteId>100100118</busRouteId>
+      <busRouteNm>146</busRouteNm>
+      <stBegin>상계주공7단지</stBegin>
+      <stEnd>강남역</stEnd>
+      <routeType>3</routeType>
+    </itemList>
+  </msgBody>
+</ServiceResult>`],
+  ['bus-route-all-arrivals', `<?xml version="1.0" encoding="UTF-8"?>
+<ServiceResult>
+  <msgHeader><headerCd>0</headerCd><headerMsg>정상 처리되었습니다.</headerMsg></msgHeader>
+  <msgBody>
+    <itemList>
+      <busRouteId>100100118</busRouteId>
+      <rtNm>146</rtNm>
+      <mkTm>2026-10-05 09:45:00</mkTm>
+      <exps1>90</exps1>
+      <plainNo1><![CDATA[서울74사1234]]></plainNo1>
+      <exps2>280</exps2>
+      <plainNo2><![CDATA[서울74사5678]]></plainNo2>
+      <stId>122000606</stId>
+    </itemList>
+  </msgBody>
+</ServiceResult>`],
+]);
+
 const requests = [];
 const fakeTransport = {
+  async getText(request, context) {
+    requests.push({ request, context });
+    if (!busXmlByCapability.has(request.capability)) {
+      throw new Error('XML fixture missing for ' + request.capability);
+    }
+    return busXmlByCapability.get(request.capability);
+  },
   async getJson(request, context) {
     requests.push({ request, context });
     if (!fixtureByCapability.has(request.capability)) {
@@ -58,9 +111,13 @@ try {
 
   const bus = new clients.SeoulBusRequestClient(fakeTransport);
   const stops = await bus.searchStops('강남역', { x: 127.03, y: 37.49 });
+  const busRoutes = await bus.routesByStop('23813');
   const busArrivals = await bus.arrivals('122000606', '100100118');
-  expect(stops[0]?.providerId === '122000606', 'Seoul bus client stop mapping mismatch');
-  expect(busArrivals.length === 2, 'Seoul bus route-all stop filter mismatch');
+  expect(stops[0]?.providerId === '122000606', 'Seoul bus client XML stop mapping mismatch');
+  expect(stops[0]?.name === '강남역', 'Seoul bus CDATA decoding mismatch');
+  expect(busRoutes[0]?.providerRouteId === '100100118', 'Seoul bus XML route mapping mismatch');
+  expect(busRoutes[0]?.routeNo === '146', 'Seoul bus XML route number mismatch');
+  expect(busArrivals.length === 2, 'Seoul bus XML route-all stop filter mismatch');
 
   const subway = new clients.SeoulSubwayRequestClient(fakeTransport);
   const stations = await subway.searchStations('강남', { x: 127.02, y: 37.49 });
@@ -90,9 +147,15 @@ try {
   expect(busSearchRequest?.auth?.secretName === 'SEOUL_BUS_SERVICE_KEY', 'Seoul bus secret reference mismatch');
   expect(busSearchRequest?.security === 'DOCUMENTED_HTTP_REQUIRES_VALIDATION', 'Seoul bus HTTP risk must remain explicit');
 
+  const busRoutesRequest = byCapability.get('bus-routes-by-stop');
+  expect(busRoutesRequest?.urlTemplate.endsWith('/stationinfo/getRouteByStation'), 'Seoul bus routes-by-stop endpoint mismatch');
+  expect(busRoutesRequest?.query?.arsId === '23813', 'Seoul bus routes-by-stop arsId mismatch');
+  expect(busRoutesRequest?.query?.resultType == null, 'Seoul bus routes-by-stop must not send undocumented resultType');
+
   const busArrivalRequest = byCapability.get('bus-route-all-arrivals');
   expect(busArrivalRequest?.urlTemplate.endsWith('/arrive/getArrInfoByRouteAll'), 'Seoul bus route-all endpoint mismatch');
   expect(busArrivalRequest?.query?.busRouteId === '100100118', 'Seoul bus route id mismatch');
+  expect(busArrivalRequest?.query?.resultType == null, 'Seoul bus arrival must use the documented XML contract');
 
   const stationRequest = byCapability.get('subway-station-name-search');
   expect(stationRequest?.pathParams?.stationName === '강남', 'Seoul station path parameter mismatch');
