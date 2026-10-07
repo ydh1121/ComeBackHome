@@ -228,7 +228,9 @@ export function TransitAccessPage() {
         return;
       }
 
-      await services.actions.transitAccess.toggleAccess(point.id, !point.selected);
+      if (existing) {
+        await services.actions.transitAccess.toggleAccess(point.id, !point.selected);
+      }
     } finally {
       setWorkingId(null);
     }
