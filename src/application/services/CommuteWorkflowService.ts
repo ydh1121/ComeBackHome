@@ -51,6 +51,11 @@ export class CommuteService implements CommuteActions {
     await this.commute.saveSavedRoute({ ...route, originAccessPointId: accessPointId });
   }
 
+  async setRouteDestinationAccess(personId: EntityId, routeId: EntityId, accessPointId: EntityId): Promise<void> {
+    const route = await this.requireSavedRoute(personId, routeId);
+    await this.commute.saveSavedRoute({ ...route, destinationAccessPointId: accessPointId });
+  }
+
   async moveRouteVia(personId: EntityId, routeId: EntityId, fromIndex: number, toIndex: number): Promise<void> {
     const route = await this.requireSavedRoute(personId, routeId);
     const ids = [...route.viaAccessPointIds];
