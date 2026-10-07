@@ -1408,14 +1408,23 @@ function assertLayout(layout: ImageTextLayout): BoxToken[] {
 
 export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport {
   const tokens = assertLayout(layout);
-  const candidates = [
+  const primaryCandidates = [
     dateBlockMatrixStrategy(layout, tokens),
     rowTableStrategy(layout, tokens),
-    genericRowStrategy(layout, tokens),
   ].filter((candidate): candidate is LayoutCandidate => candidate != null)
+    .filter((candidate) => candidate.score >= 0.65)
     .sort((a, b) => b.score - a.score);
 
-  if (!candidates.length || candidates[0].score < 0.65) {
+  const genericCandidate = primaryCandidates.length
+    ? null
+    : genericRowStrategy(layout, tokens);
+  const candidates = primaryCandidates.length
+    ? primaryCandidates
+    : genericCandidate && genericCandidate.score >= 0.65
+      ? [genericCandidate]
+      : [];
+
+  if (!candidates.length) {
     throw new Error('Image schedule layout was not recognized confidently.');
   }
 
