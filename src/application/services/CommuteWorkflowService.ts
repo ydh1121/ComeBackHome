@@ -176,7 +176,6 @@ export class TransitSearchService implements TransitSearchActions {
       walkMinutes: resolved.walkMinutes,
       selected: true,
       busRoutes: resolved.busRoutes,
-      selectedBusRouteId: resolved.busRoutes?.[0]?.providerRouteId,
     };
     await this.commute.upsertAccessPoint(point);
     return point;
