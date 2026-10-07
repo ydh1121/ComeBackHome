@@ -2,6 +2,7 @@ import type {
   ImageScheduleRecognizer,
   ImageTextExtractor,
   ImageTextLayout,
+  ImportProgressReporter,
   ImageTextToken,
   ParsedImport,
   ParsedImportPerson,
@@ -176,6 +177,76 @@ export function parseScheduleImageClock(value: string): string | null {
   if (/^[0-5](?:\.(?:0|5))?$/.test(normalized)) return null;
 
   return parsed;
+}
+
+interface CalendarContext {
+  year: number | null;
+  month: number | null;
+}
+
+function inferCalendarContext(tokens: BoxToken[]): CalendarContext {
+  let year: number | null = null;
+  let month: number | null = null;
+
+  for (const token of tokens) {
+    const raw = String(token.text ?? '').normalize('NFKC').replace(/\s+/g, '');
+    const full = /(20\d{2})\s*년?\s*[-./]?\s*(1[0-2]|0?[1-9])\s*월?/.exec(raw);
+    if (full) {
+      year = Number(full[1]);
+      month = Number(full[2]);
+      break;
+    }
+    const yearOnly = /(20\d{2})\s*년?/.exec(raw);
+    if (yearOnly && year == null) year = Number(yearOnly[1]);
+    const monthOnly = /^(1[0-2]|0?[1-9])월$/.exec(raw);
+    if (monthOnly && month == null) month = Number(monthOnly[1]);
+  }
+
+  return { year, month };
+}
+
+function parseScheduleDateEvidence(value: string, context: CalendarContext): string | null {
+  const full = parseScheduleDate(value);
+  if (full) return full;
+
+  const normalized = value
+    .normalize('NFKC')
+    .trim()
+    .replace(/[.]/g, '-')
+    .replace(/\//g, '-')
+    .replace(/\s+/g, '')
+    .replace(/월/g, '-')
+    .replace(/일/g, '');
+
+  const monthDay = /^(\d{1,2})-(\d{1,2})$/.exec(normalized);
+  if (!monthDay || context.year == null) return null;
+
+  const month = Number(monthDay[1]);
+  const day = Number(monthDay[2]);
+  const candidate = [
+    String(context.year),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-');
+  return parseScheduleDate(candidate);
+}
+
+function parseTimeEvidence(value: string): string[] {
+  const normalized = value.normalize('NFKC').trim();
+  const direct = parseScheduleImageClock(normalized);
+  if (direct) return [direct];
+
+  const pieces = normalized
+    .replace(/[~〜～–—]/g, '-')
+    .split('-')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (pieces.length < 2) return [];
+
+  const parsed = pieces
+    .map((part) => parseScheduleImageClock(part))
+    .filter((item): item is string => item != null);
+  return parsed.length >= 2 ? parsed.slice(0, 2) : [];
 }
 
 function matchesAlias(value: string, aliases: string[]): boolean {
@@ -1193,6 +1264,126 @@ function rowTableStrategy(
   };
 }
 
+
+function genericRowStrategy(
+  _layout: ImageTextLayout,
+  tokens: BoxToken[],
+): LayoutCandidate | null {
+  const rows = groupRows(tokens);
+  const calendarContext = inferCalendarContext(tokens);
+  const detected = new Map<string, ParsedImportPerson>();
+  const scheduleCandidates: ParsedScheduleCandidate[] = [];
+  const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
+  const personCenters: number[] = [];
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const dateEvidence = row.tokens
+      .map((token) => ({ token, date: parseScheduleDateEvidence(token.text, calendarContext) }))
+      .find((item) => item.date != null);
+    if (!dateEvidence?.date) continue;
+
+    const clockEvidence: Array<{ value: string; confidence: number; token: BoxToken }> = [];
+    for (const token of row.tokens) {
+      if (token === dateEvidence.token || isScheduleHeader(token.normalized)) continue;
+      for (const value of parseTimeEvidence(token.text)) {
+        clockEvidence.push({ value, confidence: token.confidence, token });
+      }
+    }
+    if (!clockEvidence.length) continue;
+
+    const personOptions = row.tokens.filter((token) =>
+      token !== dateEvidence.token &&
+      !isScheduleHeader(token.normalized) &&
+      parseTimeEvidence(token.text).length === 0 &&
+      isUsablePersonRowLabel(token.normalized, token.confidence)
+    );
+    if (!personOptions.length) continue;
+
+    const personToken = personOptions
+      .sort((left, right) =>
+        right.confidence - left.confidence ||
+        left.x - right.x
+      )[0];
+    if (!personToken) continue;
+
+    if (personCenters.length) {
+      const center = median(personCenters);
+      const allowedDrift = Math.max(40, personToken.width * 3);
+      if (Math.abs(personToken.cx - center) > allowedDrift) continue;
+    }
+    personCenters.push(personToken.cx);
+
+    const sourceName = personToken.normalized;
+    const personConfidence = personToken.confidence;
+    const existing = detected.get(sourceName);
+    if (!existing || personConfidence > existing.confidence) {
+      detected.set(sourceName, { sourceName, confidence: personConfidence });
+    }
+
+    const uniqueClocks = clockEvidence.filter((item, clockIndex, all) =>
+      all.findIndex((candidate) => candidate.value === item.value) === clockIndex
+    );
+    const start = uniqueClocks[0] ?? null;
+    const end = uniqueClocks[1] ?? null;
+    const confidence = Math.min(
+      personConfidence,
+      dateEvidence.token.confidence,
+      ...(start ? [start.confidence] : []),
+      ...(end ? [end.confidence] : []),
+    );
+
+    if (start && end) {
+      scheduleCandidates.push({
+        sourcePersonName: sourceName,
+        date: dateEvidence.date,
+        start: start.value,
+        end: end.value,
+        sourceRow: index + 1,
+        confidence,
+      });
+    } else if (start) {
+      reviewCandidates.push({
+        sourcePersonName: sourceName,
+        date: dateEvidence.date,
+        start: start.value,
+        end: null,
+        sourceRow: index + 1,
+        confidence,
+      });
+    }
+  }
+
+  const evidenceCount = scheduleCandidates.length + reviewCandidates.length;
+  if (evidenceCount < 2 || detected.size === 0) return null;
+
+  const evidence = scheduleCandidates.length ? scheduleCandidates : reviewCandidates;
+  const candidateConfidence = average(evidence.map((item) => item.confidence));
+  const structuralScore = Math.min(0.92, 0.68 + Math.min(evidenceCount, 6) * 0.04);
+  const score = Math.min(1, candidateConfidence * 0.72 + structuralScore * 0.28);
+
+  return {
+    strategy: 'generic-row',
+    score,
+    parsed: {
+      detectedPeople: [...detected.values()],
+      scheduleCandidates,
+      ...(reviewCandidates.length ? { reviewCandidates } : {}),
+      structure: {
+        sheet: '이미지 근무표 / generic-row',
+        headerRow: 0,
+        personColumn: '행 내부 이름 증거(자동 추론)',
+        dateColumn: calendarContext.year != null
+          ? '전체 날짜 또는 연도 기반 월/일(자동 추론)'
+          : '전체 날짜(자동 추론)',
+        shiftColumn: '행 내부 시간 또는 시간 범위(자동 추론)',
+        needsReview: true,
+      },
+      confidence: candidateConfidence,
+    },
+  };
+}
+
 function assertLayout(layout: ImageTextLayout): BoxToken[] {
   if (
     !Number.isFinite(layout.width) ||
@@ -1210,6 +1401,7 @@ export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport 
   const candidates = [
     dateBlockMatrixStrategy(layout, tokens),
     rowTableStrategy(layout, tokens),
+    genericRowStrategy(layout, tokens),
   ].filter((candidate): candidate is LayoutCandidate => candidate != null)
     .sort((a, b) => b.score - a.score);
 
@@ -1237,8 +1429,10 @@ export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport 
 export class AdaptiveScheduleImageRecognizer implements ImageScheduleRecognizer {
   constructor(private readonly extractor: ImageTextExtractor) {}
 
-  async parse(file: File): Promise<ParsedImport> {
-    return parseScheduleImageLayout(await this.extractor.extract(file));
+  async parse(file: File, onProgress?: ImportProgressReporter): Promise<ParsedImport> {
+    const layout = await this.extractor.extract(file, onProgress);
+    await onProgress?.(94);
+    return parseScheduleImageLayout(layout);
   }
 }
 
