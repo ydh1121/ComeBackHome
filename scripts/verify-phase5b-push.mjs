@@ -12,6 +12,7 @@ const mocks = await read('../src/mocks/providers.ts');
 const mockRepositories = await read('../src/mocks/repositories.ts');
 const state = await read('../src/mocks/state.ts');
 const composition = await read('../src/app/composition.ts');
+const mockComposition = await read('../src/app/mockComposition.ts');
 const page = await read('../src/pages/NotificationPage.tsx');
 const sw = await read('../public/sw.js');
 
@@ -40,7 +41,8 @@ for (const text of ['class MockPushSubscriptionProvider','push.example.invalid/m
 }
 if (!mockRepositories.includes('setSubscription(subscription: WebPushSubscriptionRecord | null)')) failures.push('mock subscription persistence missing');
 if (!state.includes('subscription: null')) failures.push('empty subscription fixture missing');
-if (!composition.includes('new MockPushSubscriptionProvider()')) failures.push('mock subscription provider not composed');
+if (!mockComposition.includes('new MockPushSubscriptionProvider()')) failures.push('DEV mock subscription provider not composed');
+if (composition.includes('MockPushSubscriptionProvider')) failures.push('mock push provider leaked into production composition');
 
 for (const text of [
   "self.addEventListener('push'",
