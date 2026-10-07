@@ -8,7 +8,11 @@ export interface TransitBusLeg { stopNames: string[]; routes: BusRouteOption[]; 
 export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; accessMinutes?: number; egressMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
 export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearchResult[]>; }
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]>; }
-export interface TransitAccessSearchProvider { search(query: string, near: Coordinate): Promise<TransitSearchResult[]>; nearby(near: Coordinate): Promise<TransitSearchResult[]>; }
+export interface TransitAccessSearchProvider {
+  search(query: string, near: Coordinate): Promise<TransitSearchResult[]>;
+  nearby(near: Coordinate): Promise<TransitSearchResult[]>;
+  resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult>;
+}
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
 export interface RealtimeSubwayProvider { arrivals(stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
