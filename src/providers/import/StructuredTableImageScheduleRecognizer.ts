@@ -1270,6 +1270,166 @@ function rowTableStrategy(
 }
 
 
+function calendarCellTimePairStrategy(
+  layout: ImageTextLayout,
+  tokens: BoxToken[],
+): LayoutCandidate | null {
+  const calendarContext = inferCalendarContext(tokens);
+  const dateTokens = tokens
+    .map((token) => ({ token, date: parseScheduleDateEvidence(token.text, calendarContext) }))
+    .filter((item): item is { token: BoxToken; date: string } => item.date != null);
+  const calendarBlocks = buildCalendarStripDateBlocks(tokens, layout.width);
+  const blocks = calendarBlocks.length >= 2
+    ? calendarBlocks
+    : buildDateBlocks(dateTokens, layout.width);
+  if (blocks.length < 2) return null;
+
+  const gridLeft = Math.min(...blocks.map((block) => block.left));
+  const gridRight = Math.max(...blocks.map((block) => block.right));
+  const weekdayTokens = tokens.filter((token) => parseWeekdayAnchor(token) != null);
+  const headerEvidence = [
+    ...dateTokens.map((item) => item.token),
+    ...weekdayTokens,
+  ];
+  const headerBottom = headerEvidence.length
+    ? Math.max(...headerEvidence.map((token) => token.bottom))
+    : 0;
+
+  const labelRows = groupRows(
+    tokens.filter((token) =>
+      token.cx < gridLeft &&
+      token.cy > headerBottom &&
+      !isScheduleHeader(token.normalized) &&
+      isUsablePersonRowLabel(token.normalized, token.confidence)
+    ),
+  );
+  const labels = labelRows.flatMap((row) => {
+    const options = row.tokens
+      .filter((token) => isUsablePersonRowLabel(token.normalized, token.confidence))
+      .sort((left, right) =>
+        right.confidence - left.confidence ||
+        right.cx - left.cx
+      );
+    const token = options[0];
+    return token ? [{ token, row }] : [];
+  }).sort((left, right) => left.token.cy - right.token.cy);
+
+  if (!labels.length) return null;
+
+  const people = labels.map((item, index) => ({
+    sourceRow: index + 1,
+    sourceName: item.token.normalized,
+    confidence: item.token.confidence,
+    top: index === 0
+      ? Math.max(headerBottom, 0)
+      : (labels[index - 1].token.cy + item.token.cy) / 2,
+    bottom: index === labels.length - 1
+      ? Number.POSITIVE_INFINITY
+      : (item.token.cy + labels[index + 1].token.cy) / 2,
+  }));
+
+  const detected = new Map<string, ParsedImportPerson>();
+  const scheduleCandidates: ParsedScheduleCandidate[] = [];
+  const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
+
+  for (const person of people) {
+    detected.set(person.sourceName, {
+      sourceName: person.sourceName,
+      confidence: person.confidence,
+    });
+
+    for (const block of blocks) {
+      const cellTokens = tokens
+        .filter((token) =>
+          token.cx >= Math.max(gridLeft, block.left) &&
+          token.cx < Math.min(gridRight, block.right) &&
+          token.cy >= person.top &&
+          token.cy < person.bottom
+        )
+        .sort((left, right) => left.x - right.x);
+
+      const clocks: Array<{ value: string; confidence: number; order: number }> = [];
+      for (const token of cellTokens) {
+        const values = parseTimeEvidence(token.text);
+        values.forEach((value, index) => {
+          clocks.push({
+            value,
+            confidence: token.confidence,
+            order: token.x + index * Math.max(1, token.width / Math.max(1, values.length)),
+          });
+        });
+      }
+      const unique = clocks
+        .sort((left, right) => left.order - right.order)
+        .filter((item, index, all) =>
+          all.findIndex((candidate) => candidate.value === item.value) === index
+        );
+
+      const start = unique[0] ?? null;
+      const end = unique[1] ?? null;
+      if (!start && !end) continue;
+
+      const confidence = Math.min(
+        person.confidence,
+        block.confidence,
+        start?.confidence ?? 1,
+        end?.confidence ?? 1,
+      );
+
+      if (start && end) {
+        scheduleCandidates.push({
+          sourcePersonName: person.sourceName,
+          date: block.date,
+          start: start.value,
+          end: end.value,
+          sourceRow: person.sourceRow,
+          confidence,
+        });
+      } else {
+        reviewCandidates.push({
+          sourcePersonName: person.sourceName,
+          date: block.date,
+          start: start?.value ?? null,
+          end: end?.value ?? null,
+          sourceRow: person.sourceRow,
+          confidence,
+        });
+      }
+    }
+  }
+
+  const evidenceCount = scheduleCandidates.length + reviewCandidates.length;
+  if (evidenceCount < 2 || !scheduleCandidates.length) return null;
+
+  const candidateConfidence = average(scheduleCandidates.map((item) => item.confidence));
+  const structuralScore = Math.min(
+    0.93,
+    0.72 + Math.min(blocks.length, 7) * 0.025 + Math.min(detected.size, 4) * 0.02,
+  );
+  const score = Math.min(1, candidateConfidence * 0.7 + structuralScore * 0.3);
+
+  return {
+    strategy: 'calendar-cell-time-pair',
+    score,
+    parsed: {
+      detectedPeople: [...detected.values()],
+      scheduleCandidates,
+      ...(reviewCandidates.length ? { reviewCandidates } : {}),
+      structure: {
+        sheet: calendarBlocks.length >= 2
+          ? '이미지 근무표 / calendar-cell-time-pair + calendar-strip'
+          : '이미지 근무표 / calendar-cell-time-pair',
+        headerRow: 0,
+        personColumn: '날짜 영역 좌측 이름 행(자동 추론)',
+        dateColumn: '날짜/요일 블록(자동 추론)',
+        shiftColumn: '셀 내부 시간쌍(자동 추론)',
+        needsReview: true,
+      },
+      confidence: candidateConfidence,
+    },
+  };
+}
+
 function genericRowStrategy(
   _layout: ImageTextLayout,
   tokens: BoxToken[],
@@ -1410,17 +1570,35 @@ export function parseScheduleImageLayout(layout: ImageTextLayout): ParsedImport 
     .filter((candidate) => candidate.score >= 0.65)
     .sort((a, b) => b.score - a.score);
 
-  const genericCandidate = primaryCandidates.length
-    ? null
-    : genericRowStrategy(layout, tokens);
-  const candidates = primaryCandidates.length
-    ? primaryCandidates
-    : genericCandidate && genericCandidate.score >= 0.65
-      ? [genericCandidate]
-      : [];
+  const fallbackCandidates = primaryCandidates.length
+    ? []
+    : [
+        genericRowStrategy(layout, tokens),
+        calendarCellTimePairStrategy(layout, tokens),
+      ]
+        .filter((candidate): candidate is LayoutCandidate => candidate != null)
+        .filter((candidate) => candidate.score >= 0.65)
+        .sort((left, right) => right.score - left.score);
+  const candidates = primaryCandidates.length ? primaryCandidates : fallbackCandidates;
 
   if (!candidates.length) {
-    throw new Error('Image schedule layout was not recognized confidently.');
+    const calendarContext = inferCalendarContext(tokens);
+    const dateEvidence = tokens.filter(
+      (token) => parseScheduleDateEvidence(token.text, calendarContext) != null,
+    ).length;
+    const timeEvidence = tokens.reduce(
+      (sum, token) => sum + parseTimeEvidence(token.text).length,
+      0,
+    );
+    const personEvidence = tokens.filter(
+      (token) => isUsablePersonRowLabel(token.normalized, token.confidence),
+    ).length;
+    throw new Error(
+      '근무표 구조를 충분히 인식하지 못했습니다. ' +
+      '(날짜 증거 ' + dateEvidence +
+      ' · 시간 증거 ' + timeEvidence +
+      ' · 이름 후보 ' + personEvidence + ')'
+    );
   }
 
   if (
