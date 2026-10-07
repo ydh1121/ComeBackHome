@@ -23,7 +23,7 @@ for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','새 사
 for (const text of ['표 구조 확인','머리글 행','근무시간 열','자동 인식이 확실하지 않을 때만']) {
   if (!structure.includes(text)) failures.push('structure missing ' + text);
 }
-for (const text of ['일정 확인','기존 일정','가져온 일정','batch.reviewItems.map','allReviewed','services.actions.importReview.setResolution','commitImportReview.execute']) {
+for (const text of ['일정 확인','기존 일정','가져온 일정','visibleReviewItems.map','allReviewed','services.actions.importReview.setResolution','commitImportReview.execute']) {
   if (!review.includes(text)) failures.push('review missing ' + text);
 }
 for (const path of ['/import', '/import/:batchId/people', '/import/:batchId/structure', '/import/:batchId/review']) {
@@ -39,7 +39,7 @@ if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.p
 if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
 if (!browserImports.includes("STORAGE_KEY = 'cbh:import-batches:v1'")) failures.push('browser import persistence missing');
 if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근무표 이미지 가져오기')) failures.push('schedule-to-image-import entry missing');
-if (!commit.includes('schedules.upsertMany(entries)')) failures.push('schedule batch boundary missing');
+if (!commit.includes('entriesByPerson') || !commit.includes('for (const group of entriesByPerson.values())') || !commit.includes('schedules.upsertMany(group)')) failures.push('multi-person schedule batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
 if (!commit.includes('ignoredDetectedIds') || !commit.includes('includedItems')) failures.push('ignored roster people must be excluded from commit');
 if (!review.includes('visibleReviewItems') || !review.includes('ignoredDetectedIds')) failures.push('ignored roster people must be excluded from review');
