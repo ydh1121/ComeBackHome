@@ -78,7 +78,10 @@ for (const route of expectedRoutes) {
   expect(manifest.includes("'" + route + "'"), 'product route missing from manifest: ' + route);
   expect(router.includes("'" + route + "'"), 'product route missing from router: ' + route);
 }
-expect(router.includes('import.meta.env.DEV ? qaRoutes'), 'QA routes are not DEV-only');
+expect(router.includes('const qaRouteEntries = import.meta.env.DEV'), 'QA routes are not DEV-only');
+expect(!router.includes("import { QaStateMatrixPage }"), 'QA state page is statically imported into production router');
+expect(!router.includes("import { QaFlowMapPage }"), 'QA flow page is statically imported into production router');
+expect(!router.includes("import { QaDesktopDropPage }"), 'QA desktop page is statically imported into production router');
 expect(router.includes('{ path: \'*\', element: <Navigate to="/" replace /> }'), 'unknown routes must redirect to product home');
 expect(!composition.includes('/mocks/'), 'production composition imports mock modules');
 expect(!composition.includes('MOCK_FIXTURE'), 'production composition contains mock fixture');
