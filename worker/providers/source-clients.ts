@@ -9,6 +9,7 @@ import {
   mapKakaoPlaceSearch,
   mapKakaoPublicTransitRoutes,
   mapSeoulBusArrivals,
+  mapSeoulBusRoutes,
   mapSeoulBusStops,
   mapSeoulSubwayArrivals,
   mapSeoulSubwayStations,
@@ -145,6 +146,22 @@ export class SeoulBusRequestClient implements SeoulBusSource {
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
     return mapSeoulBusStops(await this.transport.getJson(request, context));
+  }
+
+  async routesByStop(arsId: string, context?: ProviderRequestContext) {
+    const request: ProviderJsonRequest = {
+      source: 'seoul-bus',
+      capability: 'bus-routes-by-stop',
+      method: 'GET',
+      urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getRouteByStation',
+      query: {
+        arsId,
+        resultType: 'json',
+      },
+      auth: seoulBusAuth(),
+      security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
+    };
+    return mapSeoulBusRoutes(await this.transport.getJson(request, context));
   }
 
   async arrivals(stopProviderId: string, routeProviderId: string, context?: ProviderRequestContext) {
