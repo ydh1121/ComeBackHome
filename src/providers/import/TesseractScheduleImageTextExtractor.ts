@@ -241,6 +241,11 @@ function numericShape(value: string): boolean {
   );
 }
 
+function numericCellShape(value: string): boolean {
+  const normalized = value.normalize('NFKC').replace(/\s+/g, '');
+  return /\d/.test(normalized) && /^[0-9.,:/~\-–—〜～]+$/.test(normalized);
+}
+
 function explicitSchedulePunctuation(value: string): boolean {
   return /[.,:]/.test(value) && numericShape(value);
 }
@@ -697,7 +702,7 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
             }))
             .filter((item) =>
               item.text.length > 0 &&
-              numericShape(item.text) &&
+              numericCellShape(item.text) &&
               item.confidence >= this.minimumConfidence
             )
             .sort((left, right) => left.x0 - right.x0);
