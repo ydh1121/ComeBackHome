@@ -182,14 +182,49 @@ jobs:
           const eonjuNearbyUrl = new URL(origin + '/api/providers/transit-nearby');
           eonjuNearbyUrl.searchParams.set('x', String(eonju.coordinate.x));
           eonjuNearbyUrl.searchParams.set('y', String(eonju.coordinate.y));
-          const eonjuNearby = await fetch(eonjuNearbyUrl, {
-            headers: { Accept: 'application/json' },
-          });
-          const eonjuNearbyBody = await eonjuNearby.json().catch(() => null);
-          const eonjuResults = Array.isArray(eonjuNearbyBody?.results)
-            ? eonjuNearbyBody.results
-            : [];
-          if (!eonjuNearby.ok || eonjuResults.length === 0) {
+          let eonjuNearby = null;
+          let eonjuResults = [];
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            const response = await fetch(eonjuNearbyUrl, {
+              headers: { Accept: 'application/json' },
+              cache: 'no-store',
+            });
+            const body = await response.json().catch(() => null);
+            const candidateResults = Array.isArray(body?.results) ? body.results : [];
+            const candidateSubways = candidateResults.filter((item) => item?.mode === 'SUBWAY');
+            const subwayDistances = candidateSubways
+              .map((item) => Number(item?.distanceM))
+              .filter(Number.isFinite)
+              .sort((left, right) => left - right);
+            const nearest = subwayDistances[0];
+            const max = subwayDistances[subwayDistances.length - 1];
+            const threshold = Number.isFinite(nearest)
+              ? nearest <= 900
+                ? Math.min(900, Math.max(450, nearest + 250))
+                : nearest + 400
+              : null;
+            const forbiddenLeak = candidateSubways.some((item) =>
+              ['압구정', '신사', '학동'].some((name) =>
+                String(item?.name ?? '').includes(name)
+              )
+            );
+
+            eonjuNearby = response;
+            eonjuResults = candidateResults;
+            if (
+              response.ok &&
+              candidateResults.length > 0 &&
+              threshold != null &&
+              Number.isFinite(max) &&
+              max <= threshold &&
+              !forbiddenLeak
+            ) break;
+
+            if (attempt < 29) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+          }
+          if (!eonjuNearby?.ok || eonjuResults.length === 0) {
             throw new Error('Eonju nearby transit failed');
           }
 
@@ -210,8 +245,8 @@ jobs:
               .sort((left, right) => left - right);
             if (!distances.length) return { nearest: null, max: null, threshold: null };
             const nearest = distances[0];
-            const baseRadius = mode === 'BUS' ? 450 : 550;
-            const delta = mode === 'BUS' ? 450 : 450;
+            const baseRadius = mode === 'BUS' ? 450 : 450;
+            const delta = mode === 'BUS' ? 450 : 250;
             const normalCap = mode === 'BUS' ? 800 : 900;
             const threshold = nearest <= normalCap
               ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
