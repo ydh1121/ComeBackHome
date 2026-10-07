@@ -9,6 +9,8 @@ const doc = await readFile(new URL('../docs/CLOUDFLARE_ENVIRONMENT_CONTRACT.md',
 
 const required = [
   'KAKAO_REST_API_KEY',
+  'SEOUL_BUS_SERVICE_KEY',
+  'SEOUL_SUBWAY_API_KEY',
   'VAPID_PRIVATE_KEY',
   'PRESENCE_EVENT_INGEST_TOKEN',
   'VAPID_PUBLIC_KEY',
@@ -29,6 +31,8 @@ for (const name of required) {
 
 for (const secret of [
   'KAKAO_REST_API_KEY=',
+  'SEOUL_BUS_SERVICE_KEY=',
+  'SEOUL_SUBWAY_API_KEY=',
   'VAPID_PRIVATE_KEY=',
   'PRESENCE_EVENT_INGEST_TOKEN=',
 ]) {
