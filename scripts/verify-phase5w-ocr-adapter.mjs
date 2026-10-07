@@ -26,8 +26,12 @@ for (const text of [
   expect(extractorSource.includes(text), 'OCR adapter source missing ' + text);
 }
 expect(
-  !compositionSource.includes('TesseractScheduleImageTextExtractor'),
-  'Phase5W prototype must not be active in production composition',
+  compositionSource.includes('TesseractScheduleImageTextExtractor'),
+  'production composition must activate the local-first OCR extractor',
+);
+expect(
+  compositionSource.includes('AdaptiveScheduleImageRecognizer'),
+  'production composition must connect OCR to the schedule image recognizer',
 );
 expect(
   !extractorSource.includes('https://cdn.'),
@@ -274,4 +278,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('phase 5W local-first OCR adapter verification passed');
+console.log('phase 5W production local-first OCR adapter verification passed');
