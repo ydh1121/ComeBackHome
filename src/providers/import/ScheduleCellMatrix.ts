@@ -267,11 +267,14 @@ export function buildScheduleCellMatrix(
   const dates = buildDateColumns(tokens, detection);
   if (dates.length < 2) return null;
 
-  const dateTokens = tokens.filter((token) =>
-    dates.some((date) => Math.abs(token.cx - (date.bounds.x + date.bounds.width / 2)) <= date.bounds.width * 0.55)
+  const calendarContext = parseCalendarContext(tokens);
+  const dateHeaderTokens = tokens.filter(
+    (token) => parseDateEvidence(token.text, calendarContext) != null,
   );
-  const semanticHeaderTokens = tokens.filter((token) => classifyScheduleShiftLabel(token.text) != null);
-  const headerEvidence = [...dateTokens, ...semanticHeaderTokens];
+  const semanticHeaderTokens = tokens.filter(
+    (token) => classifyScheduleShiftLabel(token.text) != null,
+  );
+  const headerEvidence = [...dateHeaderTokens, ...semanticHeaderTokens];
   const headerBottom = headerEvidence.length
     ? Math.max(...headerEvidence.map((token) => token.bottom))
     : Math.max(0, detection.structure.tableBounds.y);
