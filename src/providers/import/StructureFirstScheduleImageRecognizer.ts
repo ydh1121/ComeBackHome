@@ -325,7 +325,7 @@ export function interpretStructureFirstSchedule(
 
 // Grid-based fallback is conservative: every date must be OCR-observed
 // inside a real pixel-supported column. Never infer a date from its index.
-function pixelDateHeaderRegions(
+export function pixelDateHeaderRegions(
   detection: ScheduleTableStructureDetection,
 ): ImageTextProbeRegion[] {
   const header = detection.structure.rowBands[0]?.bounds;
