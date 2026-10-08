@@ -20,7 +20,7 @@ import { createNotificationActivationReadiness } from './notification-activation
 import { createPushDeliveryRuntime, inspectPushDeliveryConfig } from './push-delivery-readiness';
 import { verifyVapidKeyPair } from './vapid-pair-validation';
 import { PushDeliveryError } from './contracts';
-import { classifyPushProviderFailure } from './push/WebPushDeliveryGateway';
+import { classifyPushProviderFailure, pushSubscriptionKeyShapeValid } from './push/WebPushDeliveryGateway';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
 type JsonObject = Record<string, unknown>;
@@ -928,7 +928,10 @@ export async function handleApiRequest(
         segments[2] === 'readiness' && request.method === 'GET') {
       const push = inspectPushDeliveryConfig(env);
       const scheduled = createNotificationActivationReadiness(env, providerRuntime);
-      const activeSubscriptionCount = (await new D1SubscriptionStore(env.DB).listActive()).length;
+      const activeSubscriptions = await new D1SubscriptionStore(env.DB).listActive();
+      const activeSubscriptionCount = activeSubscriptions.length;
+      const validSubscriptionKeyShapeCount = activeSubscriptions.filter(
+        (item) => pushSubscriptionKeyShapeValid(item.keys)).length;
       const vapidKeyPairValid = await verifyVapidKeyPair(env);
       return json({
         vapidConfigured: !push.missing.some((value) => value.startsWith('VAPID_')),
@@ -937,6 +940,7 @@ export async function handleApiRequest(
         vapidKeyPairValid,
         pushMissing: push.missing,
         activeSubscriptionCount,
+        validSubscriptionKeyShapeCount,
         scheduledNotificationReady: scheduled.ready,
         scheduledMissing: scheduled.missing,
         valuesExposed: false,
