@@ -82,6 +82,7 @@ interface FileEvaluationResult {
   };
   roiCount?: number;
   initialOcrTokenCount?: number;
+  qaDiagnostics?: Record<string, unknown>;
   parser:
     | {
         result: 'PARSED_REVIEW_REQUIRED';
@@ -185,6 +186,7 @@ function renderBundle(bundle: EvaluationBundle): void {
       timingMs: item.timingMs,
       roiCount: item.roiCount,
       parserResult: item.parser.result,
+      qaDiagnostics: item.qaDiagnostics ?? null,
     })),
   }, null, 2);
 
@@ -240,6 +242,54 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
       timingMs: diagnostic.timingMs,
       roiCount: diagnostic.roiCount,
       initialOcrTokenCount: diagnostic.layoutTokenCount,
+      qaDiagnostics: {
+        source: {
+          width: diagnostic.detection.structure.imageWidth,
+          height: diagnostic.detection.structure.imageHeight,
+          format: file.type || 'UNKNOWN',
+          displayedOrientation: diagnostic.detection.structure.imageWidth >= diagnostic.detection.structure.imageHeight
+            ? 'LANDSCAPE' : 'PORTRAIT',
+        },
+        structure: {
+          tableBounds: diagnostic.detection.structure.tableBounds,
+          pixelRowCount: diagnostic.detection.structure.rowBands.length,
+          pixelColumnCount: diagnostic.detection.structure.columnBands.length,
+          confidence: diagnostic.detection.structure.confidence,
+        },
+        date: {
+          contextYear: diagnostic.matrixInput.recognizedYear,
+          contextMonth: diagnostic.matrixInput.recognizedMonth,
+          dateAnchors: diagnostic.matrixInput.dateAnchorCount,
+          resolvedDates: diagnostic.matrixInput.resolvedDateCount,
+          rejectionStage: diagnostic.matrixInput.failureStage,
+        },
+        person: {
+          detectedRows: diagnostic.matrix.rows.length,
+          registeredPriorCount: diagnostic.registeredPriorCount,
+          matchedRegisteredPeopleCount: diagnostic.matchedRegisteredPeopleCount,
+          unresolvedRowCount: diagnostic.unresolvedPersonRowCount,
+          rejectedNonPersonCount: diagnostic.unresolvedPersonRowCount,
+        },
+        matrix: {
+          personRows: diagnostic.matrix.rows.length,
+          dateColumns: diagnostic.matrix.dates.length,
+          cells: diagnostic.matrix.cells.length,
+          occupancy: {
+            empty: diagnostic.matrix.cells.filter((item) => item.visual.occupancy === 'EMPTY').length,
+            content: diagnostic.matrix.cells.filter((item) => item.visual.occupancy === 'CONTENT').length,
+            uncertain: diagnostic.matrix.cells.filter((item) => item.visual.occupancy === 'UNCERTAIN').length,
+          },
+        },
+        cellClassification: {
+          WORK: counts.workCount,
+          OFF: counts.offCount,
+          INCOMPLETE: counts.incompleteCount,
+          UNREADABLE: counts.unreadableCount,
+        },
+        finalFailureStage: 'NONE',
+        personalNamesLogged: false,
+        originalImagePersisted: false,
+      },
       parser: {
         result: 'PARSED_REVIEW_REQUIRED',
         parsed: diagnostic.parsed,
@@ -256,6 +306,14 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
       runtime,
       timingMs: {
         total: Number((performance.now() - startedAt).toFixed(1)),
+      },
+      qaDiagnostics: {
+        source: { format: file.type || 'UNKNOWN', sizeBytes: file.size },
+        finalFailureStage: /stage=([A-Z_]+)/.exec(formatError(error))?.[1] ??
+          (/사람 이름/.test(formatError(error)) ? 'PERSON_REJECTION' :
+            /셀에서 일정/.test(formatError(error)) ? 'CELL_EVIDENCE' : 'UNKNOWN'),
+        personalNamesLogged: false,
+        originalImagePersisted: false,
       },
       parser: {
         result: 'FAILED_CLOSED',
