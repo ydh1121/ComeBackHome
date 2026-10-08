@@ -762,6 +762,37 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           }
         }
 
+        if (region.purpose === 'date' && dateNumericCrops.length &&
+            !words.some((word) => /^(?:[1-9]|[12][0-9]|3[01])$/.test(
+              String(word.text ?? '').trim())) && !semanticDateWords.length) {
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_WORD),
+            tessedit_char_whitelist: '0123456789',
+            preserve_interword_spaces: '1',
+          });
+          const alternatives: OcrWord[] = [];
+          for (const glyphs of dateNumericCrops) {
+            const read = await worker.recognize(glyphs, { rotateAuto: false },
+              { text: true, blocks: true });
+            const text = String(read.data.text ?? '').trim().replace(/\\s+/g, '');
+            if (!/^(?:[1-9]|[12][0-9]|3[01])$/.test(text)) continue;
+            const confidence = Number(read.data.confidence) || 0;
+            if (confidence < 30) continue;
+            alternatives.push({
+              text,
+              confidence,
+              bbox: { x0: 0, y0: 0, x1: rectangle.width, y1: rectangle.height },
+            });
+          }
+          // Conflicting left-portion readings are not reliable date
+          // evidence. Preserve unknown rather than guessing.
+          const unique = new Set(alternatives.map((word) => word.text));
+          if (unique.size === 1 && alternatives.length) {
+            semanticDateWords = [alternatives.sort((a, b) =>
+              Number(b.confidence) - Number(a.confidence))[0]];
+          }
+        }
+
         if (region.purpose === 'date') {
           // Read real OCR bounding boxes. Equal-width synthetic token slots
           // would turn legitimate sparse date headers into invented geometry.
