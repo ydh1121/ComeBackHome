@@ -39,7 +39,8 @@ try {
           placeName: query,
           roadAddress: '서울 테스트로 1',
           coordinate: near ?? { x: 127, y: 37.5 },
-          category: 'fixture',
+          category: query === '버스정류장' ? '교통,수송 > 버스정류장' :
+            query === '지하철역' ? '교통,수송 > 지하철역' : '음식점 > 일반음식점',
         }];
       },
       async publicTransitRoutes() {
@@ -163,9 +164,17 @@ try {
   expect(calls.route === 1, 'Kakao route fake source call count mismatch');
 
   const transitResults = await transitProvider.search('강남역', { x: 127.03, y: 37.49 });
-  expect(transitResults.length === 1, 'Kakao transit search result count mismatch');
-  expect(transitResults[0]?.mode === 'SUBWAY', 'Kakao transit search mode inference mismatch');
-  expect(transitResults[0]?.coordinate?.x === 127.03, 'Kakao transit search coordinate mapping mismatch');
+  expect(transitResults.length === 1, 'official transit station search result count mismatch');
+  expect(transitResults[0]?.mode === 'SUBWAY', 'official transit station must retain its mode');
+  expect(transitResults[0]?.providerId === '0222', 'official transit source identity mismatch');
+  expect(transitResults[0]?.coordinate == null, 'missing official station coordinates must not be fabricated');
+
+  const kakaoCallsBeforeStationSearch = calls.place;
+  const onlyTransit = await transitProvider.search('언주역', { x: 127.03, y: 37.49 });
+  expect(onlyTransit.every((item) => item.mode === 'BUS' || item.mode === 'SUBWAY'),
+    'transit search must only return official stops and stations');
+  expect(calls.place === kakaoCallsBeforeStationSearch,
+    'transit search must not call general-purpose Kakao POI search');
 
   const nearbyTransit = await transitProvider.nearby({ x: 127.03, y: 37.49 });
   expect(nearbyTransit.some((item) => item.mode === 'BUS'), 'nearby transit must include bus candidates');
@@ -246,7 +255,7 @@ try {
     disabledError = error instanceof Error ? error.message : String(error);
   }
   expect(disabledError === 'Provider runtime is disabled.', 'disabled Worker provider contract mismatch');
-  expect(calls.place === 4, 'disabled Worker provider call reached fake Kakao source');
+  expect(calls.place === 3, 'disabled Worker provider call reached fake Kakao source');
 } finally {
   globalThis.fetch = originalFetch;
   await vite.close();

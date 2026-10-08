@@ -66,6 +66,7 @@ export function TransitAccessPage() {
   const [nearbyLoading, setNearbyLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -138,6 +139,16 @@ export function TransitAccessPage() {
     [source, filter],
   );
 
+  const mapPoints = useMemo(
+    () => visible.flatMap((point) => point.coordinate ? [{
+      id: point.id,
+      name: point.name,
+      mode: point.mode,
+      coordinate: point.coordinate,
+    }] : []),
+    [visible],
+  );
+
   const place = placeState.status === 'ready' ? placeState.place : null;
   const kindLabel = kind === 'origin' ? '출발지' : '도착지';
   const base = '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access';
@@ -183,6 +194,7 @@ export function TransitAccessPage() {
   const toggleResult = async (result: TransitResult) => {
     if (workingId) return;
     setWorkingId(result.id);
+    setActionError(null);
     try {
       const existing = persistedPoints.find((point) => sameProvider(point, result));
 
@@ -194,6 +206,16 @@ export function TransitAccessPage() {
             await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
           await services.actions.commute.addRouteOriginAccess(personId, routeId, point.id);
         }
+        const confirmed = await services.queries.getCommuteOverview(personId);
+        const updated = confirmed.savedRoutes.find((item) => item.id === routeId);
+        const resultPoint = confirmed.originAccessPoints.find((item) => sameProvider(item, result));
+        const wasSelected = Boolean(existing && selectedRouteIds.has(existing.id));
+        const isSelected = Boolean(resultPoint && (
+          updated?.originAccessPointIds ?? (updated?.originAccessPointId ? [updated.originAccessPointId] : [])
+        ).includes(resultPoint.id));
+        if (!updated || isSelected === wasSelected) {
+          throw new Error('출발 교통편 저장을 다시 확인하지 못했습니다.');
+        }
         return;
       }
 
@@ -204,6 +226,16 @@ export function TransitAccessPage() {
           const point = existing ??
             await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
           await services.actions.commute.addRouteDestinationAccess(personId, routeId, point.id);
+        }
+        const confirmed = await services.queries.getCommuteOverview(personId);
+        const updated = confirmed.savedRoutes.find((item) => item.id === routeId);
+        const resultPoint = confirmed.destinationAccessPoints.find((item) => sameProvider(item, result));
+        const wasSelected = Boolean(existing && selectedRouteIds.has(existing.id));
+        const isSelected = Boolean(resultPoint && (
+          updated?.destinationAccessPointIds ?? (updated?.destinationAccessPointId ? [updated.destinationAccessPointId] : [])
+        ).includes(resultPoint.id));
+        if (!updated || isSelected === wasSelected) {
+          throw new Error('도착 교통편 저장을 다시 확인하지 못했습니다.');
         }
         return;
       }
@@ -231,6 +263,13 @@ export function TransitAccessPage() {
       if (existing) {
         await services.actions.transitAccess.toggleAccess(point.id, !point.selected);
       }
+      // All successful mutations must survive the repository readback.
+      const persisted = await services.queries.getTransitAccess(personId, kind, 'all');
+      if (!persisted.some((candidate) => candidate.id === point.id)) {
+        throw new Error('교통편 저장 후 다시 조회되지 않았습니다.');
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '교통편 저장에 실패했습니다.');
     } finally {
       setWorkingId(null);
     }
@@ -269,12 +308,7 @@ export function TransitAccessPage() {
       <KakaoTransitMap
         center={place.coordinate}
         centerLabel={place.label || kindLabel}
-        points={visible.flatMap((point) => point.coordinate ? [{
-          id: point.id,
-          name: point.name,
-          mode: point.mode,
-          coordinate: point.coordinate,
-        }] : [])}
+        points={mapPoints}
         selectedIds={[...selectedResultIds]}
         onSelect={(id) => {
           const result = visible.find((item) => item.id === id);
@@ -309,6 +343,7 @@ export function TransitAccessPage() {
         </div>
       ) : null}
 
+      {actionError ? <div className="search-inline-status" role="alert">{actionError}</div> : null}
       <div className="transit-list">
         {loading ? (
           <div className="transit-empty">

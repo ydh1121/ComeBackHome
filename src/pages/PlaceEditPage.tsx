@@ -107,13 +107,13 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
       </label>
 
       <div className="form-field address-search-field">
-        <span className="form-label">주소</span>
+        <span className="form-label">주소 또는 장소</span>
         <div className="address-search-control">
           <Icon name="search" />
           <input
-            aria-label="주소 검색"
+            aria-label="주소 또는 장소 검색"
             value={query}
-            placeholder="도로명·건물명 검색"
+            placeholder="도로명·지번·건물·매장·장소 검색"
             autoComplete="off"
             onCompositionStart={() => { composing.current = true; }}
             onCompositionEnd={(event) => {

@@ -21,15 +21,23 @@ import {
 } from './ScheduleCellMatrix';
 import { parseScheduleImageClock } from './StructuredTableImageScheduleRecognizer';
 
+const NON_PERSON_LABELS = new Set([
+  '쉬는시간', '휴게시간', '쉬는날', '휴무', '휴일', '연차', '반차', '공휴일',
+  '출근', '퇴근', '근무', '근무시간', '출근시간', '퇴근시간',
+  '이름', '성명', '직원', '직원명', '성함', '담당자', '사람', '비고',
+  '날짜', '요일', '합계', '총합', '시간', '시작', '종료', '오전', '오후',
+]);
+
 function normalizePersonCandidate(value: string): string | null {
   const normalized = String(value ?? '')
     .normalize('NFKC')
     .trim()
     .replace(/\s+/g, '');
-  if (normalized.length < 2 || normalized.length > 30) return null;
-  if (/\d/.test(normalized)) return null;
-  if (!/[가-힣a-z]/i.test(normalized)) return null;
-  return normalized.toLowerCase();
+  // Never promote headings, Latin OCR fragments, dates or shift labels to people.
+  if (!/^[가-힣]{2,5}$/.test(normalized)) return null;
+  if (NON_PERSON_LABELS.has(normalized)) return null;
+  if (/^(?:오전|오후|평일|주말|휴무|근무|출근|퇴근|시작|종료)/.test(normalized)) return null;
+  return normalized;
 }
 
 function parseTimeEvidence(value: string): string[] {
@@ -51,31 +59,25 @@ function parseTimeEvidence(value: string): string[] {
 function rowName(
   row: ScheduleMatrixPersonRow,
   regional: Map<string, ImageTextProbeResult>,
+  knownNames: Set<string>,
 ): { sourceName: string; confidence: number; unreadable: boolean } {
   const focused = regional.get('person::' + row.sourceRow);
-  const focusedName = normalizePersonCandidate(focused?.text ?? '');
-  if (focusedName) {
-    return {
-      sourceName: focusedName,
-      confidence: Math.max(0.2, focused?.confidence ?? 0),
-      unreadable: false,
-    };
+  const candidates = [
+    { name: normalizePersonCandidate(focused?.text ?? ''), confidence: focused?.confidence ?? 0 },
+    { name: normalizePersonCandidate(row.preliminaryName ?? ''), confidence: row.preliminaryConfidence },
+  ];
+  // Registered people are authoritative priors, even with weak OCR confidence.
+  const registered = candidates.find((candidate) => candidate.name && knownNames.has(candidate.name));
+  if (registered?.name) {
+    return { sourceName: registered.name, confidence: Math.max(0.8, registered.confidence), unreadable: false };
   }
-
-  const preliminary = normalizePersonCandidate(row.preliminaryName ?? '');
-  if (preliminary) {
-    return {
-      sourceName: preliminary,
-      confidence: Math.max(0.15, row.preliminaryConfidence),
-      unreadable: false,
-    };
+  // A novel name may enter explicit human import review only with strong
+  // evidence. Weak/new labels never create a detected person.
+  const credible = candidates.find((candidate) => candidate.name && candidate.confidence >= 0.85);
+  if (credible?.name) {
+    return { sourceName: credible.name, confidence: credible.confidence, unreadable: false };
   }
-
-  return {
-    sourceName: '인식불확실행' + row.sourceRow,
-    confidence: 0.12,
-    unreadable: true,
-  };
+  return { sourceName: '', confidence: 0, unreadable: true };
 }
 
 function cellTimes(result: ImageTextProbeResult | undefined): {
@@ -146,18 +148,16 @@ export interface StructureFirstRecognitionDiagnostics {
 export function interpretStructureFirstSchedule(
   matrix: ScheduleCellMatrix,
   regionResults: ImageTextProbeResult[],
+  knownPersonNames: string[] = [],
 ): ParsedImport {
   const byRegion = new Map(regionResults.map((result) => [result.id, result]));
+  const knownNames = new Set(knownPersonNames.map(normalizePersonCandidate).filter((name): name is string => !!name));
   const peopleByRow = new Map(
-    matrix.rows.map((row) => [row.sourceRow, rowName(row, byRegion)])
+    matrix.rows.map((row) => [row.sourceRow, rowName(row, byRegion, knownNames)])
   );
-  const detectedPeople: ParsedImportPerson[] = matrix.rows.map((row) => {
-    const person = peopleByRow.get(row.sourceRow)!;
-    return {
-      sourceName: person.sourceName,
-      confidence: person.confidence,
-    };
-  });
+  const detectedPeople: ParsedImportPerson[] = [...peopleByRow.values()]
+    .filter((person) => !person.unreadable && person.sourceName)
+    .map((person) => ({ sourceName: person.sourceName, confidence: person.confidence }));
 
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
   const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
@@ -168,7 +168,7 @@ export function interpretStructureFirstSchedule(
 
   for (const cell of matrix.cells) {
     const person = peopleByRow.get(cell.sourceRow);
-    if (!person) continue;
+    if (!person || person.unreadable || !person.sourceName) continue;
     const time = cellTimes(byRegion.get(cell.id));
     const dateConfidence =
       matrix.dates.find((date) => date.date === cell.date)?.confidence ?? 0.5;
@@ -236,6 +236,10 @@ export function interpretStructureFirstSchedule(
     }
   }
 
+  if (!detectedPeople.length) {
+    throw new Error('근무표에서 신뢰할 수 있는 사람 이름을 찾지 못했습니다. 헤더·휴무·불확실한 OCR 결과는 사람으로 추가되지 않습니다.');
+  }
+
   if (!scheduleCandidates.length && !reviewCandidates.length) {
     throw new Error('표 구조는 찾았지만 사람×날짜 셀에서 일정 증거를 생성하지 못했습니다.');
   }
@@ -274,6 +278,7 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
   constructor(
     private readonly detector: ScheduleTableStructureDetector,
     private readonly extractor: RegionalImageTextExtractor,
+    private readonly knownPersonNames: string[] = [],
   ) {}
 
   async evaluate(
@@ -314,7 +319,7 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
     const regionalOcrMs = performance.now() - regionalOcrStarted;
     await onProgress?.(94);
 
-    const parsed = interpretStructureFirstSchedule(matrix, regionResults);
+    const parsed = interpretStructureFirstSchedule(matrix, regionResults, this.knownPersonNames);
     await onProgress?.(98);
 
     return {
