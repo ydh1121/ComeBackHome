@@ -144,9 +144,21 @@ async function verifyOn(browserType, label, device = {}) {
       checkedWidths.push(width);
     }
     await page.locator('[data-test-layout]').evaluate((node) => node.remove());
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-map-state="ready"]').waitFor({ timeout: 35_000 });
+    assert.equal(await page.locator('.transit-selected-chip').count(), selectedOriginCount,
+      'Saved selection count not restored after real browser reload');
 
     // Simulate actual map drag in a browser, never a state-only unit mock.
+    const savedAccessResponse = await api.get(
+      ORIGIN + '/api/people/' + pathId + '/commute?kind=origin'
+    );
+    assert.equal(savedAccessResponse.status(), 200, 'D1 origin access readback');
+    const savedOriginPoints = (await savedAccessResponse.json()).accessPoints ?? [];
+    const selectedOriginCount = savedOriginPoints.filter((point) => point.selected === true).length;
     const selectedChipCountBeforePan = await page.locator('.transit-selected-chip').count();
+    assert.equal(selectedChipCountBeforePan, selectedOriginCount,
+      'Standalone picker selection count differs from persisted D1 flags');
     const mapBox = await page.locator('.kakao-transit-map').boundingBox();
     assert.ok(mapBox, 'Interactive map has no drag target');
     const startX = mapBox.x + mapBox.width * 0.65;
@@ -230,6 +242,8 @@ async function verifyOn(browserType, label, device = {}) {
       nearbyDistanceCap: 'PASS',
       nearbyTotal: nearby.length,
       nearbyBusCount: nearby.filter((item) => item.mode === 'BUS').length,
+      originPersistedSelectionCount: selectedOriginCount,
+      persistedSelectionReload: 'PASS_READ_ONLY',
       busSource: nearbyPayload.sourceStatus?.bus ?? 'UNKNOWN',
       nearbySubwayCount: nearby.filter((item) => item.mode === 'SUBWAY').length,
       nearbyMaximumMeters: Math.max(...nearby.map((item) => item.distanceM)),
