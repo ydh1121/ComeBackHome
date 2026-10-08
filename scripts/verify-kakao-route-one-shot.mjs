@@ -18,7 +18,7 @@ let replayedUiRequests = 0;
 const page = await context.newPage();
 try {
   // Strict browser egress firewall: no second real routes call is permitted.
-  await page.route(/\\/api\\/providers\\/routes(?:\\?|$)/, route =>
+  await page.route(/\/api\/providers\/routes(?:\?|$)/, route =>
     route.abort('blockedbyclient'));
   const get = async (path) => {
     const res = await context.request.get(ORIGIN + path, {
@@ -57,7 +57,7 @@ try {
   if (!response.ok()) {
     // Never log provider upstream text, route IDs or personal coordinates.
     const quota = response.status() === 400 &&
-      typeof body?.error === 'string' && /HTTP 400 CODE -10(?:$|\\s)/.test(body.error);
+      typeof body?.error === 'string' && /HTTP 400 CODE -10(?:$|\s)/.test(body.error);
     throw new Error(quota ? 'KAKAO_ROUTE_QUOTA_BLOCKED' :
       'KAKAO_ROUTE_PROVIDER_HTTP_' + response.status());
   }
@@ -66,8 +66,8 @@ try {
 
   // The browser receives the already-fetched provider response. This tests
   // card rendering without a second external route call or saving anything.
-  await page.unroute(/\\/api\\/providers\\/routes(?:\\?|$)/);
-  await page.route(/\\/api\\/providers\\/routes(?:\\?|$)/, async (route) => {
+  await page.unroute(/\/api\/providers\/routes(?:\?|$)/);
+  await page.route(/\/api\/providers\/routes(?:\?|$)/, async (route) => {
     replayedUiRequests++;
     await route.fulfill({
       status: 200, contentType: 'application/json',
@@ -79,8 +79,8 @@ try {
     return route.continue();
   });
   // Later-added routes win: ensure the provider replay still has precedence.
-  await page.unroute(/\\/api\\/providers\\/routes(?:\\?|$)/);
-  await page.route(/\\/api\\/providers\\/routes(?:\\?|$)/, async (route) => {
+  await page.unroute(/\/api\/providers\/routes(?:\?|$)/);
+  await page.route(/\/api\/providers\/routes(?:\?|$)/, async (route) => {
     replayedUiRequests++;
     await route.fulfill({
       status: 200, contentType: 'application/json',
