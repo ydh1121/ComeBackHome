@@ -87,6 +87,10 @@ export function CommuteRoutePage() {
   const services = useApplicationServices();
   const state = useCommuteOverview(personId);
   const [expanded, setExpanded] = useState(false);
+  const [draftRouteId, setDraftRouteId] = useState<string | null>(null);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const [routeMessage, setRouteMessage] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
 
   if (state.status === 'loading') return <section className="commute-page"><div className="commute-message">경로를 불러오는 중</div></section>;
   if (state.status === 'error' || !state.overview.person) return <section className="commute-page"><div className="commute-message">경로를 불러오지 못했습니다.</div></section>;
@@ -118,6 +122,26 @@ export function CommuteRoutePage() {
     navigate(routePath(route.id));
   };
 
+  const savePreferredRoute = async () => {
+    if (!draftRouteId || savingRoute) return;
+    setSavingRoute(true);
+    setRouteError(null);
+    setRouteMessage(null);
+    try {
+      await services.actions.commute.selectRouteCandidate(personId, draftRouteId);
+      const readback = await services.queries.getCommuteOverview(personId);
+      if (readback.preferredRouteCandidateId !== draftRouteId) {
+        throw new Error('선택한 추천 경로가 저장 후 조회되지 않았습니다.');
+      }
+      setDraftRouteId(null);
+      setRouteMessage('선택한 추천 경로를 저장했습니다.');
+    } catch (error) {
+      setRouteError(error instanceof Error ? error.message : '추천 경로 저장에 실패했습니다.');
+    } finally {
+      setSavingRoute(false);
+    }
+  };
+
   return (
     <section className="commute-page" data-route={'/people/' + personId + '/commute'} data-page="CommuteRouteEditPage" data-state={overview.savedRoutes.length ? 'ROUTE_CONFIGURED' : 'EMPTY'}>
       <BackButton fallbackTo={'/people/' + encodeURIComponent(personId)} />
@@ -147,13 +171,18 @@ export function CommuteRoutePage() {
       {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 추천 경로가 없습니다.</div> : null}
       <div className="route-policy-list">
         {visible.map((route) => {
-          const selected = route.id === overview.preferredRouteCandidateId;
+          const selected = route.id === (draftRouteId ?? overview.preferredRouteCandidateId);
           return (
             <button
               type="button"
               className={'route-candidate' + (selected ? ' selected' : '')}
               key={route.id}
-              onClick={() => services.actions.commute.selectRouteCandidate(personId, route.id)}
+              aria-pressed={selected}
+              onClick={() => {
+                setDraftRouteId(route.id);
+                setRouteMessage(null);
+                setRouteError(null);
+              }}
             >
               <div className="route-candidate-head">
                 <div>
@@ -173,6 +202,13 @@ export function CommuteRoutePage() {
       </div>
 
       {remain ? <div className="route-more"><button type="button" className="cta secondary" onClick={() => setExpanded(true)}>다른 경로 {remain}개 보기</button></div> : null}
+      {draftRouteId ? (
+        <button type="button" className="cta" disabled={savingRoute} onClick={() => void savePreferredRoute()}>
+          {savingRoute ? '추천 경로 저장 중' : '선택한 추천 경로 저장'}
+        </button>
+      ) : null}
+      {routeMessage ? <div className="search-inline-status" role="status">{routeMessage}</div> : null}
+      {routeError ? <div className="search-inline-status" role="alert">{routeError}</div> : null}
     </section>
   );
 }
