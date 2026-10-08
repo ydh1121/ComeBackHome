@@ -114,6 +114,17 @@ try{
   assert.equal(errors.categorizePushError(new errors.PushClientError('NO_PERMISSION')),
     'NO_PERMISSION');
   assert.equal(errors.PUSH_FAILURE_MESSAGES.PUSH_PROVIDER_REJECTED.includes('거부'),true);
+  for (const reason of ['PUSH_PROVIDER_BAD_REQUEST','PUSH_PROVIDER_AUTH_REJECTED',
+      'PUSH_PROVIDER_RATE_LIMITED','PUSH_PROVIDER_UNAVAILABLE','PUSH_TRANSPORT_ERROR']) {
+    const clientError = Object.assign(new Error('Test push delivery failed'), {
+      status: 502,
+      reason,
+    });
+    assert.equal(errors.categorizePushError(clientError),reason,
+      'Specific server reason must override generic HTTP 502');
+    assert.ok(errors.PUSH_FAILURE_MESSAGES[reason]?.length > 16,
+      'Every new server failure must have a Korean UI explanation');
+  }
   // iOS Home Screen apps need the permission API invoked synchronously from
   // the click handler. Prove the request happens BEFORE any awaited work.
   const gestureEvents=[];
