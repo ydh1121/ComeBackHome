@@ -148,6 +148,7 @@ export interface StructureFirstRecognitionDiagnostics {
   registeredPriorCount: number;
   matchedRegisteredPeopleCount: number;
   unresolvedPersonRowCount: number;
+  rejectedNonPersonLabelCount: number;
 }
 
 export function interpretStructureFirstSchedule(
@@ -363,6 +364,10 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
       registeredPriorCount: normalizedPrior.size,
       matchedRegisteredPeopleCount,
       unresolvedPersonRowCount: Math.max(0, matrix.rows.length - parsed.detectedPeople.length),
+      rejectedNonPersonLabelCount: regionResults.filter((result) =>
+        result.id.startsWith('person::') && !!result.text.trim() &&
+        normalizePersonCandidate(result.text) == null,
+      ).length,
     };
   }
 
