@@ -268,7 +268,7 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
           registeredPriorCount: diagnostic.registeredPriorCount,
           matchedRegisteredPeopleCount: diagnostic.matchedRegisteredPeopleCount,
           unresolvedRowCount: diagnostic.unresolvedPersonRowCount,
-          rejectedNonPersonCount: diagnostic.unresolvedPersonRowCount,
+          rejectedNonPersonCount: diagnostic.rejectedNonPersonLabelCount,
         },
         matrix: {
           personRows: diagnostic.matrix.rows.length,
