@@ -227,8 +227,13 @@ async function verifyOn(browserType, label, device = {}) {
       'Standalone picker selection count differs from persisted D1 flags');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('[data-map-state="ready"]').waitFor({ timeout: 35_000 });
+    // useCommuteOverview fetches the stored D1 selection independently of
+    // Kakao's SDK loading. Map READY does NOT mean selected-set readback READY.
+    await page.waitForFunction((expected) =>
+      document.querySelectorAll('.transit-selected-chip').length === expected,
+      selectedOriginCount, { timeout: 20_000 });
     assert.equal(await page.locator('.transit-selected-chip').count(), selectedOriginCount,
-      'Saved selection count not restored after real browser reload');
+      'Saved D1 selection failed to reappear after async overview hydration');
 
     // Simulate actual map drag in a browser, never a state-only unit mock.
     const mapBox = await page.locator('.kakao-transit-map').boundingBox();
