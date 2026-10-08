@@ -14,7 +14,28 @@ function normalizeSubscription(subscription: PushSubscription): WebPushSubscript
 }
 
 export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider {
-  constructor(private readonly config: WebPushClientConfig) {}
+  private runtimePublicKey: string | null = null;
+
+  constructor(
+    private readonly config: WebPushClientConfig,
+    private readonly resolveServerPublicKey?: () => Promise<string | null>,
+  ) {}
+
+  async prepare(): Promise<void> {
+    if (!this.resolveServerPublicKey) return;
+    const publicKey = (await this.resolveServerPublicKey())?.trim() ?? '';
+    if (!/^[A-Za-z0-9_-]{80,100}$/.test(publicKey)) {
+      throw new Error('Web Push client config is not ready.');
+    }
+    this.runtimePublicKey = publicKey;
+  }
+
+  private async getApplicationServerKey(): Promise<string> {
+    if (this.resolveServerPublicKey && !this.runtimePublicKey) await this.prepare();
+    const key = this.runtimePublicKey ?? this.config.applicationServerKey;
+    if (!key) throw new Error('Web Push client config is not ready.');
+    return key;
+  }
 
   async getCurrent(): Promise<WebPushSubscriptionRecord | null> {
     const registration = await this.getRegistration();
@@ -24,17 +45,18 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
 
   async isCompatible(): Promise<boolean> {
     const current = await (await this.getRegistration()).pushManager.getSubscription();
-    if (!current || !this.config.applicationServerKey) return !current;
+    if (!current) return true;
+    const publicKey = await this.getApplicationServerKey();
     const actualKey = current.options?.applicationServerKey;
     if (!actualKey) return true; // Unknown is not evidence of key rotation.
-    const expected = decodeBase64Url(this.config.applicationServerKey);
+    const expected = decodeBase64Url(publicKey);
     const actual = new Uint8Array(actualKey);
     return actual.length === expected.length &&
       actual.every((value, index) => value === expected[index]);
   }
 
   async subscribe(): Promise<WebPushSubscriptionRecord> {
-    if (!this.config.applicationServerKey) throw new Error('Web Push client config is not ready.');
+    const publicKey = await this.getApplicationServerKey();
 
     const registration = await this.getRegistration();
     const current = await registration.pushManager.getSubscription();
@@ -42,7 +64,7 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: decodeBase64Url(this.config.applicationServerKey),
+      applicationServerKey: decodeBase64Url(publicKey),
     });
     return normalizeSubscription(subscription);
   }
