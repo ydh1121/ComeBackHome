@@ -48,6 +48,7 @@ export function categorizePushError(error: unknown): PushFailureReason {
     if (error.name === 'AbortError' || error.name === 'NetworkError' ||
         error instanceof TypeError) return 'NETWORK_ERROR';
     if (/Web Push client config is not ready/i.test(error.message)) return 'APPLICATION_SERVER_KEY_MISSING';
+    if (/Application server key invalid/i.test(error.message)) return 'APPLICATION_SERVER_KEY_INVALID';
     if (/PushManager subscribe failed/i.test(error.message)) return 'SUBSCRIBE_REJECTED';
     if (/VAPID key mismatch/i.test(error.message)) return 'VAPID_KEY_MISMATCH';
     if (/Server push subscription registration failed/i.test(error.message)) return 'SERVER_REGISTER_FAILED';
