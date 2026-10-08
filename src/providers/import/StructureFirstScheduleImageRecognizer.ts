@@ -251,8 +251,40 @@ export function interpretStructureFirstSchedule(
     }
   }
 
+  // A valid pixel row is not discarded solely because Korean OCR missed
+  // its name. Create a review-only placeholder; the import repository
+  // defaults unknown names to IGNORED and requires a deliberate DB match.
+  // Header/shift/footer labels and unoccupied ghost rows are never promoted.
+  for (const row of matrix.rows) {
+    const resolved = peopleByRow.get(row.sourceRow);
+    if (resolved && !resolved.unreadable) continue;
+    const focused = byRegion.get('person::' + row.sourceRow);
+    const raw = String(focused?.text ?? row.preliminaryName ?? '')
+      .normalize('NFKC').trim().replace(/\\s+/g, '').toLowerCase();
+    if (NON_PERSON_LABELS.has(raw) ||
+        /^(?:name|person|employee|sole|store|za|shift|break)$/i.test(raw)) continue;
+    if (row.labelVisual?.occupancy === 'EMPTY') continue;
+    const cellsForRow = matrix.cells.filter((cell) => cell.sourceRow === row.sourceRow);
+    if (!cellsForRow.length) continue;
+    const placeholder = '이름 확인 필요 (' + row.sourceRow + '행)';
+    detectedPeople.push({ sourceName: placeholder, confidence: 0.01 });
+    for (const cell of cellsForRow) {
+      const times = cellTimes(byRegion.get(cell.id));
+      const empty = cell.visual.occupancy === 'EMPTY' && !times.start && !times.end;
+      reviewCandidates.push({
+        sourcePersonName: placeholder,
+        date: cell.date,
+        start: times.start,
+        end: times.end,
+        sourceRow: cell.sourceRow,
+        confidence: 0.01,
+        recognitionState: empty ? 'OFF' : 'UNREADABLE',
+        enabled: !empty,
+      });
+    }
+  }
   if (!detectedPeople.length) {
-    throw new Error('근무표에서 신뢰할 수 있는 사람 이름을 찾지 못했습니다. 헤더·휴무·불확실한 OCR 결과는 사람으로 추가되지 않습니다.');
+    throw new Error('사람 이름과 검토 가능한 행을 모두 인식하지 못했습니다. 사용자 원본 이미지는 개발에 필요하지 않습니다.');
   }
 
   if (!scheduleCandidates.length && !reviewCandidates.length) {
