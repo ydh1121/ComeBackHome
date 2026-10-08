@@ -98,64 +98,26 @@ async function verifyOn(browserType, label, device = {}) {
 
     // Actual screenshot-equivalent QA: activate a REAL Kakao marker and
     // inspect the rendered React panel. No manually injected fake card.
-    const markerTargets = page.locator(
-      '.kakao-transit-map area[title^="버스 · "], ' +
-      '.kakao-transit-map area[title^="지하철 · "]'
-    );
-    await markerTargets.first().waitFor({ state: 'attached', timeout: 20_000 });
+    const markerTargets = page.locator('.cbh-transit-map-marker');
+    await markerTargets.first().waitFor({ state: 'visible', timeout: 20_000 });
     const markerTitles = await markerTargets.evaluateAll((nodes) =>
       nodes.map((node, index) => ({
         index,
         name: node.getAttribute('title') ?? '',
       }))
     );
-    assert.ok(markerTitles.length, 'Kakao transit markers are not rendered');
+    assert.ok(markerTitles.length, 'Clickable transit markers are not rendered');
     const preferred = markerTitles.find((item) => item.name.includes('차병원사거리')) ??
       markerTitles.sort((a, b) => b.name.length - a.name.length)[0];
     const marker = markerTargets.nth(preferred.index);
-    const markerClick = await marker.evaluate((area) => {
-      const map = area.closest('map');
-      const name = map?.getAttribute('name') ?? map?.id ?? '';
-      const image = [...document.querySelectorAll('img[usemap]')].find((candidate) =>
-        candidate.getAttribute('usemap')?.replace(/^#/, '') === name);
-      const coords = (area.getAttribute('coords') ?? '').split(',')
-        .map(Number).filter(Number.isFinite);
-      const imageBox = image?.getBoundingClientRect();
-      if (!image || !imageBox || coords.length < 4 ||
-          imageBox.width < 4 || imageBox.height < 4) {
-        return { type: 'DOM_CLICK', name: area.getAttribute('title') ?? '' };
-      }
-      const xs = coords.filter((_, index) => index % 2 === 0);
-      const ys = coords.filter((_, index) => index % 2 === 1);
-      const naturalWidth = image.naturalWidth || image.width;
-      const naturalHeight = image.naturalHeight || image.height;
-      const x = imageBox.left + (Math.min(...xs) + Math.max(...xs)) / 2 *
-        (imageBox.width / naturalWidth);
-      const y = imageBox.top + (Math.min(...ys) + Math.max(...ys)) / 2 *
-        (imageBox.height / naturalHeight);
-      return { type: 'POINTER', x, y, name: area.getAttribute('title') ?? '' };
-    });
-    if (markerClick.type === 'POINTER') {
-      if (label.startsWith('mobile')) {
-        await page.touchscreen.tap(markerClick.x, markerClick.y);
-      } else {
-        await page.mouse.click(markerClick.x, markerClick.y);
-      }
-    } else {
-      // The polygon-area target is occasionally unpositioned in WebKit
-      // headless. This is DOM activation only, NOT physical-tap acceptance.
-      await marker.evaluate((area) => area.click());
-    }
+    // Pointer/touch on the REAL overlay button: no programmatic dispatch,
+    // injected fake card or D1 mutation is allowed.
+    if (label.startsWith('mobile')) await marker.tap();
+    else await marker.click();
     const activePanel = page.getByRole('region', { name: '지도에서 선택한 교통편' });
-    await page.waitForTimeout(600);
-    let clickMode = markerClick.type;
-    if (!(await activePanel.isVisible())) {
-      // Browser-marker polygon coordinates may not yield a usable pointer hit.
-      // Keep this separate from true physical mouse/touch acceptance.
-      await marker.evaluate((area) => area.click());
-      clickMode = 'DOM_FALLBACK_AFTER_' + markerClick.type;
-    }
-    await activePanel.waitFor({ timeout: 8_000 });
+    await activePanel.waitFor({ timeout: 10_000 });
+    const clickMode = label.startsWith('mobile') ? 'NATIVE_TOUCH' : 'NATIVE_POINTER';
+    const markerClick = { name: preferred.name };
     const activeName = markerClick.name.replace(/^(버스|지하철) · /, '');
     assert.ok((await activePanel.innerText()).includes(activeName),
       'Live active transit panel did not match focused marker');
@@ -315,8 +277,7 @@ async function verifyOn(browserType, label, device = {}) {
       mapSDK: 'PASS',
       mapDOM: 'PASS',
       mapMarkerDOM: 'PASS',
-      markerInteraction: clickMode === 'POINTER' ? 'POINTER_PREVIEW_PASS' :
-        clickMode === 'DOM_CLICK' ? 'DOM_PREVIEW_PASS' : 'DOM_FALLBACK_ONLY',
+      markerInteraction: clickMode + '_PASS',
       markerListSync: 'FOCUS_ONLY_PASS',
       realActiveCard: 'PASS',
       activeCardGeometry: measured,
