@@ -49,7 +49,9 @@ export class ComeBackHomeQueries {
     );
     const route = today?.routeCandidateId
       ? routes.find((candidate) => candidate.id === today.routeCandidateId) ?? null
-      : rankRouteCandidates(routes)[0] ?? null;
+      : today?.eta.status === 'UNKNOWN'
+        ? null
+        : rankRouteCandidates(routes)[0] ?? null;
 
     return {
       people,
