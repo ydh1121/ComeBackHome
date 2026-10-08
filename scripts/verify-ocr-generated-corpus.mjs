@@ -149,7 +149,7 @@ function generate(family, index) {
   return { raster, layout:{width,height,tokens}, truth, names, regions,
     meta:{family:family.id,personCount,dateCount,style,background} };
 }
-function summarize(truth, matrix, parsed) {
+function summarize(truth, matrix, parsed, knownNames) {
   const actual = new Map();
   if(parsed){
     for(const c of parsed.scheduleCandidates) actual.set((c.sourceRow-1)+'|'+c.date,
@@ -177,7 +177,7 @@ function summarize(truth, matrix, parsed) {
     personTotal:new Set(truth.map(x=>x.p)).size,
     dateCorrect:matrix?.dates?.filter(x=>truth.some(t=>t.date===x.date)).length??0,
     dateTotal:new Set(truth.map(x=>x.date)).size,
-    garbagePerson:parsed?.detectedPeople?.filter(x=>!truth.some(t=>t.p>=0)).length??0};
+    garbagePerson:parsed?.detectedPeople?.filter(x=>!knownNames.includes(x.sourceName)).length??0};
 }
 const results=[];
 const temp=await mkdtemp(join(tmpdir(),'cbh-ocr-generated-corpus-'));
@@ -216,7 +216,7 @@ try{
         try{parsed=interp.interpretStructureFirstSchedule(matrix,regional,item.names);}
         catch{familyResult.decodeFailed++;}
       } else familyResult.decodeFailed++;
-      const m=summarize(item.truth,matrix,parsed);
+      const m=summarize(item.truth,matrix,parsed,item.names);
       familyResult.images++;
       familyResult.borderStyles[item.meta.style]++;
       for(const key of ['expectedCells','correct','falseOff','falseWork','garbagePerson','unreadable',
