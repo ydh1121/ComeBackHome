@@ -185,10 +185,11 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
         .map((vehicle) => text(vehicle.name))
         .filter((name): name is string => Boolean(name));
 
+      const stopNames = asRecords(stepProperties.stops)
+        .map((stop) => text(stop.name))
+        .filter((name): name is string => Boolean(name));
+
       if (type === 'BUS') {
-        const stopNames = asRecords(stepProperties.stops)
-          .map((stop) => text(stop.name))
-          .filter((name): name is string => Boolean(name));
         const directionLabel =
           stopNames.length >= 2
             ? stopNames[0] + ' → ' + stopNames[stopNames.length - 1]
@@ -207,6 +208,7 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
         label,
         time: Math.max(0, Math.round(stepSeconds)),
         vehicles: vehicleNames,
+        stopNames,
       }];
     });
 
@@ -229,12 +231,20 @@ export function mapKakaoPublicTransitRoutes(payload: unknown): TransitRouteResul
     const fareRecord = asRecord(properties.fare);
     const fare = nonNegativeInteger(fareRecord?.value);
     const totalMinutes = Math.ceil(totalSeconds / 60);
+    // A user-selected route must retain its identity when traffic estimates,
+    // walking duration or fares are refreshed. Only stable transit legs identify
+    // the journey; the live estimates remain separate display/calculation data.
     const identity = JSON.stringify({
       type: text(properties.type) ?? '',
-      totalSeconds: Math.round(totalSeconds),
       transfers,
-      fare: fare ?? null,
-      steps: identitySteps,
+      steps: identitySteps.map((step) => ({
+        type: step.type,
+        ...(step.type === 'WALKING' ? {} : {
+          vehicles: step.vehicles,
+          stops: step.stopNames,
+          ...(step.vehicles.length || step.stopNames.length ? {} : { label: step.label }),
+        }),
+      })),
     });
 
     return [{
