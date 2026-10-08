@@ -91,3 +91,34 @@
   .commute-page .transit-map-active{column-gap:8px;padding:10px}
   .commute-page .transit-active-action{padding:0 8px;min-width:56px}
 }
+/* Native Kakao CustomOverlay markers: reliable touch/click and visible focus. */
+.commute-page .cbh-transit-map-marker{
+  appearance:none;cursor:pointer;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  width:35px;height:35px;min-width:35px;min-height:35px;
+  margin:0;padding:0;
+  background:#2874ed;color:#fff;border:3px solid #fff;
+  box-shadow:0 2px 9px rgba(9,42,94,.28);
+  border-radius:50%;font:800 10px/1 system-ui,sans-serif;
+  touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;
+}
+.commute-page .cbh-transit-map-marker::after{
+  content:"";position:absolute;left:11px;bottom:-7px;
+  border-left:4px solid transparent;border-right:4px solid transparent;
+  border-top:7px solid #2874ed;
+}
+.commute-page .cbh-transit-map-marker[data-mode="SUBWAY"]{
+  background:#0f7a88;
+}
+.commute-page .cbh-transit-map-marker[data-mode="SUBWAY"]::after{
+  border-top-color:#0f7a88;
+}
+.commute-page .cbh-transit-map-marker.is-selected{
+  box-shadow:0 0 0 2px #173fa5,0 2px 9px rgba(9,42,94,.28);
+}
+.commute-page .cbh-transit-map-marker.is-active{
+  outline:3px solid #ffcc4d;outline-offset:3px;
+}
+.commute-page .cbh-transit-map-marker:focus-visible{
+  outline:3px solid #ffcc4d;outline-offset:3px;
+}
