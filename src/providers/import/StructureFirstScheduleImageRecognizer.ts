@@ -351,10 +351,32 @@ function pixelDateHeaderRegions(
     .sort((a, b) => a.x - b.x)
     .filter((item, i, items) =>
       i === 0 || item.x - items[i - 1].x > 3);
+  // A partially bordered table can omit an occasional vertical stroke.
+  // Recover ONLY plausible physical column ROIs from a repeated spacing
+  // supported by at least three observed gaps. This does not infer day
+  // numbers, dates or employee data; those still require actual Tesseract.
+  const gaps = lines.slice(1).map((item, i) => item.x - lines[i].x)
+    .filter((width) => width >= Math.max(30, header.height * 0.6))
+    .sort((a, b) => a - b);
+  const shortlist = gaps.slice(0, Math.max(2, Math.ceil(gaps.length * 0.6)));
+  const typical = shortlist.length >= 3
+    ? shortlist[Math.floor(shortlist.length / 2)] : 0;
+  const borders = lines.map((item) => item.x);
+  if (typical > 0) {
+    for (let i = 1; i < lines.length; i += 1) {
+      const left = lines[i - 1].x;
+      const gap = lines[i].x - left;
+      const count = Math.round(gap / typical);
+      if (count < 2 || count > 4 ||
+          Math.abs(gap / count - typical) > typical * 0.16) continue;
+      for (let j = 1; j < count; j += 1) borders.push(left + gap * j / count);
+    }
+  }
+  borders.sort((a, b) => a - b);
   const regions: ImageTextProbeRegion[] = [];
-  for (let i = 1; i < lines.length; i += 1) {
-    const x = lines[i - 1].x;
-    const width = lines[i].x - x;
+  for (let i = 1; i < borders.length; i += 1) {
+    const x = borders[i - 1];
+    const width = borders[i] - x;
     if (width < Math.max(32, header.height * 0.7)) continue;
     const pad = Math.max(2, Math.floor(width * 0.04));
     regions.push({
