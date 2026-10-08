@@ -314,9 +314,69 @@ async function verifyOn(browserType, label, device = {}) {
     await placeInput.fill('코엑스');
     await page.locator('.search-result-row').first().waitFor({ timeout: 25_000 });
 
+    // Read-only route baseline. Log only counts and status categories.
+    // Do not log person IDs, raw coordinates, addresses or provider secrets.
+    const [destPlaceResponse, savedOriginResponse, savedDestResponse, statusResponse] = await Promise.all([
+      api.get(ORIGIN + '/api/people/' + pathId + '/places/destination'),
+      api.get(ORIGIN + '/api/people/' + pathId + '/commute?kind=origin'),
+      api.get(ORIGIN + '/api/people/' + pathId + '/commute?kind=destination'),
+      api.get(ORIGIN + '/api/providers/status'),
+    ]);
+    const destinationPlace = destPlaceResponse.ok() ? (await destPlaceResponse.json()).place : null;
+    const savedOrigin = savedOriginResponse.ok() ? await savedOriginResponse.json() : {};
+    const savedDestination = savedDestResponse.ok() ? await savedDestResponse.json() : {};
+    const providerStatus = statusResponse.ok() ? await statusResponse.json() : {};
+    const originAccess = savedOrigin.accessPoints ?? [];
+    const destinationAccess = savedDestination.accessPoints ?? [];
+    const savedRoute = (savedOrigin.savedRoutes ?? []).find((item) => item.active) ??
+      (savedOrigin.savedRoutes ?? [])[0] ?? null;
+    const configuredOrigin = savedRoute?.originAccessPointIds ??
+      (savedRoute?.originAccessPointId ? [savedRoute.originAccessPointId] : []);
+    const configuredDestination = savedRoute?.destinationAccessPointIds ??
+      (savedRoute?.destinationAccessPointId ? [savedRoute.destinationAccessPointId] : []);
+    const validOriginCount = configuredOrigin.filter((id) => originAccess.some((p) => p.id === id)).length;
+    const validDestinationCount = configuredDestination.filter((id) => destinationAccess.some((p) => p.id === id)).length;
+    const probe = {
+      originCoordinatePresent: Boolean(originCoordinate),
+      destinationCoordinatePresent: Boolean(destinationPlace?.coordinate),
+      selectedOriginCount: originAccess.filter((p) => p.selected).length,
+      selectedDestinationCount: destinationAccess.filter((p) => p.selected).length,
+      routeSpecificOriginCount: validOriginCount,
+      routeSpecificDestinationCount: validDestinationCount,
+      staleAccessIdCount: configuredOrigin.length + configuredDestination.length -
+        validOriginCount - validDestinationCount,
+      preferredRouteConfigured: Boolean(savedOrigin.preferredRouteCandidateId),
+      providerEnabled: providerStatus.enabled === true,
+      providerSource: providerStatus.source ?? 'UNKNOWN',
+      placePairStatus: 'NOT_RUN',
+      placePairRoutes: 0,
+    };
+    if (originCoordinate && destinationPlace?.coordinate) {
+      const u = new URL(ORIGIN + '/api/providers/routes');
+      u.searchParams.set('originX', String(originCoordinate.x));
+      u.searchParams.set('originY', String(originCoordinate.y));
+      u.searchParams.set('destinationX', String(destinationPlace.coordinate.x));
+      u.searchParams.set('destinationY', String(destinationPlace.coordinate.y));
+      try {
+        const response = await api.get(u.toString());
+        probe.placePairStatus = response.status() === 200 ? 'HTTP_200' :
+          [401, 403].includes(response.status()) ? 'AUTH' : 'HTTP_' + response.status();
+        if (response.ok()) probe.placePairRoutes = ((await response.json()).results ?? []).length;
+      } catch {
+        probe.placePairStatus = 'NETWORK_ERROR';
+      }
+    }
+    console.log('CBH_ROUTE_PROBE_' + label + '=' + JSON.stringify(probe));
     await page.goto(ORIGIN + '/people/' + pathId + '/commute',
       { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.locator('[data-page="CommuteRouteEditPage"]').waitFor({ timeout: 30_000 });
+    const diagnostic = await page.locator('[data-page="CommuteRouteEditPage"]').evaluate((node) => ({
+      status: node.getAttribute('data-route-search-status') ?? 'UNAVAILABLE',
+      pairs: Number(node.getAttribute('data-route-pair-count') ?? 0),
+      candidates: Number(node.getAttribute('data-route-candidate-count') ?? 0),
+      empty: node.querySelector('.search-inline-status[data-state]')?.getAttribute('data-state') ?? 'NONE',
+    }));
+    console.log('CBH_ROUTE_SURFACE_' + label + '=' + JSON.stringify(diagnostic));
     const routeCards = page.locator('.route-candidate');
     await routeCards.first().waitFor({ timeout: 25_000 });
     const candidates = await routeCards.count();
