@@ -158,6 +158,53 @@ function clusterProjectionPeaks(scores: number[]): Array<{ position: number; sco
     .sort((left, right) => left.position - right.position);
 }
 
+/**
+ * A projected peak is a physical border only when it has a long, nearly
+ * unbroken dark run. Korean glyph strokes can otherwise form convincing
+ * vertical projection peaks and split date columns into false tiny cells.
+ * The score uses raster pixels only, never recognized OCR or date values.
+ */
+function continuousGridPeaks(
+  raster: ScheduleRasterPlane,
+  peaks: Array<{ position: number; score: number }>,
+  direction: 'horizontal' | 'vertical',
+): Array<{ position: number; score: number }> {
+  const alongLength = direction === 'horizontal' ? raster.width : raster.height;
+  const acrossLength = direction === 'horizontal' ? raster.height : raster.width;
+  const minimumRun = Math.max(24, Math.round(alongLength * 0.32));
+
+  return peaks.filter(({ position }) => {
+    const coordinate = Math.round(position);
+    let current = 0;
+    let longest = 0;
+    let gap = 0;
+    for (let along = 0; along < alongLength; along += 1) {
+      let dark = false;
+      for (let offset = -2; offset <= 2; offset += 1) {
+        const across = coordinate + offset;
+        if (across < 0 || across >= acrossLength) continue;
+        const x = direction === 'horizontal' ? along : across;
+        const y = direction === 'horizontal' ? across : along;
+        if (raster.luminance[y * raster.width + x] < 155) {
+          dark = true;
+          break;
+        }
+      }
+      if (dark) {
+        current += gap + 1;
+        gap = 0;
+      } else if (current && gap < 2) {
+        gap += 1;
+      } else {
+        longest = Math.max(longest, current);
+        current = 0;
+        gap = 0;
+      }
+    }
+    return Math.max(longest, current) >= minimumRun;
+  });
+}
+
 function weakContentRowBands(raster: ScheduleRasterPlane): ScheduleStructureBand[] {
   const scores = new Array<number>(raster.height).fill(0);
 
@@ -326,8 +373,12 @@ export function detectScheduleTableStructureFromRaster(
     throw new Error('Schedule table raster is invalid.');
   }
 
-  const horizontalPeaks = clusterProjectionPeaks(projectionScores(raster, 'horizontal'));
-  const verticalPeaks = clusterProjectionPeaks(projectionScores(raster, 'vertical'));
+  const horizontalPeaks = continuousGridPeaks(
+    raster, clusterProjectionPeaks(projectionScores(raster, 'horizontal')), 'horizontal',
+  );
+  const verticalPeaks = continuousGridPeaks(
+    raster, clusterProjectionPeaks(projectionScores(raster, 'vertical')), 'vertical',
+  );
   const horizontalPositions = horizontalPeaks.map((item) => item.position);
   const verticalPositions = verticalPeaks.map((item) => item.position);
 
