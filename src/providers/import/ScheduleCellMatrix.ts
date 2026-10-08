@@ -1,6 +1,7 @@
 import type { ImageTextLayout, ImageTextToken } from '../../application/contracts/providers';
 import {
   analyzeScheduleCellVisualEvidence,
+  pixelSupportedColumnBounds,
   type ScheduleCellVisualEvidence,
   type SchedulePixelBounds,
   type ScheduleTableStructureDetection,
@@ -231,6 +232,16 @@ function buildDateColumns(
   if (!typicalGap) return [];
 
   const vertical = detection.structure.evidence.verticalLinePositions;
+  // Anchor values still come only from recognized OCR text. Physical pixel
+  // column boundaries fix the width of sparse recognized date anchors without
+  // inventing a date for an unreadable intervening column.
+  const physical = pixelSupportedColumnBounds(detection);
+  const matched = deduped.map(({ token }) => physical.find((band) =>
+    token.cx >= band.x && token.cx < band.x + band.width
+  ));
+  const usePhysical = matched.length >= 2 &&
+    matched.every((band) => band != null) &&
+    new Set(matched.map((band) => band?.x)).size === matched.length;
   return deduped.map((item, index) => {
     const previous = deduped[index - 1];
     const next = deduped[index + 1];
@@ -253,7 +264,7 @@ function buildDateColumns(
     return {
       index,
       date: item.date,
-      bounds: {
+      bounds: usePhysical && matched[index] ? matched[index]! : {
         x: Math.max(0, Math.min(left, right - 1)),
         y: 0,
         width: Math.max(1, right - left),
