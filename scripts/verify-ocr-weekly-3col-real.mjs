@@ -221,7 +221,23 @@ try{
                   arch==='PADDLE'?pMs:tMs+pMs),
               };
             }
+            const debug=spec.family==='C'?null:{
+              titleTokens:titleLayout.tokens.filter(x=>x.y<90).map(x=>({
+                text:String(x.text).slice(0,26),x:Math.round(x.x),y:Math.round(x.y),
+              })).slice(0,25),
+              tDate:tResults.filter(x=>x.purpose==='date')
+                .map(x=>({id:x.id,text:x.text,confidence:x.confidence,
+                  tokens:x.tokens.map(t=>t.text)})),
+              pDate:pResults.filter(x=>x.purpose==='date')
+                .map(x=>({id:x.id,text:x.text,confidence:x.confidence,
+                  tokens:x.tokens.map(t=>t.text)})),
+              rawColumnWidths:detection.structure.columnBands.map(x=>
+                Math.round(x.bounds.width)),
+              rawColumnXs:detection.structure.columnBands.map(x=>
+                Math.round(x.bounds.x)),
+            };
             comparisons.push({
+              debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
@@ -271,6 +287,9 @@ for(const engine of engines){
   for(const image of a.result.comparisons){
     const other=b.result.comparisons.find(x=>x.id===image.id);
     const aa=image.architectures[engine].logical,bb=other.architectures[engine].logical;
+    // Two mutually empty outputs do NOT demonstrate genuine logical parity.
+    if(!image.architectures[engine].complete||
+       !other.architectures[engine].complete)continue;
     for(let i=0;i<aa.length;i++){total++;if(aa[i]===bb[i])equal++;}
   }
   parity[engine]={match:equal,total,rate:total?equal/total:null};
