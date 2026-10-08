@@ -268,11 +268,17 @@ try{
         }
 
         function geometryFromDetection(detection){
-          const columns=pixelSupportedColumnBounds(detection);
+          const pixelColumns=pixelSupportedColumnBounds(detection);
+          const detectorColumns=(detection.structure.columnBands??[]).map(x=>x.bounds);
+          const columns=pixelColumns.length>=2?pixelColumns:
+            detectorColumns.length>=2?detectorColumns:[];
+          const columnSource=pixelColumns.length>=2?'PIXEL_SUPPORTED':
+            detectorColumns.length>=2?'DETECTOR_COLUMN_BANDS':'NONE';
           const header=detection.structure.rowBands[0]?.bounds??null;
           const rows=detection.structure.rowBands.slice(1).map(x=>x.bounds);
           if(!header||columns.length<2||!rows.length)return {
             valid:false,columns,header,rows,label:null,dateColumns:[],regions:[],calendar:null,
+            columnSource,pixelColumnCount:pixelColumns.length,detectorColumnCount:detectorColumns.length,
           };
           const label=columns[0],dateColumns=columns.slice(1);
           const regions=[];
@@ -295,7 +301,8 @@ try{
               Math.max(label.width*1.7,(dateColumns[0]?.x+dateColumns[0]?.width-label.x)||label.width*2)),
             height:Math.max(1,header.y),
           };
-          return {valid:true,columns,header,rows,label,dateColumns,regions,calendar};
+          return {valid:true,columns,header,rows,label,dateColumns,regions,calendar,
+            columnSource,pixelColumnCount:pixelColumns.length,detectorColumnCount:detectorColumns.length};
         }
 
         function oracleRegions(truth){
@@ -572,7 +579,8 @@ try{
                 timing:{detectionMs,ocrMs,parseMs,totalMs:detectionMs+ocrMs+parseMs}};
             }
             items.push({id:spec.id,family:spec.family,variant:spec.variant,bytes:generated.bytes,
-              geometry:geomScore,geometryValid:geometry.valid,
+              geometry:geomScore,geometryValid:geometry.valid,columnSource:geometry.columnSource,
+              pixelColumnCount:geometry.pixelColumnCount,detectorColumnCount:geometry.detectorColumnCount,
               detectedRows:geometry.rows.length,detectedColumns:geometry.dateColumns.length,
               tessMs,paddleMs,paddleInferenceMs:paddleBatch.inferenceMs,
               architectures});
@@ -651,7 +659,8 @@ const geometry=browserResults.map(browser=>({
     key,browser.result.items.reduce((n,x)=>n+x.geometry[key],0)/browser.result.items.length,
   ])),
   perImage:browser.result.items.map(x=>({id:x.id,valid:x.geometryValid,...x.geometry,
-    rows:x.detectedRows,columns:x.detectedColumns})),
+    rows:x.detectedRows,columns:x.detectedColumns,columnSource:x.columnSource,
+    pixelColumnCount:x.pixelColumnCount,detectorColumnCount:x.detectorColumnCount})),
 }));
 const gate={};
 for(const arch of architectures){
@@ -683,8 +692,38 @@ const report={
   physicalIPhone:'PHYSICAL_IPHONE_NOT_VERIFIED',
   userImageUsed:false,kakaoLiveRouteCalls:0,
 };
-console.log('CBH_DETECTED_ENGINE_MATRIX_REPORT='+JSON.stringify(report));
 const accepted=architectures.filter(x=>gate[x].accepted);
+const compact={
+  summary,gate,geometry,modelSize,physicalIPhone:report.physicalIPhone,
+  browserRuntime:browserResults.map(x=>({browser:x.browser,pageErrors:x.pageErrors,
+    paddleMetadata:x.result.paddleMetadata,initialMemory:x.result.initialMemory,
+    finalMemory:x.result.finalMemory})),
+};
+console.log('CBH_DETECTED_ENGINE_SUMMARY='+JSON.stringify(compact));
+for(const browser of browserResults){
+  for(const item of browser.result.items){
+    console.log('CBH_DETECTED_IMAGE='+JSON.stringify({
+      browser:browser.browser,id:item.id,family:item.family,variant:item.variant,
+      bytes:item.bytes,geometry:item.geometry,geometryValid:item.geometryValid,
+      columnSource:item.columnSource,pixelColumnCount:item.pixelColumnCount,
+      detectorColumnCount:item.detectorColumnCount,detectedRows:item.detectedRows,
+      detectedColumns:item.detectedColumns,tessMs:item.tessMs,paddleMs:item.paddleMs,
+      paddleInferenceMs:item.paddleInferenceMs,
+      architectures:Object.fromEntries(Object.entries(item.architectures).map(([name,value])=>[name,{
+        detectedRaw:value.detectedRaw,oracleRaw:value.oracleRaw,pipeline:{
+          personCorrect:value.pipeline.personCorrect,personTotal:value.pipeline.personTotal,
+          dateCorrect:value.pipeline.dateCorrect,dateTotal:value.pipeline.dateTotal,
+          startCorrect:value.pipeline.startCorrect,startTotal:value.pipeline.startTotal,
+          endCorrect:value.pipeline.endCorrect,endTotal:value.pipeline.endTotal,
+          cellCorrect:value.pipeline.cellCorrect,cellTotal:value.pipeline.cellTotal,
+          falseOff:value.pipeline.falseOff,nonOff:value.pipeline.nonOff,
+          offTruth:value.pipeline.offTruth,offPredicted:value.pipeline.offPredicted,
+          offCorrect:value.pipeline.offCorrect,wrongAuto:value.pipeline.wrongAuto,
+          complete:value.pipeline.complete,imageExact:value.pipeline.imageExact,
+        },error:value.error,diagnostics:value.diagnostics,timing:value.timing,
+      }]))}));
+  }
+}
 console.log('CBH_DETECTED_ENGINE_ACCEPTED='+JSON.stringify(accepted));
 if(browserResults.some(x=>x.pageErrors.length))throw Error('Browser runtime page errors observed');
 if(!accepted.length)throw Error('OCR merge gate failed after complete Tesseract/Paddle/Hybrid matrix evaluation');
