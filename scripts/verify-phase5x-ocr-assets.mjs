@@ -118,7 +118,7 @@ try {
   assert(composition.includes('StructureFirstScheduleImageRecognizer'), 'Production structure-first image schedule recognizer must be active');
   assert(composition.includes('BrowserScheduleTableStructureDetector'), 'Production pixel table structure detector must be active');
   assert(
-    packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets',
+    packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets && node scripts/generate-build-revision.mjs',
     'Production build must stage same-origin OCR assets before Vite build',
   );
   assert(
