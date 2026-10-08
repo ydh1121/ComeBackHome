@@ -352,6 +352,10 @@ jobs:
           # --with-deps triggers a full apt installation that has repeatedly
           # timed out before any Tesseract regression could execute.
           timeout 180s npx playwright install chromium webkit
+          # Browser binaries are separate from WebKit's GTK/GStreamer
+          # host dependencies. Install those once, with an independent
+          # bound rather than forcing the entire combined operation into 240s.
+          timeout 600s npx playwright install-deps chromium webkit
           if ! fc-list :lang=ko | grep -q .; then
             timeout 150s sudo apt-get install -y --no-install-recommends fonts-nanum
           fi
