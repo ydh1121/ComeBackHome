@@ -224,7 +224,8 @@ export function interpretStructureFirstSchedule(
       continue;
     }
 
-    if (cell.visual.occupancy === 'EMPTY' || explicitOffLabel(byRegion.get(cell.id))) {
+    if (explicitOffLabel(byRegion.get(cell.id)) ||
+        (cell.visual.occupancy === 'EMPTY' && !cell.initialTextEvidence)) {
       offCount += 1;
       reviewCandidates.push({
         sourcePersonName: person.sourceName,
@@ -270,7 +271,8 @@ export function interpretStructureFirstSchedule(
     detectedPeople.push({ sourceName: placeholder, confidence: 0.01 });
     for (const cell of cellsForRow) {
       const times = cellTimes(byRegion.get(cell.id));
-      const empty = cell.visual.occupancy === 'EMPTY' && !times.start && !times.end;
+      const empty = cell.visual.occupancy === 'EMPTY' &&
+        !cell.initialTextEvidence && !times.start && !times.end;
       reviewCandidates.push({
         sourcePersonName: placeholder,
         date: cell.date,
