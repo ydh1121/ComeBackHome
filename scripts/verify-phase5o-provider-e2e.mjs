@@ -213,6 +213,29 @@ try {
     'nearby transit must be distance ascending');
   expect(nearbyTransit.some((item) => item.mode === 'SUBWAY'), 'nearby transit must include subway candidates');
 
+  // If the official Seoul stop endpoint is unavailable, only a verified
+  // local BUS category may appear as a limited UI fallback.
+  const originalNearbyStops = providerRuntime.seoulBus.nearbyStops;
+  providerRuntime.seoulBus.nearbyStops = async () => {
+    throw new Error('fixture positional API unavailable');
+  };
+  const fallbackUrl = new URL('https://local.test/api/providers/transit-nearby');
+  fallbackUrl.searchParams.set('x', '127.03');
+  fallbackUrl.searchParams.set('y', '37.49');
+  const fallbackResponse = await workerApi.handleApiRequest(
+    new Request(fallbackUrl), env, providerRuntime,
+  );
+  const fallbackBody = await fallbackResponse.json();
+  expect(fallbackResponse.ok && fallbackBody?.sourceStatus?.bus === 'VERIFIED_CATEGORY_FALLBACK',
+    'strict local bus category fallback must be explicit when official bus is unavailable');
+  expect(fallbackBody.results.some((item) =>
+    item.mode === 'BUS' && item.id.startsWith('kakao-transit:bus:')),
+    'nearby transit must retain a strictly-categorized bus when official source fails');
+  expect(fallbackBody.results.every((item) =>
+    item.distanceM <= (item.mode === 'BUS' ? 800 : 900)),
+    'fallback bus must never reintroduce distant results');
+  providerRuntime.seoulBus.nearbyStops = originalNearbyStops;
+
   const subwayResolveUrl = new URL('https://local.test/api/providers/transit-resolve');
   subwayResolveUrl.searchParams.set('mode', 'SUBWAY');
   subwayResolveUrl.searchParams.set('name', '강남역');
@@ -288,7 +311,7 @@ try {
     disabledError = error instanceof Error ? error.message : String(error);
   }
   expect(disabledError === 'Provider runtime is disabled.', 'disabled Worker provider contract mismatch');
-  expect(calls.place === 3, 'disabled Worker provider call reached fake Kakao source');
+  expect(calls.place === 5, 'disabled Worker provider call reached fake Kakao source');
 } finally {
   globalThis.fetch = originalFetch;
   await vite.close();
