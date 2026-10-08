@@ -364,6 +364,9 @@ jobs:
           fi
           fc-list :lang=ko | head -n 1
 
+      - name: Verify image-derived partial grid column geometry
+        run: npm run verify:ocr-partial-grid
+
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
 
