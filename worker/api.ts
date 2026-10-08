@@ -940,7 +940,8 @@ export async function handleApiRequest(
       if (!delivery.ready || !delivery.gateway || !delivery.subscriptions) {
         return json({
           error: 'Push delivery runtime is not ready.',
-          reason: 'PUSH_RUNTIME_NOT_READY',
+          reason: delivery.missing.some((value) => value.startsWith('VAPID_'))
+            ? 'VAPID_CONFIG_MISSING' : 'PUSH_RUNTIME_NOT_READY',
           missing: delivery.missing,
         }, 503);
       }
