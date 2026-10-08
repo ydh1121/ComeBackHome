@@ -651,7 +651,8 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
 
         await worker.setParameters({
           tessedit_pageseg_mode: String(
-            region.purpose === 'person' ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
+            region.purpose === 'person' || region.purpose === 'date'
+              ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
           ),
           tessedit_char_whitelist:
             region.purpose === 'person'
@@ -667,7 +668,31 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
         );
         const words = flattenWords(response.data);
 
-        if (region.purpose === 'person') {
+        if (region.purpose === 'date') {
+          // Read real OCR bounding boxes. Equal-width synthetic token slots
+          // would turn legitimate sparse date headers into invented geometry.
+          const scaleX = raster.sourceWidth / raster.rasterWidth;
+          const tokens = words.map((word) => ({
+            text: String(word.text ?? '').normalize('NFKC').trim(),
+            x: Math.min(word.bbox.x0, word.bbox.x1) * scaleX,
+            y: region.y + region.height * 0.15,
+            width: Math.max(1, Math.abs(word.bbox.x1 - word.bbox.x0) * scaleX),
+            height: Math.max(1, region.height * 0.7),
+            confidence: normalizeConfidence(word.confidence),
+          })).filter((token) =>
+            /^(?:[1-9]|[12][0-9]|3[01])$/.test(token.text) &&
+            token.confidence >= this.minimumConfidence &&
+            token.x >= region.x && token.x + token.width <= region.x + region.width
+          ).sort((left, right) => left.x - right.x);
+          results.push({
+            id: region.id, purpose: region.purpose,
+            text: tokens.map((token) => token.text).join(' '),
+            tokens,
+            confidence: tokens.length
+              ? tokens.reduce((sum, token) => sum + token.confidence, 0) / tokens.length
+              : 0,
+          });
+        } else if (region.purpose === 'person') {
           const candidate = personLabelCandidate(words, rectangle.height);
           const token = candidate
             ? regionToken(
