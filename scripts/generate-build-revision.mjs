@@ -15,5 +15,5 @@ const sha = valid.test(environmentSha) ? environmentSha.toLowerCase() :
   valid.test(gitSha) ? gitSha.toLowerCase() : 'unknown';
 writeFileSync(new URL('../worker/build-revision.ts', import.meta.url),
   "// Generated at build time. Commit SHA only; no secrets.\n" +
-  "export const BUILD_COMMIT_SHA = " + JSON.stringify(sha) + ";\n");
+  "export const BUILD_COMMIT_SHA: string = " + JSON.stringify(sha) + ";\n");
 console.log('CBH_BUILD_COMMIT_ID=' + (sha === 'unknown' ? 'UNKNOWN' : sha.slice(0, 12)));
