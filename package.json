@@ -75,6 +75,7 @@
     "verify:push-recovery": "node scripts/verify-push-test-recovery.mjs",
     "verify:push-sw-local": "node scripts/verify-push-serviceworker-local.mjs",
     "verify:ocr-real-tesseract-e2e": "node scripts/verify-ocr-real-tesseract-e2e.mjs",
+    "verify:ocr-partial-grid": "node scripts/verify-ocr-partial-grid-columns.mjs",
     "verify:ocr-region-order": "node scripts/verify-ocr-region-reading-order.mjs",
     "verify:push-runtime-key": "node scripts/verify-push-runtime-key-parity.mjs",
     "verify:vapid-pair": "node scripts/verify-vapid-pair-cryptography.mjs"
