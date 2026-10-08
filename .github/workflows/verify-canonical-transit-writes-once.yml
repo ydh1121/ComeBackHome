@@ -3,8 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/verify-canonical-transit-writes-once.yml"
-      - "scripts/verify-canonical-transit-writes-reversible.mjs"
+      - "runtime-activation/cbh-reversible-d1-qa.trigger"
 permissions:
   contents: read
 concurrency:
