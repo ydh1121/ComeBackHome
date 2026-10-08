@@ -197,10 +197,23 @@ async function verifyOn(browserType, label, device = {}) {
       checkedWidths.push(width);
       if (width === 375 || width === 390) {
         await activePanel.scrollIntoViewIfNeeded();
-        await page.screenshot({
-          path: 'artifacts/cbh-transit-card/' + label + '-' + width + '.png',
-          fullPage: true,
-        });
+        const cardBox = await activePanel.boundingBox();
+        const summaryBox = await page.locator('.transit-selected-summary').boundingBox();
+        if (cardBox) {
+          // Crop BELOW the map: no private saved-place context is stored.
+          await page.screenshot({
+            path: 'artifacts/cbh-transit-card/' + label + '-' + width + '.png',
+            clip: {
+              x: Math.max(0, cardBox.x - 1),
+              y: Math.max(0, cardBox.y - 1),
+              width: Math.ceil(cardBox.width + 2),
+              height: Math.ceil(Math.min(
+                470, Math.max(200, (summaryBox?.y ?? (cardBox.y + 260)) -
+                  cardBox.y + (summaryBox?.height ?? 50) + 12)
+              )),
+            },
+          });
+        }
       }
     }
     const savedAccessResponse = await api.get(
