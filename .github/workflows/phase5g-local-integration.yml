@@ -346,29 +346,8 @@ jobs:
       - name: Prepare real Tesseract browser runtime (temporary CI workspace)
         run: npm run prepare:ocr-assets
 
-      - name: Install Chromium, WebKit and Korean system fonts for actual OCR
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          export CI=true
-          timeout 120s npm install --no-save --no-package-lock playwright@1.58.2
-          # GitHub's hosted runner already includes many browser libraries.
-          # --with-deps triggers a full apt installation that has repeatedly
-          # timed out before any Tesseract regression could execute.
-          timeout 180s npx playwright install chromium webkit
-          # Browser binaries are separate from WebKit's GTK/GStreamer
-          # host dependencies. Install those once, with an independent
-          # bound rather than forcing the entire combined operation into 240s.
-          timeout 600s npx playwright install-deps chromium webkit
-          if ! fc-list :lang=ko | grep -q .; then
-            timeout 150s sudo apt-get install -y --no-install-recommends fonts-nanum
-          fi
-          fc-list :lang=ko | head -n 1
-
       - name: Verify image-derived partial grid column geometry
         run: npm run verify:ocr-partial-grid
-
-      - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
-        run: npm run verify:ocr-real-tesseract-e2e
 
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
@@ -387,3 +366,43 @@ jobs:
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
+
+  ocr-real-tesseract:
+    name: Real OCR raster / Chromium + WebKit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Image includes browser binaries and host libraries; no slow apt install-deps.
+    # Pinned to the tested Playwright package version (not a floating latest).
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install pinned Playwright JS package (CI only)
+        run: npm install --no-save --no-package-lock playwright@1.58.2
+
+      - name: Prepare local Tesseract assets
+        run: npm run prepare:ocr-assets
+
+      - name: Check Korean font availability
+        run: |
+          if ! fc-list :lang=ko | grep -q .; then
+            echo 'Missing Korean glyph font in browser image'
+            exit 1
+          fi
+          fc-list :lang=ko | head -n 1
+
+      - name: Verify image-derived partial grid column geometry
+        run: npm run verify:ocr-partial-grid
+
+      - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
+        run: npm run verify:ocr-real-tesseract-e2e
