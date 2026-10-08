@@ -152,7 +152,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
   private quotaBlockedUntil = 0;
 
   private searchProviderRoutes(origin: { x: number; y: number }, destination: { x: number; y: number }): Promise<TransitRouteResult[]> {
-    const now = Date.now();
+    const now = systemRuntimeClock.now().getTime();
     if (now < this.quotaBlockedUntil) {
       return Promise.reject(new Error('Provider request failed: kakao-map/public-transit-routing HTTP 400 CODE -10'));
     }
@@ -167,7 +167,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
         if (providerErrorCategory(error) === 'QUOTA') {
           // Avoid re-request storms for this app session. This is not a claim
           // that the provider quota resets in sixty seconds.
-          this.quotaBlockedUntil = Date.now() + 60_000;
+          this.quotaBlockedUntil = systemRuntimeClock.now().getTime() + 60_000;
         }
         throw error;
       });
