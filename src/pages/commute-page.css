@@ -150,3 +150,5 @@
 .commute-page .transit-row-toggle[aria-pressed="true"]{background:#255cff;color:#fff}
 .commute-page .transit-row-toggle:disabled{opacity:.55}
 .commute-page .transit-row-toggle .svg{height:19px;width:19px}
+
+.commute-page .transit-row-action{grid-template-columns:minmax(0,1fr) 44px}
