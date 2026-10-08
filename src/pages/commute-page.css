@@ -133,3 +133,17 @@
 .commute-page .kakao-transit-map .cbh-transit-map-marker{
   pointer-events:auto;
 }
+/* Row focus is separate from D1-backed 0..N selection action. */
+.commute-page .transit-row-action{grid-template-columns:minmax(0,1fr) 44px;gap:2px;padding:0 2px}
+.commute-page .transit-row-focus{appearance:none;border:0;background:transparent;display:grid;
+  grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:center;
+  min-height:64px;padding:10px 0;color:inherit;text-align:left;cursor:pointer;min-width:0}
+.commute-page .transit-row-focus>.svg{width:21px;height:21px;color:#667085}
+.commute-page .transit-row-focus .transit-copy{min-width:0}
+.commute-page .transit-row-toggle{appearance:none;border:0;background:transparent;
+  min-width:44px;min-height:44px;display:grid;place-items:center;
+  color:#4566a5;font-size:11px;cursor:pointer}
+.commute-page .transit-row-toggle>.svg{width:18px;height:18px}
+.commute-page .transit-row-toggle[aria-pressed="true"]{color:#2855bf}
+.commute-page .transit-row-focus:focus-visible,
+.commute-page .transit-row-toggle:focus-visible{outline:2px solid #245cff;outline-offset:-2px;border-radius:8px}
