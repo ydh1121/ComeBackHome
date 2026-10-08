@@ -19,7 +19,28 @@ async function json(path) {
   return response.json();
 }
 async function snapshot(id, kind) {
-  return (await json('/api/people/' + encodeURIComponent(id) + '/commute?kind=' + kind)).accessPoints ?? [];
+  const path = '/api/people/' + encodeURIComponent(id) + '/commute?kind=' + kind;
+  const response = await api.request.get(path, {
+    headers: { 'Cache-Control': 'no-cache' },
+  });
+  assert.equal(response.status(), 200, 'Canonical selected-set GET failed');
+  return (await response.json()).accessPoints ?? [];
+}
+// Await observed D1 state rather than the first possibly stale read replica.
+// Expose only side/status/timing; never log actual person/stop identifiers.
+async function awaitFlag(personId, kind, pointId, expected, label, timeoutMs = 16000) {
+  const start = Date.now();
+  let lastValue = null;
+  let attempts = 0;
+  while (Date.now() - start < timeoutMs) {
+    const rows = await snapshot(personId, kind);
+    lastValue = rows.find(row => row.id === pointId)?.selected ?? null;
+    attempts++;
+    if (lastValue === expected) return { attempts, durationMs: Date.now() - start };
+    await new Promise(resolve => setTimeout(resolve, 350));
+  }
+  throw new Error(label + ': selected flag never stabilized; side=' + kind +
+    ' expected=' + expected + ' last=' + lastValue + ' reads=' + attempts);
 }
 const key = (point) => point.id;
 const flags = (rows) => new Map(rows.map(row => [key(row), Boolean(row.selected)]));
@@ -96,13 +117,32 @@ try {
     }
     const baselineSelectedCount = baseline.filter(p => p.selected).length;
     const expected = !Boolean(chosen.selected);
-    await control.click();
-    await page.waitForFunction(async ({ id, side, selected, personId }) => {
-      const response = await fetch('/api/people/' + encodeURIComponent(personId) + '/commute?kind=' + side);
-      if (!response.ok) return false;
-      const rows = (await response.json()).accessPoints ?? [];
-      return rows.find(point => point.id === id)?.selected === selected;
-    }, { id: chosen.id, side: kind, selected: expected, personId: identity }, { timeout: 18000 });
+    const patchResponses = [];
+    const onResponse = (response) => {
+      if (response.request().method() === 'PATCH' &&
+          response.url().includes('/api/commute/access/')) {
+        patchResponses.push(response.status());
+      }
+    };
+    page.on('response', onResponse);
+    let transitionEvidence;
+    try {
+      await control.click();
+      transitionEvidence = await awaitFlag(identity, kind, chosen.id, expected, 'UI mutation');
+      await page.waitForFunction(() =>
+        !document.querySelector('.transit-row-toggle:disabled'),
+        null, { timeout: 10000 });
+    } catch (error) {
+      const alert = await page.locator('.search-inline-status[role="alert"]')
+        .allTextContents().catch(() => []);
+      throw new Error('UI→D1 mutation failed; side=' + kind +
+        ' PATCH statuses=' + JSON.stringify(patchResponses) +
+        ' UI error count=' + alert.length + ' cause=' +
+        (error instanceof Error ? error.message : String(error)));
+    } finally {
+      page.off('response', onResponse);
+    }
+    assert.ok(patchResponses.includes(200), 'UI selected-action did not receive a successful PATCH');
     mutations.add(chosen.id);
     const after = await snapshot(identity, kind);
     const otherAfter = await snapshot(identity, otherKind);
@@ -118,11 +158,7 @@ try {
     assert.equal(await again.getAttribute('aria-pressed'), String(expected),
       'Selected flag was not restored in actual UI after reload');
     await again.click();
-    await page.waitForFunction(async ({ id, side, selected, personId }) => {
-      const response = await fetch('/api/people/' + encodeURIComponent(personId) + '/commute?kind=' + side);
-      if (!response.ok) return false;
-      return (await response.json()).accessPoints?.find(point => point.id === id)?.selected === selected;
-    }, { id: chosen.id, side: kind, selected: Boolean(chosen.selected), personId: identity }, { timeout: 18000 });
+    await awaitFlag(identity, kind, chosen.id, Boolean(chosen.selected), 'UI restore');
     equalFlags(await snapshot(identity, kind), baseline, 'D1 selection not restored to starting state');
     equalFlags(await snapshot(identity, otherKind), initial[otherKind], 'Other side changed after restoration');
     outcomes.push({
@@ -132,6 +168,9 @@ try {
       temporaryCount: baselineSelectedCount + (expected ? 1 : -1),
       reload: true, isolation: true,
       tripleSelectReached: baselineSelectedCount + (expected ? 1 : -1) >= 3,
+      writeReadback: 'D1_FLAG_VERIFIED',
+      verificationAttempts: transitionEvidence.attempts,
+      patchHTTP: 200,
     });
   }
 } finally {

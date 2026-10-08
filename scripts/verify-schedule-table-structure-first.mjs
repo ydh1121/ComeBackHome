@@ -213,6 +213,41 @@ try {
       'unrecognized person rows must not produce import candidates');
   }
 
+  // Recognizer's known-person prior is read at EACH import. A person
+  // registered after app bootstrap must be recognized on the next image,
+  // without promoting OCR garbage or creating a DB person automatically.
+  const currentRoster = [];
+  const weakLayout = {
+    ...layout,
+    tokens: layout.tokens.map((item) =>
+      item.text === '사아자' ? { ...item, confidence: 0.2 } : item),
+  };
+  const mockExtractor = {
+    async extract() { return weakLayout; },
+    async extractRegions(_image, regions) {
+      return regions.map((region) => ({
+        id: region.id,
+        purpose: region.purpose,
+        text: region.id === 'person::3' ? '사아자' : '',
+        confidence: region.id === 'person::3' ? 0.2 : 0,
+        tokens: [],
+      }));
+    },
+  };
+  const dynamicRecognizer = new interpreter.StructureFirstScheduleImageRecognizer(
+    { async detect() { return detection; } },
+    mockExtractor,
+    async () => [...currentRoster],
+  );
+  const sampleImage = new File([new Uint8Array([1])], 'local-private-fixture.png', { type: 'image/png' });
+  const priorBefore = await dynamicRecognizer.parse(sampleImage);
+  currentRoster.push('사아자');
+  const priorAfter = await dynamicRecognizer.parse(sampleImage);
+  expect(!priorBefore.detectedPeople.some((person) => person.sourceName === '사아자'),
+    'low-confidence novel row must not be promoted to registered person');
+  expect(priorAfter.detectedPeople.some((person) => person.sourceName === '사아자'),
+    'newly registered person must be recognized from current prior on next import');
+
   // Color/fill alone must not imply work or off. A flat darker background with
   // no text remains EMPTY because occupancy is measured relative to local background.
   const colored = makeRaster({
