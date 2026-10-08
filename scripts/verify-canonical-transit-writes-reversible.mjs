@@ -72,7 +72,10 @@ try {
     await page.locator('.transit-row[data-provider-id] .transit-row-toggle').first().waitFor({ timeout: 90000 });
     const baseline = initial[kind];
     const otherKind = kind === 'origin' ? 'destination' : 'origin';
-    const eligible = baseline.filter(point => typeof point.selected === 'boolean');
+    // Prefer an already persisted unselected access: ADD makes the existing
+    // 2-selection D1 set reach 3, then REMOVE restores all baseline flags.
+    const eligible = baseline.filter(point => typeof point.selected === 'boolean')
+      .sort((left, right) => Number(left.selected) - Number(right.selected));
     let chosen = null;
     let control = null;
     for (const point of eligible) {
@@ -128,6 +131,7 @@ try {
       originalCount: baselineSelectedCount,
       temporaryCount: baselineSelectedCount + (expected ? 1 : -1),
       reload: true, isolation: true,
+      tripleSelectReached: baselineSelectedCount + (expected ? 1 : -1) >= 3,
     });
   }
 } finally {
