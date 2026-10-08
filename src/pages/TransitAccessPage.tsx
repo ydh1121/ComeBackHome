@@ -66,6 +66,7 @@ export function TransitAccessPage() {
   const [nearbyLoading, setNearbyLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -183,6 +184,7 @@ export function TransitAccessPage() {
   const toggleResult = async (result: TransitResult) => {
     if (workingId) return;
     setWorkingId(result.id);
+    setActionError(null);
     try {
       const existing = persistedPoints.find((point) => sameProvider(point, result));
 
@@ -231,6 +233,13 @@ export function TransitAccessPage() {
       if (existing) {
         await services.actions.transitAccess.toggleAccess(point.id, !point.selected);
       }
+      // All successful mutations must survive the repository readback.
+      const persisted = await services.queries.getTransitAccess(personId, kind, 'all');
+      if (!persisted.some((candidate) => candidate.id === point.id)) {
+        throw new Error('교통편 저장 후 다시 조회되지 않았습니다.');
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '교통편 저장에 실패했습니다.');
     } finally {
       setWorkingId(null);
     }
@@ -309,6 +318,7 @@ export function TransitAccessPage() {
         </div>
       ) : null}
 
+      {actionError ? <div className="search-inline-status" role="alert">{actionError}</div> : null}
       <div className="transit-list">
         {loading ? (
           <div className="transit-empty">
