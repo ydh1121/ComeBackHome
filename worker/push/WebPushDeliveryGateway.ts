@@ -140,27 +140,40 @@ export function pushSubscriptionKeyShapeValid(keys: { p256dh: string; auth: stri
     validBase64UrlLength(keys.auth, 16);
 }
 
+/**
+ * Exporting just the crypto stage lets an actual local workerd (not Node)
+ * exercise encryption and JWT generation with synthetic subscription keys.
+ * The smoke test cannot contact any remote push service.
+ */
+export async function buildWorkerEncryptedPushPayload(
+  subscription: Parameters<WebPushSender['sendNotification']>[0],
+  payload: string,
+  options: Parameters<WebPushSender['sendNotification']>[2],
+): Promise<Awaited<ReturnType<typeof buildPushPayload>>> {
+  if (!pushSubscriptionKeyShapeValid(subscription.keys)) {
+    throw new PushDeliveryError('Push subscription key format invalid.',
+      'permanent', null, 'SUBSCRIPTION');
+  }
+  try {
+    return await buildPushPayload(
+      { data: payload, options: {
+        ttl: options.TTL,
+        urgency: options.urgency,
+      } },
+      { endpoint: subscription.endpoint, expirationTime: null,
+        keys: subscription.keys },
+      options.vapidDetails,
+    );
+  } catch {
+    throw new PushDeliveryError('Push encryption or VAPID signing failed.',
+      'permanent', null, 'PREPARE');
+  }
+}
+
 const defaultSender: WebPushSender = {
   async sendNotification(subscription, payload, options) {
-    if (!pushSubscriptionKeyShapeValid(subscription.keys)) {
-      throw new PushDeliveryError('Push subscription key format invalid.',
-        'permanent', null, 'SUBSCRIPTION');
-    }
-    let details: Awaited<ReturnType<typeof buildPushPayload>>;
-    try {
-      details = await buildPushPayload(
-        { data: payload, options: {
-          ttl: options.TTL,
-          urgency: options.urgency,
-        } },
-        { endpoint: subscription.endpoint, expirationTime: null,
-          keys: subscription.keys },
-        options.vapidDetails,
-      );
-    } catch {
-      throw new PushDeliveryError('Push encryption or VAPID signing failed.',
-        'permanent', null, 'PREPARE');
-    }
+    const details = await buildWorkerEncryptedPushPayload(
+      subscription, payload, options);
     let url: URL;
     let headers: Headers;
     let body: ArrayBuffer | null;
