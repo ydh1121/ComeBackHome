@@ -17,9 +17,8 @@ for (const text of [
   'TTL: this.config.ttlSeconds',
   "statusCode === 404 || statusCode === 410",
   "statusCode === 429",
-  "new PushDeliveryError(message, 'terminal-subscription')",
-  "new PushDeliveryError(message, 'transient')",
-  "new PushDeliveryError(message, 'permanent')",
+  'new PushDeliveryError(message, kind, statusCode)',
+  'export function classifyPushProviderFailure',
 ]) {
   expect(source.includes(text), 'web push gateway missing ' + text);
 }
