@@ -17,6 +17,12 @@ assert.ok(browser.includes("placePairStatus = 'SKIPPED_QUOTA_FIREWALL'"),
   'browser regression still performs live place-pair smoke');
 assert.ok(!browser.includes('api.get(u.toString())'), 'browser regression contains live direct provider fetch');
 assert.ok(browser.includes("route.fulfill("), 'browser fixture must intercept route requests');
+assert.ok(browser.includes("serviceWorkers: 'block'") &&
+  browser.includes('context.addInitScript(') && browser.includes("window.fetch ="),
+  'Canonical PWA fixture must block service-worker bypass and intercept fetch');
+assert.ok(browserWorkflow.includes('workflow_dispatch:') &&
+  !/\\n  push:|\\n  pull_request:/.test(browserWorkflow),
+  'Canonical browser QA must not auto-run while quota is frozen');
 assert.ok(!browserWorkflow.includes('CBH_KAKAO_ROUTE_SMOKE: APPROVED_ONE_RUN'),
   'normal browser CI must not approve live routes');
 assert.ok(!localWorkflow.includes('CBH_KAKAO_ROUTE_SMOKE: APPROVED_ONE_RUN'),
