@@ -114,10 +114,27 @@ export class SecureProviderJsonTransport implements ProviderJsonTransport {
     });
 
     if (!response.ok) {
+      // A numeric upstream error code is safe diagnostic evidence. Never
+      // expose upstream messages, request URLs, private coordinates or keys.
+      // Kakao may return HTTP 400 for quota (-10), unlike typical HTTP 429.
+      let numericCode: number | null = null;
+      if (request.source === 'kakao-map' && request.capability === 'public-transit-routing') {
+        try {
+          const body: unknown = await response.json();
+          const code = body && typeof body === 'object' && 'code' in body
+            ? (body as { code?: unknown }).code : null;
+          if (typeof code === 'number' && Number.isSafeInteger(code) && code >= -10000 && code <= 10000) {
+            numericCode = code;
+          }
+        } catch {
+          // The upstream body is diagnostic-only; never override HTTP failure.
+        }
+      }
       throw new Error(
         'Provider request failed: ' +
         request.source + '/' + request.capability +
-        ' HTTP ' + response.status,
+        ' HTTP ' + response.status +
+        (numericCode == null ? '' : ' CODE ' + numericCode),
       );
     }
 
