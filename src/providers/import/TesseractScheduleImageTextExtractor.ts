@@ -668,6 +668,7 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
         });
 
         let dateCrop: Blob | null = null;
+        const dateNumericCrops: Blob[] = [];
         if (region.purpose === 'date' && region.id.startsWith('date::grid-cell::')) {
           // Decode the actual raster and isolate each structurally verified
           // header cell. Border strokes at ROI edges degrade small-digit OCR.
@@ -687,6 +688,42 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
             ctx.drawImage(bitmap, rectangle.left + insetX, rectangle.top + insetY,
               sw, sh, 0, 0, canvas.width, canvas.height);
             dateCrop = await canvasToBlob(canvas);
+            // Keep alternative views that isolate the actual leading
+            // numeric glyphs from a Korean day suffix. Pixel evidence
+            // determines the crop; no injected OCR token or day index.
+            const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const inkColumns: number[] = [];
+            for (let x = Math.ceil(canvas.width * 0.04);
+              x < Math.floor(canvas.width * 0.96); x += 1) {
+              let dark = 0;
+              for (let y = Math.ceil(canvas.height * 0.1);
+                y < Math.floor(canvas.height * 0.88); y += 1) {
+                const offset = (y * canvas.width + x) * 4;
+                if ((pixels.data[offset] + pixels.data[offset + 1] +
+                    pixels.data[offset + 2]) / 3 < 160) dark += 1;
+              }
+              if (dark >= Math.max(2, canvas.height * 0.045)) inkColumns.push(x);
+            }
+            if (inkColumns.length >= 3) {
+              const firstInk = inkColumns[0];
+              const lastInk = inkColumns[inkColumns.length - 1];
+              const span = lastInk - firstInk + 1;
+              for (const fraction of [0.54, 0.74]) {
+                const left = Math.max(0, firstInk - 9);
+                const right = Math.min(canvas.width,
+                  firstInk + Math.max(6, Math.round(span * fraction)) + 8);
+                const part = document.createElement('canvas');
+                part.width = Math.max(70, (right - left) * 3);
+                part.height = Math.max(48, canvas.height * 3);
+                const partContext = part.getContext('2d');
+                if (!partContext) continue;
+                partContext.fillStyle = '#fff';
+                partContext.fillRect(0, 0, part.width, part.height);
+                partContext.drawImage(canvas, left, 0, right - left,
+                  canvas.height, 0, 0, part.width, part.height);
+                dateNumericCrops.push(await canvasToBlob(part));
+              }
+            }
           } finally {
             bitmap.close();
           }
