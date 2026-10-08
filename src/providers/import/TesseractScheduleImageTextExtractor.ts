@@ -696,7 +696,47 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           dateCrop ? { rotateAuto: false } : { rotateAuto: false, rectangle },
           { text: true, blocks: true },
         );
-        const words = flattenWords(response.data);
+        let words = flattenWords(response.data);
+        if (region.purpose === 'person' && !personLabelCandidate(words, rectangle.height)) {
+          // A complete row crop can include dark table borders that obscure
+          // compact Hangul names. Retry only unreadable people with the
+          // actually observed label pixels: no roster, fixture label or
+          // expected answer is supplied to OCR.
+          const bitmap = await createImageBitmap(raster.image);
+          let personCrop: Blob;
+          let scaledHeight = rectangle.height;
+          try {
+            const insetX = Math.max(3, Math.round(rectangle.width * 0.06));
+            const insetY = Math.max(3, Math.round(rectangle.height * 0.08));
+            const sw = Math.max(1, rectangle.width - 2 * insetX);
+            const sh = Math.max(1, rectangle.height - 2 * insetY);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(72, sw * 2);
+            canvas.height = Math.max(48, sh * 2);
+            scaledHeight = canvas.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Person OCR crop canvas is unavailable.');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap,
+              rectangle.left + insetX, rectangle.top + insetY,
+              sw, sh, 0, 0, canvas.width, canvas.height);
+            personCrop = await canvasToBlob(canvas);
+          } finally {
+            bitmap.close();
+          }
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_WORD),
+            tessedit_char_whitelist: '',
+            preserve_interword_spaces: '1',
+          });
+          const retry = await worker.recognize(
+            personCrop, { rotateAuto: false }, { text: true, blocks: true });
+          const actualWords = flattenWords(retry.data);
+          if (personLabelCandidate(actualWords, scaledHeight)) {
+            words = actualWords;
+          }
+        }
         let semanticDateWords: OcrWord[] = [];
         if (region.purpose === 'date' && dateCrop &&
             !words.some((word) => /^(?:[1-9]|[12][0-9]|3[01])$/.test(
