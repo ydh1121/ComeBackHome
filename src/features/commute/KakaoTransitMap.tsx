@@ -193,17 +193,38 @@ export function KakaoTransitMap({
     const map = mapRef.current;
     for (const point of points) {
       const position = new kakao.maps.LatLng(point.coordinate.y, point.coordinate.x);
-      const marker = new kakao.maps.Marker({
+      // Kakao SDK Marker exposes an image-map <area> that is not reliably
+      // clickable in the canonical PWA (Chromium + WebKit user-flow QA).
+      // A CustomOverlay with a REAL native button offers pointer, touch
+      // and keyboard interaction while preserving map coordinates/identity.
+      const content = document.createElement('button');
+      content.type = 'button';
+      content.className = 'cbh-transit-map-marker';
+      content.dataset.transitId = point.id;
+      content.dataset.mode = point.mode;
+      content.title = (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name;
+      content.setAttribute('aria-label', content.title);
+      content.setAttribute('aria-pressed', 'false');
+      const glyph = document.createElement('span');
+      glyph.textContent = point.mode === 'BUS' ? '버스' : '역';
+      glyph.setAttribute('aria-hidden', 'true');
+      content.append(glyph);
+      content.addEventListener('pointerdown', (event) => event.stopPropagation());
+      content.addEventListener('touchstart', (event) => event.stopPropagation(), { passive: true });
+      content.addEventListener('click', (event) => {
+        event.stopPropagation();
+        onSelectRef.current(point.id);
+      });
+      const marker = new kakao.maps.CustomOverlay({
         map,
         position,
-        title: (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name,
+        content,
         clickable: true,
+        xAnchor: 0.5,
+        yAnchor: 1,
         zIndex: 2,
       });
       markersRef.current.set(point.id, marker);
-      kakao.maps.event.addListener(marker, 'click', () => {
-        onSelectRef.current(point.id);
-      });
     }
     return () => {
       for (const marker of markersRef.current.values()) marker.setMap(null);
@@ -214,7 +235,15 @@ export function KakaoTransitMap({
   useEffect(() => {
     const selectedSet = new Set(selectedKey ? selectedKey.split('|') : []);
     for (const [id, marker] of markersRef.current) {
-      marker.setZIndex(id === selectedId ? 20 : selectedSet.has(id) ? 10 : 2);
+      const focused = id === selectedId;
+      const selected = selectedSet.has(id);
+      marker.setZIndex(focused ? 20 : selected ? 10 : 2);
+      const content = marker.getContent?.();
+      if (content instanceof HTMLElement) {
+        content.classList.toggle('is-active', focused);
+        content.classList.toggle('is-selected', selected);
+        content.setAttribute('aria-pressed', String(selected));
+      }
     }
     const active = selectedId ? markersRef.current.get(selectedId) : null;
     // List focus should not move the search center when the marker is already
