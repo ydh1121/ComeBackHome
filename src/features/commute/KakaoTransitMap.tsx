@@ -217,7 +217,12 @@ export function KakaoTransitMap({
       marker.setZIndex(id === selectedId ? 20 : selectedSet.has(id) ? 10 : 2);
     }
     const active = selectedId ? markersRef.current.get(selectedId) : null;
-    if (active && mapRef.current) mapRef.current.panTo(active.getPosition());
+    // List focus should not move the search center when the marker is already
+    // visible. Offscreen focused markers can still be brought into view.
+    if (active && mapRef.current &&
+        !mapRef.current.getBounds().contain(active.getPosition())) {
+      mapRef.current.panTo(active.getPosition());
+    }
   }, [selectedId, selectedKey, state]);
 
   return (
