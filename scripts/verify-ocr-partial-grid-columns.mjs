@@ -14,9 +14,11 @@ try {
   const width=780,height=300;
   const luminance=new Uint8Array(width*height).fill(246);
   const boundaries=[20,120,220,420,520,720];
+  // Repeated body glyph strokes are deliberately NOT physical table lines.
+  const bodyGlyphStrokes=[259,267,273,282];
   // The gap 220->420 and 520->720 represents missing 320 and 620
   // strokes. We verify column geometry only; no dates are inferred.
-  for(const x of boundaries){
+  for(const x of [...boundaries,...bodyGlyphStrokes]){
     for(let y=90;y<274;y++)luminance[y*width+x]=22;
   }
   const detection={
@@ -25,7 +27,7 @@ try {
       rowBands:[{index:0,bounds:{x:20,y:40,width:700,height:50},confidence:1},
         {index:1,bounds:{x:20,y:90,width:700,height:46},confidence:1}],
       tableBounds:{x:20,y:40,width:700,height:235},
-      evidence:{verticalLinePositions:boundaries,
+      evidence:{verticalLinePositions:[...boundaries,...bodyGlyphStrokes].sort((a,b)=>a-b),
         horizontalLinePositions:[40,90,136,182,228,275],
         source:'PIXEL_PARTIAL'},
     },
@@ -77,6 +79,7 @@ try {
     noDateValuesInferred:true,emptyRasterRejected:true,
     sparseDateAnchorsMappedToPhysicalColumns:true,
     missingDateValuesNeverInvented:true,
+    printedGlyphVerticalStrokesRejected:true,
     arbitraryImageCoordinatesUsed:false,liveKakaoRouteCalls:0,
   }));
 }finally{await server.close();}
