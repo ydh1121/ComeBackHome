@@ -37,3 +37,9 @@
 .commute-page .manual-route-selected-access{display:grid;grid-template-columns:minmax(0,1fr) 38px;align-items:center;gap:6px}
 .commute-page .manual-route-selected-access .route-via-remove{position:static;width:36px;height:36px}
 .commute-page .route-recommendation-context{margin:-2px 0 12px;color:#667085;font-size:12px;line-height:1.5}
+
+.commute-page .transit-map-active{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;background:#f1f5ff;color:#344054;font-size:12px;line-height:1.5}
+.commute-page .transit-map-active span{min-width:0;overflow-wrap:anywhere}
+.commute-page .transit-map-active .cta{flex-shrink:0;min-height:40px;font-size:12px;padding:0 12px}
+.commute-page .transit-row.map-active{outline:2px solid #255cff;outline-offset:-2px;background:#f5f8ff}
+@media(max-width:390px){.commute-page .transit-map-active{align-items:stretch;flex-direction:column}.commute-page .transit-map-active .cta{align-self:flex-end}}
