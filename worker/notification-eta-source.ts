@@ -80,10 +80,12 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
 
     const preferredRouteCandidateId =
       await this.dependencies.commute.getPreferredRouteCandidateId(personId);
-    const route =
-      routes.find((candidate) => candidate.id === preferredRouteCandidateId) ??
-      routes[0] ??
-      null;
+    // A saved route is authoritative. Provider refresh may make its ID
+    // temporarily unavailable, but choosing another route would silently
+    // change the user's ETA/notification plan. Match Today fail-closed semantics.
+    const route = preferredRouteCandidateId
+      ? routes.find((candidate) => candidate.id === preferredRouteCandidateId) ?? null
+      : routes[0] ?? null;
     if (!route || !Number.isFinite(route.totalMinutes) || route.totalMinutes < 0) {
       return { personId, arrivalAt: null, confidence: 'UNKNOWN' };
     }
