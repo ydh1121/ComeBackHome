@@ -38,18 +38,8 @@
 .commute-page .manual-route-selected-access .route-via-remove{position:static;width:36px;height:36px}
 .commute-page .route-recommendation-context{margin:-2px 0 12px;color:#667085;font-size:12px;line-height:1.5}
 
-.commute-page .transit-map-active{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;background:#f1f5ff;color:#344054;font-size:12px;line-height:1.5}
-.commute-page .transit-map-active span{min-width:0;overflow-wrap:anywhere}
-.commute-page .transit-map-active .cta{flex-shrink:0;min-height:40px;font-size:12px;padding:0 12px}
 .commute-page .transit-row.map-active{outline:2px solid #255cff;outline-offset:-2px;background:#f5f8ff}
-@media(max-width:390px){.commute-page .transit-map-active{align-items:stretch;flex-direction:column}.commute-page .transit-map-active .cta{align-self:flex-end}}
 
-/* P0 selected transit panel: never squeeze Hangul to one glyph per line. */
-.commute-page .transit-map-active{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:start;padding:12px;max-width:100%;min-width:0}
-.commute-page .transit-map-active .transit-map-active-details{display:grid;grid-template-columns:minmax(0,1fr);gap:3px;min-width:0;width:100%;word-break:keep-all;overflow-wrap:normal;white-space:normal}
-.commute-page .transit-map-active .transit-map-active-details strong{font-size:14px;color:#101828;font-weight:800;line-height:1.45}
-.commute-page .transit-map-active .transit-map-active-details small{font-size:12px;color:#667085;line-height:1.35}
-.commute-page .transit-map-active .cta{justify-self:start;align-self:start;width:auto;max-width:100%;min-width:116px;white-space:nowrap;min-height:40px;margin:0}
 .commute-page .transit-selected-summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
 .commute-page .transit-selected-summary>strong{flex:0 0 100%;font-size:12px;color:#344054}
 .commute-page .transit-selected-chip{max-width:100%;min-height:34px;display:inline-flex;gap:6px;align-items:center;border:1px solid #dce5f9;border-radius:999px;padding:5px 11px;background:#f4f7fe;color:#2850a4;font-size:12px;white-space:normal;text-align:left;word-break:keep-all}
@@ -57,3 +47,47 @@
 .commute-page .transit-search-center{margin:4px 0 8px;color:#667085;font-size:12px}
 
 .commute-page .kakao-map-center-crosshair{position:absolute;left:50%;top:50%;z-index:5;transform:translate(-50%,-50%);width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.78);box-shadow:0 1px 5px rgba(0,0,0,.16);color:#255cff;font-size:19px;font-weight:750;line-height:1;pointer-events:none;user-select:none}
+
+/* Active transit = one focused marker/row, not the stored 0..N access set.
+   Single authoritative grid; avoid former stacked/CTA override chain. */
+.commute-page .transit-map-active{
+  width:100%;min-width:0;max-width:100%;box-sizing:border-box;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  column-gap:12px;align-items:center;
+  padding:11px 12px;
+  margin:2px 0 16px;
+  border:1px solid #dce6fb;border-radius:12px;
+  background:#f6f8ff;color:#27364c;
+}
+.commute-page .transit-map-active-details{
+  min-width:0;width:100%;
+  display:flex;flex-direction:column;gap:3px;
+  overflow-wrap:normal;word-break:keep-all;
+}
+.commute-page .transit-active-type{
+  display:block;color:#526cab;font-size:11px;line-height:1.3;font-weight:700;
+}
+.commute-page .transit-active-name{
+  display:block;min-width:0;
+  color:#18263d;font-size:13px;font-weight:800;line-height:1.4;
+  white-space:normal;word-break:keep-all;overflow-wrap:anywhere;
+}
+.commute-page .transit-active-meta{
+  display:block;min-width:0;color:#667085;font-size:11.5px;line-height:1.4;
+  white-space:normal;word-break:keep-all;
+}
+.commute-page .transit-active-action{
+  flex-shrink:0;justify-self:end;
+  border:1px solid #d4e0ff;border-radius:9px;
+  background:#fff;color:#2051bb;font-size:12px;font-weight:750;
+  padding:0 11px;min-width:62px;height:36px;white-space:nowrap;
+}
+.commute-page .transit-active-action[aria-pressed="true"]{
+  background:#e8efff;border-color:#d4e0ff;color:#244b9a;
+}
+.commute-page .transit-active-action:disabled{opacity:.6}
+.commute-page .transit-map-active + .candidate-filter{margin-top:0}
+@media(max-width:359px){
+  .commute-page .transit-map-active{column-gap:8px;padding:10px}
+  .commute-page .transit-active-action{padding:0 8px;min-width:56px}
+}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
 import { chromium, webkit, devices } from 'playwright';
 
 const ORIGIN = 'https://come-back-home.pages.dev';
@@ -95,55 +96,126 @@ async function verifyOn(browserType, label, device = {}) {
     assert.equal(renderedMap.dimensionsValid, true, 'Interactive map dimensions invalid');
     assert.equal(renderedMap.hasRenderedChildren, true, 'Interactive map DOM not rendered');
 
-    // This workflow MUST remain read-only. A marker click now toggles a D1
-    // selection, so assert markup and test actual user gestures separately.
+    // Actual screenshot-equivalent QA: activate a REAL Kakao marker and
+    // inspect the rendered React panel. No manually injected fake card.
     const markerTargets = page.locator(
       '.kakao-transit-map area[title^="버스 · "], ' +
-      '.kakao-transit-map area[title^="지하철 · "], ' +
-      '.kakao-transit-map img[title^="버스 · "], ' +
-      '.kakao-transit-map img[title^="지하철 · "]'
+      '.kakao-transit-map area[title^="지하철 · "]'
     );
     await markerTargets.first().waitFor({ state: 'attached', timeout: 20_000 });
-    const markerDomCount = await markerTargets.count();
-    assert.ok(markerDomCount > 0, 'Kakao marker target DOM missing');
-
-    // Render a local-only selected panel for responsive geometry QA. This
-    // does not add a saved transit access or alter production database state.
-    await page.evaluate(() => {
-      const card = document.createElement('div');
-      card.className = 'transit-map-active';
-      card.setAttribute('data-test-layout', '1');
-      card.innerHTML =
-        '<div class="transit-map-active-details">' +
-        '<strong>지하철 · 언주역 9호선</strong>' +
-        '<small>161m · 도보 약 3분</small></div>' +
-        '<button class="cta secondary" type="button">이 교통편 선택</button>';
-      document.querySelector('.kakao-transit-map-shell')?.after(card);
+    const markerTitles = await markerTargets.evaluateAll((nodes) =>
+      nodes.map((node, index) => ({
+        index,
+        name: node.getAttribute('title') ?? '',
+      }))
+    );
+    assert.ok(markerTitles.length, 'Kakao transit markers are not rendered');
+    const preferred = markerTitles.find((item) => item.name.includes('차병원사거리')) ??
+      markerTitles.sort((a, b) => b.name.length - a.name.length)[0];
+    const marker = markerTargets.nth(preferred.index);
+    const markerClick = await marker.evaluate((area) => {
+      const map = area.closest('map');
+      const name = map?.getAttribute('name') ?? map?.id ?? '';
+      const image = [...document.querySelectorAll('img[usemap]')].find((candidate) =>
+        candidate.getAttribute('usemap')?.replace(/^#/, '') === name);
+      const coords = (area.getAttribute('coords') ?? '').split(',')
+        .map(Number).filter(Number.isFinite);
+      const imageBox = image?.getBoundingClientRect();
+      if (!image || !imageBox || coords.length < 4 ||
+          imageBox.width < 4 || imageBox.height < 4) {
+        return { type: 'DOM_CLICK', name: area.getAttribute('title') ?? '' };
+      }
+      const xs = coords.filter((_, index) => index % 2 === 0);
+      const ys = coords.filter((_, index) => index % 2 === 1);
+      const naturalWidth = image.naturalWidth || image.width;
+      const naturalHeight = image.naturalHeight || image.height;
+      const x = imageBox.left + (Math.min(...xs) + Math.max(...xs)) / 2 *
+        (imageBox.width / naturalWidth);
+      const y = imageBox.top + (Math.min(...ys) + Math.max(...ys)) / 2 *
+        (imageBox.height / naturalHeight);
+      return { type: 'POINTER', x, y, name: area.getAttribute('title') ?? '' };
     });
+    if (markerClick.type === 'POINTER') {
+      if (label.startsWith('mobile')) {
+        await page.touchscreen.tap(markerClick.x, markerClick.y);
+      } else {
+        await page.mouse.click(markerClick.x, markerClick.y);
+      }
+    } else {
+      // The polygon-area target is occasionally unpositioned in WebKit
+      // headless. This is DOM activation only, NOT physical-tap acceptance.
+      await marker.evaluate((area) => area.click());
+    }
+    const activePanel = page.getByRole('region', { name: '지도에서 선택한 교통편' });
+    await activePanel.waitFor({ timeout: 10_000 });
+    const activeName = markerClick.name.replace(/^(버스|지하철) · /, '');
+    assert.ok((await activePanel.innerText()).includes(activeName),
+      'Live active transit panel did not match focused marker');
+    assert.ok((await page.locator('.transit-row.map-active').innerText()).includes(activeName),
+      'Active map marker did not highlight the same entity in the list');
+    assert.equal(attemptedWrites.length, 0,
+      'Focusing a map marker must not mutate production D1');
+
     const checkedWidths = [];
+    const measured = [];
+    mkdirSync('artifacts/cbh-transit-card', { recursive: true });
     for (const width of [320, 375, 390, 430]) {
       await page.setViewportSize({ width, height: 820 });
-      const geometry = await page.locator('[data-test-layout]').evaluate((card) => {
-        const text = card.querySelector('strong');
-        const details = card.querySelector('.transit-map-active-details');
-        const button = card.querySelector('button');
+      const geometry = await page.locator('.transit-map-active').evaluate((card) => {
+        const panel = card.getBoundingClientRect();
+        const name = card.querySelector('.transit-active-name');
+        const nameBox = name?.getBoundingClientRect();
+        const action = card.querySelector('.transit-active-action');
+        const actionBox = action?.getBoundingClientRect();
+        const filterBox = document.querySelector('.candidate-filter')?.getBoundingClientRect();
+        const searchBox = document.querySelector('.transit-inline-search')?.getBoundingClientRect();
+        const summaryBox = document.querySelector('.transit-selected-summary')?.getBoundingClientRect();
+        const firstRow = document.querySelector('.transit-row')?.getBoundingClientRect();
+        const lineHeight = name ? parseFloat(getComputedStyle(name).lineHeight) : 0;
         return {
-          panelWidth: card.getBoundingClientRect().width,
-          panelHeight: card.getBoundingClientRect().height,
-          textWidth: text.getBoundingClientRect().width,
-          detailsWidth: details.getBoundingClientRect().width,
-          buttonWidth: button.getBoundingClientRect().width,
-          overflows: card.scrollWidth > card.clientWidth,
+          panelWidth: panel.width, panelHeight: panel.height,
+          nameWidth: nameBox?.width ?? 0,
+          nameLines: nameBox && lineHeight ? Math.round(nameBox.height / lineHeight) : 0,
+          actionWidth: actionBox?.width ?? 0,
+          actionVisible: Boolean(actionBox && actionBox.width > 40 && actionBox.height >= 32),
+          verticalGap: filterBox ? Math.round(filterBox.top - panel.bottom) : -1,
+          filterChipCount: document.querySelectorAll('.candidate-filter .filter-btn').length,
+          searchGap: filterBox && searchBox ? Math.round(searchBox.top - filterBox.bottom) : -1,
+          summaryGap: searchBox && summaryBox ? Math.round(summaryBox.top - searchBox.bottom) : null,
+          resultGap: summaryBox && firstRow ? Math.round(firstRow.top - summaryBox.bottom) : null,
+          overflow: card.scrollWidth > card.clientWidth + 1,
         };
       });
-      assert.ok(geometry.panelWidth > 200 && geometry.detailsWidth > 170 &&
-        geometry.textWidth > 170 && geometry.panelHeight < 170 &&
-        geometry.buttonWidth > 105 && !geometry.overflows,
-        'Selected transit layout broken at viewport ' + width + 'px: ' +
+      assert.ok(geometry.panelWidth > 220 && geometry.nameWidth >= 138 &&
+        geometry.nameLines >= 1 && geometry.nameLines <= 3 &&
+        geometry.panelHeight <= 128 && geometry.actionVisible && !geometry.overflow &&
+        geometry.verticalGap >= 12 && geometry.verticalGap <= 24 &&
+        geometry.filterChipCount === 3 && geometry.searchGap >= 6,
+        'Actual selected card geometry failed at ' + width + 'px: ' +
           JSON.stringify(geometry));
+      measured.push({ width, ...geometry });
       checkedWidths.push(width);
+      if (width === 375 || width === 390) {
+        await activePanel.scrollIntoViewIfNeeded();
+        const cardBox = await activePanel.boundingBox();
+        const summaryBox = await page.locator('.transit-selected-summary').boundingBox();
+        if (cardBox) {
+          // Crop BELOW the map: no private saved-place context is stored.
+          await page.screenshot({
+            path: 'artifacts/cbh-transit-card/' + label + '-' + width + '.png',
+            clip: {
+              x: Math.max(0, cardBox.x - 1),
+              y: Math.max(0, cardBox.y - 1),
+              width: Math.ceil(cardBox.width + 2),
+              height: Math.ceil(Math.min(
+                470, Math.max(200, (summaryBox?.y ?? (cardBox.y + 260)) -
+                  cardBox.y + (summaryBox?.height ?? 50) + 12)
+              )),
+            },
+          });
+        }
+      }
     }
-    await page.locator('[data-test-layout]').evaluate((node) => node.remove());
     const savedAccessResponse = await api.get(
       ORIGIN + '/api/people/' + pathId + '/commute?kind=origin'
     );
@@ -235,8 +307,10 @@ async function verifyOn(browserType, label, device = {}) {
       mapSDK: 'PASS',
       mapDOM: 'PASS',
       mapMarkerDOM: 'PASS',
-      markerInteraction: 'NOT_RUN_READ_ONLY',
-      markerListSync: 'NOT_RUN_READ_ONLY',
+      markerInteraction: markerClick.type === 'POINTER' ? 'POINTER_PREVIEW_PASS' : 'DOM_PREVIEW_PASS',
+      markerListSync: 'FOCUS_ONLY_PASS',
+      realActiveCard: 'PASS',
+      activeCardGeometry: measured,
       mapCenterRequery: label.startsWith('mobile') ? 'NOT_RUN_TOUCH_DRAG' : 'PASS',
       layoutWidths: checkedWidths,
       nearbyDistanceCap: 'PASS',
