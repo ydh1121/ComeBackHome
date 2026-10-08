@@ -104,10 +104,46 @@ try {
   });
   assert.equal(glyphOnly.evidence.source,'WEAK_PIXEL',
     'Text-only glyph strokes must not claim pixel grid authority');
+
+  // Simulate a downscaled/JPEG-antialiased schedule: physical borders are
+  // medium gray rather than near-black. The detector must retain those long
+  // strokes without weakening the discontinuous-glyph rejection above.
+  const lowContrast=new Uint8Array(imageW*imageH).fill(244);
+  const paintVertical=(x)=>{
+    for(let y=40;y<=250;y++){
+      lowContrast[y*imageW+x]=178;
+      if(x>0)lowContrast[y*imageW+x-1]=207;
+      if(x+1<imageW)lowContrast[y*imageW+x+1]=207;
+    }
+  };
+  const paintHorizontal=(y)=>{
+    for(let x=30;x<=390;x++){
+      lowContrast[y*imageW+x]=178;
+      if(y>0)lowContrast[(y-1)*imageW+x]=207;
+      if(y+1<imageH)lowContrast[(y+1)*imageW+x]=207;
+    }
+  };
+  for(const x of [30,150,270,390])paintVertical(x);
+  for(const y of [40,110,180,250])paintHorizontal(y);
+  // Dark text-like strokes remain discontinuous and must not become columns.
+  for(const x of [205,210,215]){
+    for(const [top,bottom] of [[75,112],[145,182],[215,252]]){
+      for(let y=top;y<=bottom;y++)lowContrast[y*imageW+x]=45;
+    }
+  }
+  const lowContrastStructure=detectScheduleTableStructureFromRaster({
+    width:imageW,height:imageH,luminance:lowContrast,
+  });
+  assert.equal(lowContrastStructure.evidence.source,'PIXEL_GRID',
+    'Low-contrast downsampled borders must still establish pixel grid authority');
+  assert.deepEqual(lowContrastStructure.evidence.verticalLinePositions,[30,150,270,390],
+    'Adaptive threshold must recover gray vertical borders without glyph columns');
+  assert.deepEqual(lowContrastStructure.evidence.horizontalLinePositions,[40,110,180,250],
+    'Adaptive threshold must recover gray horizontal borders');
   console.log(JSON.stringify({
     result:'PASS',recoveredRegions:recovered.length,
     pixelSupportedPeriodicity:true,missingBordersRecovered:true,
-    continuousBorderGate:true,glyphStrokesExcluded:true,
+    continuousBorderGate:true,glyphStrokesExcluded:true,lowContrastGridRecovered:true,
     noDateValuesInferred:true,emptyRasterRejected:true,
     sparseDateAnchorsMappedToPhysicalColumns:true,
     missingDateValuesNeverInvented:true,
