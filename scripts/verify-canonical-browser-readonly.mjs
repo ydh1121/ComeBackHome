@@ -14,6 +14,36 @@ async function verifyOn(browserType, label, device = {}) {
       ...device,
       locale: 'ko-KR',
       timezoneId: 'Asia/Seoul',
+      serviceWorkers: 'block',
+    });
+    // Browser-level network interception alone is not sufficient if a PWA
+    // service worker handles fetch. Intercept at the JS fetch callsite before
+    // app bootstrap as an additional no-quota safety barrier.
+    await context.addInitScript(() => {
+      const nativeFetch = window.fetch.bind(window);
+      const routeFixture = {
+        results: [
+          { id: 'fixture-route-A', totalMinutes: 35, transferCount: 1,
+            walkMinutes: 6, steps: [{ type: 'SUBWAY', label: 'fixture only' }] },
+          { id: 'fixture-route-B', totalMinutes: 42, transferCount: 0,
+            walkMinutes: 8, steps: [{ type: 'BUS', label: 'fixture only' }] },
+        ],
+      };
+      window.fetch = (input, init) => {
+        const uri = typeof input === 'string' ? input :
+          input instanceof Request ? input.url : String(input);
+        try {
+          if (new URL(uri, location.origin).pathname === '/api/providers/routes') {
+            return Promise.resolve(new Response(JSON.stringify(routeFixture), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }));
+          }
+        } catch {
+          return Promise.reject(new Error('Route QA blocked an invalid request URL'));
+        }
+        return nativeFetch(input, init);
+      };
     });
     const api = context.request;
     const configResponse = await api.get(ORIGIN + '/api/client-config');
