@@ -156,8 +156,10 @@ try {
           };
           const detector=new BrowserScheduleTableStructureDetector();
           const originalDetect=detector.detect.bind(detector);
+          let detectedGeometry=null;
           detector.detect=async (...args)=>{
             const value=await originalDetect(...args);
+            detectedGeometry=value;
             gridProof={
               topBand:value.structure.rowBands[0]?.bounds??null,
               vertical:value.structure.evidence.verticalLinePositions.map(x=>Math.round(x)),
@@ -174,6 +176,65 @@ try {
           let failure=null;
           try { diagnostics=await recognizer.evaluate(file); }
           catch(error){failure=error instanceof Error?error.message.slice(0,220):'Unknown OCR error';}
+          const gtRect=(x,y,w,h)=>({x:(x+input.skew*y)*input.scale,
+            y:y*input.scale,width:(w+Math.abs(input.skew)*h)*input.scale,height:h*input.scale});
+          const iou=(a,b)=>{if(!a||!b)return 0;
+            const w=Math.max(0,Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x));
+            const h=Math.max(0,Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y));
+            const intersection=w*h,union=a.width*a.height+b.width*b.height-intersection;
+            return union>0?Number((intersection/union).toFixed(4)):0;};
+          const meanBest=(expected,actual)=>expected.length?
+            Number((expected.reduce((sum,gt)=>sum+
+              Math.max(0,...actual.map(v=>iou(gt,v))),0)/expected.length).toFixed(4)):null;
+          const trueRows=Array.from({length:input.people},(_,p)=>
+            gtRect(left,top+(p+1)*rowHeight,labelWidth+input.days*cellWidth,rowHeight));
+          const trueColumns=Array.from({length:input.days},(_,d)=>
+            gtRect(left+labelWidth+d*cellWidth,top,cellWidth,(input.people+1)*rowHeight));
+          const found=detectedGeometry?.structure;
+          const geometry={
+            tableBoundsIoU:iou(gtRect(left,top,labelWidth+input.days*cellWidth,
+              (input.people+1)*rowHeight),found?.tableBounds),
+            rowBandIoU:meanBest(trueRows,found?.rowBands.map(x=>x.bounds)??[]),
+            columnBandIoU:meanBest(trueColumns,found?.columnBands.map(x=>x.bounds)??[]),
+            personRowIoU:meanBest(trueRows,diagnostics?.matrix.rows.map(x=>x.bounds)??[]),
+            dateColumnIoU:meanBest(trueColumns,diagnostics?.matrix.dates.map(x=>x.bounds)??[]),
+            cellRectIoU:meanBest(Array.from({length:input.people},(_,p)=>
+              Array.from({length:input.days},(_,d)=>gtRect(
+                left+labelWidth+d*cellWidth,top+(p+1)*rowHeight,
+                cellWidth,rowHeight))).flat(),diagnostics?.matrix.cells.map(x=>x.bounds)??[]),
+            detectedRows:found?.rowBands.length??0,
+            detectedColumns:found?.columnBands.length??0,
+            matrixRows:diagnostics?.matrix.rows.length??0,
+            matrixDates:diagnostics?.matrix.dates.length??0};
+          // Oracle geometry is test-only; it is never injected into recognition.
+          const firstWork=truth.find(x=>x.state==='WORK');
+          const workDay=firstWork?Number(firstWork.date.slice(-2))-1:0;
+          const oracleRegions=[
+            {id:'oracle::person',purpose:'person',
+              ...gtRect(left,top+rowHeight,labelWidth,rowHeight)},
+            {id:'date::grid-cell::oracle',purpose:'date',
+              ...gtRect(left+labelWidth,top,cellWidth,rowHeight)},
+            {id:'oracle::cell',purpose:'cell',...gtRect(
+              left+labelWidth+workDay*cellWidth,
+              top+((firstWork?.person??0)+1)*rowHeight,cellWidth,rowHeight)}];
+          let oracleCrop={executed:false,error:null};
+          try{
+            const results=await extractor.extractRegions(file,oracleRegions);
+            const person=results.find(x=>x.id==='oracle::person');
+            const date=results.find(x=>x.id==='date::grid-cell::oracle');
+            const cell=results.find(x=>x.id==='oracle::cell');
+            const timeRaw=cell?.tokens.map(x=>x.text).join(' ')??'';
+            oracleCrop={executed:true,error:null,personRaw:person?.text??'',
+              personExact:(person?.text??'').replace(/\s+/g,'')===names[0],
+              dateRaw:date?.text??'',dateExact:(date?.text??'').trim()==='1',
+              timeRaw,startExact:/09\s*:\s*00/.test(timeRaw),
+              endExact:firstWork?.end?/18\s*:\s*00/.test(timeRaw):null};
+          }catch(e){oracleCrop.error=e instanceof Error?e.message.slice(0,130):'OCR error';}
+          const detectedCrop={available:!!diagnostics,
+            personRaw:diagnostics?.regionResults.find(x=>x.id==='person::1')?.text??null,
+            dateMatched:!!diagnostics?.matrix.dates.some(x=>x.date==='2026-10-01'),
+            cellRaw:firstWork?diagnostics?.regionResults.find(x=>
+              x.id==='cell::'+(firstWork.person+1)+'::'+firstWork.date)?.text??null:null};
           const parsed=diagnostics?.parsed;
           const observations=new Map();
           for(const item of parsed?.scheduleCandidates??[])observations.set(
@@ -198,6 +259,7 @@ try {
             imageDecoded:canvas.width>0,
             generatedHeaderEvidence:syntheticOcrHeaders,
             generatedGrid: gridProof,
+            geometry,oracleCrop,detectedCrop,
             generatedFocusedDateTokens: focusedDates,
             actualTesseractFirstPass:workerPassComplete,
             fullPipelineSuccess:failure===null,
@@ -244,7 +306,25 @@ try {
     const pair=observed.filter(item=>item.id===id);
     return pair.length===2&&pair[0].logicalSignature===pair[1].logicalSignature;
   });
-  const metrics={
+  const avg=(metric,entries=observed)=>{const values=entries.map(x=>x.geometry?.[metric])
+    .filter(Number.isFinite);return values.length?
+      Number((values.reduce((a,b)=>a+b,0)/values.length).toFixed(4)):null;};
+  const diagnostic={
+    tableBoundsIoU:avg('tableBoundsIoU'),rowBandIoU:avg('rowBandIoU'),
+    columnBandIoU:avg('columnBandIoU'),personRowIoU:avg('personRowIoU'),
+    dateColumnIoU:avg('dateColumnIoU'),cellRectIoU:avg('cellRectIoU'),
+    oracleRuns:observed.filter(x=>x.oracleCrop?.executed).length,
+    oraclePersonExact:observed.filter(x=>x.oracleCrop?.personExact).length,
+    oracleDateExact:observed.filter(x=>x.oracleCrop?.dateExact).length,
+    oracleStartExact:observed.filter(x=>x.oracleCrop?.startExact).length,
+    oracleEndExact:observed.filter(x=>x.oracleCrop?.endExact).length,
+    detectedRegionComparable:observed.filter(x=>x.detectedCrop?.available).length,
+    perFamily:Object.fromEntries(specs.map(spec=>[spec.family,{
+      tableBoundsIoU:avg('tableBoundsIoU',observed.filter(x=>x.family===spec.family)),
+      rows:avg('rowBandIoU',observed.filter(x=>x.family===spec.family)),
+      columns:avg('columnBandIoU',observed.filter(x=>x.family===spec.family))}])),
+  };
+  const metrics={geometryOracleDiagnostic:diagnostic,
     realRasterGeneratorFamilies:3,realRasterImages:observed.length,
     codecs:['PNG','JPEG'],engine:'Tesseract.js kor+eng / production structure recognizer',
     precomputedOcrTokensSupplied:false,
