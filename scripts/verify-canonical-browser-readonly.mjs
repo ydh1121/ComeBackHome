@@ -80,7 +80,7 @@ async function verifyOn(browserType, label, device = {}) {
     // All route recommendations in this normal Chromium/WebKit regression
     // are deterministic fixtures. Never consume Kakao public-transit quota.
     let fixtureRouteRequests = 0;
-    await page.route(/\\/api\\/providers\\/routes(?:\\?|$)/, async (route) => {
+    await page.route(/\/api\/providers\/routes(?:\?|$)/, async (route) => {
       fixtureRouteRequests++;
       await route.fulfill({
         status: 200,
