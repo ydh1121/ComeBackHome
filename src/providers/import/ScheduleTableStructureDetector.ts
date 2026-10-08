@@ -289,36 +289,16 @@ export function pixelSupportedColumnBounds(
     .filter((item) => item.continuity >= 0.58)
     .sort((a, b) => a.x - b.x)
     .filter((item, index, items) => index === 0 || item.x - items[index - 1].x > 3);
-  // Repeated clock digits at the same x-coordinate across body rows can
-  // mimic long vertical table borders. Sample the QUIET margin near the top
-  // of physically detected body bands, where a real border continues but
-  // centered text glyphs normally do not. Never infer a date from geometry.
-  const quietY = structure.rowBands.slice(1)
-    .filter((band) => band.bounds.height >= 22)
-    .flatMap((band) => {
-      const start = band.bounds.y;
-      const h = band.bounds.height;
-      return [Math.round(start + Math.max(5, h * 0.08)),
-        Math.round(start + Math.max(9, h * 0.15))];
-    }).filter((y) => y > y0 && y < y1);
-  const quietSupported = quietY.length >= 2
-    ? continuous.filter(({ x }) => quietY.filter((y) =>
-      raster.luminance[y * raster.width + x] < 170).length /
-        quietY.length >= 0.72)
-    : [];
-  // A pixel margin that supports too few distinct grid lines is not enough
-  // to replace the original continuous evidence; fail conservatively.
-  const physical = quietSupported.length >= 3 ? quietSupported : continuous;
-  const gaps = physical.slice(1)
-    .map((item, i) => item.x - physical[i].x)
+  const gaps = continuous.slice(1)
+    .map((item, i) => item.x - continuous[i].x)
     .filter((width) => width >= Math.max(30, header.height * 0.6))
     .sort((a, b) => a - b);
   const shortlist = gaps.slice(0, Math.max(2, Math.ceil(gaps.length * 0.6)));
   const typical = shortlist.length >= 3 ? shortlist[Math.floor(shortlist.length / 2)] : 0;
-  const borders = physical.map((item) => item.x);
+  const borders = continuous.map((item) => item.x);
   if (typical > 0) {
-    for (let i = 1; i < physical.length; i++) {
-      const left = physical[i - 1].x, gap = physical[i].x - left;
+    for (let i = 1; i < continuous.length; i++) {
+      const left = continuous[i - 1].x, gap = continuous[i].x - left;
       const pieces = Math.round(gap / typical);
       if (pieces < 2 || pieces > 4 ||
           Math.abs(gap / pieces - typical) > typical * 0.16) continue;
