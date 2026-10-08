@@ -213,6 +213,7 @@ export async function handleApiRequest(
       const kakaoMapsJavaScriptKey =
         env.CBH_KAKAO_MAPS_JAVASCRIPT_KEY?.trim() ||
         env.VITE_CBH_KAKAO_JAVASCRIPT_KEY?.trim() ||
+        env.KAKAO_JAVASCRIPT_KEY?.trim() ||
         '';
       return json({
         kakaoMaps: {
