@@ -1,3 +1,4 @@
+import { PushClientError, categorizePushError } from '../../features/notifications/pushErrors';
 import type { EntityId } from '../../domain/common';
 import type { NotificationRules, PlaceKind } from '../../domain/models';
 import type {
@@ -141,50 +142,64 @@ export class NotificationService implements NotificationActions {
         await this.repository.setPermission(permission);
         return;
       }
-
-      const subscription = await this.subscriptionProvider.getCurrent();
-      if (!subscription) {
+      const current = await this.subscriptionProvider.getCurrent();
+      if (!current) {
         await this.repository.setSubscription(null);
         await this.repository.setPermission('granted');
         return;
       }
-
-      if (this.subscriptionTransport) {
-        await this.subscriptionTransport.upsert(subscription);
+      if (this.subscriptionProvider.isCompatible &&
+          !(await this.subscriptionProvider.isCompatible())) {
+        await this.repository.setSubscription(null);
+        await this.repository.setPermission('stale');
+        return;
       }
-      await this.repository.setSubscription(subscription);
+      if (this.subscriptionTransport) {
+        const registered = this.subscriptionTransport.checkRegistered
+          ? await this.subscriptionTransport.checkRegistered(current.endpoint)
+          : false;
+        if (!registered) await this.subscriptionTransport.upsert(current);
+      }
+      await this.repository.setSubscription(current);
       await this.repository.setPermission('subscribed');
-    } catch {
+    } catch (error) {
       await this.repository.setSubscription(null);
       await this.repository.setPermission('error');
-      throw new Error('Notification subscription sync failed.');
+      throw new PushClientError(categorizePushError(error));
     }
   }
 
-  async requestPermissionFromUserGesture(): Promise<void> {
+  async connectPushFromUserGesture(): Promise<void> {
     try {
-      const permission = await this.permissionProvider.requestPermissionFromUserGesture();
+      const before = await this.permissionProvider.getPermission();
+      if (before === 'denied') throw new PushClientError('NO_PERMISSION');
+      // Only request if permission is not already granted. The click
+      // remains the browser's user gesture for iOS PWA subscription.
+      const permission = before === 'granted'
+        ? before : await this.permissionProvider.requestPermissionFromUserGesture();
       await this.repository.setPermission(permission);
       if (permission !== 'granted') {
         await this.repository.setSubscription(null);
-        return;
+        throw new PushClientError('NO_PERMISSION');
+      }
+      if (this.subscriptionProvider.isCompatible &&
+          !(await this.subscriptionProvider.isCompatible())) {
+        await this.subscriptionProvider.unsubscribe();
       }
       const subscription = await this.subscriptionProvider.subscribe();
-      if (this.subscriptionTransport) {
-        try {
-          await this.subscriptionTransport.upsert(subscription);
-        } catch (error) {
-          await this.subscriptionProvider.unsubscribe().catch(() => undefined);
-          throw error;
-        }
-      }
+      if (this.subscriptionTransport) await this.subscriptionTransport.upsert(subscription);
       await this.repository.setSubscription(subscription);
       await this.repository.setPermission('subscribed');
-    } catch {
+    } catch (error) {
+      const reason = categorizePushError(error);
       await this.repository.setSubscription(null);
-      await this.repository.setPermission('error');
-      throw new Error('Notification permission or push subscription failed.');
+      await this.repository.setPermission(reason === 'STALE_SUBSCRIPTION' ? 'stale' : 'error');
+      throw new PushClientError(reason);
     }
+  }
+
+  requestPermissionFromUserGesture(): Promise<void> {
+    return this.connectPushFromUserGesture();
   }
 
   async disablePushSubscription(): Promise<void> {
@@ -198,6 +213,40 @@ export class NotificationService implements NotificationActions {
     await this.repository.setPermission(permission === 'granted' ? 'granted' : permission);
   }
 
-  updateRules(rules: NotificationRules): Promise<void> { return this.repository.setRules(rules); }
-  sendTestNotification(): Promise<void> { return this.testGateway.sendTestNotification(); }
+  updateRules(rules: NotificationRules): Promise<void> {
+    return this.repository.setRules(rules);
+  }
+
+  async sendTestNotification(): Promise<void> {
+    const permission = await this.permissionProvider.getPermission();
+    if (permission !== 'granted') throw new PushClientError('NO_PERMISSION');
+    const current = await this.subscriptionProvider.getCurrent();
+    if (!current) {
+      await this.repository.setSubscription(null);
+      await this.repository.setPermission('granted');
+      throw new PushClientError('NO_SUBSCRIPTION');
+    }
+    if (this.subscriptionProvider.isCompatible &&
+        !(await this.subscriptionProvider.isCompatible())) {
+      await this.repository.setSubscription(null);
+      await this.repository.setPermission('stale');
+      throw new PushClientError('STALE_SUBSCRIPTION');
+    }
+    try {
+      if (this.subscriptionTransport) {
+        const registered = this.subscriptionTransport.checkRegistered
+          ? await this.subscriptionTransport.checkRegistered(current.endpoint)
+          : false;
+        if (!registered) await this.subscriptionTransport.upsert(current);
+      }
+      await this.testGateway.sendTestNotification();
+    } catch (error) {
+      const reason = categorizePushError(error);
+      if (reason === 'STALE_SUBSCRIPTION') {
+        await this.repository.setSubscription(null);
+        await this.repository.setPermission('stale');
+      }
+      throw new PushClientError(reason);
+    }
+  }
 }
