@@ -446,3 +446,71 @@ jobs:
 
       - name: Run TRUE Korean model inference on identical generated glyph inputs
         run: timeout 1500s python -u scripts/ocr-korean-paddle-probe.py
+
+  ocr-paddle-official-onnx-browser:
+    name: Official Korean ONNX / real Chromium + WebKit WASM
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 81
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout isolated OCR Draft
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install JS browser OCR benchmark runtime
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2 onnxruntime-web@1.23.2
+
+      - name: Install pinned Korean test glyph font
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          if ! fc-match -f '%{family}' 'Nanum Gothic:lang=ko' | grep -qi Nanum; then
+            timeout 360s bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends fonts-nanum'
+            fc-cache -f
+          fi
+          fc-match -f '%{family}' 'Nanum Gothic:lang=ko' | grep -qi Nanum
+
+      - name: Download official verified Korean ONNX and compile actual CTC dictionary
+        run: |
+          python -m pip install --no-cache-dir "huggingface_hub>=0.35,<2" "PyYAML>=6,<7"
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          import hashlib, json, pathlib, shutil, yaml
+          repo='PaddlePaddle/korean_PP-OCRv5_mobile_rec_onnx'
+          path=pathlib.Path('public/ocr-paddle-probe')
+          path.mkdir(parents=True,exist_ok=True)
+          onnx=pathlib.Path(hf_hub_download(repo_id=repo,filename='inference.onnx'))
+          yaml_file=pathlib.Path(hf_hub_download(repo_id=repo,filename='inference.yml'))
+          digest=hashlib.sha256(onnx.read_bytes()).hexdigest()
+          assert digest=='92f0b7785e64fc9090106a241cf4c1eb97472824558272751b88a2a4476d3a08', 'Official model hash mismatch'
+          config=yaml.safe_load(yaml_file.read_text())
+          assert config['Global']['model_name']=='korean_PP-OCRv5_mobile_rec'
+          assert config['PostProcess']['name']=='CTCLabelDecode'
+          alphabet=config['PostProcess']['character_dict']
+          assert alphabet and '강' in alphabet and '0' in alphabet
+          shutil.copyfile(onnx,path/'inference.onnx')
+          (path/'dict.json').write_text(json.dumps(alphabet,ensure_ascii=False))
+          print('CBH_OFFICIAL_ONNX_SHA256='+digest)
+          print('CBH_OFFICIAL_ONNX_MODEL_BYTES='+str(onnx.stat().st_size))
+          print('CBH_OFFICIAL_ONNX_DICTIONARY_CHARS='+str(len(alphabet)))
+          ort=pathlib.Path('node_modules/onnxruntime-web/dist')
+          dest=pathlib.Path('public/ort')
+          dest.mkdir(parents=True,exist_ok=True)
+          for item in ort.glob('ort-wasm*'):
+            if item.suffix in ('.wasm','.mjs'):
+              shutil.copyfile(item,dest/item.name)
+          for item in dest.glob('*'):
+            print('ORT_ASSET='+item.name+' BYTES='+str(item.stat().st_size))
+          PY
+
+      - name: Run official ONNX CPU WASM in real Chromium and WebKit
+        run: node scripts/verify-ocr-paddle-onnx-browser.mjs
