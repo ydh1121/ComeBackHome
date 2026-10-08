@@ -344,10 +344,12 @@ export class ProviderTodayRepository implements TodayRepository {
 
     const currentPresence = presence?.workDate === date ? presence : null;
 
-    const route =
-      routes.find((candidate) => candidate.id === preferredRouteCandidateId) ??
-      routes.slice().sort(compareRoutes)[0] ??
-      null;
+    // A persisted preferred route must never silently turn into another
+    // route when the provider refresh changes candidate IDs. Report UNKNOWN
+    // until that exact stable route can be resolved again.
+    const route = preferredRouteCandidateId
+      ? routes.find((candidate) => candidate.id === preferredRouteCandidateId) ?? null
+      : routes.slice().sort(compareRoutes)[0] ?? null;
 
     const shiftEnd = schedule?.enabled ? schedule.end : undefined;
     const leftWorkAt = currentPresence?.leftWorkAt;
