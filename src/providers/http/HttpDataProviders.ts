@@ -49,6 +49,11 @@ export class HttpTransitAccessSearchProvider implements TransitAccessSearchProvi
   }
 
   async resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult> {
+    // Nearby official Seoul bus records already contain the canonical station
+    // identity and coordinates. Re-resolving by a shared name may pick a
+    // different direction/stop and silently corrupt selected access IDs.
+    if (result.mode === 'BUS' && result.id.startsWith('seoul-bus:') &&
+        result.providerId && result.coordinate) return result;
     const params = new URLSearchParams({
       mode: result.mode,
       name: result.name,
