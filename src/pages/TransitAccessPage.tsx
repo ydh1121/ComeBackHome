@@ -198,8 +198,12 @@ export function TransitAccessPage() {
         }
         const confirmed = await services.queries.getCommuteOverview(personId);
         const updated = confirmed.savedRoutes.find((item) => item.id === routeId);
-        const expected = existing?.id ?? null;
-        if (!updated || (!expected && !updated.originAccessPointIds?.length)) {
+        const resultPoint = confirmed.originAccessPoints.find((item) => sameProvider(item, result));
+        const wasSelected = Boolean(existing && selectedRouteIds.has(existing.id));
+        const isSelected = Boolean(resultPoint && (
+          updated?.originAccessPointIds ?? (updated?.originAccessPointId ? [updated.originAccessPointId] : [])
+        ).includes(resultPoint.id));
+        if (!updated || isSelected === wasSelected) {
           throw new Error('출발 교통편 저장을 다시 확인하지 못했습니다.');
         }
         return;
@@ -215,8 +219,12 @@ export function TransitAccessPage() {
         }
         const confirmed = await services.queries.getCommuteOverview(personId);
         const updated = confirmed.savedRoutes.find((item) => item.id === routeId);
-        const expected = existing?.id ?? null;
-        if (!updated || (!expected && !updated.destinationAccessPointIds?.length)) {
+        const resultPoint = confirmed.destinationAccessPoints.find((item) => sameProvider(item, result));
+        const wasSelected = Boolean(existing && selectedRouteIds.has(existing.id));
+        const isSelected = Boolean(resultPoint && (
+          updated?.destinationAccessPointIds ?? (updated?.destinationAccessPointId ? [updated.destinationAccessPointId] : [])
+        ).includes(resultPoint.id));
+        if (!updated || isSelected === wasSelected) {
           throw new Error('도착 교통편 저장을 다시 확인하지 못했습니다.');
         }
         return;
