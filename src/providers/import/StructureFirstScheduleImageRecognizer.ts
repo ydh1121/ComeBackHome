@@ -13,6 +13,7 @@ import type {
   ScheduleTableStructureDetection,
   ScheduleTableStructureDetector,
 } from './ScheduleTableStructureDetector';
+import { pixelSupportedColumnBounds } from './ScheduleTableStructureDetector';
 import {
   buildScheduleCellMatrix,
   buildScheduleMatrixProbeRegions,
@@ -329,66 +330,18 @@ export function pixelDateHeaderRegions(
   detection: ScheduleTableStructureDetection,
 ): ImageTextProbeRegion[] {
   const header = detection.structure.rowBands[0]?.bounds;
-  if (!header || header.height < 14) return [];
-  const { raster, structure } = detection;
-  const yStart = Math.max(0, Math.round(header.y + header.height));
-  const yEnd = Math.min(raster.height, Math.round(
-    structure.tableBounds.y + structure.tableBounds.height));
-  if (yEnd - yStart < 18) return [];
-  const lines = structure.evidence.verticalLinePositions.map((position) => {
-    const x = Math.max(1, Math.min(raster.width - 2, Math.round(position)));
-    let dark = 0, count = 0;
-    // Only continuous dark pixels at the same X are structural lines.
-    // Taking the MINIMUM over neighbouring X coordinates admits
-    // text strokes as spurious column boundaries.
-    for (let y = yStart; y < yEnd; y += 3) {
-      const offset = y * raster.width + x;
-      if (raster.luminance[offset] < 140) dark += 1;
-      count += 1;
-    }
-    return { x, continuity: count > 0 ? dark / count : 0 };
-  }).filter((item) => item.continuity >= 0.58)
-    .sort((a, b) => a.x - b.x)
-    .filter((item, i, items) =>
-      i === 0 || item.x - items[i - 1].x > 3);
-  // A partially bordered table can omit an occasional vertical stroke.
-  // Recover ONLY plausible physical column ROIs from a repeated spacing
-  // supported by at least three observed gaps. This does not infer day
-  // numbers, dates or employee data; those still require actual Tesseract.
-  const gaps = lines.slice(1).map((item, i) => item.x - lines[i].x)
-    .filter((width) => width >= Math.max(30, header.height * 0.6))
-    .sort((a, b) => a - b);
-  const shortlist = gaps.slice(0, Math.max(2, Math.ceil(gaps.length * 0.6)));
-  const typical = shortlist.length >= 3
-    ? shortlist[Math.floor(shortlist.length / 2)] : 0;
-  const borders = lines.map((item) => item.x);
-  if (typical > 0) {
-    for (let i = 1; i < lines.length; i += 1) {
-      const left = lines[i - 1].x;
-      const gap = lines[i].x - left;
-      const count = Math.round(gap / typical);
-      if (count < 2 || count > 4 ||
-          Math.abs(gap / count - typical) > typical * 0.16) continue;
-      for (let j = 1; j < count; j += 1) borders.push(left + gap * j / count);
-    }
-  }
-  borders.sort((a, b) => a - b);
-  const regions: ImageTextProbeRegion[] = [];
-  for (let i = 1; i < borders.length; i += 1) {
-    const x = borders[i - 1];
-    const width = borders[i] - x;
-    if (width < Math.max(32, header.height * 0.7)) continue;
-    const pad = Math.max(2, Math.floor(width * 0.04));
-    regions.push({
-      id: 'date::grid-cell::' + i,
-      purpose: 'date',
-      x: x + pad,
+  if (!header) return [];
+  return pixelSupportedColumnBounds(detection).map((band, i) => {
+    const pad = Math.max(2, Math.floor(band.width * 0.04));
+    return {
+      id: 'date::grid-cell::' + (i + 1),
+      purpose: 'date' as const,
+      x: band.x + pad,
       y: header.y + Math.max(2, Math.floor(header.height * 0.08)),
-      width: width - pad * 2,
+      width: band.width - pad * 2,
       height: header.height * 0.84,
-    });
-  }
-  return regions.length >= 2 && regions.length <= 32 ? regions : [];
+    };
+  });
 }
 
 export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecognizer {
