@@ -261,6 +261,9 @@ jobs:
       - name: Verify server/client runtime VAPID public key parity
         run: npm run verify:push-runtime-key
 
+      - name: Verify VAPID P-256 pair self-check
+        run: npm run verify:vapid-pair
+
       - name: Verify production service worker push/click handlers without external push
         run: npm run verify:push-sw-local
 
