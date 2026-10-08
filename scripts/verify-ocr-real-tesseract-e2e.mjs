@@ -51,17 +51,19 @@ try {
           ctx.setTransform(input.scale, 0, input.skew * input.scale, input.scale, 0, 0);
           ctx.fillStyle = input.background;
           ctx.fillRect(0, 0, width, height);
+          // The generated quality corpus uses a pinned Korean font, not an
+          // OS-dependent sans-serif fallback (which differs across CI hosts).
           const left=22, top=75, labelWidth=151, cellWidth=141, rowHeight=82;
           const border='#5a5e65';
           ctx.fillStyle='#111';
           ctx.textAlign='left';
-          ctx.font='bold 27px sans-serif';
+          ctx.font='bold 27px "Nanum Gothic", sans-serif';
           ctx.fillText('2026년 10월',left+7,47);
-          ctx.font='bold 19px sans-serif';
+          ctx.font='bold 19px "Nanum Gothic", sans-serif';
           ctx.fillText('이름',left+15,top+49);
           for(let d=0;d<input.days;d++) {
             const x=left+labelWidth+d*cellWidth;
-            ctx.font='bold 21px sans-serif';
+            ctx.font='bold 21px "Nanum Gothic", sans-serif';
             ctx.fillText(String(d+1)+'일',x+47,top+48);
           }
           const names = [];
@@ -78,7 +80,7 @@ try {
               +last[(p*7+input.days)%last.length];
             names.push(name);
             const y=top+(p+1)*rowHeight;
-            ctx.font='bold 24px sans-serif';
+            ctx.font='bold 24px "Nanum Gothic", sans-serif';
             ctx.fillStyle='#12151b';
             ctx.fillText(name,left+14,y+52);
             for(let d=0;d<input.days;d++){
@@ -95,12 +97,12 @@ try {
               }
               if(state==='WORK'||state==='INCOMPLETE'){
                 ctx.fillStyle='#191919';
-                ctx.font='bold 23px sans-serif';
+                ctx.font='bold 23px "Nanum Gothic", sans-serif';
                 ctx.fillText('09:00',x+26,y+34);
                 if(state==='WORK')ctx.fillText('18:00',x+26,y+64);
               }else if(state==='UNREADABLE'){
                 ctx.fillStyle='#444';
-                ctx.font='bold 21px sans-serif';
+                ctx.font='bold 21px "Nanum Gothic", sans-serif';
                 ctx.fillText('메모',x+37,y+48);
               }
             }
