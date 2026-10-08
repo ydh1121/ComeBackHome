@@ -186,6 +186,13 @@ try{
   const detector=await vite.ssrLoadModule('/src/providers/import/ScheduleTableStructureDetector.ts');
   const matrixModule=await vite.ssrLoadModule('/src/providers/import/ScheduleCellMatrix.ts');
   const interp=await vite.ssrLoadModule('/src/providers/import/StructureFirstScheduleImageRecognizer.ts');
+  const clocks=await vite.ssrLoadModule('/src/providers/import/StructuredTableImageScheduleRecognizer.ts');
+  for(const [input,expected] of [
+    ['09:00','09:00'],['9:00','09:00'],['09','09:00'],
+    ['9','09:00'],['0900','09:00'],['930','09:30'],
+    ['09:30','09:30'],['9.5','09:30'],['1830','18:30'],
+    ['2360',null],['2500',null],['2',null],
+  ]) assert.equal(clocks.parseScheduleImageClock(input),expected,'Generic clock format '+input);
   for(const family of families){
     const familyResult={family:family.id,seed:family.seed,images:0,cells:0,correct:0,falseOff:0,falseWork:0,
       garbagePerson:0,unreadable:0,personTotal:0,personCorrect:0,dateTotal:0,dateCorrect:0,
