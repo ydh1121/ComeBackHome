@@ -330,6 +330,12 @@ jobs:
       - name: Evaluate generated A/B/C OCR raster matrix corpus without user images
         run: npm run verify:ocr-generated-corpus
 
+      - name: Prepare real Tesseract browser runtime (temporary CI workspace)
+        run: npm run prepare:ocr-assets
+
+      - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
+        run: npm run verify:ocr-real-tesseract-e2e
+
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
 
