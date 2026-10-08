@@ -135,19 +135,15 @@ async function verifyOn(browserType, label, device = {}) {
     // Simulate actual map drag in a browser, never a state-only unit mock.
     const mapBox = await page.locator('.kakao-transit-map').boundingBox();
     assert.ok(mapBox, 'Interactive map has no drag target');
-    const dragResponse = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return url.pathname === '/api/providers/transit-nearby' &&
-        url.searchParams.get('x') !== String(originCoordinate.x) &&
-        response.request().method() === 'GET';
-    }, { timeout: 25_000 });
     const startX = mapBox.x + mapBox.width * 0.65;
     const startY = mapBox.y + mapBox.height * 0.45;
-    if (label.startsWith('mobile')) {
-      // Mobile WebKit has no reliable drag input via Playwright's mouse, so
-      // WebKit uses synthesized touch gesture via touchscreen coordinates.
-      await page.touchscreen.tap(startX, startY);
-    } else {
+    if (!label.startsWith('mobile')) {
+      const dragResponse = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/providers/transit-nearby' &&
+          url.searchParams.get('x') !== String(originCoordinate.x) &&
+          response.request().method() === 'GET';
+      }, { timeout: 25_000 });
       await page.mouse.move(startX, startY);
       await page.mouse.down();
       await page.mouse.move(startX - 110, startY - 55, { steps: 12 });
