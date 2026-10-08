@@ -410,6 +410,17 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
         matrix = buildScheduleCellMatrix(detection, layout);
       }
     }
+    if (!matrix || matrix.dates.length < 2) {
+      const pixelCells = pixelDateHeaderRegions(detection);
+      if (pixelCells.length) {
+        const results = await this.extractor.extractRegions(file, pixelCells);
+        const tokens = results.flatMap((result) => result.tokens);
+        if (new Set(tokens.map((token) => token.text)).size >= 2) {
+          layout = { ...layout, tokens: [...layout.tokens, ...tokens] };
+          matrix = buildScheduleCellMatrix(detection, layout);
+        }
+      }
+    }
     const inputDiagnostics = inspectScheduleMatrixInput(detection, layout);
     if (!matrix || matrix.rows.length === 0 || matrix.dates.length < 2) {
       throw new Error(
