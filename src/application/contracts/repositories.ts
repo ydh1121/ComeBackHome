@@ -4,9 +4,9 @@ export interface PersonRepository { list(): Promise<Person[]>; get(id: EntityId)
 export interface ScheduleRepository { list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; upsertMany(entries: ScheduleEntry[]): Promise<void>; }
 export interface PlaceRepository { get(personId: EntityId, kind: PlaceKind): Promise<Place | null>; save(place: Place): Promise<void>; }
 export type RouteSearchSource = 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE';
-export type RouteProviderErrorCategory = 'NONE' | 'AUTH' | 'HTTP' | 'NO_RESULT' | 'INVALID_COORDINATE' | 'UNKNOWN';
+export type RouteProviderErrorCategory = 'NONE' | 'AUTH' | 'HTTP' | 'NO_RESULT' | 'INVALID_COORDINATE' | 'QUOTA' | 'UNKNOWN';
 export interface RouteSearchDiagnostics {
-  status: 'OK' | 'NO_RESULT' | 'PROVIDER_ERROR' | 'MISSING_PLACE' | 'INVALID_COORDINATE' | 'RUNTIME_DISABLED';
+  status: 'OK' | 'NO_RESULT' | 'PROVIDER_ERROR' | 'MISSING_PLACE' | 'INVALID_COORDINATE' | 'RUNTIME_DISABLED' | 'QUOTA_EXCEEDED';
   originPlaceCoordinatePresent: boolean;
   destinationPlaceCoordinatePresent: boolean;
   selectedOriginCount: number;

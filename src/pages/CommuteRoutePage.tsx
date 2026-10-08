@@ -116,7 +116,9 @@ export function CommuteRoutePage() {
   const stalePreferredRoute = Boolean(overview.preferredRouteCandidateId &&
     !candidates.some((candidate) => candidate.id === overview.preferredRouteCandidateId));
   const routeEmptyMessage =
-    routeDiagnostics?.status === 'MISSING_PLACE'
+    routeDiagnostics?.status === 'QUOTA_EXCEEDED'
+      ? '카카오 대중교통 경로 조회 한도가 초과되어 추천 경로를 표시할 수 없습니다. 이용 한도가 복구된 뒤 다시 확인해 주세요.'
+      : routeDiagnostics?.status === 'MISSING_PLACE'
       ? '출발지 또는 도착지가 설정되지 않았습니다.'
       : routeDiagnostics?.status === 'INVALID_COORDINATE'
         ? '출발지 또는 도착지 위치를 확인해 주세요.'

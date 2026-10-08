@@ -118,6 +118,7 @@ function validRouteCoordinate(value: { x: number; y: number } | undefined): valu
 
 function providerErrorCategory(error: unknown): RouteProviderErrorCategory {
   const message = error instanceof Error ? error.message : String(error);
+  if (/kakao-map\/public-transit-routing HTTP 400 CODE -10/.test(message)) return 'QUOTA';
   if (/unauthoriz|forbidden|invalid.api.key|authentication|permission|api key/i.test(message)) return 'AUTH';
   if (/HTTP|status|quota|limit has been exceeded|disabled|unavailable|not configured|activation blocked/i.test(message)) return 'HTTP';
   return 'UNKNOWN';
@@ -141,6 +142,42 @@ function accessPriority(origin: RouteSearchSource, destination: RouteSearchSourc
 }
 
 export class ProviderCommuteRepository implements CommuteRepository {
+  // A single page can request route candidates for Today and the commute
+  // editor independently. Share short-lived in-flight and successful searches
+  // within the active runtime without persisting private coordinates.
+  private readonly routeSearchCache = new Map<string, {
+    expiresAt: number;
+    value: Promise<TransitRouteResult[]>;
+  }>();
+  private quotaBlockedUntil = 0;
+
+  private searchProviderRoutes(origin: { x: number; y: number }, destination: { x: number; y: number }): Promise<TransitRouteResult[]> {
+    const now = systemRuntimeClock.now().getTime();
+    if (now < this.quotaBlockedUntil) {
+      return Promise.reject(new Error('Provider request failed: kakao-map/public-transit-routing HTTP 400 CODE -10'));
+    }
+    const key = [origin.x, origin.y, destination.x, destination.y].join(':');
+    const cached = this.routeSearchCache.get(key);
+    if (cached && now < cached.expiresAt) return cached.value;
+    if (cached) this.routeSearchCache.delete(key);
+
+    const value = this.routeProvider.search(origin, destination)
+      .catch((error: unknown) => {
+        this.routeSearchCache.delete(key);
+        if (providerErrorCategory(error) === 'QUOTA') {
+          // Avoid re-request storms for this app session. This is not a claim
+          // that the provider quota resets in sixty seconds.
+          this.quotaBlockedUntil = systemRuntimeClock.now().getTime() + 60_000;
+        }
+        throw error;
+      });
+    this.routeSearchCache.set(key, { expiresAt: now + 60_000, value });
+    if (this.routeSearchCache.size > 64) {
+      this.routeSearchCache.delete(this.routeSearchCache.keys().next().value!);
+    }
+    return value;
+  }
+
   constructor(
     private readonly persisted: CommuteRepository,
     private readonly places: PlaceRepository,
@@ -270,6 +307,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
 
     let hadProviderError = false;
     let runtimeDisabled = false;
+    let quotaExceeded = false;
     let hasPositiveSelectedPair = false;
     const found: FoundRoute[] = [];
     const search = async (originTarget: RouteTarget, destinationTarget: RouteTarget): Promise<void> => {
@@ -282,7 +320,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
       diagnostics.pairs.push(pair);
       diagnostics.searchPairCount++;
       try {
-        const results = await this.routeProvider.search(originTarget.coordinate, destinationTarget.coordinate);
+        const results = await this.searchProviderRoutes(originTarget.coordinate, destinationTarget.coordinate);
         pair.providerResultCount = results.length;
         if (!results.length) {
           pair.errorCategory = 'NO_RESULT';
@@ -304,21 +342,29 @@ export class ProviderCommuteRepository implements CommuteRepository {
         hadProviderError = true;
         diagnostics.failedPairCount++;
         pair.errorCategory = providerErrorCategory(error);
+        if (pair.errorCategory === 'QUOTA') quotaExceeded = true;
         if (error instanceof Error && /runtime is disabled|runtime is unavailable/i.test(error.message)) {
           runtimeDisabled = true;
         }
       }
     };
 
-    await Promise.all(origins.flatMap((originTarget) =>
-      destinations.map((destinationTarget) => search(originTarget, destinationTarget))));
+    // Sequential discovery avoids launching N×M parallel requests after a
+    // quota denial. All valid combinations remain eligible when API is healthy.
+    for (const originTarget of origins) {
+      if (quotaExceeded) break;
+      for (const destinationTarget of destinations) {
+        if (quotaExceeded) break;
+        await search(originTarget, destinationTarget);
+      }
+    }
 
     // Selected-pair discovery cannot suppress the original place-to-place
     // recommendation. Preserve any successful selected pairs; query bare
     // places only when the selected search yielded no usable routes.
     const selectedSearch = origins.some((item) => item.source !== 'PLACE') ||
       destinations.some((item) => item.source !== 'PLACE');
-    if (selectedSearch && !hasPositiveSelectedPair) {
+    if (selectedSearch && !hasPositiveSelectedPair && !quotaExceeded) {
       diagnostics.placeFallbackUsed = true;
       await search(placeOrigin, placeDestination);
     }
@@ -360,6 +406,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
     }).sort(compareRoutes);
     diagnostics.dedupedCandidateCount = candidates.length;
     diagnostics.status = candidates.length ? 'OK' :
+      quotaExceeded ? 'QUOTA_EXCEEDED' :
       runtimeDisabled ? 'RUNTIME_DISABLED' : hadProviderError ? 'PROVIDER_ERROR' : 'NO_RESULT';
     return { candidates, diagnostics };
   }

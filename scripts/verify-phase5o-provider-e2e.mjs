@@ -439,6 +439,40 @@ try {
     discovery.diagnostics.pairs[0]?.originSource === 'ROUTE_ACCESS',
     'CASE10 resolved route-specific selection must take precedence');
 
+  // 11: Quota -10 must stop additional selected pairs and any place fallback.
+  let quotaCalls = 0;
+  repoCase = caseRepo({ originPoints: [O1, O2], destinationPoints: [D1, D2],
+    search: async () => {
+      quotaCalls++;
+      throw new Error('Provider request failed: kakao-map/public-transit-routing HTTP 400 CODE -10');
+    } });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates.length === 0 &&
+    discovery.diagnostics.status === 'QUOTA_EXCEEDED' &&
+    discovery.diagnostics.searchPairCount === 1 &&
+    discovery.diagnostics.pairs[0]?.errorCategory === 'QUOTA' &&
+    discovery.diagnostics.placeFallbackUsed === false &&
+    quotaCalls === 1,
+    'CASE11 quota -10 must halt selected pair explosion and fallback');
+  const quotaReadback = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(quotaReadback.diagnostics.status === 'QUOTA_EXCEEDED' && quotaCalls === 1,
+    'CASE11 immediate repeated Today/read-only route query must not hit quota again');
+
+  // 12: Repeated read-only route queries share the same short-lived result.
+  let routeCalls = 0;
+  repoCase = caseRepo({ search: async () => {
+    routeCalls++;
+    return [fixtureRoute('cache-reused')];
+  } });
+  const cachedResults = await Promise.all([
+    repoCase.inspectRouteCandidates('mock-person-1'),
+    repoCase.inspectRouteCandidates('mock-person-1'),
+  ]);
+  expect(cachedResults.every((item) => item.candidates[0]?.id === 'cache-reused') && routeCalls === 1,
+    'CASE12 simultaneous read-only queries must deduplicate transit API fetch');
+  await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(routeCalls === 1, 'CASE12 immediate repeated route view must reuse a successful search');
+
   const realtimeCallsBeforeToday = { bus: calls.bus, subway: calls.subway };
   const today = new runtimeModule.ProviderTodayRepository(
     schedules,
