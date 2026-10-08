@@ -164,6 +164,7 @@ export async function createHybridApiApplicationServices(
   const imageRecognizer = new StructureFirstScheduleImageRecognizer(
     new BrowserScheduleTableStructureDetector(),
     imageTextExtractor,
+    availablePeople.map((person) => person.name),
   );
   const importFileSelection = new WorkbookImportFileSelectionAction(
     imports,
