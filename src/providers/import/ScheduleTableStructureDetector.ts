@@ -265,6 +265,72 @@ function bandsFromLines(
  * header. No OCR tokens, calendar values, or known fixture geometry enter here.
  * Returns [] when the raster does not support a trustworthy column grid.
  */
+/**
+ * Recover a physical repeated grid while discarding printed glyph strokes
+ * that happened to be continuous in the vertical projection. The candidate
+ * period and phase are supported by at least four independently observed
+ * raster lines. Missing strokes can be interpolated as geometry ONLY.
+ * OCR alone must still establish each calendar date.
+ */
+function repeatedPixelGridLines(
+  lines: Array<{ x: number; continuity: number }>,
+): number[] | null {
+  if (lines.length < 4 || lines.length > 64) return null;
+  let best: {
+    score: number;
+    period: number;
+    matches: Array<{ index: number; x: number; continuity: number }>;
+  } | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    for (let j = i + 1; j < lines.length; j++) {
+      for (let intervals = 1; intervals <= 4; intervals++) {
+        const period = (lines[j].x - lines[i].x) / intervals;
+        if (period < 46 || period > 300) continue;
+        for (const origin of lines) {
+          const tolerance = Math.max(2.5, period * 0.028);
+          const byIndex = new Map<number, { index: number; x: number; continuity: number }>();
+          for (const line of lines) {
+            const index = Math.round((line.x - origin.x) / period);
+            if (Math.abs(line.x - (origin.x + index * period)) > tolerance) continue;
+            const previous = byIndex.get(index);
+            if (!previous || line.continuity > previous.continuity) {
+              byIndex.set(index, { index, ...line });
+            }
+          }
+          const matches = [...byIndex.values()].sort((a, b) => a.index - b.index);
+          if (matches.length < 4 ||
+              matches[matches.length - 1].index - matches[0].index < 3) continue;
+          const score = matches.length * Math.sqrt(period);
+          if (!best || score > best.score) best = { score, period, matches };
+        }
+      }
+    }
+  }
+  if (!best) return null;
+  // There must be two genuine strokes bordering every interpolated gap.
+  const anchors = new Map(best.matches.map((item) => [item.index, item.x]));
+  const start = best.matches[0].index;
+  const end = best.matches[best.matches.length - 1].index;
+  if (end - start > 30) return null;
+  const result: number[] = [];
+  for (let index = start; index <= end; index++) {
+    const observed = anchors.get(index);
+    if (observed != null) {
+      result.push(observed);
+      continue;
+    }
+    const before = [...anchors.keys()].filter((value) => value < index)
+      .sort((a, b) => b - a)[0];
+    const after = [...anchors.keys()].filter((value) => value > index)
+      .sort((a, b) => a - b)[0];
+    if (before == null || after == null) return null;
+    result.push(anchors.get(before)! +
+      (anchors.get(after)! - anchors.get(before)!) *
+      (index - before) / (after - before));
+  }
+  return result;
+}
+
 export function pixelSupportedColumnBounds(
   detection: ScheduleTableStructureDetection,
 ): SchedulePixelBounds[] {
@@ -289,6 +355,19 @@ export function pixelSupportedColumnBounds(
     .filter((item) => item.continuity >= 0.58)
     .sort((a, b) => a.x - b.x)
     .filter((item, index, items) => index === 0 || item.x - items[index - 1].x > 3);
+  const supported = repeatedPixelGridLines(continuous);
+  if (supported) {
+    const result: SchedulePixelBounds[] = [];
+    for (let i = 1; i < supported.length; i++) {
+      const x = supported[i - 1];
+      const width = supported[i] - x;
+      if (width < Math.max(32, header.height * 0.7)) return [];
+      result.push({ x, y: 0, width, height: raster.height });
+    }
+    if (result.length >= 2 && result.length <= 32) return result;
+  }
+  // Preserve the earlier conservative fallback for tables without a
+  // sufficiently supported repeated grid (e.g. borderless layouts).
   const gaps = continuous.slice(1)
     .map((item, i) => item.x - continuous[i].x)
     .filter((width) => width >= Math.max(30, header.height * 0.6))
