@@ -67,6 +67,15 @@ async function verifyOn(browserType, label, device = {}) {
         (nearbyPayload.sourceStatus?.bus ?? 'UNKNOWN'));
 
     const page = await context.newPage();
+    const attemptedWrites = [];
+    await page.route('**/api/**', async (route) => {
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) {
+        attemptedWrites.push(route.request().method());
+        await route.abort('blockedbyclient');
+        return;
+      }
+      await route.continue();
+    });
     const javascriptErrors = [];
     page.on('pageerror', (error) => javascriptErrors.push(error.name ?? 'Error'));
 
@@ -203,6 +212,8 @@ async function verifyOn(browserType, label, device = {}) {
     await page.getByRole('button', { name: '선택한 추천 경로 저장' })
       .waitFor({ timeout: 10_000 });
 
+    assert.equal(attemptedWrites.length, 0,
+      'Read-only QA unexpectedly attempted production mutations');
     results.push({
       browser: label,
       mapSDK: 'PASS',
