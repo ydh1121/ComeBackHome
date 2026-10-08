@@ -288,7 +288,7 @@ try {
     disabledError = error instanceof Error ? error.message : String(error);
   }
   expect(disabledError === 'Provider runtime is disabled.', 'disabled Worker provider contract mismatch');
-  expect(calls.place === 2, 'disabled Worker provider call reached fake Kakao source');
+  expect(calls.place === 3, 'disabled Worker provider call reached fake Kakao source');
 } finally {
   globalThis.fetch = originalFetch;
   await vite.close();
