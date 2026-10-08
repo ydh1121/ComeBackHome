@@ -3,6 +3,31 @@ import type { EntityId, ISODate } from '../../domain/common';
 export interface PersonRepository { list(): Promise<Person[]>; get(id: EntityId): Promise<Person | null>; create(input: Omit<Person,'id'>): Promise<Person>; update(id: EntityId, patch: Partial<Omit<Person,'id'>>): Promise<Person>; }
 export interface ScheduleRepository { list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; upsertMany(entries: ScheduleEntry[]): Promise<void>; }
 export interface PlaceRepository { get(personId: EntityId, kind: PlaceKind): Promise<Place | null>; save(place: Place): Promise<void>; }
+export type RouteSearchSource = 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE';
+export type RouteProviderErrorCategory = 'NONE' | 'AUTH' | 'HTTP' | 'NO_RESULT' | 'INVALID_COORDINATE' | 'UNKNOWN';
+export interface RouteSearchDiagnostics {
+  status: 'OK' | 'NO_RESULT' | 'PROVIDER_ERROR' | 'MISSING_PLACE' | 'INVALID_COORDINATE' | 'RUNTIME_DISABLED';
+  originPlaceCoordinatePresent: boolean;
+  destinationPlaceCoordinatePresent: boolean;
+  selectedOriginCount: number;
+  selectedDestinationCount: number;
+  routeSpecificOriginCount: number;
+  routeSpecificDestinationCount: number;
+  staleAccessIdCount: number;
+  searchPairCount: number;
+  successfulPairCount: number;
+  failedPairCount: number;
+  totalRouteResultCount: number;
+  dedupedCandidateCount: number;
+  placeFallbackUsed: boolean;
+  pairs: Array<{
+    originSource: RouteSearchSource;
+    destinationSource: RouteSearchSource;
+    providerResultCount: number;
+    errorCategory: RouteProviderErrorCategory;
+  }>;
+}
+export interface RouteDiscovery { candidates: RouteCandidate[]; diagnostics: RouteSearchDiagnostics; }
 export interface CommuteRepository {
   listAccessPoints(personId: EntityId, kind: PlaceKind): Promise<TransitAccessPoint[]>;
   upsertAccessPoint(point: TransitAccessPoint): Promise<void>;
@@ -16,6 +41,7 @@ export interface CommuteRepository {
   saveSavedRoute(route: SavedCommuteRoute): Promise<void>;
   setActiveSavedRoute(personId: EntityId, routeId: EntityId): Promise<void>;
   listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]>;
+  inspectRouteCandidates?(personId: EntityId): Promise<RouteDiscovery>;
   getPreferredRouteCandidateId(personId: EntityId): Promise<EntityId | null>;
   setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void>;
 }
