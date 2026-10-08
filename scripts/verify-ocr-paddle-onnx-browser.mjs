@@ -16,7 +16,32 @@ const size={onnxBytes:fs.statSync(model).size,dictBytes:fs.statSync(dict).size,
             runtimeWasmBytes:fs.statSync(wasm).size};
 assert.ok(size.onnxBytes<=25*1024*1024,'Cloudflare Pages 25MiB per-file cap');
 assert.ok(size.runtimeWasmBytes<=25*1024*1024,'Cloudflare Pages WASM asset cap');
-const web=await createServer({root,logLevel:'error',server:{host:'127.0.0.1',port:0}});
+// Vite's development transform refuses to import JS modules under public/.
+ // Serve the official ORT runtime via pre-transform middleware with exact
+ // same-origin MIME handling; this is a CI-only static asset route.
+const web=await createServer({
+ root,logLevel:'error',server:{host:'127.0.0.1',port:0},
+ plugins:[{
+   name:'cbh-ocr-ort-runtime-assets',
+   enforce:'pre',
+   configureServer(server){
+     server.middlewares.use((request,response,next)=>{
+       const url=new URL(request.url??'/', 'http://127.0.0.1');
+       if(!url.pathname.startsWith('/ort/'))return next();
+       const basename=url.pathname.slice('/ort/'.length);
+       if(!/^ort-wasm-[a-z0-9.-]+\\.(?:mjs|wasm)$/.test(basename)){
+         response.statusCode=404;response.end();return;
+       }
+       const asset=path.join(root,'public/ort',basename);
+       if(!fs.existsSync(asset)){response.statusCode=404;response.end();return;}
+       response.setHeader('Content-Type',
+         basename.endsWith('.mjs')?'text/javascript':'application/wasm');
+       response.setHeader('Cache-Control','no-store');
+       response.end(fs.readFileSync(asset));
+     });
+   },
+ }],
+});
 const browsers=[['CHROMIUM',chromium],['WEBKIT',webkit]];
 const results=[];
 try{
