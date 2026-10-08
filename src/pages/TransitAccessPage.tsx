@@ -479,33 +479,42 @@ export function TransitAccessPage() {
         ) : visible.map((point) => {
           const selected = selectedResultIds.has(point.id);
           return (
-            <button
-              type="button"
+            <div
               id={'transit-result-' + point.id}
               className={'transit-row transit-row-action' + (selected ? ' selected' : '') + (activeMarkerId === point.id ? ' map-active' : '')}
               key={point.id}
-              aria-pressed={selected}
-              disabled={workingId === point.id}
-              onClick={() => {
-                setActiveMarkerId(point.id);
-                void toggleResult(point);
-              }}
+              data-transit-id={point.id}
             >
-              <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
-              <span className="transit-copy">
-                <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
-                <span className="row-sub">
-                  {[
-                    point.displayCode ? '정류소 ' + point.displayCode : null,
-                    point.distanceM != null ? point.distanceM.toLocaleString() + 'm' : null,
-                    point.walkMinutes != null ? '도보 약 ' + point.walkMinutes + '분' : null,
-                  ].filter(Boolean).join(' · ')}
+              <button
+                type="button"
+                className="transit-row-focus"
+                aria-label={point.name + ' 지도에서 보기'}
+                aria-current={activeMarkerId === point.id ? 'true' : undefined}
+                onClick={() => activateMarker(point.id)}
+              >
+                <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
+                <span className="transit-copy">
+                  <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
+                  <span className="row-sub">
+                    {[
+                      point.displayCode ? '정류소 ' + point.displayCode : null,
+                      point.distanceM != null ? point.distanceM.toLocaleString() + 'm' : null,
+                      point.walkMinutes != null ? '도보 약 ' + point.walkMinutes + '분' : null,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
                 </span>
-              </span>
-              <span className="transit-trailing">
+              </button>
+              <button
+                type="button"
+                className="transit-row-toggle"
+                aria-label={point.name + (selected ? ' 선택 해제' : ' 선택')}
+                aria-pressed={selected}
+                disabled={workingId != null}
+                onClick={() => void toggleResult(point)}
+              >
                 {workingId === point.id ? '처리 중' : selected ? <Icon name="check" /> : <Icon name="plus" />}
-              </span>
-            </button>
+              </button>
+            </div>
           );
         })}
         {!loading && !visible.length ? (
