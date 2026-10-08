@@ -130,7 +130,7 @@ export async function createPaddleDetectedRegionRecognizer(){
       let inferenceMs=0;
       try{
         for(const region of regions){
-          if(region.purpose==='cell'){
+          if(region.purpose==='cell'&&!region.id.startsWith('weekly::')){
             const half=Math.max(1,region.height/2);
             const top=await infer(bitmap,{...region,height:half});
             const bottom=await infer(bitmap,{...region,y:region.y+half,height:region.height-half});
