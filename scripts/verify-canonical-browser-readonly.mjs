@@ -156,6 +156,32 @@ async function verifyOn(browserType, label, device = {}) {
     assert.equal(attemptedWrites.length, 0,
       'Focusing a map marker must not mutate production D1');
 
+    // Reverse sync: list focus must activate the SAME stable marker ID
+    // without silently adding/removing the persisted multi-selection.
+    const reverseSync = {};
+    for (const [filterName, mode] of [['bus', 'BUS'], ['subway', 'SUBWAY']]) {
+      await page.locator('.candidate-filter .filter-btn').filter({
+        hasText: mode === 'BUS' ? '버스' : '지하철',
+      }).click();
+      const row = page.locator('.transit-row[data-transit-id]').first();
+      await row.waitFor({ state: 'visible', timeout: 12_000 });
+      const id = await row.getAttribute('data-transit-id');
+      const focus = row.locator('.transit-row-focus');
+      if (label.startsWith('mobile')) await focus.tap();
+      else await focus.click();
+      const livePanel = page.getByRole('region', { name: '지도에서 선택한 교통편' });
+      await livePanel.waitFor({ timeout: 10_000 });
+      assert.equal(await livePanel.getAttribute('data-active-id'), id,
+        'List focus did not update active card identity for ' + mode);
+      const activeMarker = page.locator('.cbh-transit-map-marker.is-active');
+      assert.equal(await activeMarker.getAttribute('data-transit-id'), id,
+        'List focus did not activate matching map marker for ' + mode);
+      assert.equal(attemptedWrites.length, 0,
+        'List focus must not mutate production data');
+      reverseSync[mode] = 'PASS';
+    }
+    await page.locator('.candidate-filter .filter-btn').filter({ hasText: '전체' }).click();
+
     const checkedWidths = [];
     const measured = [];
     mkdirSync('artifacts/cbh-transit-card', { recursive: true });
@@ -315,6 +341,7 @@ async function verifyOn(browserType, label, device = {}) {
       markerInteraction: clickMode + '_PASS',
       markerHitCentersClear: hitChecks.filter((item) => item.visibleOnMap).length,
       markerListSync: 'FOCUS_ONLY_PASS',
+      listMarkerSync: reverseSync,
       realActiveCard: 'PASS',
       activeCardGeometry: measured,
       mapCenterRequery: label.startsWith('mobile') ? 'NOT_RUN_TOUCH_DRAG' : 'PASS',
