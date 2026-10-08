@@ -123,12 +123,19 @@ try {
           const file=new File([blob],'generated-'+input.id+'.'+input.format,
             {type:blob.type});
           const syntheticOcrHeaders=[];
+          const extractor=new TesseractScheduleImageTextExtractor(
+            new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
+            new BrowserScheduleOcrPreprocessor(),{useStructureFirstMode:true});
+          const originalExtract=extractor.extract.bind(extractor);
+          extractor.extract=async (...args)=>{
+            const layout=await originalExtract(...args);
+            syntheticOcrHeaders.push(...layout.tokens
+              .filter(token=>token.y<top+rowHeight)
+              .map(token=>token.text.slice(0,28)).slice(0,24));
+            return layout;
+          };
           const recognizer=new StructureFirstScheduleImageRecognizer(
-            new BrowserScheduleTableStructureDetector(),
-            new TesseractScheduleImageTextExtractor(
-              new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
-              new BrowserScheduleOcrPreprocessor(),
-              {useStructureFirstMode:true}),
+            new BrowserScheduleTableStructureDetector(),extractor,
             async()=>[...names],
           );
           let diagnostics=null;
