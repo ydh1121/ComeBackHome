@@ -219,14 +219,18 @@ export class SeoulBusRequestClient implements SeoulBusSource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
   async searchStops(query: string, _near: Coordinate, context?: ProviderRequestContext) {
+    const normalized = query.normalize('NFKC').trim();
+    const numericText = normalized.replace(/^(?:정류장|정류소)(?:번호)?\s*[:#]?\s*/, '').replace(/[-\s]/g, '');
+    const arsId = /^\d{4,5}$/.test(numericText) ? numericText.padStart(5, '0') : null;
+    const nameQuery = normalized.replace(/(?:정류장|정류소)$/, '').trim();
     const request: ProviderJsonRequest = {
       source: 'seoul-bus',
-      capability: 'bus-stop-name-search',
+      capability: arsId ? 'bus-stop-ars-search' : 'bus-stop-name-search',
       method: 'GET',
-      urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName',
-      query: {
-        stSrch: query,
-      },
+      urlTemplate: arsId
+        ? 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid'
+        : 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName',
+      query: arsId ? { arsId } : { stSrch: nameQuery || normalized },
       auth: seoulBusAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
