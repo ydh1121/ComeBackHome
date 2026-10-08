@@ -484,11 +484,10 @@ export function TransitAccessPage() {
               id={'transit-result-' + point.id}
               className={'transit-row transit-row-action' + (selected ? ' selected' : '') + (activeMarkerId === point.id ? ' map-active' : '')}
               key={point.id}
-              aria-pressed={selected}
+              aria-current={activeMarkerId === point.id ? 'true' : undefined}
               disabled={workingId === point.id}
               onClick={() => {
-                setActiveMarkerId(point.id);
-                void toggleResult(point);
+                activateMarker(point.id);
               }}
             >
               <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
@@ -503,7 +502,7 @@ export function TransitAccessPage() {
                 </span>
               </span>
               <span className="transit-trailing">
-                {workingId === point.id ? '처리 중' : selected ? <Icon name="check" /> : <Icon name="plus" />}
+                {selected ? <Icon name="check" /> : <Icon name="chevron-right" />}
               </span>
             </button>
           );
