@@ -525,3 +525,9 @@ jobs:
 
       - name: Run official ONNX CPU WASM in real Chromium and WebKit
         run: node scripts/verify-ocr-paddle-onnx-browser.mjs
+
+      - name: Reuse installed packages to prepare local Tesseract browser assets
+        run: npm run prepare:ocr-assets
+
+      - name: Complete common detected-crop Tesseract Paddle Hybrid matrix comparison
+        run: node scripts/verify-ocr-detected-engine-comparison.mjs
