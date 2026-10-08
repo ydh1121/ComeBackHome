@@ -71,7 +71,8 @@
     "verify:completion": "node scripts/verify-product-completion-gate.mjs",
     "verify:production-bundle": "node scripts/verify-production-bundle.mjs",
     "verify:ocr-structure-first": "node scripts/verify-schedule-table-structure-first.mjs",
-    "verify:ocr-generated-corpus": "node scripts/verify-ocr-generated-corpus.mjs"
+    "verify:ocr-generated-corpus": "node scripts/verify-ocr-generated-corpus.mjs",
+    "verify:push-recovery": "node scripts/verify-push-test-recovery.mjs"
   },
   "dependencies": {
     "react": "19.3.0",
