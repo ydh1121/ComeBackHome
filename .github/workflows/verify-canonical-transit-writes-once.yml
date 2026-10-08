@@ -1,0 +1,27 @@
+name: Canonical Reversible Transit Write QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-canonical-transit-writes-once.yml"
+      - "scripts/verify-canonical-transit-writes-reversible.mjs"
+permissions:
+  contents: read
+concurrency:
+  group: cbh-production-transit-reversible-qa
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CBH_REVERSIBLE_PRODUCTION_QA: APPROVED_ONE_RUN
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Verify UI→D1→reload and restore original flags
+        run: node scripts/verify-canonical-transit-writes-reversible.mjs
