@@ -133,6 +133,7 @@ async function verifyOn(browserType, label, device = {}) {
     await page.locator('[data-test-layout]').evaluate((node) => node.remove());
 
     // Simulate actual map drag in a browser, never a state-only unit mock.
+    const selectedChipCountBeforePan = await page.locator('.transit-selected-chip').count();
     const mapBox = await page.locator('.kakao-transit-map').boundingBox();
     assert.ok(mapBox, 'Interactive map has no drag target');
     const startX = mapBox.x + mapBox.width * 0.65;
@@ -150,6 +151,17 @@ async function verifyOn(browserType, label, device = {}) {
       await page.mouse.up();
       const draggedResponse = await dragResponse;
       assert.equal(draggedResponse.status(), 200, 'map-center requery failed');
+      await page.waitForTimeout(450);
+      assert.equal(await page.locator('.transit-selected-chip').count(),
+        selectedChipCountBeforePan,
+        'Map pan cleared previously stored transit selections');
+      const unchangedPlace = await api.get(
+        ORIGIN + '/api/people/' + pathId + '/places/origin'
+      );
+      assert.equal(unchangedPlace.status(), 200, 'saved place readback after pan');
+      const anchorAfterPan = (await unchangedPlace.json()).place?.coordinate;
+      assert.deepEqual(anchorAfterPan, originCoordinate,
+        'Map pan must never mutate saved origin coordinates');
     }
 
     const input = page.locator('.transit-inline-search input[type="search"]');
