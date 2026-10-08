@@ -481,6 +481,8 @@ export function TransitAccessPage() {
           return (
             <div
               id={'transit-result-' + point.id}
+              data-provider-id={point.providerId}
+              data-mode={point.mode}
               className={'transit-row transit-row-action' + (selected ? ' selected' : '') + (activeMarkerId === point.id ? ' map-active' : '')}
               key={point.id}
             >
