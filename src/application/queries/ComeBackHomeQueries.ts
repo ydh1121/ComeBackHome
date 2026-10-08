@@ -2,9 +2,10 @@ import type { EntityId, ISODate } from '../../domain/common';
 import type { EtaSnapshot, ImportBatch, NotificationSettings, Person, Place, PlaceKind, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TransitAccessPoint } from '../../domain/models';
 import type { PersonSelectionActions, TransitAccessFilter } from '../contracts/actions';
 import type { RepositoryBundle } from '../contracts/runtime';
+import type { RouteSearchDiagnostics } from '../contracts/repositories';
 import { rankRouteCandidates, selectNextShift, selectVisibleAccessPoints } from '../selectors';
 
-export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; }
+export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; routeDiagnostics?: RouteSearchDiagnostics; }
 export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; leftWorkAt: string | null; arrivedHomeAt: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
 export interface CommuteOverviewQueryResult extends PersonDetailQueryResult { preferredRouteCandidateId: EntityId | null; }
 
@@ -81,7 +82,7 @@ export class ComeBackHomeQueries {
   }
 
   async getPersonDetail(personId: EntityId): Promise<PersonDetailQueryResult> {
-    const [person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, routeCandidates, preferredRouteCandidateId] = await Promise.all([
+    const [person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, routeDiscovery, preferredRouteCandidateId] = await Promise.all([
       this.repositories.people.get(personId),
       this.repositories.places.get(personId, 'origin'),
       this.repositories.places.get(personId, 'destination'),
@@ -89,12 +90,14 @@ export class ComeBackHomeQueries {
       this.repositories.commute.listSavedRoutes(personId),
       this.repositories.commute.listAccessPoints(personId, 'origin'),
       this.repositories.commute.listAccessPoints(personId, 'destination'),
-      this.repositories.commute.listRouteCandidates(personId),
+      (this.repositories.commute.inspectRouteCandidates
+        ? this.repositories.commute.inspectRouteCandidates(personId)
+        : this.repositories.commute.listRouteCandidates(personId).then((candidates) => ({ candidates, diagnostics: undefined }))),
       this.repositories.commute.getPreferredRouteCandidateId(personId),
     ]);
-    const ranked = rankRouteCandidates(routeCandidates);
+    const ranked = rankRouteCandidates(routeDiscovery.candidates);
     const preferred = ranked.find((candidate) => candidate.id === preferredRouteCandidateId);
     const ordered = preferred ? [preferred, ...ranked.filter((candidate) => candidate.id !== preferred.id)] : ranked;
-    return { person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, routeCandidates: ordered };
+    return { person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, routeCandidates: ordered, ...(routeDiscovery.diagnostics ? { routeDiagnostics: routeDiscovery.diagnostics } : {}) };
   }
 }

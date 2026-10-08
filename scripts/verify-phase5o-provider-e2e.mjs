@@ -285,6 +285,160 @@ try {
   expect(candidates[0]?.id === 'e2e-route-fast', 'provider-backed commute did not rank Worker route result');
   expect(candidates[0]?.personId === 'mock-person-1', 'provider-backed commute lost person ownership');
 
+  // Regression matrix for the real route-discovery algorithm. These use the
+  // production repository class and fake transport; they never access D1.
+  const homeOrigin = { x: 126.9, y: 37.5 };
+  const homeDestination = { x: 127.3, y: 37.6 };
+  const originA = { x: 127.01, y: 37.5 };
+  const originB = { x: 127.02, y: 37.5 };
+  const destinationA = { x: 127.11, y: 37.6 };
+  const destinationB = { x: 127.12, y: 37.6 };
+  const point = (id, kind, coordinate, selected = true) => ({
+    id, personId: 'mock-person-1', providerId: id, placeKind: kind,
+    name: id, mode: 'SUBWAY', coordinate, selected,
+  });
+  const O1 = point('O1', 'origin', originA);
+  const O2 = point('O2', 'origin', originB);
+  const D1 = point('D1', 'destination', destinationA);
+  const D2 = point('D2', 'destination', destinationB);
+  const saved = (originAccessPointIds = [], destinationAccessPointIds = []) => ({
+    id: 'saved-fixture', personId: 'mock-person-1', position: 1, label: '경로 1',
+    originAccessPointIds, destinationAccessPointIds, viaAccessPointIds: [], active: true,
+  });
+  const fixtureRoute = (id, minutes = 30) => ({
+    id, totalMinutes: minutes, transferCount: 1, walkMinutes: 4,
+    steps: [{ type: 'SUBWAY', label: 'test line' }],
+  });
+  const caseRepo = ({ originPoints = [], destinationPoints = [], savedRoutes = [],
+    search, originCoordinate = homeOrigin, destinationCoordinate = homeDestination,
+    preferred = null }) => {
+    const persisted = {
+      listSavedRoutes: async () => savedRoutes,
+      listAccessPoints: async (_id, kind) => kind === 'origin' ? originPoints : destinationPoints,
+      getPreferredRouteCandidateId: async () => preferred,
+    };
+    const placeRepo = {
+      get: async (_id, kind) => ({
+        coordinate: kind === 'origin' ? originCoordinate : destinationCoordinate,
+      }),
+    };
+    return new runtimeModule.ProviderCommuteRepository(persisted, placeRepo, { search });
+  };
+  const isPlacePair = (o, d) => o.x === homeOrigin.x && d.x === homeDestination.x;
+
+  // 1: No selections -> ordinary place-to-place search.
+  let repoCase = caseRepo({ search: async (o, d) =>
+    isPlacePair(o, d) ? [fixtureRoute('base')] : [] });
+  let discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates.length === 1 && discovery.diagnostics.searchPairCount === 1 &&
+    discovery.diagnostics.pairs[0]?.originSource === 'PLACE',
+    'CASE1 zero selection must search bare saved places');
+
+  // 2: Both selected, provider returns valid selected-pair routes.
+  repoCase = caseRepo({ originPoints: [O1], destinationPoints: [D1],
+    search: async (o, d) => o.x === originA.x && d.x === destinationA.x
+      ? [fixtureRoute('selected')] : [] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates[0]?.id === 'selected' &&
+    discovery.candidates[0]?.preferenceMatchScore === 0.95 &&
+    discovery.diagnostics.placeFallbackUsed === false &&
+    discovery.diagnostics.searchPairCount === 1,
+    'CASE2 selected pair must rank and avoid unnecessary fallback');
+
+  // 3: N x N selected cartesian product, four independent provider requests.
+  repoCase = caseRepo({ originPoints: [O1, O2], destinationPoints: [D1, D2],
+    search: async (o, d) => [fixtureRoute('pair:' + o.x + ':' + d.x)] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates.length === 4 &&
+    discovery.diagnostics.searchPairCount === 4 &&
+    discovery.diagnostics.successfulPairCount === 4,
+    'CASE3 multi-access origin x destination must search every pair');
+
+  // 4: Partial provider errors cannot discard successful selected results.
+  repoCase = caseRepo({ originPoints: [O1, O2], destinationPoints: [D1],
+    search: async (o) => {
+      if (o.x === originA.x) throw new Error('HTTP request failed with status 429.');
+      return [fixtureRoute('survivor')];
+    } });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates[0]?.id === 'survivor' &&
+    discovery.diagnostics.failedPairCount === 1 &&
+    discovery.diagnostics.successfulPairCount === 1 &&
+    discovery.diagnostics.placeFallbackUsed === false,
+    'CASE4 keep good selected routes when a different pair fails');
+
+  // 5: Selected pairs all return zero -> fallback to saved place coordinates.
+  repoCase = caseRepo({ originPoints: [O1], destinationPoints: [D1],
+    search: async (o, d) => isPlacePair(o, d) ? [fixtureRoute('fallback')] : [] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates[0]?.id === 'fallback' &&
+    discovery.candidates[0]?.preferenceMatchScore == null &&
+    discovery.diagnostics.placeFallbackUsed &&
+    discovery.diagnostics.searchPairCount === 2,
+    'CASE5 all-selected-empty must use place fallback without false match label');
+
+  // 6: An unresolved saved access ID cannot shadow a valid standalone selection.
+  repoCase = caseRepo({ originPoints: [O1], destinationPoints: [D1],
+    savedRoutes: [saved(['deleted-origin'], ['deleted-destination'])],
+    search: async (o, d) => o.x === originA.x && d.x === destinationA.x
+      ? [fixtureRoute('fresh-selection')] : [] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates[0]?.id === 'fresh-selection' &&
+    discovery.diagnostics.staleAccessIdCount === 2 &&
+    discovery.diagnostics.pairs[0]?.originSource === 'SELECTED_ACCESS',
+    'CASE6 stale route IDs must resolve to fresh standalone selected points');
+
+  // 7: Stale preferred route does not remove candidates, while Today stays UNKNOWN.
+  repoCase = caseRepo({ preferred: 'obsolete-candidate',
+    search: async () => [fixtureRoute('available')] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates.length === 1, 'CASE7 stale preferred ID cannot suppress discovery');
+  const staleToday = new runtimeModule.ProviderTodayRepository(
+    schedules, repoCase, presence, busProvider, subwayProvider,
+    { now: () => new Date('2026-10-05T12:00:00.000Z') },
+  );
+  const staleSnapshot = await staleToday.get('mock-person-1');
+  expect(staleSnapshot?.eta.status === 'UNKNOWN' && !staleSnapshot?.routeCandidateId,
+    'CASE7 exact stale preferred route must still fail closed in Today');
+
+  // 8: All pairs fail -> provider error, never a false NO_RESULT.
+  repoCase = caseRepo({ originPoints: [O1], destinationPoints: [D1],
+    search: async () => { throw new Error('HTTP request failed with status 503.'); } });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates.length === 0 &&
+    discovery.diagnostics.status === 'PROVIDER_ERROR' &&
+    discovery.diagnostics.failedPairCount === 2 &&
+    discovery.diagnostics.pairs.every((pair) => pair.errorCategory === 'HTTP'),
+    'CASE8 provider failure must remain distinguishable after place fallback');
+
+  // 9: Reversed/invalid WGS84 access point coordinates fail safely to place.
+  repoCase = caseRepo({ originPoints: [point('invalid', 'origin', { x: 37.5, y: 127 })],
+    destinationPoints: [D1],
+    search: async (o, d) => isPlacePair(o, d) ? [fixtureRoute('valid-base')] : [] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates[0]?.id === 'valid-base' &&
+    discovery.diagnostics.placeFallbackUsed,
+    'CASE9 swapped access coordinates must not poison fallback');
+  repoCase = caseRepo({ originCoordinate: { x: 0, y: 0 },
+    search: async () => [fixtureRoute('never')] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates.length === 0 &&
+    discovery.diagnostics.status === 'INVALID_COORDINATE' &&
+    discovery.diagnostics.searchPairCount === 0,
+    'CASE9 invalid saved place coordinate must not call provider');
+
+  // 10: Route-specific resolved points override standalone selected sets.
+  repoCase = caseRepo({ originPoints: [O1, O2], destinationPoints: [D1, D2],
+    savedRoutes: [saved(['O2'], ['D2'])],
+    search: async (o, d) => o.x === originB.x && d.x === destinationB.x
+      ? [fixtureRoute('route-specific')] : [] });
+  discovery = await repoCase.inspectRouteCandidates('mock-person-1');
+  expect(discovery.candidates[0]?.id === 'route-specific' &&
+    discovery.candidates[0]?.preferenceMatchScore === 1 &&
+    discovery.diagnostics.searchPairCount === 1 &&
+    discovery.diagnostics.pairs[0]?.originSource === 'ROUTE_ACCESS',
+    'CASE10 resolved route-specific selection must take precedence');
+
   const realtimeCallsBeforeToday = { bus: calls.bus, subway: calls.subway };
   const today = new runtimeModule.ProviderTodayRepository(
     schedules,

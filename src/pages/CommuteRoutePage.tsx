@@ -107,10 +107,25 @@ export function CommuteRoutePage() {
     ? activeSavedRoute.destinationAccessPointIds ??
       (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
     : [];
-  const hasTransitPreference =
-    activeOriginIds.length > 0 ||
-    activeDestinationIds.length > 0 ||
-    (activeSavedRoute?.viaAccessPointIds.length ?? 0) > 0;
+  const resolvedOrigin = activeOriginIds.some((id) => overview.originAccessPoints.some((point) => point.id === id && point.coordinate));
+  const resolvedDestination = activeDestinationIds.some((id) => overview.destinationAccessPoints.some((point) => point.id === id && point.coordinate));
+  const hasTransitPreference = resolvedOrigin || resolvedDestination ||
+    overview.originAccessPoints.some((point) => point.selected && point.coordinate) ||
+    overview.destinationAccessPoints.some((point) => point.selected && point.coordinate);
+  const routeDiagnostics = overview.routeDiagnostics;
+  const stalePreferredRoute = Boolean(overview.preferredRouteCandidateId &&
+    !candidates.some((candidate) => candidate.id === overview.preferredRouteCandidateId));
+  const routeEmptyMessage =
+    routeDiagnostics?.status === 'MISSING_PLACE'
+      ? '출발지 또는 도착지가 설정되지 않았습니다.'
+      : routeDiagnostics?.status === 'INVALID_COORDINATE'
+        ? '출발지 또는 도착지 위치를 확인해 주세요.'
+        : routeDiagnostics?.status === 'RUNTIME_DISABLED' ||
+            routeDiagnostics?.status === 'PROVIDER_ERROR'
+          ? '추천 경로를 불러오지 못했습니다. 다시 시도해 주세요.'
+          : hasTransitPreference
+            ? '선택한 교통편과 기본 출발·도착 위치에서 경로를 찾지 못했습니다.'
+            : '현재 출발·도착 위치에서 경로를 찾지 못했습니다.';
   const visible = expanded ? candidates : candidates.slice(0, 3);
   const remain = Math.max(0, candidates.length - visible.length);
 
@@ -143,7 +158,7 @@ export function CommuteRoutePage() {
   };
 
   return (
-    <section className="commute-page" data-route={'/people/' + personId + '/commute'} data-page="CommuteRouteEditPage" data-state={overview.savedRoutes.length ? 'ROUTE_CONFIGURED' : 'EMPTY'}>
+    <section className="commute-page" data-route={'/people/' + personId + '/commute'} data-page="CommuteRouteEditPage" data-state={overview.savedRoutes.length ? 'ROUTE_CONFIGURED' : 'EMPTY'} data-route-search-status={routeDiagnostics?.status ?? 'UNAVAILABLE'} data-route-pair-count={routeDiagnostics?.searchPairCount ?? 0} data-route-candidate-count={candidates.length}>
       <BackButton fallbackTo={'/people/' + encodeURIComponent(personId)} />
       <h1 className="page-title">경로 설정</h1>
 
@@ -164,11 +179,25 @@ export function CommuteRoutePage() {
 
       <div className="route-section-head"><h2>추천 경로</h2></div>
       <div className="route-recommendation-context">
-        {hasTransitPreference
-          ? '선택한 출발지·도착지 교통의 위치 조합을 실제 출발·도착 기준으로 사용해 카카오 대중교통 경로를 추천합니다.'
-          : '선택한 교통이 없어 저장된 출발지·도착지 위치를 기준으로 카카오 대중교통 경로를 추천합니다.'}
+        {routeDiagnostics?.placeFallbackUsed && candidates.length
+          ? '선택한 교통편 조합에서 경로를 찾지 못해 저장된 출발지·도착지 위치로 추천했습니다. 선택 교통편은 이 결과에 반영되지 않았습니다.'
+          : hasTransitPreference
+            ? '선택한 출발지·도착지 교통을 우선 반영하고, 검색이 실패하면 저장된 위치로 재검색합니다.'
+            : '저장된 출발지·도착지 위치를 기준으로 카카오 대중교통 경로를 추천합니다.'}
       </div>
-      {!candidates.length ? <div className="search-inline-status" data-state="NO_RESULT">사용 가능한 추천 경로가 없습니다.</div> : null}
+      {!candidates.length ? (
+        <div className="search-inline-status" role="status" data-state={routeDiagnostics?.status ?? 'NO_RESULT'}>
+          {routeEmptyMessage}
+          {(routeDiagnostics?.status === 'PROVIDER_ERROR' || routeDiagnostics?.status === 'RUNTIME_DISABLED') ? (
+            <button type="button" className="text-btn" onClick={() => window.location.reload()}>다시 시도</button>
+          ) : null}
+        </div>
+      ) : null}
+      {stalePreferredRoute ? (
+        <div className="search-inline-status" data-state="STALE_PREFERRED_ROUTE">
+          이전에 저장한 경로를 현재 찾을 수 없습니다. 아래 추천 경로는 계속 선택할 수 있습니다.
+        </div>
+      ) : null}
       <div className="route-policy-list">
         {visible.map((route) => {
           const selected = route.id === (draftRouteId ?? overview.preferredRouteCandidateId);

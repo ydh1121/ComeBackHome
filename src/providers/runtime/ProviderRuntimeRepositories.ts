@@ -18,6 +18,9 @@ import type {
 import { calculateArrivalEta } from '../../application/services/ArrivalEtaCalculator';
 import type {
   CommuteRepository,
+  RouteDiscovery,
+  RouteProviderErrorCategory,
+  RouteSearchSource,
   PlaceRepository,
   PresenceRepository,
   ScheduleRepository,
@@ -105,6 +108,38 @@ function routeMatchesAccessPoint(
   });
 }
 
+// Only numeric Korean WGS84 longitude/latitude pairs can be sent to the
+// transit provider. Reject NaN, reversed axes and (0,0), without logging any
+// person's address or location.
+function validRouteCoordinate(value: { x: number; y: number } | undefined): value is { x: number; y: number } {
+  return !!value && Number.isFinite(value.x) && Number.isFinite(value.y) &&
+    value.x >= 124 && value.x <= 132 && value.y >= 33 && value.y <= 39;
+}
+
+function providerErrorCategory(error: unknown): RouteProviderErrorCategory {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/unauthoriz|forbidden|invalid.api.key|authentication|permission|api key/i.test(message)) return 'AUTH';
+  if (/HTTP|status|quota|limit has been exceeded|disabled|unavailable|not configured|activation blocked/i.test(message)) return 'HTTP';
+  return 'UNKNOWN';
+}
+
+type RouteTarget = {
+  coordinate: { x: number; y: number };
+  source: RouteSearchSource;
+};
+type FoundRoute = {
+  result: TransitRouteResult;
+  originSource: RouteSearchSource;
+  destinationSource: RouteSearchSource;
+};
+
+function accessPriority(origin: RouteSearchSource, destination: RouteSearchSource): number {
+  if (origin === 'ROUTE_ACCESS' && destination === 'ROUTE_ACCESS') return 1;
+  if (origin !== 'PLACE' && destination !== 'PLACE') return 0.95;
+  if (origin !== 'PLACE' || destination !== 'PLACE') return 0.5;
+  return 0;
+}
+
 export class ProviderCommuteRepository implements CommuteRepository {
   constructor(
     private readonly persisted: CommuteRepository,
@@ -157,6 +192,10 @@ export class ProviderCommuteRepository implements CommuteRepository {
   }
 
   async listRouteCandidates(personId: EntityId): Promise<RouteCandidate[]> {
+    return (await this.inspectRouteCandidates(personId)).candidates;
+  }
+
+  async inspectRouteCandidates(personId: EntityId): Promise<RouteDiscovery> {
     const [origin, destination, savedRoutes, originPoints, destinationPoints] = await Promise.all([
       this.places.get(personId, 'origin'),
       this.places.get(personId, 'destination'),
@@ -164,12 +203,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
       this.persisted.listAccessPoints(personId, 'origin'),
       this.persisted.listAccessPoints(personId, 'destination'),
     ]);
-    if (!origin?.coordinate || !destination?.coordinate) return [];
-
     const activeSavedRoute = savedRoutes.find((route) => route.active) ?? savedRoutes[0] ?? null;
-    const pointsById = new Map(
-      [...originPoints, ...destinationPoints].map((point) => [point.id, point]),
-    );
     const originIds = activeSavedRoute
       ? activeSavedRoute.originAccessPointIds ??
         (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
@@ -178,137 +212,156 @@ export class ProviderCommuteRepository implements CommuteRepository {
       ? activeSavedRoute.destinationAccessPointIds ??
         (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
       : [];
-    const viaIds = activeSavedRoute?.viaAccessPointIds ?? [];
-    // Route-specific 0..N access sets take priority. When no route access
-    // is configured, use the standalone persisted selected sets rather than
-    // silently dropping them in favor of bare place coordinates.
-    const originConfiguredPoints = originIds.length
-      ? originIds.map((id) => pointsById.get(id))
-          .filter((point): point is TransitAccessPoint => point != null)
-      : originPoints.filter((point) => point.selected);
-    const destinationConfiguredPoints = destinationIds.length
-      ? destinationIds.map((id) => pointsById.get(id))
-          .filter((point): point is TransitAccessPoint => point != null)
-      : destinationPoints.filter((point) => point.selected);
-    const viaConfiguredPoints = viaIds
-      .map((id) => pointsById.get(id))
-      .filter((point): point is TransitAccessPoint => point != null);
+    const originById = new Map(originPoints.map((point) => [point.id, point]));
+    const destinationById = new Map(destinationPoints.map((point) => [point.id, point]));
+    const routeOrigin = originIds.map((id) => originById.get(id))
+      .filter((point): point is TransitAccessPoint => !!point);
+    const routeDestination = destinationIds.map((id) => destinationById.get(id))
+      .filter((point): point is TransitAccessPoint => !!point);
+    const selectedOrigin = originPoints.filter((point) => point.selected);
+    const selectedDestination = destinationPoints.filter((point) => point.selected);
+    const staleAccessIdCount =
+      originIds.length - routeOrigin.length + destinationIds.length - routeDestination.length;
 
-    const originSearchTargets = originConfiguredPoints
-      .filter((point) => point.coordinate != null)
-      .map((point) => ({ coordinate: point.coordinate!, fromSelectedAccess: true }));
-    const destinationSearchTargets = destinationConfiguredPoints
-      .filter((point) => point.coordinate != null)
-      .map((point) => ({ coordinate: point.coordinate!, fromSelectedAccess: true }));
+    // Diagnostics deliberately contain counts and source classes only: no
+    // person names, private coordinates, stop IDs or provider credentials.
+    const diagnostics: RouteDiscovery['diagnostics'] = {
+      status: 'NO_RESULT',
+      originPlaceCoordinatePresent: !!origin?.coordinate,
+      destinationPlaceCoordinatePresent: !!destination?.coordinate,
+      selectedOriginCount: selectedOrigin.length,
+      selectedDestinationCount: selectedDestination.length,
+      routeSpecificOriginCount: routeOrigin.length,
+      routeSpecificDestinationCount: routeDestination.length,
+      staleAccessIdCount,
+      searchPairCount: 0,
+      successfulPairCount: 0,
+      failedPairCount: 0,
+      totalRouteResultCount: 0,
+      dedupedCandidateCount: 0,
+      placeFallbackUsed: false,
+      pairs: [],
+    };
+    if (!origin?.coordinate || !destination?.coordinate) {
+      diagnostics.status = 'MISSING_PLACE';
+      return { candidates: [], diagnostics };
+    }
+    if (!validRouteCoordinate(origin.coordinate) || !validRouteCoordinate(destination.coordinate)) {
+      diagnostics.status = 'INVALID_COORDINATE';
+      return { candidates: [], diagnostics };
+    }
 
-    const resolvedOriginTargets = originSearchTargets.length
-      ? originSearchTargets
-      : [{ coordinate: origin.coordinate, fromSelectedAccess: false }];
-    const resolvedDestinationTargets = destinationSearchTargets.length
-      ? destinationSearchTargets
-      : [{ coordinate: destination.coordinate, fromSelectedAccess: false }];
+    const toTargets = (points: TransitAccessPoint[], source: RouteSearchSource): RouteTarget[] =>
+      points.filter((point) => validRouteCoordinate(point.coordinate))
+        .map((point) => ({ coordinate: point.coordinate!, source }));
+    const originRouteTargets = toTargets(routeOrigin, 'ROUTE_ACCESS');
+    const destinationRouteTargets = toTargets(routeDestination, 'ROUTE_ACCESS');
+    const originSelectedTargets = toTargets(selectedOrigin, 'SELECTED_ACCESS');
+    const destinationSelectedTargets = toTargets(selectedDestination, 'SELECTED_ACCESS');
+    const placeOrigin: RouteTarget = { coordinate: origin.coordinate, source: 'PLACE' };
+    const placeDestination: RouteTarget = { coordinate: destination.coordinate, source: 'PLACE' };
 
-    const searchPairs = resolvedOriginTargets.flatMap((originTarget) =>
-      resolvedDestinationTargets.map((destinationTarget) => ({
-        originTarget,
-        destinationTarget,
-      }))
-    );
+    // A stale, opposite-side or invalid route-specific ID does not disable
+    // the valid standalone selection. Each side resolves independently.
+    const origins = originRouteTargets.length ? originRouteTargets :
+      originSelectedTargets.length ? originSelectedTargets : [placeOrigin];
+    const destinations = destinationRouteTargets.length ? destinationRouteTargets :
+      destinationSelectedTargets.length ? destinationSelectedTargets : [placeDestination];
 
-    try {
-      const pairResults = await Promise.all(
-        searchPairs.map(async ({ originTarget, destinationTarget }) => {
-          try {
-            const results = await this.routeProvider.search(
-              originTarget.coordinate,
-              destinationTarget.coordinate,
-            );
-            return results.map((result) => ({
-              result,
-              originFromSelectedAccess: originTarget.fromSelectedAccess,
-              destinationFromSelectedAccess: destinationTarget.fromSelectedAccess,
-            }));
-          } catch {
-            return [];
-          }
-        }),
-      );
-
-      const deduped = new Map<string, {
-        result: TransitRouteResult;
-        originFromSelectedAccess: boolean;
-        destinationFromSelectedAccess: boolean;
-      }>();
-
-      for (const item of pairResults.flat()) {
-        const existing = deduped.get(item.result.id);
-        const itemEndpointScore =
-          Number(item.originFromSelectedAccess) + Number(item.destinationFromSelectedAccess);
-        const existingEndpointScore = existing
-          ? Number(existing.originFromSelectedAccess) + Number(existing.destinationFromSelectedAccess)
-          : -1;
-        if (
-          !existing ||
-          itemEndpointScore > existingEndpointScore ||
-          (
-            itemEndpointScore === existingEndpointScore &&
-            item.result.totalMinutes < existing.result.totalMinutes
-          )
-        ) {
-          deduped.set(item.result.id, item);
+    let hadProviderError = false;
+    let runtimeDisabled = false;
+    let hasPositiveSelectedPair = false;
+    const found: FoundRoute[] = [];
+    const search = async (originTarget: RouteTarget, destinationTarget: RouteTarget): Promise<void> => {
+      const pair: RouteDiscovery['diagnostics']['pairs'][number] = {
+        originSource: originTarget.source,
+        destinationSource: destinationTarget.source,
+        providerResultCount: 0,
+        errorCategory: 'NONE',
+      };
+      diagnostics.pairs.push(pair);
+      diagnostics.searchPairCount++;
+      try {
+        const results = await this.routeProvider.search(originTarget.coordinate, destinationTarget.coordinate);
+        pair.providerResultCount = results.length;
+        if (!results.length) {
+          pair.errorCategory = 'NO_RESULT';
+          return;
+        }
+        diagnostics.successfulPairCount++;
+        diagnostics.totalRouteResultCount += results.length;
+        if (originTarget.source !== 'PLACE' || destinationTarget.source !== 'PLACE') {
+          hasPositiveSelectedPair = true;
+        }
+        for (const result of results) {
+          found.push({
+            result,
+            originSource: originTarget.source,
+            destinationSource: destinationTarget.source,
+          });
+        }
+      } catch (error) {
+        hadProviderError = true;
+        diagnostics.failedPairCount++;
+        pair.errorCategory = providerErrorCategory(error);
+        if (error instanceof Error && /runtime is disabled|runtime is unavailable/i.test(error.message)) {
+          runtimeDisabled = true;
         }
       }
+    };
 
-      return [...deduped.values()]
-        .map(({ result, originFromSelectedAccess, destinationFromSelectedAccess }): RouteCandidate => {
-          const originConfigured = originConfiguredPoints.length > 0;
-          const destinationConfigured = destinationConfiguredPoints.length > 0;
-          const viaConfigured = viaConfiguredPoints.length > 0;
-          const originMatch =
-            !originConfigured ||
-            originFromSelectedAccess ||
-            originConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
-          const destinationMatch =
-            !destinationConfigured ||
-            destinationFromSelectedAccess ||
-            destinationConfiguredPoints.some((point) => routeMatchesAccessPoint(result, point));
-          const viaMatch =
-            !viaConfigured ||
-            viaConfiguredPoints.every((point) => routeMatchesAccessPoint(result, point));
-          const configuredGroupCount =
-            Number(originConfigured) + Number(destinationConfigured) + Number(viaConfigured);
-          const matchedGroupCount =
-            Number(originConfigured && originMatch) +
-            Number(destinationConfigured && destinationMatch) +
-            Number(viaConfigured && viaMatch);
-          const preferenceMatchScore = configuredGroupCount
-            ? matchedGroupCount / configuredGroupCount
-            : 0;
-          const matchesPreference =
-            configuredGroupCount > 0 &&
-            originMatch &&
-            destinationMatch &&
-            viaMatch;
-          return {
-            id: result.id,
-            personId,
-            totalMinutes: result.totalMinutes,
-            transferCount: result.transferCount,
-            walkMinutes: result.walkMinutes ?? 0,
-            ...(result.accessMinutes == null ? {} : { accessMinutes: result.accessMinutes }),
-            ...(result.egressMinutes == null ? {} : { egressMinutes: result.egressMinutes }),
-            ...(result.fare == null ? {} : { fare: result.fare }),
-            ...(result.steps ? { steps: result.steps } : {}),
-            ...(preferenceMatchScore > 0 ? { preferenceMatchScore } : {}),
-            ...(matchesPreference
-              ? { matchesPreference: true, policyLabels: ['선택 교통 반영'] }
-              : {}),
-          };
-        })
-        .sort(compareRoutes);
-    } catch {
-      return [];
+    await Promise.all(origins.flatMap((originTarget) =>
+      destinations.map((destinationTarget) => search(originTarget, destinationTarget))));
+
+    // Selected-pair discovery cannot suppress the original place-to-place
+    // recommendation. Preserve any successful selected pairs; query bare
+    // places only when the selected search yielded no usable routes.
+    const selectedSearch = origins.some((item) => item.source !== 'PLACE') ||
+      destinations.some((item) => item.source !== 'PLACE');
+    if (selectedSearch && !hasPositiveSelectedPair) {
+      diagnostics.placeFallbackUsed = true;
+      await search(placeOrigin, placeDestination);
     }
+
+    const deduped = new Map<string, FoundRoute>();
+    for (const item of found) {
+      const existing = deduped.get(item.result.id);
+      if (!existing ||
+        accessPriority(item.originSource, item.destinationSource) >
+          accessPriority(existing.originSource, existing.destinationSource) ||
+        (accessPriority(item.originSource, item.destinationSource) ===
+          accessPriority(existing.originSource, existing.destinationSource) &&
+          item.result.totalMinutes < existing.result.totalMinutes)) {
+        deduped.set(item.result.id, item);
+      }
+    }
+
+    const viaIds = activeSavedRoute?.viaAccessPointIds ?? [];
+    const allPoints = [...originPoints, ...destinationPoints];
+    const viaPoints = viaIds.map((id) => allPoints.find((point) => point.id === id))
+      .filter((point): point is TransitAccessPoint => !!point);
+    const candidates = [...deduped.values()].map((item): RouteCandidate => {
+      const matchScore = accessPriority(item.originSource, item.destinationSource);
+      const viaMatch = !viaPoints.length || viaPoints.every((point) => routeMatchesAccessPoint(item.result, point));
+      const matchesPreference = matchScore >= 0.95 && viaMatch;
+      return {
+        id: item.result.id,
+        personId,
+        totalMinutes: item.result.totalMinutes,
+        transferCount: item.result.transferCount,
+        walkMinutes: item.result.walkMinutes ?? 0,
+        ...(item.result.accessMinutes == null ? {} : { accessMinutes: item.result.accessMinutes }),
+        ...(item.result.egressMinutes == null ? {} : { egressMinutes: item.result.egressMinutes }),
+        ...(item.result.fare == null ? {} : { fare: item.result.fare }),
+        ...(item.result.steps ? { steps: item.result.steps } : {}),
+        ...(matchScore > 0 ? { preferenceMatchScore: matchScore } : {}),
+        ...(matchesPreference ? { matchesPreference: true, policyLabels: ['선택 교통 반영'] } : {}),
+      };
+    }).sort(compareRoutes);
+    diagnostics.dedupedCandidateCount = candidates.length;
+    diagnostics.status = candidates.length ? 'OK' :
+      runtimeDisabled ? 'RUNTIME_DISABLED' : hadProviderError ? 'PROVIDER_ERROR' : 'NO_RESULT';
+    return { candidates, diagnostics };
   }
 
   getPreferredRouteCandidateId(personId: EntityId): Promise<EntityId | null> {
