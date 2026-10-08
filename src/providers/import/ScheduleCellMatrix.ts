@@ -277,8 +277,15 @@ export function buildScheduleCellMatrix(
   if (dates.length < 2) return null;
 
   const calendarContext = parseCalendarContext(tokens);
+  const firstHeaderRows = detection.structure.rowBands.slice(0, 2);
+  const headerZoneBottom = firstHeaderRows.length
+    ? Math.max(...firstHeaderRows.map((band) => band.bounds.y + band.bounds.height))
+    : detection.structure.tableBounds.y + detection.structure.tableBounds.height * 0.25;
   const dateHeaderTokens = tokens.filter(
-    (token) => parseDateEvidence(token.text, calendarContext) != null,
+    (token) =>
+      token.cy >= detection.structure.tableBounds.y &&
+      token.cy <= headerZoneBottom &&
+      parseDateEvidence(token.text, calendarContext, true) != null,
   );
   // A shift label such as "쉬는시간" may occur deep in the body; it must
   // never push the header boundary down and hide actual person rows.
