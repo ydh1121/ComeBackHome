@@ -207,6 +207,85 @@ try {
       error.message === 'Import contains unresolved people.';
   }
   expect(unresolvedBlocked, 'unresolved person must block even a resolved schedule choice');
+
+  // Weekly OCR imports require deliberate per-cell approval, unlike the
+  // preexisting XLSX import behavior tested above. No private image or D1.
+  const weeklyStore = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  weeklyStore.mutate((state) => {
+    state.importBatches = [];
+    state.schedules = state.schedules.filter((entry) =>
+      !['2099-04-05', '2099-04-06'].includes(entry.date)
+    );
+  });
+  const weeklyImports = new reposModule.MockImportRepository(weeklyStore);
+  const weeklyPeople = new reposModule.MockPersonRepository(weeklyStore);
+  const weeklySchedules = new reposModule.MockScheduleRepository(weeklyStore);
+  const weeklySelection = new selectionModule.WorkbookImportFileSelectionAction(
+    weeklyImports, weeklyPeople, weeklySchedules,
+    { async parse() { throw Error('Workbook must not be used for weekly image'); } },
+    { async parse() {
+      return {
+        detectedPeople: [{ sourceName: '여자친구', confidence: 0.99 }],
+        scheduleCandidates: [{
+          sourcePersonName: '여자친구', date: '2099-04-05',
+          start: '09:30', end: '23:30', sourceRow: 1, confidence: .95,
+        }],
+        reviewCandidates: [{
+          sourcePersonName: '여자친구', date: '2099-04-06',
+          start: null, end: null, sourceRow: 1, confidence: .1,
+          recognitionState: 'UNREADABLE', enabled: true,
+        }],
+        structure: {
+          sheet: 'weekly 7 day x start/end/break physical matrix',
+          headerRow: 0, personColumn: 'pixel label',
+          dateColumn: 'observed OCR', shiftColumn: 'start/end/break',
+          needsReview: true,
+        },
+        confidence: .90,
+      };
+    } },
+  );
+  const weeklyId = await weeklySelection.accept([{
+    kind: 'IMAGE', file: { name: 'generated-weekly-fixture.png' },
+  }]);
+  const weeklyBatch = await weeklyImports.getBatch(weeklyId);
+  expect(weeklyBatch?.reviewItems.length === 2,
+    'weekly fixture must produce both WORK and blank-review rows');
+  expect(weeklyBatch?.reviewItems.every((item) => item.resolution === null),
+    'weekly matched person must not auto-approve WORK or blank');
+  const weeklyBlank = weeklyBatch?.reviewItems.find((item) => item.date === '2099-04-06');
+  const weeklyWork = weeklyBatch?.reviewItems.find((item) => item.date === '2099-04-05');
+  expect(weeklyBlank?.imported.enabled === true &&
+    weeklyBlank.recognitionState === 'UNREADABLE',
+    'blank must not be pre-classified as OFF');
+  if (weeklyBlank && weeklyWork) {
+    const weeklyCommit = new commitModule.CommitImportReview(weeklyImports, weeklySchedules);
+    await weeklyImports.setDetectedPersonMatch(weeklyId, weeklyBlank.detectedPersonId, 'mock-person-1');
+    const afterMatch = await weeklyImports.getBatch(weeklyId);
+    expect(afterMatch?.reviewItems.every((item) => item.resolution === null),
+      'person match must not implicitly approve weekly rows');
+
+    let blocked = false;
+    try { await weeklyCommit.execute(weeklyId); }
+    catch (error) { blocked = String(error).includes('unreviewed'); }
+    expect(blocked, 'unreviewed weekly import must not commit');
+    expect(await weeklySchedules.getByDate('mock-person-1', '2099-04-06') === null,
+      'unreviewed blank must not mutate schedules');
+
+    await weeklyImports.setImportedEnabled(weeklyId, weeklyBlank.id, false);
+    const beforeApproval = await weeklyImports.getBatch(weeklyId);
+    expect(beforeApproval?.reviewItems.find((item) => item.id === weeklyBlank.id)?.resolution === null,
+      'explicit OFF toggle must reopen approval');
+    await weeklyImports.setResolution(weeklyId, weeklyBlank.id, 'NEW');
+    await weeklyImports.setResolution(weeklyId, weeklyWork.id, 'NEW');
+    await weeklyCommit.execute(weeklyId);
+    const off = await weeklySchedules.getByDate('mock-person-1', '2099-04-06');
+    const work = await weeklySchedules.getByDate('mock-person-1', '2099-04-05');
+    expect(off?.enabled === false,
+      'OFF can be saved only after user explicitly toggles and approves');
+    expect(work?.enabled !== false && work?.start === '09:30' && work?.end === '23:30',
+      'approved weekly decimal-time schedule did not save correctly');
+  }
 } finally {
   await vite.close();
 }
