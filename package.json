@@ -73,7 +73,8 @@
     "verify:ocr-structure-first": "node scripts/verify-schedule-table-structure-first.mjs",
     "verify:ocr-generated-corpus": "node scripts/verify-ocr-generated-corpus.mjs",
     "verify:push-recovery": "node scripts/verify-push-test-recovery.mjs",
-    "verify:push-sw-local": "node scripts/verify-push-serviceworker-local.mjs"
+    "verify:push-sw-local": "node scripts/verify-push-serviceworker-local.mjs",
+    "verify:ocr-real-tesseract-e2e": "node scripts/verify-ocr-real-tesseract-e2e.mjs"
   },
   "dependencies": {
     "react": "19.3.0",
