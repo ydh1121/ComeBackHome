@@ -260,7 +260,7 @@ export function interpretStructureFirstSchedule(
     if (resolved && !resolved.unreadable) continue;
     const focused = byRegion.get('person::' + row.sourceRow);
     const raw = String(focused?.text ?? row.preliminaryName ?? '')
-      .normalize('NFKC').trim().replace(/\\s+/g, '').toLowerCase();
+      .normalize('NFKC').trim().replace(/\s+/g, '').toLowerCase();
     if (NON_PERSON_LABELS.has(raw) ||
         /^(?:name|person|employee|sole|store|za|shift|break)$/i.test(raw)) continue;
     if (row.labelVisual?.occupancy === 'EMPTY') continue;
