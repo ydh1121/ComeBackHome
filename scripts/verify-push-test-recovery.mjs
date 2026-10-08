@@ -60,6 +60,60 @@ try{
   body=await response.json();
   assert.equal(body.reason,'SUBSCRIPTION_NOT_REGISTERED');
 
+  // Exercise the real API route with an in-memory D1 read and a deterministic
+  // fake transport. No external push is sent, no production D1 is modified.
+  const gatewayModule=await vite.ssrLoadModule('/worker/push/WebPushDeliveryGateway.ts');
+  const contracts=await vite.ssrLoadModule('/worker/contracts.ts');
+  const originalSend=gatewayModule.WebPushDeliveryGateway.prototype.send;
+  const diagnosticEndpoint='https://push.example.invalid/registered';
+  dbSubscriptions.push({
+    id:'diagnostic',endpoint:diagnosticEndpoint,p256dh:'sensitive-public-key',
+    auth:'sensitive-auth',expiration_time:null,active:1,
+    created_at:'2026-10-09T00:00:00Z',updated_at:'2026-10-09T00:00:00Z',
+  });
+  try {
+    for (const [httpStatus,kind,expectedReason] of [
+      [403,'permanent','PUSH_PROVIDER_AUTH_REJECTED'],
+      [400,'permanent','PUSH_PROVIDER_BAD_REQUEST'],
+      [429,'transient','PUSH_PROVIDER_RATE_LIMITED'],
+      [503,'transient','PUSH_PROVIDER_UNAVAILABLE'],
+    ]) {
+      gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
+        throw new contracts.PushDeliveryError('secret delivery error',kind,httpStatus);
+      };
+      const actual=await api.handleApiRequest(
+        new Request('https://come-back-home.pages.dev/api/notifications/test',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({endpoint:diagnosticEndpoint}),
+        }),env,null);
+      assert.equal(actual.status,502);
+      const payload=await actual.json();
+      assert.equal(payload.reason,expectedReason);
+      assert.equal(payload.upstreamStatus,httpStatus);
+      const serialized=JSON.stringify(payload);
+      assert.ok(!serialized.includes('secret delivery error'));
+      assert.ok(!serialized.includes(diagnosticEndpoint));
+      assert.ok(!serialized.includes('sensitive-auth'));
+      assert.ok(!serialized.includes(env.VAPID_PRIVATE_KEY));
+    }
+    gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
+      throw new Error('internal crypto or transport exception with private data');
+    };
+    const runtime=await api.handleApiRequest(
+      new Request('https://come-back-home.pages.dev/api/notifications/test',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({endpoint:diagnosticEndpoint}),
+      }),env,null);
+    assert.equal(runtime.status,502);
+    const runtimeResult=await runtime.json();
+    assert.equal(runtimeResult.reason,'PUSH_TRANSPORT_ERROR');
+    assert.equal(runtimeResult.upstreamStatus,null);
+    assert.ok(!JSON.stringify(runtimeResult).includes('internal crypto'));
+  } finally {
+    gatewayModule.WebPushDeliveryGateway.prototype.send=originalSend;
+    dbSubscriptions.length=0;
+  }
+
   const state={permission:'default',subscription:null};
   const repo={
     async getSettings(){return {...state,rules:{shiftEnd:false,etaChange:false}};},
@@ -114,6 +168,17 @@ try{
   assert.equal(errors.categorizePushError(new errors.PushClientError('NO_PERMISSION')),
     'NO_PERMISSION');
   assert.equal(errors.PUSH_FAILURE_MESSAGES.PUSH_PROVIDER_REJECTED.includes('거부'),true);
+  for (const reason of ['PUSH_PROVIDER_BAD_REQUEST','PUSH_PROVIDER_AUTH_REJECTED',
+      'PUSH_PROVIDER_RATE_LIMITED','PUSH_PROVIDER_UNAVAILABLE','PUSH_TRANSPORT_ERROR']) {
+    const clientError = Object.assign(new Error('Test push delivery failed'), {
+      status: 502,
+      reason,
+    });
+    assert.equal(errors.categorizePushError(clientError),reason,
+      'Specific server reason must override generic HTTP 502');
+    assert.ok(errors.PUSH_FAILURE_MESSAGES[reason]?.length > 16,
+      'Every new server failure must have a Korean UI explanation');
+  }
   // iOS Home Screen apps need the permission API invoked synchronously from
   // the click handler. Prove the request happens BEFORE any awaited work.
   const gestureEvents=[];

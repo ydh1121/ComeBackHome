@@ -20,6 +20,7 @@ import { createNotificationActivationReadiness } from './notification-activation
 import { createPushDeliveryRuntime, inspectPushDeliveryConfig } from './push-delivery-readiness';
 import { verifyVapidKeyPair } from './vapid-pair-validation';
 import { PushDeliveryError } from './contracts';
+import { classifyPushProviderFailure } from './push/WebPushDeliveryGateway';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
 type JsonObject = Record<string, unknown>;
@@ -982,7 +983,14 @@ export async function handleApiRequest(
           await subscriptions.deactivateByEndpoint(endpoint);
           return json({ error: 'Push subscription is no longer active.', reason: 'STALE_SUBSCRIPTION' }, 410);
         }
-        return json({ error: 'Test push delivery failed.', reason: 'PUSH_PROVIDER_REJECTED' }, 502);
+        const classified = classifyPushProviderFailure(error);
+        return json({
+          error: 'Test push delivery failed.',
+          reason: classified.reason,
+          // Upstream status is safe to disclose; never serialize a provider
+          // response body, subscription endpoint, keys or exception message.
+          upstreamStatus: classified.upstreamStatus,
+        }, 502);
       }
 
       return json({ sent: true });

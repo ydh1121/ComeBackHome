@@ -84,6 +84,8 @@ export class PushDeliveryError extends Error {
   constructor(
     message: string,
     readonly kind: PushDeliveryErrorKind,
+    /** Upstream push provider HTTP status, if present. Never an endpoint or response body. */
+    readonly providerStatus: number | null = null,
   ) {
     super(message);
     this.name = 'PushDeliveryError';

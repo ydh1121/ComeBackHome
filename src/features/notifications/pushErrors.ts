@@ -6,6 +6,11 @@ export type PushFailureReason =
   | 'VAPID_CONFIG_MISSING'
   | 'PUSH_RUNTIME_NOT_READY'
   | 'PUSH_PROVIDER_REJECTED'
+  | 'PUSH_PROVIDER_BAD_REQUEST'
+  | 'PUSH_PROVIDER_AUTH_REJECTED'
+  | 'PUSH_PROVIDER_RATE_LIMITED'
+  | 'PUSH_PROVIDER_UNAVAILABLE'
+  | 'PUSH_TRANSPORT_ERROR'
   | 'NETWORK_ERROR'
   | 'UNSUPPORTED_BROWSER'
   | 'SERVICE_WORKER_NOT_READY'
@@ -26,7 +31,8 @@ export class PushClientError extends Error {
 const REASONS = new Set<PushFailureReason>([
   'NO_PERMISSION','NO_SUBSCRIPTION','SUBSCRIPTION_NOT_REGISTERED',
   'STALE_SUBSCRIPTION','VAPID_CONFIG_MISSING','PUSH_RUNTIME_NOT_READY',
-  'PUSH_PROVIDER_REJECTED','NETWORK_ERROR','UNSUPPORTED_BROWSER','SERVICE_WORKER_NOT_READY',
+  'PUSH_PROVIDER_REJECTED','PUSH_PROVIDER_BAD_REQUEST','PUSH_PROVIDER_AUTH_REJECTED',
+  'PUSH_PROVIDER_RATE_LIMITED','PUSH_PROVIDER_UNAVAILABLE','PUSH_TRANSPORT_ERROR','NETWORK_ERROR','UNSUPPORTED_BROWSER','SERVICE_WORKER_NOT_READY',
   'APPLICATION_SERVER_KEY_MISSING','APPLICATION_SERVER_KEY_INVALID',
   'SUBSCRIBE_REJECTED','SERVER_REGISTER_FAILED','VAPID_KEY_MISMATCH','UNKNOWN',
 ]);
@@ -68,6 +74,11 @@ export const PUSH_FAILURE_MESSAGES: Record<PushFailureReason, string> = {
   VAPID_CONFIG_MISSING: '서버 알림 키 설정이 아직 준비되지 않았습니다.',
   PUSH_RUNTIME_NOT_READY: '서버 알림 전송 설정이 아직 준비되지 않았습니다.',
   PUSH_PROVIDER_REJECTED: '푸시 서비스가 알림 전송을 거부했습니다. 잠시 후 다시 시도해 주세요.',
+  PUSH_PROVIDER_BAD_REQUEST: '푸시 서비스가 알림 데이터 또는 구독 정보를 잘못된 요청으로 거부했습니다.',
+  PUSH_PROVIDER_AUTH_REJECTED: '푸시 서비스 인증이 거부되었습니다. 서버의 푸시 서명 또는 구독 키 설정을 확인해야 합니다.',
+  PUSH_PROVIDER_RATE_LIMITED: '푸시 서비스 전송 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도해 주세요.',
+  PUSH_PROVIDER_UNAVAILABLE: '푸시 서비스가 일시적으로 응답하지 않습니다. 이후 다시 전송을 확인해 주세요.',
+  PUSH_TRANSPORT_ERROR: '서버에서 푸시 전송 자체에 실패했습니다. 서버 실행 환경 또는 네트워크를 점검해야 합니다.',
   NETWORK_ERROR: '네트워크 연결을 확인하고 다시 시도해 주세요.',
   UNSUPPORTED_BROWSER: '이 브라우저에서 푸시 알림을 사용할 수 없습니다. iPhone은 홈 화면에 추가한 앱에서 확인해 주세요.',
   SERVICE_WORKER_NOT_READY: '알림 서비스를 준비하지 못했습니다. 앱을 다시 열고 연결해 주세요.',

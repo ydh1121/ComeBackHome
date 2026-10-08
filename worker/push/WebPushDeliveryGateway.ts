@@ -72,19 +72,41 @@ function classifyDeliveryError(error: unknown): PushDeliveryError {
   const statusCode = statusCodeOf(error);
   const message = messageOf(error);
 
-  if (statusCode === 404 || statusCode === 410) {
-    return new PushDeliveryError(message, 'terminal-subscription');
+  const kind = statusCode === 404 || statusCode === 410
+    ? 'terminal-subscription'
+    : statusCode == null || statusCode === 408 ||
+      statusCode === 425 || statusCode === 429 || statusCode >= 500
+      ? 'transient' : 'permanent';
+  return new PushDeliveryError(message, kind, statusCode);
+}
+
+/**
+ * Public, privacy-safe classification of a failed upstream push request.
+ * Do not forward raw provider bodies, endpoints, keys, or exception messages.
+ */
+export function classifyPushProviderFailure(error: unknown): {
+  reason: 'PUSH_PROVIDER_BAD_REQUEST' | 'PUSH_PROVIDER_AUTH_REJECTED' |
+    'PUSH_PROVIDER_RATE_LIMITED' | 'PUSH_PROVIDER_UNAVAILABLE' |
+    'PUSH_TRANSPORT_ERROR' | 'PUSH_PROVIDER_REJECTED';
+  upstreamStatus: number | null;
+} {
+  const raw = error instanceof PushDeliveryError ? error.providerStatus : null;
+  const status = raw != null && Number.isInteger(raw) && raw >= 400 && raw <= 599
+    ? raw : null;
+  if (status == null) return { reason: 'PUSH_TRANSPORT_ERROR', upstreamStatus: null };
+  if (status === 400 || status === 413 || status === 422) {
+    return { reason: 'PUSH_PROVIDER_BAD_REQUEST', upstreamStatus: status };
   }
-  if (
-    statusCode == null ||
-    statusCode === 408 ||
-    statusCode === 425 ||
-    statusCode === 429 ||
-    statusCode >= 500
-  ) {
-    return new PushDeliveryError(message, 'transient');
+  if (status === 401 || status === 403) {
+    return { reason: 'PUSH_PROVIDER_AUTH_REJECTED', upstreamStatus: status };
   }
-  return new PushDeliveryError(message, 'permanent');
+  if (status === 429) {
+    return { reason: 'PUSH_PROVIDER_RATE_LIMITED', upstreamStatus: status };
+  }
+  if (status >= 500 || status === 408 || status === 425) {
+    return { reason: 'PUSH_PROVIDER_UNAVAILABLE', upstreamStatus: status };
+  }
+  return { reason: 'PUSH_PROVIDER_REJECTED', upstreamStatus: status };
 }
 
 const defaultSender: WebPushSender = {

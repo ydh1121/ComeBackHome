@@ -17,9 +17,8 @@ for (const text of [
   'TTL: this.config.ttlSeconds',
   "statusCode === 404 || statusCode === 410",
   "statusCode === 429",
-  "new PushDeliveryError(message, 'terminal-subscription')",
-  "new PushDeliveryError(message, 'transient')",
-  "new PushDeliveryError(message, 'permanent')",
+  'new PushDeliveryError(message, kind, statusCode)',
+  'export function classifyPushProviderFailure',
 ]) {
   expect(source.includes(text), 'web push gateway missing ' + text);
 }
@@ -91,15 +90,37 @@ try {
       failures.push('expected push failure for ' + String(statusCode));
     } catch (error) {
       expect(error?.kind === expectedKind, 'status ' + String(statusCode) + ' classified as ' + String(error?.kind));
+      const diagnosed = module.classifyPushProviderFailure(error);
+      const expectedReason = statusCode === 400 ? 'PUSH_PROVIDER_BAD_REQUEST'
+        : statusCode === 401 || statusCode === 403 ? 'PUSH_PROVIDER_AUTH_REJECTED'
+        : statusCode === 429 ? 'PUSH_PROVIDER_RATE_LIMITED'
+        : statusCode === 503 ? 'PUSH_PROVIDER_UNAVAILABLE'
+        : statusCode === 404 || statusCode === 410 ? 'PUSH_PROVIDER_REJECTED'
+        : 'PUSH_TRANSPORT_ERROR';
+      expect(diagnosed.reason === expectedReason,
+        'status ' + String(statusCode) + ' public reason incorrect');
+      expect(diagnosed.upstreamStatus === statusCode,
+        'status ' + String(statusCode) + ' must retain only sanitized HTTP status');
+      expect(!JSON.stringify(diagnosed).includes(subscription.endpoint),
+        'public error must never include subscription endpoint');
     }
   };
 
   await expectKind(410, 'terminal-subscription');
   await expectKind(404, 'terminal-subscription');
+  await expectKind(401, 'permanent');
+  await expectKind(403, 'permanent');
   await expectKind(429, 'transient');
   await expectKind(503, 'transient');
   await expectKind(null, 'transient');
   await expectKind(400, 'permanent');
+
+  const unknownRuntimeFailure = module.classifyPushProviderFailure(new Error('secret runtime path'));
+  expect(unknownRuntimeFailure.reason === 'PUSH_TRANSPORT_ERROR' &&
+    unknownRuntimeFailure.upstreamStatus === null,
+    'runtime errors must not be mislabeled as upstream provider refusal');
+  expect(!JSON.stringify(unknownRuntimeFailure).includes('secret runtime path'),
+    'raw runtime exception must not leak to client');
 
   let invalidSubjectBlocked = false;
   try {
