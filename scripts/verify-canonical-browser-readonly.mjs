@@ -361,7 +361,17 @@ async function verifyOn(browserType, label, device = {}) {
         const response = await api.get(u.toString());
         probe.placePairStatus = response.status() === 200 ? 'HTTP_200' :
           [401, 403].includes(response.status()) ? 'AUTH' : 'HTTP_' + response.status();
-        if (response.ok()) probe.placePairRoutes = ((await response.json()).results ?? []).length;
+        const body = await response.json().catch(() => null);
+        if (response.ok()) {
+          probe.placePairRoutes = (body?.results ?? []).length;
+        } else {
+          // The Worker forwards only a numeric upstream code; redact any
+          // private error string, location or provider request URL.
+          const safeCode = typeof body?.error === 'string'
+            ? /^Provider request failed: kakao-map\/public-transit-routing HTTP \d{3} CODE (-?\d{1,5})$/.exec(body.error)?.[1]
+            : undefined;
+          if (safeCode) probe.placePairUpstreamCode = Number(safeCode);
+        }
       } catch {
         probe.placePairStatus = 'NETWORK_ERROR';
       }
