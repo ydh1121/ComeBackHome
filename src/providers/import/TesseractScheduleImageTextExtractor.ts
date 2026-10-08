@@ -397,7 +397,9 @@ function personLabelCandidate(
   // Auxiliary labels in this schedule family use materially smaller text than
   // employee names. Do not promote those rows into people merely because OCR
   // returned Korean text with high confidence.
-  if (regionHeight > 0 && typicalHeight / regionHeight < 0.38) return null;
+  // Label cells may have generous line height and padding. Reject truly
+  // tiny auxiliary captions, not normal-sized Korean names in tall rows.
+  if (regionHeight > 0 && typicalHeight / regionHeight < 0.22) return null;
 
   const text = usable.map((item) => item.text.replace(/\s+/g, '')).join('');
   const confidence = usable.reduce((sum, item) => sum + item.confidence, 0) / usable.length;
