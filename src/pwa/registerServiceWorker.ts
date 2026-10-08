@@ -1,7 +1,11 @@
 const SERVICE_WORKER_URL = '/sw.js';
 
 async function register(): Promise<void> {
-  await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: '/' });
+  const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
+    scope: '/',
+    updateViaCache: 'none',
+  });
+  await registration.update();
 }
 
 export function registerPwaServiceWorker(): void {
