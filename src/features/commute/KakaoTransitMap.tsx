@@ -99,6 +99,45 @@ function loadKakaoMapsSdk(appKey: string): Promise<any> {
   return sdkPromise;
 }
 
+// Closely-spaced bus stops can have distinct official IDs but nearly the
+// same on-screen pixel. Spread only overlapping visual buttons; never mutate
+// their true Kakao coordinates, route identity or stored walking distance.
+function spreadOverlappingTransitMarkers(map: any, markers: Map<string, any>): void {
+  const projection = map.getProjection?.();
+  const node = map.getNode?.();
+  if (!projection?.containerPointFromCoords) return;
+  const size = { width: node?.clientWidth ?? 0, height: node?.clientHeight ?? 0 };
+  const occupied: Array<{ x: number; y: number }> = [];
+  const offsets = [
+    [0, 0], [0, -40], [40, 0], [-40, 0], [0, 40],
+    [30, -30], [-30, -30], [30, 30], [-30, 30],
+    [0, -80], [80, 0], [-80, 0], [0, 80],
+    [60, -60], [-60, -60], [60, 60], [-60, 60],
+  ] as const;
+
+  for (const [, overlay] of [...markers.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const node = overlay.getContent?.();
+    if (!(node instanceof HTMLElement)) continue;
+    const anchorPoint = projection.containerPointFromCoords(overlay.getPosition());
+    if (!Number.isFinite(anchorPoint?.x) || !Number.isFinite(anchorPoint?.y)) continue;
+    const inBounds = (x: number, y: number) =>
+      size.width <= 0 || size.height <= 0 ||
+      (x >= 20 && x <= size.width - 20 && y >= 20 && y <= size.height - 12);
+    const candidate = offsets.find(([dx, dy]) => {
+      const x = anchorPoint.x + dx;
+      const y = anchorPoint.y + dy - 18;
+      return inBounds(x, y) &&
+        occupied.every((used) => Math.hypot(x - used.x, y - used.y) >= 39);
+    }) ?? [0, 0];
+    const x = anchorPoint.x + candidate[0];
+    const y = anchorPoint.y + candidate[1] - 18;
+    node.style.transform = `translate(${candidate[0]}px, ${candidate[1]}px)`;
+    node.dataset.spreadX = String(candidate[0]);
+    node.dataset.spreadY = String(candidate[1]);
+    occupied.push({ x, y });
+  }
+}
+
 export function KakaoTransitMap({
   center,
   centerLabel,
@@ -167,7 +206,12 @@ export function KakaoTransitMap({
         // The saved address marker stays fixed while the search center moves.
         mapInitialized = true;
         kakao.maps.event.addListener(map, 'dragend', publishCenter);
-        kakao.maps.event.addListener(map, 'zoom_changed', publishCenter);
+        kakao.maps.event.addListener(map, 'zoom_changed', () => {
+          publishCenter();
+          window.requestAnimationFrame(() => {
+            if (active) spreadOverlappingTransitMarkers(map, markersRef.current);
+          });
+        });
 
         setState('ready');
       })
@@ -226,6 +270,7 @@ export function KakaoTransitMap({
       });
       markersRef.current.set(point.id, marker);
     }
+    spreadOverlappingTransitMarkers(map, markersRef.current);
     return () => {
       for (const marker of markersRef.current.values()) marker.setMap(null);
       markersRef.current.clear();
