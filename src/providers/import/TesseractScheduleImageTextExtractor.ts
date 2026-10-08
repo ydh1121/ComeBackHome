@@ -725,6 +725,49 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           }
         }
 
+
+        if (region.purpose === 'date' && dateCrop &&
+            !words.some((word) => /^(?:[1-9]|[12][0-9]|3[01])$/.test(String(word.text ?? '').trim())) &&
+            !semanticDateWords.length) {
+          // Mixed Hangul+digits (for example a day suffix) can defeat a
+          // numeric-only pass. Re-read an ink-derived central crop, not a
+          // fixed date position or a source-supplied OCR token.
+          const bitmap = await createImageBitmap(dateCrop);
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Date crop retry context unavailable.');
+            const sx = Math.round(bitmap.width * 0.14);
+            const sw = Math.round(bitmap.width * 0.68);
+            const sy = Math.round(bitmap.height * 0.12);
+            const sh = Math.round(bitmap.height * 0.76);
+            canvas.width = sw * 2;
+            canvas.height = sh * 2;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            const focused = await canvasToBlob(canvas);
+            await worker.setParameters({
+              tessedit_pageseg_mode: String(PSM.SINGLE_LINE),
+              tessedit_char_whitelist: '0123456789',
+              preserve_interword_spaces: '1',
+            });
+            const retry = await worker.recognize(
+              focused, { rotateAuto: false }, { text: true, blocks: true });
+            const text = String(retry.data.text ?? '').normalize('NFKC')
+              .replace(/\s+/g, '');
+            if (/^0?(?:[1-9]|[12][0-9]|3[01])$/.test(text)) {
+              semanticDateWords = [{
+                text: String(Number(text)),
+                confidence: Number(retry.data.confidence) || 0,
+                bbox: { x0: 0, y0: 0, x1: rectangle.width, y1: rectangle.height },
+              }];
+            }
+          } finally {
+            bitmap.close();
+          }
+        }
+
         if (region.purpose === 'date') {
           // Read real OCR bounding boxes. Equal-width synthetic token slots
           // would turn legitimate sparse date headers into invented geometry.
