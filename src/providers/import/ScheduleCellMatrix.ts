@@ -63,7 +63,7 @@ function normalize(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[‐‑‒–—―]/g, '-')
-    .replace(/[s_()[]{}]/g, '');
+    .replace(/[\s_()[\]{}]/g, '');
 }
 
 function box(token: ImageTextToken): BoxToken {
@@ -98,9 +98,9 @@ function parseCalendarContext(tokens: BoxToken[]): { year: number | null; month:
   let month: number | null = null;
   for (const token of tokens) {
     const raw = String(token.text ?? '').normalize('NFKC').replace(/\s+/g, '');
-    const full = /(20d{2})년?[-./]?(1[0-2]|0?[1-9])월?/.exec(raw);
+    const full = /(20\d{2})년?[-./]?(1[0-2]|0?[1-9])월?/.exec(raw);
     if (full) return { year: Number(full[1]), month: Number(full[2]) };
-    const yearOnly = /(20d{2})년?/.exec(raw);
+    const yearOnly = /(20\d{2})년?/.exec(raw);
     if (yearOnly && year == null) year = Number(yearOnly[1]);
     const monthOnly = /^(1[0-2]|0?[1-9])월$/.exec(raw);
     if (monthOnly && month == null) month = Number(monthOnly[1]);
@@ -116,7 +116,7 @@ function parseDateEvidence(
   if (direct) return direct;
 
   const raw = value.normalize('NFKC').trim().replace(/\s+/g, '');
-  const dayOnly = /^(d{1,2})일$/.exec(raw);
+  const dayOnly = /^(\d{1,2})일$/.exec(raw);
   if (dayOnly && context.year != null && context.month != null) {
     return parseScheduleDate(
       String(context.year) + '-' +
@@ -126,8 +126,8 @@ function parseDateEvidence(
   }
 
   const monthDay =
-    /^(d{1,2})[/.](d{1,2})(?:일)?$/.exec(raw) ??
-    /^(d{1,2})월(d{1,2})(?:일)?$/.exec(raw);
+    /^(\d{1,2})[/.](\d{1,2})(?:일)?$/.exec(raw) ??
+    /^(\d{1,2})월(\d{1,2})(?:일)?$/.exec(raw);
   if (!monthDay || context.year == null) return null;
   return parseScheduleDate(
     String(context.year) + '-' +
