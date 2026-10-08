@@ -393,21 +393,20 @@ export function TransitAccessPage() {
           setMapCenter(center);
           setActiveMarkerId(null);
         }}
-        onSelect={(id) => {
-          activateMarker(id);
-          const result = visible.find((item) => item.id === id);
-          if (result) void toggleResult(result);
-        }}
+        // A marker focuses the active preview. D1 selection is a separate
+        // explicit action, shared with the list, not an accidental map tap.
+        onSelect={activateMarker}
       />
       <div className="transit-search-center" role="status">
         {nearbyLoading ? '지도 중심 주변 교통을 검색 중' :
           mapCenter ? '이동한 지도 중심 기준 · 가까운 교통편' : '저장된 위치 기준 · 가까운 교통편'}
       </div>
       {activePoint ? (
-        <div className="transit-map-active" role="region" aria-label="지도에서 선택한 교통편">
+        <div className="transit-map-active" role="region" aria-label="지도에서 선택한 교통편" data-active-id={activePoint.id}>
           <div className="transit-map-active-details">
-            <strong>{activePoint.mode === 'BUS' ? '버스' : '지하철'} · {activePoint.name}</strong>
-            <small>
+            <span className="transit-active-type">{activePoint.mode === 'BUS' ? '버스 정류장' : '지하철역'}</span>
+            <strong className="transit-active-name">{activePoint.name}</strong>
+            <small className="transit-active-meta">
               {[
                 activePoint.displayCode ? '정류소 ' + activePoint.displayCode : null,
                 activePoint.distanceM != null ? activePoint.distanceM.toLocaleString() + 'm' : null,
@@ -417,11 +416,13 @@ export function TransitAccessPage() {
           </div>
           <button
             type="button"
-            className="cta secondary"
+            className="transit-active-action"
+            aria-pressed={selectedResultIds.has(activePoint.id)}
             disabled={workingId != null}
             onClick={() => void toggleResult(activePoint)}
           >
-            {selectedResultIds.has(activePoint.id) ? '선택 해제' : '이 교통편 선택'}
+            {workingId === activePoint.id ? '처리 중' :
+              selectedResultIds.has(activePoint.id) ? '선택 해제' : '선택'}
           </button>
         </div>
       ) : null}
@@ -464,7 +465,7 @@ export function TransitAccessPage() {
               disabled={workingId != null}
               onClick={() => void removeSelectedPoint(point)}
               aria-label={point.name + ' 선택 해제'}
-            ><span>{point.name}{point.line ? ' · ' + point.line : ''}</span> ×</button>
+            ><span>{point.name}{point.displayCode ? ' · ' + point.displayCode : point.line ? ' · ' + point.line : ''}</span> ×</button>
           ))}
         </div>
       ) : null}
