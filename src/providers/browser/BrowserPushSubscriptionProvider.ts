@@ -6,7 +6,11 @@ function decodeBase64Url(value: string): Uint8Array {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
   const raw = atob(padded);
-  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  const decoded = Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  if (decoded.length !== 65 || decoded[0] !== 4) {
+    throw new Error('Application server key invalid.');
+  }
+  return decoded;
 }
 
 function normalizeSubscription(subscription: PushSubscription): WebPushSubscriptionRecord {
@@ -14,7 +18,28 @@ function normalizeSubscription(subscription: PushSubscription): WebPushSubscript
 }
 
 export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider {
-  constructor(private readonly config: WebPushClientConfig) {}
+  private runtimePublicKey: string | null = null;
+
+  constructor(
+    private readonly config: WebPushClientConfig,
+    private readonly resolveServerPublicKey?: () => Promise<string | null>,
+  ) {}
+
+  async prepare(): Promise<void> {
+    if (!this.resolveServerPublicKey) return;
+    const publicKey = (await this.resolveServerPublicKey())?.trim() ?? '';
+    if (!/^[A-Za-z0-9_-]{80,100}$/.test(publicKey)) {
+      throw new Error('Web Push client config is not ready.');
+    }
+    this.runtimePublicKey = publicKey;
+  }
+
+  private async getApplicationServerKey(): Promise<string> {
+    if (this.resolveServerPublicKey && !this.runtimePublicKey) await this.prepare();
+    const key = this.runtimePublicKey ?? this.config.applicationServerKey;
+    if (!key) throw new Error('Web Push client config is not ready.');
+    return key;
+  }
 
   async getCurrent(): Promise<WebPushSubscriptionRecord | null> {
     const registration = await this.getRegistration();
@@ -24,17 +49,18 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
 
   async isCompatible(): Promise<boolean> {
     const current = await (await this.getRegistration()).pushManager.getSubscription();
-    if (!current || !this.config.applicationServerKey) return !current;
+    if (!current) return true;
+    const publicKey = await this.getApplicationServerKey();
     const actualKey = current.options?.applicationServerKey;
     if (!actualKey) return true; // Unknown is not evidence of key rotation.
-    const expected = decodeBase64Url(this.config.applicationServerKey);
+    const expected = decodeBase64Url(publicKey);
     const actual = new Uint8Array(actualKey);
     return actual.length === expected.length &&
       actual.every((value, index) => value === expected[index]);
   }
 
   async subscribe(): Promise<WebPushSubscriptionRecord> {
-    if (!this.config.applicationServerKey) throw new Error('Web Push client config is not ready.');
+    const publicKey = await this.getApplicationServerKey();
 
     const registration = await this.getRegistration();
     const current = await registration.pushManager.getSubscription();
@@ -42,7 +68,7 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: decodeBase64Url(this.config.applicationServerKey),
+      applicationServerKey: decodeBase64Url(publicKey),
     });
     return normalizeSubscription(subscription);
   }
@@ -56,7 +82,16 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
   private async getRegistration(): Promise<ServiceWorkerRegistration> {
     if (!globalThis.isSecureContext) throw new Error('Secure context is required.');
     if (!('serviceWorker' in navigator)) throw new Error('Service Worker is not supported.');
-    const registration = await navigator.serviceWorker.ready;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const readinessDeadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('Service Worker is not ready.')), 12000);
+    });
+    let registration: ServiceWorkerRegistration;
+    try {
+      registration = await Promise.race([navigator.serviceWorker.ready, readinessDeadline]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
     if (!registration.pushManager) throw new Error('PushManager is not supported.');
     return registration;
   }
