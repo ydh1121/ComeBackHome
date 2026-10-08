@@ -347,12 +347,15 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           export CI=true
-          timeout 180s npm install --no-save --no-package-lock playwright@1.58.2
-          timeout 240s npx playwright install --with-deps chromium webkit
+          timeout 120s npm install --no-save --no-package-lock playwright@1.58.2
+          # GitHub's hosted runner already includes many browser libraries.
+          # --with-deps triggers a full apt installation that has repeatedly
+          # timed out before any Tesseract regression could execute.
+          timeout 180s npx playwright install chromium webkit
           if ! fc-list :lang=ko | grep -q .; then
-            timeout 120s sudo apt-get install -y fonts-noto-cjk
+            timeout 150s sudo apt-get install -y --no-install-recommends fonts-nanum
           fi
-          fc-list :lang=ko | grep -q .
+          fc-list :lang=ko | head -n 1
 
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
