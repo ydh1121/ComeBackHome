@@ -173,6 +173,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: cbh-phase5g-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   phase5g-local:
     runs-on: ubuntu-latest
