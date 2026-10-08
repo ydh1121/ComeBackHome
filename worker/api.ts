@@ -931,8 +931,8 @@ export async function handleApiRequest(
       const vapidKeyPairValid = await verifyVapidKeyPair(env);
       return json({
         vapidConfigured: !push.missing.some((value) => value.startsWith('VAPID_')),
-        pushDeliveryReady: push.ready && activeSubscriptionCount > 0,
-        pushTransportConfigured: push.ready,
+        pushDeliveryReady: push.ready && vapidKeyPairValid && activeSubscriptionCount > 0,
+        pushTransportConfigured: push.ready && vapidKeyPairValid,
         vapidKeyPairValid,
         pushMissing: push.missing,
         activeSubscriptionCount,
