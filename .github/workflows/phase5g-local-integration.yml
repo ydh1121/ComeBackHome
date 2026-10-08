@@ -410,3 +410,39 @@ jobs:
 
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
+
+  ocr-paddle-official-oracle:
+    name: Official Korean Paddle vs Tesseract / generated ORACLE
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 81
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      PADDLE_PDX_MODEL_SOURCE: BOS
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+    steps:
+      - name: Checkout isolated OCR Draft
+        uses: actions/checkout@v4
+
+      - name: Setup Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Korean raster font and Tesseract engine
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          timeout 360s sudo apt-get update -qq
+          timeout 360s sudo apt-get install -y --no-install-recommends fonts-nanum tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng
+          tesseract --version | head -1
+          fc-match -f '%{family}\n' 'Nanum Gothic:lang=ko'
+
+      - name: Install official Paddle inference dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary "paddlepaddle>=3.2,<4" "paddleocr>=3.2,<4" "Pillow>=11,<13"
+          python -m pip show paddlepaddle paddleocr Pillow
+
+      - name: Run TRUE Korean model inference on identical generated glyph inputs
+        run: timeout 1500s python -u scripts/ocr-korean-paddle-probe.py
