@@ -30,6 +30,7 @@ export interface ScheduleMatrixPersonRow {
   labelBounds: SchedulePixelBounds;
   preliminaryName: string | null;
   preliminaryConfidence: number;
+  labelVisual?: ScheduleCellVisualEvidence;
 }
 
 export interface ScheduleMatrixCell {
@@ -448,6 +449,7 @@ export function buildScheduleCellMatrix(
       labelBounds,
       preliminaryName,
       preliminaryConfidence,
+      labelVisual,
     });
 
     for (const item of provisionalCells) {
