@@ -79,6 +79,16 @@ for (const phrase of [
 ]) {
   expect(pagesWorkflow.includes(phrase), 'Pages runtime verification contract missing ' + phrase);
 }
+const pagesPushConfig = pagesWorkflow.split('  push:')[1]?.split('permissions:')[0] ?? '';
+expect(pagesPushConfig.includes('wrangler.jsonc'),
+  'canonical environment workflow must still run on infrastructure config changes');
+expect(!pagesPushConfig.includes('src/**') && !pagesPushConfig.includes('worker/**'),
+  'routine source changes must not repeatedly patch Pages deployment config');
+expect(pagesWorkflow.includes('An accepted request with an empty response may have created a'),
+  'ambiguous Pages POST success must not create duplicate deployments');
+expect(pagesWorkflow.includes('Pages deployment request exhausted without verified ID'),
+  'Pages POST retry loop must fail closed');
+
 expect(!pagesWorkflow.includes("throw new Error('Failed to read Pages deployment')"),
   'Pages runtime must retry transient deployment readback failures');
 
