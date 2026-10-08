@@ -122,3 +122,14 @@
 .commute-page .cbh-transit-map-marker:focus-visible{
   outline:3px solid #ffcc4d;outline-offset:3px;
 }
+/* Kakao CustomOverlay uses positioned DIV wrappers whose hit regions can
+   occlude a neighboring stop even after its visible button was spread.
+   Keep wrapper/pane hit-testing transparent; only the native button
+   receives pointer/touch events. Preserve map drag on the uncovered canvas. */
+.commute-page .kakao-transit-map div:has(> .cbh-transit-map-marker),
+.commute-page .kakao-transit-map div:has(> div > .cbh-transit-map-marker){
+  pointer-events:none;
+}
+.commute-page .kakao-transit-map .cbh-transit-map-marker{
+  pointer-events:auto;
+}

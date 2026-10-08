@@ -124,6 +124,11 @@ async function verifyOn(browserType, label, device = {}) {
           blockingId: top?.closest('.cbh-transit-map-marker')?.getAttribute('data-transit-id') ??
             top?.tagName ?? 'NONE',
           offset: [marker.getAttribute('data-spread-x'), marker.getAttribute('data-spread-y')],
+          blockerClass: top instanceof HTMLElement ? top.className?.toString().slice(0, 100) : '',
+          blockerMarkup: top?.outerHTML?.slice(0, 180),
+          blockerStack: document.elementsFromPoint(x, y).slice(0, 5)
+            .map((item) => item.tagName + '.' +
+              String(item.className ?? '').slice(0, 60)),
         };
       });
     });
