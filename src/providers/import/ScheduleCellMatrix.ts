@@ -268,6 +268,46 @@ function expandWeakRowsFromAnchors(
   });
 }
 
+export interface ScheduleMatrixRecoveryEvidence {
+  failureStage: 'DATE_HEADER' | 'PERSON_ROW_OR_OCCUPANCY';
+  rasterWidth: number;
+  rasterHeight: number;
+  layoutWidth: number;
+  layoutHeight: number;
+  structureSource: string;
+  pixelRowBands: number;
+  pixelColumnBands: number;
+  initialOcrTokens: number;
+  calendarYearResolved: boolean;
+  calendarMonthResolved: boolean;
+  dateAnchorCount: number;
+}
+
+// Privacy-safe counts and gate identity; no names, raw OCR text, or images
+// are sent anywhere. The private local evaluator may display these counts.
+export function inspectScheduleMatrixFailure(
+  detection: ScheduleTableStructureDetection,
+  layout: ImageTextLayout,
+): ScheduleMatrixRecoveryEvidence {
+  const tokens = layout.tokens.map(box);
+  const context = parseCalendarContext(tokens);
+  const dateAnchors = buildDateColumns(tokens, detection);
+  return {
+    failureStage: dateAnchors.length < 2 ? 'DATE_HEADER' : 'PERSON_ROW_OR_OCCUPANCY',
+    rasterWidth: detection.raster.width,
+    rasterHeight: detection.raster.height,
+    layoutWidth: layout.width,
+    layoutHeight: layout.height,
+    structureSource: detection.structure.evidence.source,
+    pixelRowBands: detection.structure.rowBands.length,
+    pixelColumnBands: detection.structure.columnBands.length,
+    initialOcrTokens: layout.tokens.length,
+    calendarYearResolved: context.year != null,
+    calendarMonthResolved: context.month != null,
+    dateAnchorCount: dateAnchors.length,
+  };
+}
+
 export function buildScheduleCellMatrix(
   detection: ScheduleTableStructureDetection,
   layout: ImageTextLayout,
