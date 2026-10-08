@@ -91,6 +91,7 @@ function loadKakaoMapsSdk(appKey: string): Promise<any> {
   }).catch((error) => {
     sdkPromise = null;
     sdkPromiseKey = '';
+    document.querySelector('script[data-cbh-kakao-map="1"]')?.remove();
     throw error;
   });
 
@@ -106,6 +107,8 @@ export function KakaoTransitMap({
   onSelect,
 }: KakaoTransitMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryNonce, setRetryNonce] = useState(0);
   const selectedKey = [...selectedIds].sort().join('|');
@@ -151,7 +154,7 @@ export function KakaoTransitMap({
             title: (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name,
             zIndex: selectedSet.has(point.id) ? 10 : 2,
           });
-          kakao.maps.event.addListener(marker, 'click', () => onSelect(point.id));
+          kakao.maps.event.addListener(marker, 'click', () => onSelectRef.current(point.id));
         }
 
         if (points.length) map.setBounds(bounds, 38, 38, 38, 38);
@@ -167,7 +170,7 @@ export function KakaoTransitMap({
       active = false;
       if (containerRef.current) containerRef.current.replaceChildren();
     };
-  }, [center.x, center.y, centerLabel, points, selectedId, selectedKey, onSelect, retryNonce]);
+  }, [center.x, center.y, centerLabel, points, selectedId, selectedKey, retryNonce]);
 
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
