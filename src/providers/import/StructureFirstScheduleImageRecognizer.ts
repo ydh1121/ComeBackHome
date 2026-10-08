@@ -321,6 +321,53 @@ export function interpretStructureFirstSchedule(
   };
 }
 
+// Grid-based fallback is conservative: every date must be OCR-observed
+// inside a real pixel-supported column. Never infer a date from its index.
+function pixelDateHeaderRegions(
+  detection: ScheduleTableStructureDetection,
+): ImageTextProbeRegion[] {
+  const header = detection.structure.rowBands[0]?.bounds;
+  if (!header || header.height < 14) return [];
+  const { raster, structure } = detection;
+  const yStart = Math.max(0, Math.round(header.y + header.height));
+  const yEnd = Math.min(raster.height, Math.round(
+    structure.tableBounds.y + structure.tableBounds.height));
+  if (yEnd - yStart < 18) return [];
+  const lines = structure.evidence.verticalLinePositions.map((position) => {
+    const x = Math.max(1, Math.min(raster.width - 2, Math.round(position)));
+    let dark = 0, count = 0;
+    for (let y = yStart; y < yEnd; y += 3) {
+      const offset = y * raster.width + x;
+      if (Math.min(
+        raster.luminance[offset - 1],
+        raster.luminance[offset],
+        raster.luminance[offset + 1],
+      ) < 140) dark += 1;
+      count += 1;
+    }
+    return { x, continuity: count > 0 ? dark / count : 0 };
+  }).filter((item) => item.continuity >= 0.58)
+    .sort((a, b) => a.x - b.x)
+    .filter((item, i, items) =>
+      i === 0 || item.x - items[i - 1].x > 3);
+  const regions: ImageTextProbeRegion[] = [];
+  for (let i = 1; i < lines.length; i += 1) {
+    const x = lines[i - 1].x;
+    const width = lines[i].x - x;
+    if (width < Math.max(32, header.height * 0.7)) continue;
+    const pad = Math.max(2, Math.floor(width * 0.04));
+    regions.push({
+      id: 'date::grid-cell::' + i,
+      purpose: 'date',
+      x: x + pad,
+      y: header.y + Math.max(2, Math.floor(header.height * 0.08)),
+      width: width - pad * 2,
+      height: header.height * 0.84,
+    });
+  }
+  return regions.length >= 2 && regions.length <= 32 ? regions : [];
+}
+
 export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecognizer {
   constructor(
     private readonly detector: ScheduleTableStructureDetector,
