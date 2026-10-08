@@ -22,6 +22,17 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
     return current ? normalizeSubscription(current) : null;
   }
 
+  async isCompatible(): Promise<boolean> {
+    const current = await (await this.getRegistration()).pushManager.getSubscription();
+    if (!current || !this.config.applicationServerKey) return !current;
+    const actualKey = current.options?.applicationServerKey;
+    if (!actualKey) return true; // Unknown is not evidence of key rotation.
+    const expected = decodeBase64Url(this.config.applicationServerKey);
+    const actual = new Uint8Array(actualKey);
+    return actual.length === expected.length &&
+      actual.every((value, index) => value === expected[index]);
+  }
+
   async subscribe(): Promise<WebPushSubscriptionRecord> {
     if (!this.config.applicationServerKey) throw new Error('Web Push client config is not ready.');
 
