@@ -29,7 +29,7 @@ const web=await createServer({
        const url=new URL(request.url??'/', 'http://127.0.0.1');
        if(!url.pathname.startsWith('/ort/'))return next();
        const basename=url.pathname.slice('/ort/'.length);
-       if(!/^ort-wasm-[a-z0-9.-]+\\.(?:mjs|wasm)$/.test(basename)){
+       if(!/^ort-wasm-[a-z0-9.-]+\.(?:mjs|wasm)$/.test(basename)){
          response.statusCode=404;response.end();return;
        }
        const asset=path.join(root,'public/ort',basename);
