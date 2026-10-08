@@ -21,7 +21,7 @@ assert.ok(browser.includes("serviceWorkers: 'block'") &&
   browser.includes('context.addInitScript(') && browser.includes("window.fetch ="),
   'Canonical PWA fixture must block service-worker bypass and intercept fetch');
 assert.ok(browserWorkflow.includes('workflow_dispatch:') &&
-  !/\\n  push:|\\n  pull_request:/.test(browserWorkflow),
+  !/\n  push:|\n  pull_request:/.test(browserWorkflow),
   'Canonical browser QA must not auto-run while quota is frozen');
 assert.ok(!browserWorkflow.includes('CBH_KAKAO_ROUTE_SMOKE: APPROVED_ONE_RUN'),
   'normal browser CI must not approve live routes');
@@ -40,11 +40,17 @@ assert.ok(oneShot.includes("process.env.CBH_KAKAO_ROUTE_SMOKE !== 'APPROVED_ONE_
 assert.ok(oneShot.includes("assert.equal(actualProviderCalls, 1") &&
   !oneShot.includes('for (let attempt'),
   'one-shot provider hard budget must remain one call, no retries');
+assert.ok(oneShot.includes("serviceWorkers: 'block'") &&
+  oneShot.includes('context.addInitScript('),
+  'One-shot must replay cached results even when browser fetch/SW would otherwise bypass routing');
 assert.ok(oneShot.includes("KAKAO_ROUTE_QUOTA_BLOCKED"),
   'one-shot script must explicitly stop on quota denial');
 assert.ok(routeRuntime.includes("if (quotaExceeded) break;") &&
   routeRuntime.includes("!quotaExceeded"),
   'runtime quota circuit breaker must prevent repeated pair/fallback calls');
+assert.ok(api.includes("isKakaoRouteCooldownActive(Date.now())") &&
+  api.includes("url.hostname === 'come-back-home.pages.dev'"),
+  'Canonical Pages route handler must short-circuit during the temporary freeze');
 assert.ok(api.includes("commitSha: BUILD_COMMIT_SHA") &&
   generator.includes('CF_PAGES_COMMIT_SHA'),
   'canonical version identifier build contract missing');
