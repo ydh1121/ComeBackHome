@@ -302,6 +302,17 @@ try {
     calls.bus === realtimeCallsBeforeToday.bus && calls.subway === realtimeCallsBeforeToday.subway,
     'future scheduled departure must not query realtime arrivals too early',
   );
+  // Provider-refresh missing route: do not replace selected B with route A.
+  await persistedCommute.setPreferredRouteCandidateId('mock-person-1', 'missing-e2e-route');
+  const stalePreferred = await today.get('mock-person-1');
+  expect(stalePreferred?.routeCandidateId == null,
+    'missing saved preferred route must not silently change identity');
+  expect(stalePreferred?.eta.status === 'UNKNOWN',
+    'missing selected route should display ETA UNKNOWN rather than fabricate an ETA from another route');
+  await persistedCommute.setPreferredRouteCandidateId('mock-person-1', 'e2e-route-fast');
+  const restored = await today.get('mock-person-1');
+  expect(restored?.routeCandidateId === 'e2e-route-fast' && restored?.eta.arrivalTime === '22:48',
+    'restored preferred route must be used by Today ETA');
 
   providerEnabled = false;
   let disabledError = '';
