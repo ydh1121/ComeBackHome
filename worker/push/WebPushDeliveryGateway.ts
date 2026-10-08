@@ -158,7 +158,7 @@ export async function buildWorkerEncryptedPushPayload(
     return await buildPushPayload(
       { data: payload, options: {
         ttl: options.TTL,
-        urgency: options.urgency,
+        urgency: options.urgency === 'very-low' ? 'low' : options.urgency,
       } },
       { endpoint: subscription.endpoint, expirationTime: null,
         keys: subscription.keys },
@@ -178,7 +178,7 @@ const defaultSender: WebPushSender = {
     let headers: Headers;
     let body: ArrayBuffer | null;
     try {
-      url = new URL(details.endpoint);
+      url = new URL(subscription.endpoint);
       if (url.protocol !== 'https:') throw new Error('HTTPS required');
       // Workers supplies forbidden transport-level headers automatically.
       headers = new Headers(details.headers as HeadersInit);
