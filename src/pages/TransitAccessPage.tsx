@@ -139,6 +139,16 @@ export function TransitAccessPage() {
     [source, filter],
   );
 
+  const mapPoints = useMemo(
+    () => visible.flatMap((point) => point.coordinate ? [{
+      id: point.id,
+      name: point.name,
+      mode: point.mode,
+      coordinate: point.coordinate,
+    }] : []),
+    [visible],
+  );
+
   const place = placeState.status === 'ready' ? placeState.place : null;
   const kindLabel = kind === 'origin' ? '출발지' : '도착지';
   const base = '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access';
@@ -298,12 +308,7 @@ export function TransitAccessPage() {
       <KakaoTransitMap
         center={place.coordinate}
         centerLabel={place.label || kindLabel}
-        points={visible.flatMap((point) => point.coordinate ? [{
-          id: point.id,
-          name: point.name,
-          mode: point.mode,
-          coordinate: point.coordinate,
-        }] : [])}
+        points={mapPoints}
         selectedIds={[...selectedResultIds]}
         onSelect={(id) => {
           const result = visible.find((item) => item.id === id);
