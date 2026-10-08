@@ -279,7 +279,7 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
   constructor(
     private readonly detector: ScheduleTableStructureDetector,
     private readonly extractor: RegionalImageTextExtractor,
-    private readonly knownPersonNames: string[] = [],
+    private readonly knownPersonNames: string[] | (() => Promise<string[]>) = [],
   ) {}
 
   async evaluate(
@@ -327,7 +327,12 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
     const regionalOcrMs = performance.now() - regionalOcrStarted;
     await onProgress?.(94);
 
-    const parsed = interpretStructureFirstSchedule(matrix, regionResults, this.knownPersonNames);
+    // The personal roster can change after application bootstrap. Read the
+    // current registered-name prior at recognition time, never a stale snapshot.
+    const currentPersonNames = typeof this.knownPersonNames === 'function'
+      ? await this.knownPersonNames()
+      : this.knownPersonNames;
+    const parsed = interpretStructureFirstSchedule(matrix, regionResults, currentPersonNames);
     await onProgress?.(98);
 
     return {
