@@ -43,3 +43,17 @@
 .commute-page .transit-map-active .cta{flex-shrink:0;min-height:40px;font-size:12px;padding:0 12px}
 .commute-page .transit-row.map-active{outline:2px solid #255cff;outline-offset:-2px;background:#f5f8ff}
 @media(max-width:390px){.commute-page .transit-map-active{align-items:stretch;flex-direction:column}.commute-page .transit-map-active .cta{align-self:flex-end}}
+
+/* P0 selected transit panel: never squeeze Hangul to one glyph per line. */
+.commute-page .transit-map-active{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:start;padding:12px;max-width:100%;min-width:0}
+.commute-page .transit-map-active .transit-map-active-details{display:grid;grid-template-columns:minmax(0,1fr);gap:3px;min-width:0;width:100%;word-break:keep-all;overflow-wrap:normal;white-space:normal}
+.commute-page .transit-map-active .transit-map-active-details strong{font-size:14px;color:#101828;font-weight:800;line-height:1.45}
+.commute-page .transit-map-active .transit-map-active-details small{font-size:12px;color:#667085;line-height:1.35}
+.commute-page .transit-map-active .cta{justify-self:start;align-self:start;width:auto;max-width:100%;min-width:116px;white-space:nowrap;min-height:40px;margin:0}
+.commute-page .transit-selected-summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
+.commute-page .transit-selected-summary>strong{flex:0 0 100%;font-size:12px;color:#344054}
+.commute-page .transit-selected-chip{max-width:100%;min-height:34px;display:inline-flex;gap:6px;align-items:center;border:1px solid #dce5f9;border-radius:999px;padding:5px 11px;background:#f4f7fe;color:#2850a4;font-size:12px;white-space:normal;text-align:left;word-break:keep-all}
+.commute-page .transit-selected-chip span{min-width:0}
+.commute-page .transit-search-center{margin:4px 0 8px;color:#667085;font-size:12px}
+
+.commute-page .kakao-map-center-crosshair{position:absolute;left:50%;top:50%;z-index:5;transform:translate(-50%,-50%);width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.78);box-shadow:0 1px 5px rgba(0,0,0,.16);color:#255cff;font-size:19px;font-weight:750;line-height:1;pointer-events:none;user-select:none}

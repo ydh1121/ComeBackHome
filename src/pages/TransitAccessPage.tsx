@@ -67,17 +67,33 @@ export function TransitAccessPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  // Search center is an ephemeral browsing coordinate, never a saved address.
+  const [mapCenter, setMapCenter] = useState<Coordinate | null>(null);
+  const discoveryCenter = mapCenter ??
+    (placeState.status === 'ready' ? placeState.place?.coordinate ?? null : null);
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
 
   useEffect(() => {
+    setMapCenter(null);
+    setActiveMarkerId(null);
+  }, [
+    personId, kind,
+    placeState.status === 'ready' ? placeState.place?.id : null,
+    placeState.status === 'ready' ? placeState.place?.coordinate?.x : null,
+    placeState.status === 'ready' ? placeState.place?.coordinate?.y : null,
+  ]);
+
+  useEffect(() => {
     let active = true;
-    if (placeState.status !== 'ready' || !placeState.place?.coordinate) {
+    if (placeState.status !== 'ready' || !placeState.place?.coordinate || !discoveryCenter) {
       if (placeState.status !== 'loading') setNearbyLoading(false);
       return () => { active = false; };
     }
 
     setNearbyLoading(true);
-    services.actions.transitSearch.nearby(personId, kind)
+    setNearbyError(null);
+    services.actions.transitSearch.nearby(personId, kind, discoveryCenter)
       .then((items) => {
         if (!active) return;
         setNearby(items);
@@ -86,6 +102,7 @@ export function TransitAccessPage() {
       .catch(() => {
         if (!active) return;
         setNearby([]);
+        setNearbyError('주변 교통 조회에 실패했습니다. 지도를 움직이거나 다시 시도해 주세요.');
         setNearbyLoading(false);
       });
 
@@ -96,6 +113,8 @@ export function TransitAccessPage() {
     kind,
     placeState.status,
     placeState.status === 'ready' ? placeState.place?.id : null,
+    discoveryCenter?.x,
+    discoveryCenter?.y,
   ]);
 
   useEffect(() => {
@@ -109,7 +128,7 @@ export function TransitAccessPage() {
 
     setSearchLoading(true);
     const timer = window.setTimeout(() => {
-      services.actions.transitSearch.search(personId, kind, trimmed)
+      services.actions.transitSearch.search(personId, kind, trimmed, discoveryCenter ?? undefined)
         .then((items) => {
           if (!active) return;
           setSearchResults(items);
@@ -126,7 +145,7 @@ export function TransitAccessPage() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [services, personId, kind, query]);
+  }, [services, personId, kind, query, discoveryCenter?.x, discoveryCenter?.y]);
 
   const searching = query.trim().length > 0;
   const source = searching ? searchResults : nearby;
@@ -194,6 +213,38 @@ export function TransitAccessPage() {
       .filter((result) => selectedPoints.some((point) => sameProvider(point, result)))
       .map((result) => result.id),
   );
+
+  const removeSelectedPoint = async (point: TransitAccessPoint) => {
+    if (workingId) return;
+    setWorkingId(point.id);
+    setActionError(null);
+    try {
+      if (routeId && routeRole === 'origin') {
+        await services.actions.commute.removeRouteOriginAccess(personId, routeId, point.id);
+      } else if (routeId && routeRole === 'destination') {
+        await services.actions.commute.removeRouteDestinationAccess(personId, routeId, point.id);
+      } else {
+        await services.actions.transitAccess.toggleAccess(point.id, false);
+      }
+      const readback = routeId && (routeRole === 'origin' || routeRole === 'destination')
+        ? await services.queries.getCommuteOverview(personId)
+        : null;
+      if (readback) {
+        const updated = readback.savedRoutes.find((item) => item.id === routeId);
+        const ids = routeAccessIds(updated, routeRole);
+        if (!updated || ids.includes(point.id)) throw new Error('교통편 해제를 저장하지 못했습니다.');
+      } else {
+        const saved = await services.queries.getTransitAccess(personId, kind, 'all');
+        if (saved.find((item) => item.id === point.id)?.selected !== false) {
+          throw new Error('교통편 해제를 저장하지 못했습니다.');
+        }
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '교통편 해제에 실패했습니다.');
+    } finally {
+      setWorkingId(null);
+    }
+  };
 
   const attachSingleVia = async (accessPointId: string) => {
     if (!routeId || routeRole !== 'via') return;
@@ -329,7 +380,7 @@ export function TransitAccessPage() {
       <BackButton fallbackTo={routeReturn} />
       <h1 className="page-title">{kindLabel} 근처 교통</h1>
       <div className="transit-context">
-        {place.label || kindLabel} 위치에서 실제 거리순으로 가까운 정류장과 역을 표시합니다.
+        처음에는 {place.label || kindLabel} 주변을 보여줍니다. 지도를 움직이면 지도 중심 주변 교통편을 다시 찾습니다.
       </div>
 
       <KakaoTransitMap
@@ -338,16 +389,32 @@ export function TransitAccessPage() {
         points={mapPoints}
         selectedIds={[...selectedResultIds]}
         selectedId={activePoint?.id}
-        onSelect={activateMarker}
+        onCenterChange={(center) => {
+          setMapCenter(center);
+          setActiveMarkerId(null);
+        }}
+        onSelect={(id) => {
+          activateMarker(id);
+          const result = visible.find((item) => item.id === id);
+          if (result) void toggleResult(result);
+        }}
       />
+      <div className="transit-search-center" role="status">
+        {nearbyLoading ? '지도 중심 주변 교통을 검색 중' :
+          mapCenter ? '이동한 지도 중심 기준 · 가까운 교통편' : '저장된 위치 기준 · 가까운 교통편'}
+      </div>
       {activePoint ? (
         <div className="transit-map-active" role="region" aria-label="지도에서 선택한 교통편">
-          <span>
-            <b>{activePoint.mode === 'BUS' ? '버스' : '지하철'} · {activePoint.name}</b>
-            {activePoint.displayCode ? ' · 정류소 ' + activePoint.displayCode : ''}
-            {activePoint.distanceM != null ? ' · ' + activePoint.distanceM.toLocaleString() + 'm' : ''}
-            {activePoint.walkMinutes != null ? ' · 도보 약 ' + activePoint.walkMinutes + '분' : ''}
-          </span>
+          <div className="transit-map-active-details">
+            <strong>{activePoint.mode === 'BUS' ? '버스' : '지하철'} · {activePoint.name}</strong>
+            <small>
+              {[
+                activePoint.displayCode ? '정류소 ' + activePoint.displayCode : null,
+                activePoint.distanceM != null ? activePoint.distanceM.toLocaleString() + 'm' : null,
+                activePoint.walkMinutes != null ? '도보 약 ' + activePoint.walkMinutes + '분' : null,
+              ].filter(Boolean).join(' · ')}
+            </small>
+          </div>
           <button
             type="button"
             className="cta secondary"
@@ -386,7 +453,23 @@ export function TransitAccessPage() {
         </div>
       ) : null}
 
+      {selectedPoints.length > 0 ? (
+        <div className="transit-selected-summary" aria-label="저장된 교통편 목록">
+          <strong>선택한 교통편 {selectedPoints.length}개</strong>
+          {selectedPoints.map((point) => (
+            <button
+              key={point.id}
+              type="button"
+              className="transit-selected-chip"
+              disabled={workingId != null}
+              onClick={() => void removeSelectedPoint(point)}
+              aria-label={point.name + ' 선택 해제'}
+            ><span>{point.name}{point.line ? ' · ' + point.line : ''}</span> ×</button>
+          ))}
+        </div>
+      ) : null}
       {actionError ? <div className="search-inline-status" role="alert">{actionError}</div> : null}
+      {!searching && nearbyError ? <div className="search-inline-status" role="alert">{nearbyError}</div> : null}
       <div className="transit-list">
         {loading ? (
           <div className="transit-empty">

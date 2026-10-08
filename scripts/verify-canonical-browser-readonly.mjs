@@ -47,7 +47,8 @@ async function verifyOn(browserType, label, device = {}) {
     proximityUrl.searchParams.set('y', String(originCoordinate.y));
     const nearbyResponse = await api.get(proximityUrl.toString());
     assert.equal(nearbyResponse.status(), 200, 'canonical nearby transit endpoint');
-    const nearby = (await nearbyResponse.json()).results ?? [];
+    const nearbyPayload = await nearbyResponse.json();
+    const nearby = nearbyPayload.results ?? [];
     assert.ok(nearby.length, 'No nearby transit candidates for saved origin');
     assert.ok(nearby.every((item) => Number.isFinite(item.distanceM) &&
       item.distanceM <= (item.mode === 'BUS' ? 800 : 900)),
@@ -56,8 +57,14 @@ async function verifyOn(browserType, label, device = {}) {
       nearby[index - 1].distanceM <= item.distanceM),
       'Nearby transit candidates not sorted by distance');
     assert.ok(nearby.filter((item) => item.mode === 'BUS').every((item) =>
-      item.id.startsWith('seoul-bus:') && item.providerId && item.displayCode),
-      'Nearby bus candidate lacks official identity or ARS number');
+      item.providerId && (
+        item.id.startsWith('seoul-bus:') ? Boolean(item.displayCode) :
+          item.id.startsWith('kakao-transit:bus:')
+      )),
+      'Nearby bus lacks an official station ID or strict category provenance');
+    assert.ok(nearby.some((item) => item.mode === 'BUS'),
+      'Nearby bus discovery returned no candidate; source=' +
+        (nearbyPayload.sourceStatus?.bus ?? 'UNKNOWN'));
 
     const page = await context.newPage();
     const javascriptErrors = [];
@@ -79,22 +86,83 @@ async function verifyOn(browserType, label, device = {}) {
     assert.equal(renderedMap.dimensionsValid, true, 'Interactive map dimensions invalid');
     assert.equal(renderedMap.hasRenderedChildren, true, 'Interactive map DOM not rendered');
 
-    const markers = page.locator(
-      '.kakao-transit-map [title^="버스 · "], .kakao-transit-map [title^="지하철 · "]'
-    );
-    await markers.first().waitFor({ state: 'visible', timeout: 20_000 });
-    const markerName = (await markers.first().getAttribute('title'))
-      .replace(/^(버스|지하철) · /, '');
-    if (label.startsWith('mobile')) await markers.first().tap();
-    else await markers.first().click();
-    const activePanel = page.getByRole('region', { name: '지도에서 선택한 교통편' });
-    await activePanel.waitFor({ timeout: 12_000 });
-    assert.ok((await activePanel.innerText()).includes(markerName),
-      'Clicked marker does not synchronize with active transit details');
-    assert.ok((await page.locator('.transit-row.map-active').innerText()).includes(markerName),
-      'Clicked marker does not highlight its matching list item');
-    assert.ok(await activePanel.getByRole('button', { name: /교통편 선택|선택 해제/ }).isVisible(),
-      'Marker selection does not expose the shared add/remove action');
+    // This workflow MUST remain read-only. A marker click now toggles a D1
+    // selection, so assert markup and test actual user gestures separately.
+    const markerDomCount = await page.locator(
+      '.kakao-transit-map area[title^="버스 · "], ' +
+      '.kakao-transit-map area[title^="지하철 · "]'
+    ).count();
+    assert.ok(markerDomCount > 0, 'Kakao marker target DOM missing');
+
+    // Render a local-only selected panel for responsive geometry QA. This
+    // does not add a saved transit access or alter production database state.
+    await page.evaluate(() => {
+      const card = document.createElement('div');
+      card.className = 'transit-map-active';
+      card.setAttribute('data-test-layout', '1');
+      card.innerHTML =
+        '<div class="transit-map-active-details">' +
+        '<strong>지하철 · 언주역 9호선</strong>' +
+        '<small>161m · 도보 약 3분</small></div>' +
+        '<button class="cta secondary" type="button">이 교통편 선택</button>';
+      document.querySelector('.kakao-transit-map-shell')?.after(card);
+    });
+    const checkedWidths = [];
+    for (const width of [320, 375, 390, 430]) {
+      await page.setViewportSize({ width, height: 820 });
+      const geometry = await page.locator('[data-test-layout]').evaluate((card) => {
+        const text = card.querySelector('strong');
+        const details = card.querySelector('.transit-map-active-details');
+        const button = card.querySelector('button');
+        return {
+          panelWidth: card.getBoundingClientRect().width,
+          panelHeight: card.getBoundingClientRect().height,
+          textWidth: text.getBoundingClientRect().width,
+          detailsWidth: details.getBoundingClientRect().width,
+          buttonWidth: button.getBoundingClientRect().width,
+          overflows: card.scrollWidth > card.clientWidth,
+        };
+      });
+      assert.ok(geometry.panelWidth > 200 && geometry.detailsWidth > 170 &&
+        geometry.textWidth > 170 && geometry.panelHeight < 170 &&
+        geometry.buttonWidth > 105 && !geometry.overflows,
+        'Selected transit layout broken at viewport ' + width + 'px: ' +
+          JSON.stringify(geometry));
+      checkedWidths.push(width);
+    }
+    await page.locator('[data-test-layout]').evaluate((node) => node.remove());
+
+    // Simulate actual map drag in a browser, never a state-only unit mock.
+    const selectedChipCountBeforePan = await page.locator('.transit-selected-chip').count();
+    const mapBox = await page.locator('.kakao-transit-map').boundingBox();
+    assert.ok(mapBox, 'Interactive map has no drag target');
+    const startX = mapBox.x + mapBox.width * 0.65;
+    const startY = mapBox.y + mapBox.height * 0.45;
+    if (!label.startsWith('mobile')) {
+      const dragResponse = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/providers/transit-nearby' &&
+          url.searchParams.get('x') !== String(originCoordinate.x) &&
+          response.request().method() === 'GET';
+      }, { timeout: 25_000 });
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX - 110, startY - 55, { steps: 12 });
+      await page.mouse.up();
+      const draggedResponse = await dragResponse;
+      assert.equal(draggedResponse.status(), 200, 'map-center requery failed');
+      await page.waitForTimeout(450);
+      assert.equal(await page.locator('.transit-selected-chip').count(),
+        selectedChipCountBeforePan,
+        'Map pan cleared previously stored transit selections');
+      const unchangedPlace = await api.get(
+        ORIGIN + '/api/people/' + pathId + '/places/origin'
+      );
+      assert.equal(unchangedPlace.status(), 200, 'saved place readback after pan');
+      const anchorAfterPan = (await unchangedPlace.json()).place?.coordinate;
+      assert.deepEqual(anchorAfterPan, originCoordinate,
+        'Map pan must never mutate saved origin coordinates');
+    }
 
     const input = page.locator('.transit-inline-search input[type="search"]');
     const transitResponseWait = page.waitForResponse(
@@ -139,11 +207,15 @@ async function verifyOn(browserType, label, device = {}) {
       browser: label,
       mapSDK: 'PASS',
       mapDOM: 'PASS',
-      mapMarkerInteraction: 'PASS',
-      markerListSync: 'PASS',
+      mapMarkerDOM: 'PASS',
+      markerInteraction: 'NOT_RUN_READ_ONLY',
+      markerListSync: 'NOT_RUN_READ_ONLY',
+      mapCenterRequery: label.startsWith('mobile') ? 'NOT_RUN_TOUCH_DRAG' : 'PASS',
+      layoutWidths: checkedWidths,
       nearbyDistanceCap: 'PASS',
       nearbyTotal: nearby.length,
       nearbyBusCount: nearby.filter((item) => item.mode === 'BUS').length,
+      busSource: nearbyPayload.sourceStatus?.bus ?? 'UNKNOWN',
       nearbySubwayCount: nearby.filter((item) => item.mode === 'SUBWAY').length,
       nearbyMaximumMeters: Math.max(...nearby.map((item) => item.distanceM)),
       transitOnly: 'PASS',

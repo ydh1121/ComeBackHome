@@ -404,24 +404,66 @@ export async function handleApiRequest(
               return json({ error: 'x/y are required.' }, 400);
             }
             const near = { x, y };
-            // Official bus registry gives stable stop ID, ARS code and coordinates.
-            const [officialBusStops, subwayPlaces] = await Promise.all([
-              providerRuntime.seoulBus.nearbyStops(near, 800).catch(() => []),
+            // Official stop IDs/ARS are authoritative. If Seoul's positional
+            // endpoint is empty or unavailable, only transport-category Kakao
+            // bus points inside the same absolute radius may be offered.
+            const [officialResult, busPlaces, subwayPlaces] = await Promise.all([
+              providerRuntime.seoulBus.nearbyStops(near, 800)
+                .then((stops) => ({ stops, failed: false }))
+                .catch(() => ({ stops: [] as TransitSearchResult[], failed: true })),
+              providerRuntime.kakao.searchPlaces('버스정류장', near).catch(() => []),
               providerRuntime.kakao.searchPlaces('지하철역', near),
             ]);
-            const confirmedBusStops = officialBusStops
+            const officialBusStops = officialResult.stops
               .filter((stop) => stop.mode === 'BUS' && stop.coordinate)
               .map((stop) => {
                 const distanceM = coordinateDistanceMeters(near, stop.coordinate!);
                 return { ...stop, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 75)) };
-              });
+              })
+              .filter((stop) => stop.distanceM <= 800);
+            const categoryBusStops = busPlaces
+              .filter((place) => /버스정류장|버스정류소/.test(place.category ?? ''))
+              .map((place) => placeToTransit(place, near, 'BUS'))
+              .filter((stop) => stop.distanceM != null && stop.distanceM <= 800);
             const confirmedStations = subwayPlaces.filter((place) =>
               /지하철|전철|철도역/.test(place.category ?? ''));
+            // Official name lookup is a second independent bus-index path when
+            // the positional endpoint is empty. Search only nearby confirmed
+            // station names; validate each returned stop's actual coordinates.
+            const closestStation = confirmedStations
+              .slice()
+              .sort((left, right) =>
+                coordinateDistanceMeters(near, left.coordinate) -
+                coordinateDistanceMeters(near, right.coordinate))[0];
+            const nearestStationName = closestStation?.placeName
+              ?.replace(/\s*\d+호선.*$/, '').trim() ?? '';
+            const stationNamedBusStops = !officialBusStops.length && nearestStationName
+              ? await providerRuntime.seoulBus.searchStops(nearestStationName, near)
+                .catch(() => [])
+              : [];
+            const matchingOfficialStops = stationNamedBusStops
+              .filter((point) => point.mode === 'BUS' && point.coordinate)
+              .map((point) => {
+                const distanceM = coordinateDistanceMeters(near, point.coordinate!);
+                return { ...point, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 75)) };
+              })
+              .filter((point) => point.distanceM <= 800);
+            const buses = officialBusStops.length ? officialBusStops :
+              matchingOfficialStops.length ? matchingOfficialStops : categoryBusStops;
             return json({
               results: trimNearbyTransitByDistance([
-                ...confirmedBusStops,
+                ...buses,
                 ...confirmedStations.map((place) => placeToTransit(place, near, 'SUBWAY')),
               ]),
+              sourceStatus: {
+                bus: officialBusStops.length ? 'OFFICIAL' :
+                  matchingOfficialStops.length ? 'OFFICIAL_STATION_NAME' :
+                  categoryBusStops.length ? 'VERIFIED_CATEGORY_FALLBACK' :
+                  officialResult.failed ? 'OFFICIAL_UNAVAILABLE' : 'NO_NEARBY_BUS',
+                officialBusCount: officialBusStops.length,
+                stationNameBusCount: matchingOfficialStops.length,
+                categoryBusCount: categoryBusStops.length,
+              },
             });
           }
 

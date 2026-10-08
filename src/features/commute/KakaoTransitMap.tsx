@@ -15,6 +15,7 @@ interface KakaoTransitMapProps {
   selectedId?: string | null;
   selectedIds?: string[];
   onSelect(id: string): void;
+  onCenterChange?(coordinate: Coordinate): void;
 }
 
 declare global {
@@ -105,12 +106,15 @@ export function KakaoTransitMap({
   selectedId,
   selectedIds = [],
   onSelect,
+  onCenterChange,
 }: KakaoTransitMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onCenterChangeRef = useRef(onCenterChange);
+  onCenterChangeRef.current = onCenterChange;
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryNonce, setRetryNonce] = useState(0);
   const selectedKey = [...selectedIds].sort().join('|');
@@ -120,6 +124,22 @@ export function KakaoTransitMap({
     if (!containerRef.current) return () => { active = false; };
 
     setState('loading');
+    let gestureTimer: number | undefined;
+    let mapInitialized = false;
+    let lastCenter: Coordinate = center;
+    const publishCenter = () => {
+      if (!mapRef.current || !onCenterChangeRef.current || !mapInitialized) return;
+      const point = mapRef.current.getCenter();
+      const next = { x: point.getLng(), y: point.getLat() };
+      // ~10m threshold: avoid duplicate network calls for a marker pan.
+      if (Math.abs(next.x - lastCenter.x) < 0.00011 &&
+          Math.abs(next.y - lastCenter.y) < 0.00009) return;
+      lastCenter = next;
+      if (gestureTimer != null) window.clearTimeout(gestureTimer);
+      gestureTimer = window.setTimeout(() => {
+        if (active) onCenterChangeRef.current?.(next);
+      }, 350);
+    };
     loadKakaoClientKey()
       .then((appKey) => {
         if (!appKey) throw new Error('Kakao Maps JavaScript key is unavailable.');
@@ -143,32 +163,11 @@ export function KakaoTransitMap({
           zIndex: 5,
         });
 
-        const bounds = new kakao.maps.LatLngBounds();
-        bounds.extend(centerPosition);
-
-        const selectedSet = new Set(selectedKey ? selectedKey.split('|') : []);
-        if (selectedId) selectedSet.add(selectedId);
-
-        for (const point of points) {
-          const position = new kakao.maps.LatLng(point.coordinate.y, point.coordinate.x);
-          bounds.extend(position);
-          const marker = new kakao.maps.Marker({
-            map,
-            position,
-            title: (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name,
-            clickable: true,
-            zIndex: selectedSet.has(point.id) ? 10 : 2,
-          });
-          markersRef.current.set(point.id, marker);
-          kakao.maps.event.addListener(marker, 'click', () => {
-            map.panTo(position);
-            marker.setZIndex(20);
-            onSelectRef.current(point.id);
-          });
-        }
-
-        if (points.length) map.setBounds(bounds, 38, 38, 38, 38);
-        else map.setCenter(centerPosition);
+        // Never fitBounds on result refresh: it would reset the user's pan.
+        // The saved address marker stays fixed while the search center moves.
+        mapInitialized = true;
+        kakao.maps.event.addListener(map, 'dragend', publishCenter);
+        kakao.maps.event.addListener(map, 'zoom_changed', publishCenter);
 
         setState('ready');
       })
@@ -178,11 +177,39 @@ export function KakaoTransitMap({
 
     return () => {
       active = false;
+      if (gestureTimer != null) window.clearTimeout(gestureTimer);
+      for (const marker of markersRef.current.values()) marker.setMap(null);
       mapRef.current = null;
       markersRef.current.clear();
       if (containerRef.current) containerRef.current.replaceChildren();
     };
-  }, [center.x, center.y, centerLabel, points, retryNonce]);
+  }, [center.x, center.y, centerLabel, retryNonce]);
+
+  useEffect(() => {
+    if (state !== 'ready' || !mapRef.current || !window.kakao?.maps) return;
+    for (const marker of markersRef.current.values()) marker.setMap(null);
+    markersRef.current.clear();
+    const kakao = window.kakao;
+    const map = mapRef.current;
+    for (const point of points) {
+      const position = new kakao.maps.LatLng(point.coordinate.y, point.coordinate.x);
+      const marker = new kakao.maps.Marker({
+        map,
+        position,
+        title: (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name,
+        clickable: true,
+        zIndex: 2,
+      });
+      markersRef.current.set(point.id, marker);
+      kakao.maps.event.addListener(marker, 'click', () => {
+        onSelectRef.current(point.id);
+      });
+    }
+    return () => {
+      for (const marker of markersRef.current.values()) marker.setMap(null);
+      markersRef.current.clear();
+    };
+  }, [points, state]);
 
   useEffect(() => {
     const selectedSet = new Set(selectedKey ? selectedKey.split('|') : []);
@@ -190,11 +217,17 @@ export function KakaoTransitMap({
       marker.setZIndex(id === selectedId ? 20 : selectedSet.has(id) ? 10 : 2);
     }
     const active = selectedId ? markersRef.current.get(selectedId) : null;
-    if (active && mapRef.current) mapRef.current.panTo(active.getPosition());
+    // List focus should not move the search center when the marker is already
+    // visible. Offscreen focused markers can still be brought into view.
+    if (active && mapRef.current &&
+        !mapRef.current.getBounds().contain(active.getPosition())) {
+      mapRef.current.panTo(active.getPosition());
+    }
   }, [selectedId, selectedKey, state]);
 
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
+      <span className="kakao-map-center-crosshair" aria-hidden="true">+</span>
       <div
         ref={containerRef}
         className="kakao-transit-map"
