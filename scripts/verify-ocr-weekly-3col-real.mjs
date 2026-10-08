@@ -213,7 +213,7 @@ try{
                 endCorrect,endTotal,breakCorrect,breakTotal,
                 cellCorrect,cellTotal:truth.length,
                 falseOff,complete:completed&&reconstructed.size===truth.length,
-                blockedReason:interpreted?.blockedReason??'STRUCTURE_NOT_DETECTED',
+                blockedReason:interpreted?interpreted.blockedReason:'STRUCTURE_NOT_DETECTED',
                 offReviewCount:interpreted?.offReviewCount??0,
                 blankSpans:interpreted?.consecutiveBlankSpans.length??0,
                 logical,
