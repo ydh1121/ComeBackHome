@@ -134,9 +134,40 @@ try {
           let workerPassComplete=false;
           let gridProof=null;
           const focusedDates=[];
+          // Test-only trace for development family A; no fixture truth supplied.
+          const roiTrace=input.family==='A'?[]:null;
+          const realFactory=new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS);
+          let currentRoiIds=[];
+          const tracedFactory={
+            async create(langs){
+              const worker=await realFactory.create(langs);
+              let psm='',whitelist='';
+              return {
+                async setParameters(params){
+                  psm=String(params.tessedit_pageseg_mode??psm);
+                  whitelist=String(params.tessedit_char_whitelist??whitelist);
+                  return worker.setParameters(params);
+                },
+                async recognize(...args){
+                  const result=await worker.recognize(...args);
+                  if(roiTrace&&currentRoiIds.length&&roiTrace.length<65){
+                    roiTrace.push({
+                      ids:currentRoiIds.slice(0,4),psm,whitelist,
+                      text:String(result.data.text??'').trim().slice(0,60),
+                      words:(result.data.blocks??[]).flatMap(b=>(b.paragraphs??[])
+                        .flatMap(p=>(p.lines??[]).flatMap(l=>(l.words??[])
+                          .map(w=>String(w.text??'').slice(0,20))))).slice(0,8),
+                    });
+                  }
+                  return result;
+                },
+                terminate:()=>worker.terminate(),
+              };
+            },
+          };
           const extractor=new TesseractScheduleImageTextExtractor(
-            new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
-            new BrowserScheduleOcrPreprocessor(),{useStructureFirstMode:true});
+            tracedFactory,new BrowserScheduleOcrPreprocessor(),
+            {useStructureFirstMode:true});
           const originalExtract=extractor.extract.bind(extractor);
           extractor.extract=async (...args)=>{
             const layout=await originalExtract(...args);
@@ -148,7 +179,10 @@ try {
           };
           const originalRegions=extractor.extractRegions.bind(extractor);
           extractor.extractRegions=async (...args)=>{
-            const out=await originalRegions(...args);
+            currentRoiIds=args[1].map(r=>r.id);
+            let out;
+            try{out=await originalRegions(...args);}
+            finally{currentRoiIds=[];}
             if(args[1].some(r=>r.purpose==='date')){
               focusedDates.push(...out.flatMap(r=>r.tokens.map(t=>({
                 text:t.text,x:Math.round(t.x),confidence:Number(t.confidence.toFixed(2))
@@ -263,6 +297,7 @@ try {
             generatedGrid: gridProof,
             geometry,oracleCrop,detectedCrop,
             generatedFocusedDateTokens: focusedDates,
+            actualRoiTrace:roiTrace,
             actualTesseractFirstPass:workerPassComplete,
             fullPipelineSuccess:failure===null,
             realTesseractExecuted:workerPassComplete,
