@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 25
     env:
       CBH_REVERSIBLE_PRODUCTION_QA: APPROVED_ONE_RUN
+      CBH_ROUTE_QA: APPROVED_ONE_RUN
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +28,7 @@ jobs:
       - run: sleep 45
       - name: Verify UI→D1→reload and restore original flags
         run: node scripts/verify-canonical-transit-writes-reversible.mjs
+      # Only run route mutation AFTER the origin/destination selection test
+      # restored its original database flags successfully.
+      - name: Verify preferred route→Today/ETA and restore original route
+        run: node scripts/verify-saved-route-once.mjs
