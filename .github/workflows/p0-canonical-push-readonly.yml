@@ -36,7 +36,7 @@ jobs:
               if(label==='health'){
                 info.ready=response.ok && json?.ok===true;
                 info.deployedCommitPrefix=typeof json?.commitSha==='string' ? json.commitSha.slice(0,12) : null;
-                info.matchesMergedPushFix=typeof json?.commitSha==='string' && json.commitSha.startsWith('PENDING_PUSH_DIAG_MERGE_SHA');
+                info.matchesMergedPushFix=typeof json?.commitSha==='string' && json.commitSha.startsWith('c64622714d56');
               }else if(label==='publicKey'){
                 info.configured=json?.configured===true;
                 info.source=json?.source??'UNKNOWN';
