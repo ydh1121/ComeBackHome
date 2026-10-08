@@ -87,6 +87,7 @@ jobs:
             WEB_PUSH_TTL_SECONDS: { type: 'plain_text', value: '300' },
             NOTIFICATION_RETRY_DELAYS_SECONDS: { type: 'plain_text', value: '30,90,300' },
             KAKAO_REST_API_KEY: { type: 'secret_text', value: process.env.KAKAO_REST_API_KEY },
+            KAKAO_JAVASCRIPT_KEY: { type: 'secret_text', value: process.env.KAKAO_JAVASCRIPT_KEY },
             SEOUL_BUS_SERVICE_KEY: { type: 'secret_text', value: process.env.SEOUL_BUS_SERVICE_KEY },
             SEOUL_OPENAPI_KEY: { type: 'secret_text', value: process.env.SEOUL_OPENAPI_KEY },
             SEOUL_SUBWAY_API_KEY: { type: 'secret_text', value: process.env.SEOUL_SUBWAY_API_KEY },
@@ -166,6 +167,7 @@ jobs:
           }
           for (const name of [
             'KAKAO_REST_API_KEY',
+            'KAKAO_JAVASCRIPT_KEY',
             'SEOUL_BUS_SERVICE_KEY',
             'SEOUL_OPENAPI_KEY',
             'SEOUL_SUBWAY_API_KEY',
@@ -356,6 +358,16 @@ jobs:
             headers: { Accept: 'application/json' },
           });
           const mapConfig = await mapConfigResponse.json().catch(() => null);
+          console.log(JSON.stringify({
+            mapConfigReadback: {
+              httpStatus: mapConfigResponse.status,
+              jsonObject: Boolean(mapConfig && typeof mapConfig === 'object'),
+              configured: mapConfig?.kakaoMaps?.configured === true,
+              keyPresent: typeof mapConfig?.kakaoMaps?.javaScriptKey === 'string' &&
+                mapConfig.kakaoMaps.javaScriptKey.length > 0,
+              valuesExposed: false,
+            },
+          }));
           if (!mapConfigResponse.ok || mapConfig?.kakaoMaps?.configured !== true ||
               typeof mapConfig?.kakaoMaps?.javaScriptKey !== 'string' ||
               mapConfig.kakaoMaps.javaScriptKey.length < 8) {
