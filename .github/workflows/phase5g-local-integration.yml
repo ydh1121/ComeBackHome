@@ -345,9 +345,14 @@ jobs:
 
       - name: Install Chromium, WebKit and Korean system fonts for actual OCR
         run: |
-          npm install --no-save --no-package-lock playwright@1.58.2
-          npx playwright install --with-deps chromium webkit
-          sudo apt-get install -y fonts-noto-cjk
+          export DEBIAN_FRONTEND=noninteractive
+          export CI=true
+          timeout 180s npm install --no-save --no-package-lock playwright@1.58.2
+          timeout 240s npx playwright install --with-deps chromium webkit
+          if ! fc-list :lang=ko | grep -q .; then
+            timeout 120s sudo apt-get install -y fonts-noto-cjk
+          fi
+          fc-list :lang=ko | grep -q .
 
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
