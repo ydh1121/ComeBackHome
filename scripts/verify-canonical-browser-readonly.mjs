@@ -156,6 +156,26 @@ async function verifyOn(browserType, label, device = {}) {
     assert.equal(attemptedWrites.length, 0,
       'Focusing a map marker must not mutate production D1');
 
+    // Reverse direction: clicking a LIST row focuses the identical Kakao
+    // marker, opens preview and must not send any D1 write request.
+    const focusRows = page.locator('.transit-row');
+    const alternateRow = focusRows.filter({ hasNotText: activeName }).first();
+    await alternateRow.waitFor({ state: 'visible', timeout: 10_000 });
+    const reverseId = await alternateRow.getAttribute('id');
+    const reverseTransitId = reverseId?.replace(/^transit-result-/, '');
+    assert.ok(reverseTransitId, 'List row lacks stable transit identity');
+    if (label.startsWith('mobile')) await alternateRow.tap();
+    else await alternateRow.click();
+    await page.waitForFunction((id) =>
+      document.querySelector('.cbh-transit-map-marker.is-active')?.getAttribute('data-transit-id') === id,
+      reverseTransitId, { timeout: 10_000 });
+    assert.equal(await page.locator('.transit-row.map-active').getAttribute('id'), reverseId,
+      'List click did not activate matching transit row');
+    assert.equal(await activePanel.getAttribute('data-active-id'), reverseTransitId,
+      'List click did not update active preview identity');
+    assert.equal(attemptedWrites.length, 0,
+      'Viewing a list row must not change persisted selection');
+
     const checkedWidths = [];
     const measured = [];
     mkdirSync('artifacts/cbh-transit-card', { recursive: true });
@@ -315,6 +335,7 @@ async function verifyOn(browserType, label, device = {}) {
       markerInteraction: clickMode + '_PASS',
       markerHitCentersClear: hitChecks.filter((item) => item.visibleOnMap).length,
       markerListSync: 'FOCUS_ONLY_PASS',
+      listMarkerSync: 'FOCUS_ONLY_PASS_NO_WRITES',
       realActiveCard: 'PASS',
       activeCardGeometry: measured,
       mapCenterRequery: label.startsWith('mobile') ? 'NOT_RUN_TOUCH_DRAG' : 'PASS',
