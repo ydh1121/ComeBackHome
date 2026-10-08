@@ -765,13 +765,22 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
               text: String(word.text ?? '').normalize('NFKC').trim(),
               confidence: normalizeConfidence(word.confidence),
               x0: Math.min(word.bbox.x0, word.bbox.x1),
+              y0: Math.min(word.bbox.y0, word.bbox.y1),
+              height: Math.abs(word.bbox.y1 - word.bbox.y0),
             }))
             .filter((item) =>
               item.text.length > 0 &&
               numericCellShape(item.text) &&
               item.confidence >= this.minimumConfidence
             )
-            .sort((left, right) => left.x0 - right.x0);
+            // A cell can have start/end stacked vertically OR placed side
+            // by side. Preserve Tesseract's actual reading order based on
+            // baselines, rather than sorting all clock tokens by x alone.
+            .sort((left, right) => {
+              const sameLine = Math.abs(left.y0 - right.y0) <=
+                Math.max(4, Math.min(left.height, right.height) * 0.45);
+              return sameLine ? left.x0 - right.x0 : left.y0 - right.y0;
+            });
 
           const tokens = usable.map((item, itemIndex) => {
             const slotWidth = region.width / Math.max(1, usable.length);
