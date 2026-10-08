@@ -20,6 +20,7 @@ export interface TransitAccessActions {
 }
 export interface NotificationActions {
   syncCurrentSubscription(): Promise<void>;
+  connectPushFromUserGesture(): Promise<void>;
   requestPermissionFromUserGesture(): Promise<void>;
   disablePushSubscription(): Promise<void>;
   updateRules(rules: NotificationRules): Promise<void>;

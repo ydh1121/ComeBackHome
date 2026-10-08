@@ -69,7 +69,7 @@ expect(pwaSource.includes("document.readyState === 'complete'"), 'late PWA start
 for (const text of [
   "segments[2] === 'test'",
   "active.find((item) => item.endpoint === endpoint)",
-  'readiness.dependencies.outbox.gateway.send(subscription',
+  'delivery.gateway.send(subscription',
   "error.kind === 'terminal-subscription'",
   'subscriptions.deactivateByEndpoint(endpoint)',
 ]) {

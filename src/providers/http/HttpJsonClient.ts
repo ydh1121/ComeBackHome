@@ -1,3 +1,10 @@
+export class HttpApiError extends Error {
+  constructor(message: string, readonly status: number, readonly reason: string | null) {
+    super(message);
+    this.name = 'HttpApiError';
+  }
+}
+
 export class HttpJsonClient {
   constructor(
     private readonly basePath = '/api',
@@ -42,7 +49,9 @@ export class HttpJsonClient {
       const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
         ? payload.error
         : 'HTTP request failed with status ' + response.status + '.';
-      throw new Error(message);
+      const reason = typeof payload === 'object' && payload !== null &&
+        'reason' in payload && typeof payload.reason === 'string' ? payload.reason : null;
+      throw new HttpApiError(message, response.status, reason);
     }
 
     if ((init.method ?? 'GET') !== 'GET') this.onMutation();

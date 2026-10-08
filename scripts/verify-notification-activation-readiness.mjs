@@ -21,8 +21,8 @@ expect(
   'Pages API must compose notification activation readiness before delivery',
 );
 expect(
-  apiSource.includes('readiness.dependencies.outbox'),
-  'Pages API must pass only fail-closed outbox dependencies to delivery',
+  apiSource.includes('createPushDeliveryRuntime(env)'),
+  'Test push must use independent fail-closed VAPID delivery readiness',
 );
 for (const key of [
   'VAPID_SUBJECT',

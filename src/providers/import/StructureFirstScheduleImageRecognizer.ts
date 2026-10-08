@@ -81,6 +81,15 @@ function rowName(
   return { sourceName: '', confidence: 0, unreadable: true };
 }
 
+function explicitOffLabel(result: ImageTextProbeResult | undefined): boolean {
+  if (!result) return false;
+  const normalized = [result.text, ...result.tokens.map((item) => item.text)]
+    .join(' ').normalize('NFKC').trim().replace(/\s+/g, '').toLowerCase();
+  // Empty visual cells are handled by pixel occupancy; OCR absence alone
+  // never authorizes OFF. Only an explicit unambiguous rest label does.
+  return /^(휴무|휴일|쉬는날|연차|반차|휴가|off|x|-)$/.test(normalized);
+}
+
 function cellTimes(result: ImageTextProbeResult | undefined): {
   start: string | null;
   end: string | null;
@@ -215,7 +224,7 @@ export function interpretStructureFirstSchedule(
       continue;
     }
 
-    if (cell.visual.occupancy === 'EMPTY') {
+    if (cell.visual.occupancy === 'EMPTY' || explicitOffLabel(byRegion.get(cell.id))) {
       offCount += 1;
       reviewCandidates.push({
         sourcePersonName: person.sourceName,

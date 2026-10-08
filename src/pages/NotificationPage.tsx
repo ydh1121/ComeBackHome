@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { categorizePushError, PUSH_FAILURE_MESSAGES, type PushFailureReason } from '../features/notifications/pushErrors';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { notificationPermissionView, useNotificationSettings } from '../features/notifications/useNotificationSettings';
 import { BackButton } from '../shared/components/BackButton';
@@ -11,6 +12,8 @@ export function NotificationPage() {
   const services = useApplicationServices();
   const state = useNotificationSettings();
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
+  const [testError, setTestError] = useState<PushFailureReason | null>(null);
+  const [connectError, setConnectError] = useState<PushFailureReason | null>(null);
 
   if (state.status === 'loading') {
     return <section className="notification-page" data-page="NotificationSetupPage" data-state="LOADING"><div className="notification-message">알림 설정을 불러오는 중</div></section>;
@@ -26,17 +29,21 @@ export function NotificationPage() {
     : settings.permission === 'denied'
       ? 'PERMISSION_DENIED'
       : settings.permission === 'granted'
-        ? 'PERMISSION_GRANTED'
+        ? 'PERMISSION_GRANTED_NO_SUBSCRIPTION'
         : settings.permission === 'subscribed'
           ? 'SUBSCRIBED'
+          : settings.permission === 'stale'
+            ? 'STALE_SUBSCRIPTION'
           : 'PERMISSION_ERROR';
 
   const requestPermission = async () => {
     if (!permissionView.canRequest) return;
+    setConnectError(null);
+    setTestError(null);
     try {
       await services.actions.notifications.requestPermissionFromUserGesture();
-    } catch {
-      // Repository state is updated to error by NotificationService.
+    } catch (error) {
+      setConnectError(categorizePushError(error));
     }
   };
 
@@ -50,10 +57,12 @@ export function NotificationPage() {
   const sendTest = async () => {
     if (!permissionView.enabled || testStatus === 'sending') return;
     setTestStatus('sending');
+    setTestError(null);
     try {
       await services.actions.notifications.sendTestNotification();
       setTestStatus('sent');
-    } catch {
+    } catch (error) {
+      setTestError(categorizePushError(error));
       setTestStatus('error');
     }
   };
@@ -80,6 +89,12 @@ export function NotificationPage() {
       ) : (
         <div className="permission-row">{permissionContent}</div>
       )}
+
+      {connectError ? (
+        <div className="notification-test-status error" role="alert" data-reason={connectError}>
+          {PUSH_FAILURE_MESSAGES[connectError]}
+        </div>
+      ) : null}
 
       <div className="settings-list">
         <button
@@ -123,8 +138,8 @@ export function NotificationPage() {
       <button type="button" className="cta secondary" disabled={!permissionView.enabled || testStatus === 'sending'} onClick={sendTest}>
         {testStatus === 'sending' ? '테스트 알림 보내는 중' : '테스트 알림'}
       </button>
-      {testStatus === 'sent' ? <div className="notification-test-status" role="status">테스트 알림을 보냈습니다.</div> : null}
-      {testStatus === 'error' ? <div className="notification-test-status error" role="alert">테스트 알림을 보내지 못했습니다.</div> : null}
+      {testStatus === 'sent' ? <div className="notification-test-status" role="status">서버가 테스트 알림 전송을 수락했습니다. 실제 수신은 기기에서 확인해 주세요.</div> : null}
+      {testStatus === 'error' && testError ? <div className="notification-test-status error" role="alert" data-reason={testError}>{PUSH_FAILURE_MESSAGES[testError]}</div> : null}
     </section>
   );
 }

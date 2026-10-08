@@ -256,4 +256,11 @@ export class HttpPushSubscriptionTransport implements PushSubscriptionTransport 
   async remove(endpoint: string): Promise<void> {
     await this.client.delete('/push/subscription', { endpoint });
   }
+
+  async checkRegistered(endpoint: string): Promise<boolean> {
+    const status = await this.client.post<{ registered: boolean }>(
+      '/push/subscription/status', { endpoint },
+    );
+    return status.registered === true;
+  }
 }

@@ -16,8 +16,9 @@ export interface NotificationPermissionView {
 }
 
 export function notificationPermissionView(permission: PermissionState): NotificationPermissionView {
-  if (permission === 'granted') return { title: '알림 켜짐', subtitle: '이 기기', enabled: true, canRequest: false };
+  if (permission === 'granted') return { title: '알림 연결 필요', subtitle: '알림 권한은 허용되었지만 구독이 없습니다.', enabled: false, canRequest: true };
   if (permission === 'subscribed') return { title: '알림 켜짐', subtitle: '이 기기', enabled: true, canRequest: false };
+  if (permission === 'stale') return { title: '알림 다시 연결', subtitle: '이전 구독이 만료되었거나 알림 키가 변경되었습니다.', enabled: false, canRequest: true };
   if (permission === 'denied') return { title: '알림 차단됨', subtitle: '기기 설정에서 허용이 필요합니다', enabled: false, canRequest: false };
   if (permission === 'error') return { title: '알림 상태 확인 실패', subtitle: '다시 시도할 수 있습니다', enabled: false, canRequest: true };
   return { title: '알림 꺼짐', subtitle: '이 기기', enabled: false, canRequest: true };
