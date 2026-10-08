@@ -18,6 +18,7 @@ import {
 } from './presence-event-ingest';
 import { createNotificationActivationReadiness } from './notification-activation-readiness';
 import { createPushDeliveryRuntime, inspectPushDeliveryConfig } from './push-delivery-readiness';
+import { verifyVapidKeyPair } from './vapid-pair-validation';
 import { PushDeliveryError } from './contracts';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
