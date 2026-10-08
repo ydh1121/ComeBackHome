@@ -27,6 +27,14 @@ try {
     assert.equal(res.status(), 200, 'Required read-only API request failed: ' + path.split('?')[0]);
     return res.json();
   };
+  // Build/deployment identity must match the exact approved main commit
+  // BEFORE spending the only allowed live Kakao request.
+  const health = await get('/api/health');
+  const expectedCommit = (process.env.GITHUB_SHA ?? '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(expectedCommit) ||
+      health?.commitSha !== expectedCommit) {
+    throw new Error('KAKAO_ROUTE_SMOKE_BLOCKED_CANONICAL_COMMIT_MISMATCH');
+  }
   const people = (await get('/api/people')).people ?? [];
   let selected = null;
   for (const person of people) {
