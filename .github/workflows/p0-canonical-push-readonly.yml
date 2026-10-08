@@ -34,8 +34,9 @@ jobs:
               const json=await response.json().catch(()=>null);
               const info={label,httpStatus:response.status,contentType:response.headers.get('content-type')};
               if(label==='health'){
-                info.ready=response.ok && json?.status==='ok';
-                info.versionPresent=typeof json?.version==='string'||typeof json?.commit==='string';
+                info.ready=response.ok && json?.ok===true;
+                info.deployedCommitPrefix=typeof json?.commitSha==='string' ? json.commitSha.slice(0,12) : null;
+                info.matchesMergedPushFix=typeof json?.commitSha==='string' && json.commitSha.startsWith('3b64380aabec');
               }else if(label==='publicKey'){
                 info.configured=json?.configured===true;
                 info.source=json?.source??'UNKNOWN';
