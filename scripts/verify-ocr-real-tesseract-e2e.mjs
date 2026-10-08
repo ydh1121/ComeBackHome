@@ -195,7 +195,8 @@ try {
     const {logicalSignature,...safe}=item;
     lines.push(safe);
   }
-  const parity=specs.every(({id})=>{
+  const parityEligible=observed.every(item=>item.fullPipelineSuccess);
+  const parity=parityEligible && specs.every(({id})=>{
     const pair=observed.filter(item=>item.id===id);
     return pair.length===2&&pair[0].logicalSignature===pair[1].logicalSignature;
   });
@@ -207,10 +208,14 @@ try {
     completedRealE2E:observed.every(item=>item.fullPipelineSuccess),
     realOcrAcceptance:observed.every(item=>item.fullPipelineSuccess)?'METRICS_ONLY':'FAIL',
     cellAccuracy:allCells?Number((allCorrect/allCells).toFixed(4)):0,
-    falseOff,garbagePerson:garbage,
+    falseOff:parityEligible?falseOff:null,
+    falseOffOnParsedCells:parityEligible?falseOff:0,
+    cellsWithoutCompletePipeline:observed.filter(item=>!item.fullPipelineSuccess)
+      .reduce((sum,item)=>sum+item.cellCount,0),
+    garbagePerson:garbage,
     chromium:observed.filter(item=>item.browser==='CHROMIUM').some(x=>x.realTesseractExecuted)?'RAN':'FAIL',
     webkit:observed.filter(item=>item.browser==='WEBKIT').some(x=>x.realTesseractExecuted)?'RAN':'FAIL',
-    logicalParity:parity?'PASS':'FAIL',
+    logicalParity:!parityEligible?'NOT_EVALUABLE':parity?'PASS':'FAIL',
     userOriginalImageUsed:false,acceptance:'NOT_CLAIMED',
     byImage:lines,
   };
