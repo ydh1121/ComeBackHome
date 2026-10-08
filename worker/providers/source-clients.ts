@@ -218,6 +218,20 @@ export class KakaoMapRequestClient implements KakaoMapSource {
 export class SeoulBusRequestClient implements SeoulBusSource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
+  async nearbyStops(near: Coordinate, radiusM = 800, context?: ProviderRequestContext) {
+    const radius = Math.min(800, Math.max(100, Math.round(radiusM)));
+    const request: ProviderJsonRequest = {
+      source: 'seoul-bus',
+      capability: 'bus-stop-nearby-position',
+      method: 'GET',
+      urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos',
+      query: { tmX: String(near.x), tmY: String(near.y), radius: String(radius) },
+      auth: seoulBusAuth(),
+      security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
+    };
+    return mapSeoulBusStops(await readSeoulBusPayload(this.transport, request, context));
+  }
+
   async searchStops(query: string, _near: Coordinate, context?: ProviderRequestContext) {
     const normalized = query.normalize('NFKC').trim();
     const numericText = normalized.replace(/^(?:정류장|정류소)(?:번호)?\s*[:#]?\s*/, '').replace(/[-\s]/g, '');
