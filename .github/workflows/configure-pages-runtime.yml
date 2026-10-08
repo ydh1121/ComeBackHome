@@ -238,37 +238,82 @@ jobs:
           node --input-type=module <<'NODE'
           const token = process.env.CLOUDFLARE_API_TOKEN;
           const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const projectName = process.env.PAGES_PROJECT;
           const deploymentId = process.env.PAGES_DEPLOYMENT_ID;
-          const url =
+          const base =
             'https://api.cloudflare.com/client/v4/accounts/' + accountId +
-            '/pages/projects/come-back-home/deployments/' + deploymentId;
+            '/pages/projects/' + projectName;
+          const deploymentUrl = base + '/deployments/' + deploymentId;
+          const auth = { Authorization: 'Bearer ' + token };
+          let lastObservation = 'not-yet-observed';
 
-          for (let attempt = 0; attempt < 60; attempt += 1) {
-            const response = await fetch(url, {
-              headers: { Authorization: 'Bearer ' + token },
-            });
-            const body = await response.json();
-            if (!response.ok || body.success !== true) {
-              throw new Error('Failed to read Pages deployment');
+          for (let attempt = 1; attempt <= 60; attempt += 1) {
+            let deployment = null;
+            let source = 'deployment-api';
+            const response = await fetch(deploymentUrl, { headers: auth });
+            const body = await response.json().catch(() => null);
+            if (response.status === 401 || response.status === 403) {
+              throw new Error('Pages deployment read permission denied: HTTP ' + response.status);
             }
-            const deployment = body.result;
-            const stage =
-              deployment?.latest_stage?.status ??
-              deployment?.stages?.find((item) => item?.name === 'deploy')?.status ??
-              deployment?.stages?.at(-1)?.status ??
-              'unknown';
-            if (stage === 'success') {
-              if (deployment?.uses_functions !== true) {
-                throw new Error('Pages deployment does not include Functions');
+            if (response.ok && body?.success === true && body.result?.id === deploymentId) {
+              deployment = body.result;
+            } else {
+              // Cloudflare can briefly return 404 for a newly-created
+              // deployment ID. Inspect the canonical project readback before
+              // concluding the deployment failed; never accept an unrelated ID.
+              const projectResponse = await fetch(base, { headers: auth });
+              const projectBody = await projectResponse.json().catch(() => null);
+              if (projectResponse.status === 401 || projectResponse.status === 403) {
+                throw new Error('Pages project read permission denied: HTTP ' + projectResponse.status);
               }
-              process.exit(0);
+              const latest = projectBody?.result?.latest_deployment;
+              if (projectResponse.ok && projectBody?.success === true &&
+                  latest?.id === deploymentId) {
+                deployment = latest;
+                source = 'canonical-project-latest';
+              } else {
+                lastObservation =
+                  'deploymentHTTP=' + response.status +
+                  ' projectHTTP=' + projectResponse.status +
+                  ' matchedLatest=' + (latest?.id === deploymentId);
+              }
             }
-            if (['failure', 'canceled', 'skipped'].includes(stage)) {
-              throw new Error('Pages deployment ended with status ' + stage);
+
+            if (deployment) {
+              const stage =
+                deployment.latest_stage?.status ??
+                deployment.stages?.find((item) => item?.name === 'deploy')?.status ??
+                deployment.stages?.at(-1)?.status ??
+                'unknown';
+              lastObservation = 'source=' + source + ' stage=' + stage;
+              if (stage === 'success') {
+                if (deployment.uses_functions !== true) {
+                  throw new Error('Pages deployment is successful but Functions are not confirmed');
+                }
+                if (deployment.environment && deployment.environment !== 'production') {
+                  throw new Error('Pages deployment is not production');
+                }
+                console.log(JSON.stringify({
+                  pagesProject: projectName,
+                  deploymentReadback: 'verified',
+                  source,
+                  attempt,
+                  productionFunctions: true,
+                  valuesExposed: false,
+                }));
+                process.exit(0);
+              }
+              if (['failure', 'canceled', 'skipped'].includes(stage)) {
+                throw new Error('Pages deployment ended with status ' + stage);
+              }
             }
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            if (attempt % 10 === 0) {
+              console.log('Pages readback still pending after attempt ' +
+                attempt + ': ' + lastObservation);
+            }
+            if (attempt < 60) await new Promise((resolve) => setTimeout(resolve, 5000));
           }
-          throw new Error('Timed out waiting for Pages deployment');
+          throw new Error('Pages deployment readback not verified: ' + lastObservation);
           NODE
 
       - name: Verify canonical Pages API

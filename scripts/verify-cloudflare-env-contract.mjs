@@ -65,6 +65,24 @@ expect(
 expect(gitignore.includes('.env.*'), '.gitignore must ignore derived env files');
 expect(gitignore.includes('!.env.example'), '.gitignore must explicitly allow .env.example');
 
+const pagesWorkflow = await readFile(
+  new URL('../.github/workflows/configure-pages-runtime.yml', import.meta.url), 'utf8'
+);
+for (const phrase of [
+  'KAKAO_JAVASCRIPT_KEY',
+  'CBH_KAKAO_MAPS_JAVASCRIPT_KEY',
+  'Pages deployment readback not verified',
+  "latest?.id === deploymentId",
+  "body.result?.id === deploymentId",
+  "deployment.uses_functions !== true",
+  "mapConfig?.kakaoMaps?.configured !== true",
+]) {
+  expect(pagesWorkflow.includes(phrase), 'Pages runtime verification contract missing ' + phrase);
+}
+expect(!pagesWorkflow.includes("throw new Error('Failed to read Pages deployment')"),
+  'Pages runtime must retry transient deployment readback failures');
+
+
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
