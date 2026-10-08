@@ -36,7 +36,7 @@ jobs:
               if(label==='health'){
                 info.ready=response.ok && json?.ok===true;
                 info.deployedCommitPrefix=typeof json?.commitSha==='string' ? json.commitSha.slice(0,12) : null;
-                info.matchesMergedPushFix=typeof json?.commitSha==='string' && json.commitSha.startsWith('cfaedaeb5e08');
+                info.matchesMergedPushFix=typeof json?.commitSha==='string' && json.commitSha.startsWith('PENDING_PUSH_DIAG_MERGE_SHA');
               }else if(label==='publicKey'){
                 info.configured=json?.configured===true;
                 info.source=json?.source??'UNKNOWN';
@@ -46,6 +46,7 @@ jobs:
                 info.vapidKeyPairValid=json?.vapidKeyPairValid===true;
                 info.pushDeliveryReady=json?.pushDeliveryReady===true;
                 info.activeSubscriptionCount=Number.isInteger(json?.activeSubscriptionCount)?json.activeSubscriptionCount:null;
+                info.validSubscriptionKeyShapeCount=Number.isInteger(json?.validSubscriptionKeyShapeCount)?json.validSubscriptionKeyShapeCount:null;
                 info.scheduledNotificationReady=json?.scheduledNotificationReady===true;
                 info.pushMissing=Array.isArray(json?.pushMissing)?json.pushMissing:[];
                 info.scheduledMissing=Array.isArray(json?.scheduledMissing)?json.scheduledMissing:[];
