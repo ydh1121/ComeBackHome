@@ -75,7 +75,8 @@
     "verify:push-recovery": "node scripts/verify-push-test-recovery.mjs",
     "verify:push-sw-local": "node scripts/verify-push-serviceworker-local.mjs",
     "verify:push-runtime-key": "node scripts/verify-push-runtime-key-parity.mjs",
-    "verify:vapid-pair": "node scripts/verify-vapid-pair-cryptography.mjs"
+    "verify:vapid-pair": "node scripts/verify-vapid-pair-cryptography.mjs",
+    "verify:push-workerd-crypto": "node scripts/verify-push-workerd-crypto.mjs"
   },
   "dependencies": {
     "react": "19.3.0",
