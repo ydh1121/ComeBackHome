@@ -153,6 +153,22 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setImportedEnabled(
+    batchId: EntityId,
+    reviewItemId: EntityId,
+    enabled: boolean,
+  ): Promise<void> {
+    const item = this.requireReviewItem(batchId, reviewItemId);
+    item.imported.enabled = enabled;
+    if (!enabled) {
+      item.imported.start = null;
+      item.imported.end = null;
+    }
+    // Switching work/off reopens explicit approval, never silently persists.
+    item.resolution = null;
+    this.persist();
+  }
+
   async setImportedTime(
     batchId: EntityId,
     reviewItemId: EntityId,

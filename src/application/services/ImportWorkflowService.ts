@@ -54,6 +54,14 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     return this.imports.setResolution(batchId, reviewItemId, resolution);
   }
 
+  setImportedEnabled(
+    batchId: EntityId,
+    reviewItemId: EntityId,
+    enabled: boolean,
+  ): Promise<void> {
+    return this.imports.setImportedEnabled(batchId, reviewItemId, enabled);
+  }
+
   setImportedTime(
     batchId: EntityId,
     reviewItemId: EntityId,

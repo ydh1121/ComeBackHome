@@ -216,6 +216,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       }
     }
 
+    // The store-specific weekly OCR is review-first. Even a successfully
+    // matched DB person does not constitute approval of every WORK/OFF date.
+    const weeklyRequiresPerCellApproval = parsedResults.some(
+      (parsed) => parsed.structure.sheet === 'weekly 7 day x start/end/break physical matrix',
+    );
     const reviewItems: ImportReviewItem[] = [];
     for (const candidate of candidateByKey.values()) {
       const existing = candidate.personId
@@ -247,7 +252,8 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
           end: candidate.end,
         },
         recognitionState: candidate.recognitionState,
-        resolution: exactDuplicate ? 'SKIP' : candidate.personId ? 'NEW' : null,
+        resolution: exactDuplicate ? 'SKIP' :
+          candidate.personId && !weeklyRequiresPerCellApproval ? 'NEW' : null,
       });
     }
 
