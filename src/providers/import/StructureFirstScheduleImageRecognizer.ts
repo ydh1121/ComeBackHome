@@ -338,14 +338,32 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
     await onProgress?.(18);
 
     const initialOcrStarted = performance.now();
-    const layout = await this.extractor.extract(file, async (progress) => {
+    let layout = await this.extractor.extract(file, async (progress) => {
       await onProgress?.(Math.min(58, 18 + Math.round(progress * 0.43)));
     });
     const initialOcrMs = performance.now() - initialOcrStarted;
     await onProgress?.(60);
 
+    let matrix = buildScheduleCellMatrix(detection, layout);
+    if ((!matrix || matrix.dates.length < 2) &&
+        detection.structure.rowBands.length >= 2) {
+      const header = detection.structure.rowBands[0].bounds;
+      // The header position is derived from pixel-detected table rows,
+      // not fixed schedule image coordinates or one user's sample.
+      const dateProbe: ImageTextProbeRegion = {
+        id: 'date::first-pixel-row', purpose: 'date',
+        x: 0, y: header.y,
+        width: detection.raster.width,
+        height: Math.min(header.height, detection.raster.height - header.y),
+      };
+      const focused = await this.extractor.extractRegions(file, [dateProbe]);
+      const tokens = focused[0]?.tokens ?? [];
+      if (new Set(tokens.map((token) => token.text)).size >= 2) {
+        layout = { ...layout, tokens: [...layout.tokens, ...tokens] };
+        matrix = buildScheduleCellMatrix(detection, layout);
+      }
+    }
     const inputDiagnostics = inspectScheduleMatrixInput(detection, layout);
-    const matrix = buildScheduleCellMatrix(detection, layout);
     if (!matrix || matrix.rows.length === 0 || matrix.dates.length < 2) {
       throw new Error(
         '표 구조를 안정적으로 복원하지 못했습니다. ' +
