@@ -394,8 +394,7 @@ try{
             const idx=prefix==='oracle'?i:mappings.colMatches[i].index;
             if(idx<0)return;
             const id='date::grid-cell::'+prefix+'::'+idx;
-            if(dayValue(selectedResult(arch,tMap,pMap,id,'date',names))===truth.cells.find(x=>x.dateIndex===undefined?false:true)){}
-            const expected=Number(truth.cells.find(x=>x.date.endsWith('-'+String(truth.cells[0].day+i).padStart(2,'0')))?.day??truth.cells[0].day+i);
+            const expected=truth.cells[0].day+i;
             if(dayValue(selectedResult(arch,tMap,pMap,id,'date',names))===expected)dateCorrect++;
           });
           truth.cells.forEach(cell=>{
@@ -465,11 +464,15 @@ try{
           const people=new Set(parsed.detectedPeople.map(x=>x.sourceName));
           const dates=new Set(matrix.dates.map(x=>x.date));
           let cellCorrect=0,falseOff=0,nonOff=0,startCorrect=0,startTotal=0,endCorrect=0,endTotal=0;
+          let offTruth=0,offPredicted=0,offCorrect=0;
           const logical={};
           for(const cell of truth.cells){
             const key=cell.person+'|'+cell.date,out=outputs.get(key);
-            if(cell.state!=='OFF')nonOff++;
-            if(out?.state==='OFF'&&cell.state!=='OFF')falseOff++;
+            if(cell.state!=='OFF')nonOff++; else offTruth++;
+            if(out?.state==='OFF'){
+              offPredicted++;
+              if(cell.state==='OFF')offCorrect++; else falseOff++;
+            }
             if(cell.start){startTotal++;if(out?.start===cell.start)startCorrect++;}
             if(cell.end){endTotal++;if(out?.end===cell.end)endCorrect++;}
             const exact=!!out&&out.state===cell.state&&
@@ -487,8 +490,8 @@ try{
           return {
             personCorrect,personTotal:truth.names.length,dateCorrect,dateTotal:truthDates.length,
             startCorrect,startTotal,endCorrect,endTotal,cellCorrect,cellTotal:truth.cells.length,
-            falseOff,nonOff,wrongAuto,complete:complete?1:0,imageExact:cellCorrect===truth.cells.length?1:0,
-            logical,
+            falseOff,nonOff,offTruth,offPredicted,offCorrect,wrongAuto,
+            complete:complete?1:0,imageExact:cellCorrect===truth.cells.length?1:0,logical,
           };
         }
 
@@ -560,7 +563,8 @@ try{
                   endCorrect:0,endTotal:generated.truth.cells.filter(x=>x.end).length,
                   cellCorrect:0,cellTotal:generated.truth.cells.length,falseOff:0,
                   nonOff:generated.truth.cells.filter(x=>x.state!=='OFF').length,
-                  wrongAuto:0,complete:0,imageExact:0,logical};
+                  offTruth:generated.truth.cells.filter(x=>x.state==='OFF').length,
+                  offPredicted:0,offCorrect:0,wrongAuto:0,complete:0,imageExact:0,logical};
               }
               const parseMs=Math.round(performance.now()-parseStarted);
               const ocrMs=arch==='TESSERACT'?tessMs:arch==='PADDLE'?paddleMs:tessMs+paddleMs;
@@ -596,6 +600,8 @@ function aggregate(browser,arch,filter=()=>true){
     end:ratio(sum('endCorrect'),sum('endTotal')),
     cell:ratio(sum('cellCorrect'),sum('cellTotal')),
     falseOffCount:sum('falseOff'),falseOffRate:ratio(sum('falseOff'),sum('nonOff')),
+    offPrecision:ratio(sum('offCorrect'),sum('offPredicted')),
+    offRecall:ratio(sum('offCorrect'),sum('offTruth')),
     wrongAuto:sum('wrongAuto'),completeImageRate:ratio(sum('complete'),rows.length),
     imageExactRate:ratio(sum('imageExact'),rows.length),
     oraclePerson:ratio(raw('oracleRaw','personCorrect'),raw('oracleRaw','personTotal')),
