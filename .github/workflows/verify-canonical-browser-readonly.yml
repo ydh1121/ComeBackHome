@@ -1,20 +1,9 @@
 name: Canonical Browser Read-Only QA
 
+# Explicit only during quota cooldown. Never run the canonical browser QA
+# automatically on push or PR, even with fixture guards.
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/verify-canonical-browser-readonly.yml"
-      - "scripts/verify-canonical-browser-readonly.mjs"
-      - "scripts/verify-ocr-browser-parity.mjs"
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/verify-canonical-browser-readonly.yml"
-      - "scripts/verify-canonical-browser-readonly.mjs"
-      - "runtime-activation/pages-browser-qa.trigger"
 
 permissions:
   contents: read
