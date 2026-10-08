@@ -328,6 +328,16 @@ async function verifyOn(browserType, label, device = {}) {
 
     assert.equal(attemptedWrites.length, 0,
       'Read-only QA unexpectedly attempted production mutations');
+    const destinationReadback = await api.get(
+      ORIGIN + '/api/people/' + pathId + '/commute?kind=destination'
+    );
+    const destinationPoints = destinationReadback.ok()
+      ? ((await destinationReadback.json()).accessPoints ?? []) : [];
+    const destinationPlaceResponse = await api.get(
+      ORIGIN + '/api/people/' + pathId + '/places/destination'
+    );
+    const hasDestination = destinationPlaceResponse.ok() &&
+      Boolean((await destinationPlaceResponse.json()).place?.coordinate);
     results.push({
       browser: label,
       mapSDK: 'PASS',
@@ -345,6 +355,10 @@ async function verifyOn(browserType, label, device = {}) {
       nearbyTotal: nearby.length,
       nearbyBusCount: nearby.filter((item) => item.mode === 'BUS').length,
       originPersistedSelectionCount: selectedOriginCount,
+      originUnselectedAccessCount: savedOriginPoints.filter((item) => item.selected === false).length,
+      destinationSavedPlace: hasDestination,
+      destinationPersistedSelectionCount: destinationPoints.filter((item) => item.selected === true).length,
+      destinationUnselectedAccessCount: destinationPoints.filter((item) => item.selected === false).length,
       persistedSelectionReload: 'PASS_READ_ONLY',
       busSource: nearbyPayload.sourceStatus?.bus ?? 'UNKNOWN',
       nearbySubwayCount: nearby.filter((item) => item.mode === 'SUBWAY').length,
