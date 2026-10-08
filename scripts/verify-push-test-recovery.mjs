@@ -44,6 +44,7 @@ try{
   assert.equal(body.vapidKeyPairValid,true);
   assert.equal(body.pushDeliveryReady,false);
   assert.equal(body.activeSubscriptionCount,0);
+  assert.equal(body.validSubscriptionKeyShapeCount,0);
   assert.equal(body.scheduledNotificationReady,false);
   assert.ok(body.scheduledMissing.includes('KAKAO_REST_API_KEY'));
   assert.equal(JSON.stringify(body).includes(env.VAPID_PRIVATE_KEY),false,
@@ -96,6 +97,26 @@ try{
       assert.ok(!serialized.includes('sensitive-auth'));
       assert.ok(!serialized.includes(env.VAPID_PRIVATE_KEY));
     }
+    for (const [stage,expectedReason] of [
+      ['SUBSCRIPTION','PUSH_SUBSCRIPTION_KEY_INVALID'],
+      ['PREPARE','PUSH_REQUEST_PREPARATION_FAILED'],
+      ['HEADERS','PUSH_REQUEST_HEADERS_FAILED'],
+      ['FETCH','PUSH_NETWORK_CONNECT_FAILED'],
+    ]) {
+      gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
+        throw new contracts.PushDeliveryError('secret stage exception','transient',null,stage);
+      };
+      const result=await api.handleApiRequest(
+        new Request('https://come-back-home.pages.dev/api/notifications/test',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({endpoint:diagnosticEndpoint}),
+        }),env,null);
+      assert.equal(result.status,502);
+      const response=await result.json();
+      assert.equal(response.reason,expectedReason);
+      assert.equal(response.upstreamStatus,null);
+      assert.ok(!JSON.stringify(response).includes('secret stage exception'));
+    }
     gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
       throw new Error('internal crypto or transport exception with private data');
     };
@@ -113,6 +134,22 @@ try{
     gatewayModule.WebPushDeliveryGateway.prototype.send=originalSend;
     dbSubscriptions.length=0;
   }
+
+  const syntheticKey={
+    id:'synthetic-valid',endpoint:'https://push.example.invalid/format-check-only',
+    p256dh:env.VAPID_PUBLIC_KEY,auth:Buffer.alloc(16).toString('base64url'),
+    expiration_time:null,active:1,
+    created_at:'2026-10-09T00:00:00Z',updated_at:'2026-10-09T00:00:00Z',
+  };
+  dbSubscriptions.push(syntheticKey);
+  let telemetry=await api.handleApiRequest(
+    new Request('https://come-back-home.pages.dev/api/notifications/readiness'),env,null);
+  assert.equal((await telemetry.json()).validSubscriptionKeyShapeCount,1);
+  syntheticKey.auth='invalid';
+  telemetry=await api.handleApiRequest(
+    new Request('https://come-back-home.pages.dev/api/notifications/readiness'),env,null);
+  assert.equal((await telemetry.json()).validSubscriptionKeyShapeCount,0);
+  dbSubscriptions.length=0;
 
   const state={permission:'default',subscription:null};
   const repo={
