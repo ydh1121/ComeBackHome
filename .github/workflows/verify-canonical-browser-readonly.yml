@@ -23,9 +23,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
       - name: Install application dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Install ephemeral browser test runtime
         run: |
           npm install --no-save --ignore-scripts playwright@1.56.1
