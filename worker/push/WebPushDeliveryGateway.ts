@@ -1,4 +1,4 @@
-import webPush from 'web-push';
+import { buildPushPayload } from '@block65/webcrypto-web-push';
 import type {
   NotificationPayload,
   PushDeliveryGateway,
@@ -120,10 +120,11 @@ export function classifyPushProviderFailure(error: unknown): {
 }
 
 /**
- * web-push implements transport with Node's https.request(). Workers' native
- * fetch() is the supported outbound HTTP path: use web-push only for standards-
- * compliant aes128gcm encryption and VAPID request construction.
- * Preserve the same VAPID keys and browser subscriptions.
+ * Both encryption (RFC 8291 aes128gcm) and VAPID JWT generation (RFC 8292)
+ * MUST run on Workers-native Web Crypto, not Node's createECDH/createSign.
+ * Older web-push.generateRequestDetails fails during PREPARE in workerd even
+ * when outbound HTTPS is already changed to fetch().
+ * Keep exactly the existing VAPID keys and D1 PushSubscription records.
  */
 function validBase64UrlLength(value: string, expected: number): boolean {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) return false;
@@ -145,12 +146,17 @@ const defaultSender: WebPushSender = {
       throw new PushDeliveryError('Push subscription key format invalid.',
         'permanent', null, 'SUBSCRIPTION');
     }
-    let details: ReturnType<typeof webPush.generateRequestDetails>;
+    let details: Awaited<ReturnType<typeof buildPushPayload>>;
     try {
-      details = webPush.generateRequestDetails(subscription, payload, {
-        ...options,
-        contentEncoding: 'aes128gcm',
-      });
+      details = await buildPushPayload(
+        { data: payload, options: {
+          ttl: options.TTL,
+          urgency: options.urgency,
+        } },
+        { endpoint: subscription.endpoint, expirationTime: null,
+          keys: subscription.keys },
+        options.vapidDetails,
+      );
     } catch {
       throw new PushDeliveryError('Push encryption or VAPID signing failed.',
         'permanent', null, 'PREPARE');
@@ -161,6 +167,7 @@ const defaultSender: WebPushSender = {
     try {
       url = new URL(details.endpoint);
       if (url.protocol !== 'https:') throw new Error('HTTPS required');
+      // Workers supplies forbidden transport-level headers automatically.
       headers = new Headers(details.headers as HeadersInit);
       headers.delete('content-length');
       headers.delete('host');
