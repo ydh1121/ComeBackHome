@@ -502,6 +502,12 @@ jobs:
           assert config['PostProcess']['name']=='CTCLabelDecode'
           alphabet=config['PostProcess']['character_dict']
           assert alphabet and '강' in alphabet and '0' in alphabet
+          # Official PP-OCRv5 CTC mapping: blank index 0, explicit
+          # dictionary characters, then one train-time space class.
+          # The verified ONNX logits contain 11947 classes for 11945
+          # dictionary characters; retain the official space token.
+          assert ' ' not in alphabet
+          alphabet=[*alphabet,' ']
           shutil.copyfile(onnx,path/'inference.onnx')
           (path/'dict.json').write_text(json.dumps(alphabet,ensure_ascii=False))
           print('CBH_OFFICIAL_ONNX_SHA256='+digest)
