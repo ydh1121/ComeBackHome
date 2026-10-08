@@ -1,0 +1,206 @@
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+import { chromium, webkit } from 'playwright';
+
+// Real encoded PNG/JPEG -> image decode -> production preprocessor ->
+// actual Tesseract kor+eng workers -> pixel grid -> cell matrix -> review.
+// No synthetic OCR token/region injection, no user schedule image, no API calls.
+const root = fileURLToPath(new URL('../', import.meta.url));
+const server = await createServer({
+  root,
+  logLevel: 'error',
+  server: { host: '127.0.0.1', port: 0 },
+});
+const specs = [
+  { id: 'A1', family: 'A', people: 3, days: 5, border: 'full', format: 'png', quality: 1, scale: 1, background: '#fff', skew: 0 },
+  { id: 'B1', family: 'B', people: 4, days: 6, border: 'partial', format: 'jpeg', quality: 0.76, scale: 0.82, background: '#f3f3e9', skew: 0 },
+  { id: 'C1', family: 'C', people: 2, days: 4, border: 'none', format: 'png', quality: 1, scale: 1.15, background: '#eef0f4', skew: 0.008 },
+];
+const observed = [];
+try {
+  await server.listen();
+  const port = server.httpServer.address()?.port;
+  assert.equal(typeof port, 'number');
+  for (const [name, engine] of [['CHROMIUM', chromium], ['WEBKIT', webkit]]) {
+    const browser = await engine.launch({ headless: true });
+    try {
+      const page = await browser.newPage({ serviceWorkers: 'block' });
+      page.setDefaultTimeout(240000);
+      await page.goto('http://127.0.0.1:' + port + '/tools/ocr-eval/index.html',
+        { waitUntil: 'domcontentloaded' });
+      for (const spec of specs) {
+        const result = await page.evaluate(async (input) => {
+          const [{BrowserScheduleOcrPreprocessor,TesseractJsWorkerFactory,
+            TesseractScheduleImageTextExtractor},
+            {BrowserScheduleTableStructureDetector},
+            {StructureFirstScheduleImageRecognizer},
+            {SAME_ORIGIN_TESSERACT_ASSETS}] = await Promise.all([
+            import('/src/providers/import/TesseractScheduleImageTextExtractor.ts'),
+            import('/src/providers/import/ScheduleTableStructureDetector.ts'),
+            import('/src/providers/import/StructureFirstScheduleImageRecognizer.ts'),
+            import('/src/providers/import/ocrRuntimeConfig.ts'),
+          ]);
+          const width = 185 + input.days * 141;
+          const height = 110 + (input.people + 1) * 82;
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(width * input.scale);
+          canvas.height = Math.round(height * input.scale);
+          const ctx = canvas.getContext('2d', { alpha: false });
+          if (!ctx) throw Error('Canvas 2D unavailable');
+          ctx.setTransform(input.scale, 0, input.skew * input.scale, input.scale, 0, 0);
+          ctx.fillStyle = input.background;
+          ctx.fillRect(0, 0, width, height);
+          const left=22, top=75, labelWidth=151, cellWidth=141, rowHeight=82;
+          const border='#5a5e65';
+          ctx.fillStyle='#111';
+          ctx.textAlign='left';
+          ctx.font='bold 27px sans-serif';
+          ctx.fillText('2026년 10월',left+7,47);
+          ctx.font='bold 19px sans-serif';
+          ctx.fillText('이름',left+15,top+49);
+          for(let d=0;d<input.days;d++) {
+            const x=left+labelWidth+d*cellWidth;
+            ctx.font='bold 21px sans-serif';
+            ctx.fillText(String(d+1)+'일',x+47,top+48);
+          }
+          const names = [];
+          const truth = [];
+          for(let p=0;p<input.people;p++){
+            // Varied three-syllable Hangul names are generated, not user names.
+            const name=[0,1,2].map((j) =>
+              String.fromCharCode(0xac00+((p*173+j*1321+input.people*77+19)%11172))).join('');
+            names.push(name);
+            const y=top+(p+1)*rowHeight;
+            ctx.font='bold 24px sans-serif';
+            ctx.fillStyle='#12151b';
+            ctx.fillText(name,left+14,y+52);
+            for(let d=0;d<input.days;d++){
+              const x=left+labelWidth+d*cellWidth;
+              const state=(p+d)%6===0?'UNREADABLE':(p+2*d)%5===0?'OFF':
+                (p+d)%4===0?'INCOMPLETE':'WORK';
+              const date='2026-10-'+String(d+1).padStart(2,'0');
+              truth.push({ person:p, date, state,
+                start:state==='WORK'||state==='INCOMPLETE'?'09:00':null,
+                end:state==='WORK'?'18:00':null });
+              if(state==='OFF'){
+                ctx.fillStyle=(p+d)%2===0?'#e0e4e8':input.background;
+                ctx.fillRect(x+3,y+3,cellWidth-6,rowHeight-6);
+              }
+              if(state==='WORK'||state==='INCOMPLETE'){
+                ctx.fillStyle='#191919';
+                ctx.font='bold 23px sans-serif';
+                ctx.fillText('09:00',x+26,y+34);
+                if(state==='WORK')ctx.fillText('18:00',x+26,y+64);
+              }else if(state==='UNREADABLE'){
+                ctx.fillStyle='#444';
+                ctx.font='bold 21px sans-serif';
+                ctx.fillText('메모',x+37,y+48);
+              }
+            }
+          }
+          if(input.border!=='none'){
+            ctx.strokeStyle=border;
+            ctx.lineWidth=input.border==='full'?2:1.5;
+            for(let y=0;y<=input.people+1;y++){
+              if(input.border==='partial'&&y>0&&y%3===0)continue;
+              ctx.beginPath();
+              ctx.moveTo(left,top+y*rowHeight);
+              ctx.lineTo(left+labelWidth+input.days*cellWidth,top+y*rowHeight);
+              ctx.stroke();
+            }
+            for(let d=0;d<=input.days+1;d++){
+              if(input.border==='partial'&&d>0&&d%3===0)continue;
+              const x=d===0?left:d===1?left+labelWidth:
+                left+labelWidth+(d-1)*cellWidth;
+              ctx.beginPath();ctx.moveTo(x,top);
+              ctx.lineTo(x,top+(input.people+1)*rowHeight);ctx.stroke();
+            }
+          }
+          const blob=await new Promise((resolve,reject)=>canvas.toBlob(
+            value=>value?resolve(value):reject(Error('Raster encode failed')),
+            input.format==='jpeg'?'image/jpeg':'image/png',input.quality));
+          const file=new File([blob],'generated-'+input.id+'.'+input.format,
+            {type:blob.type});
+          const recognizer=new StructureFirstScheduleImageRecognizer(
+            new BrowserScheduleTableStructureDetector(),
+            new TesseractScheduleImageTextExtractor(
+              new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
+              new BrowserScheduleOcrPreprocessor(),
+              {useStructureFirstMode:true}),
+            async()=>[...names],
+          );
+          let diagnostics=null;
+          let failure=null;
+          try { diagnostics=await recognizer.evaluate(file); }
+          catch(error){failure=error instanceof Error?error.message.slice(0,220):'Unknown OCR error';}
+          const parsed=diagnostics?.parsed;
+          const observations=new Map();
+          for(const item of parsed?.scheduleCandidates??[])observations.set(
+            item.sourceRow+'|'+item.date,{state:'WORK',start:item.start,end:item.end});
+          for(const item of parsed?.reviewCandidates??[])observations.set(
+            item.sourceRow+'|'+item.date,
+            {state:item.recognitionState,start:item.start,end:item.end});
+          let correct=0,falseOff=0,matchedTime=0,timeTotal=0;
+          const signature=[];
+          for(const cell of truth){
+            const result=observations.get((cell.person+1)+'|'+cell.date);
+            const state=result?.state??'UNREADABLE';
+            signature.push(state);
+            if(state===cell.state)correct++;
+            if(state==='OFF'&&cell.state!=='OFF')falseOff++;
+            if(cell.start){timeTotal++;if(cell.start===result?.start)matchedTime++;}
+            if(cell.end){timeTotal++;if(cell.end===result?.end)matchedTime++;}
+          }
+          const recognized=new Set((parsed?.detectedPeople??[]).map(x=>x.sourceName));
+          return {
+            family:input.family,codec:blob.type,bytes:blob.size,
+            imageDecoded:canvas.width>0,realTesseractExecuted:failure==null,
+            error:failure?.slice(0,160)??null,cellCount:truth.length,correct,
+            falseOff,personTotal:names.length,
+            personExact:names.filter(name=>recognized.has(name)).length,
+            garbagePerson:[...recognized].filter(name=>!names.includes(name)).length,
+            dateTotal:input.days,dateRecovered:diagnostics?.matrix.dates.length??0,
+            timeTotal,matchedTime,
+            structure:diagnostics?.matrix.geometrySource??'FAILED',
+            ocrTokens:diagnostics?.layoutTokenCount??0,
+            logicalSignature:signature.join(','),
+          };
+        },spec);
+        observed.push({browser:name,id:spec.id,...result});
+      }
+    } finally { await browser.close(); }
+  }
+  const lines=[];
+  let allCells=0,allCorrect=0,falseOff=0,garbage=0;
+  for(const item of observed){
+    allCells+=item.cellCount;
+    allCorrect+=item.correct;
+    falseOff+=item.falseOff;
+    garbage+=item.garbagePerson;
+    const {logicalSignature,...safe}=item;
+    lines.push(safe);
+  }
+  const parity=specs.every(({id})=>{
+    const pair=observed.filter(item=>item.id===id);
+    return pair.length===2&&pair[0].logicalSignature===pair[1].logicalSignature;
+  });
+  const metrics={
+    realRasterGeneratorFamilies:3,realRasterImages:observed.length,
+    codecs:['PNG','JPEG'],engine:'Tesseract.js kor+eng / production structure recognizer',
+    precomputedOcrTokensSupplied:false,
+    executed:observed.some(item=>item.realTesseractExecuted),
+    cellAccuracy:allCells?Number((allCorrect/allCells).toFixed(4)):0,
+    falseOff,garbagePerson:garbage,
+    chromium:observed.filter(item=>item.browser==='CHROMIUM').some(x=>x.realTesseractExecuted)?'RAN':'FAIL',
+    webkit:observed.filter(item=>item.browser==='WEBKIT').some(x=>x.realTesseractExecuted)?'RAN':'FAIL',
+    logicalParity:parity?'PASS':'FAIL',
+    userOriginalImageUsed:false,acceptance:'NOT_CLAIMED',
+    byImage:lines,
+  };
+  console.log(JSON.stringify(metrics,null,2));
+  assert.equal(metrics.realRasterImages,6,'Generated real glyph fixture matrix incomplete');
+  assert.ok(metrics.executed,'No actual Tesseract pipeline executed');
+} finally {
+  await server.close();
+}
