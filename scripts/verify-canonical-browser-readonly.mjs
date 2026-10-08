@@ -27,6 +27,7 @@ async function verifyOn(browserType, label, device = {}) {
     const people = (await peopleResponse.json()).people ?? [];
     assert.ok(people.length, 'No canonical person available for read-only QA');
     let target = null;
+    let originCoordinate = null;
     for (const person of people) {
       const response = await api.get(
         ORIGIN + '/api/people/' + encodeURIComponent(person.id) + '/places/origin'
@@ -35,11 +36,29 @@ async function verifyOn(browserType, label, device = {}) {
       if (place?.coordinate && Number.isFinite(place.coordinate.x) &&
           Number.isFinite(place.coordinate.y)) {
         target = person.id;
+        originCoordinate = place.coordinate;
         break;
       }
     }
     assert.ok(target, 'No person with a persisted origin coordinate');
     const pathId = encodeURIComponent(target);
+    const proximityUrl = new URL(ORIGIN + '/api/providers/transit-nearby');
+    proximityUrl.searchParams.set('x', String(originCoordinate.x));
+    proximityUrl.searchParams.set('y', String(originCoordinate.y));
+    const nearbyResponse = await api.get(proximityUrl.toString());
+    assert.equal(nearbyResponse.status(), 200, 'canonical nearby transit endpoint');
+    const nearby = (await nearbyResponse.json()).results ?? [];
+    assert.ok(nearby.length, 'No nearby transit candidates for saved origin');
+    assert.ok(nearby.every((item) => Number.isFinite(item.distanceM) &&
+      item.distanceM <= (item.mode === 'BUS' ? 800 : 900)),
+      'Multi-km transit outlier leaked into normal nearby list');
+    assert.ok(nearby.every((item, index) => index === 0 ||
+      nearby[index - 1].distanceM <= item.distanceM),
+      'Nearby transit candidates not sorted by distance');
+    assert.ok(nearby.filter((item) => item.mode === 'BUS').every((item) =>
+      item.id.startsWith('seoul-bus:') && item.providerId && item.displayCode),
+      'Nearby bus candidate lacks official identity or ARS number');
+
     const page = await context.newPage();
     const javascriptErrors = [];
     page.on('pageerror', (error) => javascriptErrors.push(error.name ?? 'Error'));
@@ -59,6 +78,23 @@ async function verifyOn(browserType, label, device = {}) {
     assert.equal(renderedMap.sdkReady, true, 'Kakao Maps SDK not initialized');
     assert.equal(renderedMap.dimensionsValid, true, 'Interactive map dimensions invalid');
     assert.equal(renderedMap.hasRenderedChildren, true, 'Interactive map DOM not rendered');
+
+    const markers = page.locator(
+      '.kakao-transit-map [title^="버스 · "], .kakao-transit-map [title^="지하철 · "]'
+    );
+    await markers.first().waitFor({ state: 'visible', timeout: 20_000 });
+    const markerName = (await markers.first().getAttribute('title'))
+      .replace(/^(버스|지하철) · /, '');
+    if (label.startsWith('mobile')) await markers.first().tap();
+    else await markers.first().click();
+    const activePanel = page.getByRole('region', { name: '지도에서 선택한 교통편' });
+    await activePanel.waitFor({ timeout: 12_000 });
+    assert.ok((await activePanel.innerText()).includes(markerName),
+      'Clicked marker does not synchronize with active transit details');
+    assert.ok((await page.locator('.transit-row.map-active').innerText()).includes(markerName),
+      'Clicked marker does not highlight its matching list item');
+    assert.ok(await activePanel.getByRole('button', { name: /교통편 선택|선택 해제/ }).isVisible(),
+      'Marker selection does not expose the shared add/remove action');
 
     const input = page.locator('.transit-inline-search input[type="search"]');
     const transitResponseWait = page.waitForResponse(
@@ -103,6 +139,13 @@ async function verifyOn(browserType, label, device = {}) {
       browser: label,
       mapSDK: 'PASS',
       mapDOM: 'PASS',
+      mapMarkerInteraction: 'PASS',
+      markerListSync: 'PASS',
+      nearbyDistanceCap: 'PASS',
+      nearbyTotal: nearby.length,
+      nearbyBusCount: nearby.filter((item) => item.mode === 'BUS').length,
+      nearbySubwayCount: nearby.filter((item) => item.mode === 'SUBWAY').length,
+      nearbyMaximumMeters: Math.max(...nearby.map((item) => item.distanceM)),
       transitOnly: 'PASS',
       transitCount: transitResults.length,
       placeBusiness: 'PASS',
