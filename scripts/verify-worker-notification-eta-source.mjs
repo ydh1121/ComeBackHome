@@ -127,7 +127,7 @@ try {
     leftWorkAt: '2026-10-06T14:10:00.000Z',
   };
   const actualDeparture = await source.get('person-1', new Date('2026-10-06T14:11:00.000Z'));
-  expect(actualDeparture?.arrivalAt === '2026-10-06T14:35:00.000Z', 'LEFT_WORK must replace scheduled departure when it is later');
+  expect(actualDeparture?.arrivalAt === '2026-10-06T14:50:00.000Z', 'LEFT_WORK must use the explicitly selected 40-minute route, not the first 25-minute provider route');
   expect(actualDeparture?.confidence === 'FALLBACK', 'route-only actual-departure ETA must remain FALLBACK');
 
   presenceState = {
