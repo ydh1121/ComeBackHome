@@ -22,6 +22,17 @@ try {
   const mocks = await vite.ssrLoadModule('/src/mocks/repositories.ts');
   const stateModule = await vite.ssrLoadModule('/src/mocks/state.ts');
 
+  // Deterministic absolute KST boundary. This is an in-process fixture
+  // check, not an actual provider request or Cloudflare production mutation.
+  expect(workerApi.isKakaoRouteCooldownActive(
+    Date.parse('2026-10-08T23:59:59+09:00')) === true,
+    'Canonical upstream must be frozen before midnight');
+  expect(workerApi.isKakaoRouteCooldownActive(
+    Date.parse('2026-10-09T00:04:59+09:00')) === true,
+    'Canonical upstream must still be frozen at 00:04:59 KST');
+  expect(workerApi.isKakaoRouteCooldownActive(
+    Date.parse('2026-10-09T00:05:00+09:00')) === false,
+    'No automatic extension may be inferred at the explicit cutoff');
   const calls = {
     place: 0,
     route: 0,

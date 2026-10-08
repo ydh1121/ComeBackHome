@@ -14,6 +14,36 @@ async function verifyOn(browserType, label, device = {}) {
       ...device,
       locale: 'ko-KR',
       timezoneId: 'Asia/Seoul',
+      serviceWorkers: 'block',
+    });
+    // Browser-level network interception alone is not sufficient if a PWA
+    // service worker handles fetch. Intercept at the JS fetch callsite before
+    // app bootstrap as an additional no-quota safety barrier.
+    await context.addInitScript(() => {
+      const nativeFetch = window.fetch.bind(window);
+      const routeFixture = {
+        results: [
+          { id: 'fixture-route-A', totalMinutes: 35, transferCount: 1,
+            walkMinutes: 6, steps: [{ type: 'SUBWAY', label: 'fixture only' }] },
+          { id: 'fixture-route-B', totalMinutes: 42, transferCount: 0,
+            walkMinutes: 8, steps: [{ type: 'BUS', label: 'fixture only' }] },
+        ],
+      };
+      window.fetch = (input, init) => {
+        const uri = typeof input === 'string' ? input :
+          input instanceof Request ? input.url : String(input);
+        try {
+          if (new URL(uri, location.origin).pathname === '/api/providers/routes') {
+            return Promise.resolve(new Response(JSON.stringify(routeFixture), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }));
+          }
+        } catch {
+          return Promise.reject(new Error('Route QA blocked an invalid request URL'));
+        }
+        return nativeFetch(input, init);
+      };
     });
     const api = context.request;
     const configResponse = await api.get(ORIGIN + '/api/client-config');
@@ -76,6 +106,22 @@ async function verifyOn(browserType, label, device = {}) {
         return;
       }
       await route.continue();
+    });
+    // All route recommendations in this normal Chromium/WebKit regression
+    // are deterministic fixtures. Never consume Kakao public-transit quota.
+    let fixtureRouteRequests = 0;
+    await page.route(/\/api\/providers\/routes(?:\?|$)/, async (route) => {
+      fixtureRouteRequests++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ results: [
+          { id: 'fixture-route-A', totalMinutes: 35, transferCount: 1,
+            walkMinutes: 6, steps: [{ type: 'SUBWAY', label: 'fixture only' }] },
+          { id: 'fixture-route-B', totalMinutes: 42, transferCount: 0,
+            walkMinutes: 8, steps: [{ type: 'BUS', label: 'fixture only' }] },
+        ] }),
+      });
     });
     const javascriptErrors = [];
     page.on('pageerror', (error) => javascriptErrors.push(error.name ?? 'Error'));
@@ -351,31 +397,9 @@ async function verifyOn(browserType, label, device = {}) {
       placePairStatus: 'NOT_RUN',
       placePairRoutes: 0,
     };
-    if (originCoordinate && destinationPlace?.coordinate) {
-      const u = new URL(ORIGIN + '/api/providers/routes');
-      u.searchParams.set('originX', String(originCoordinate.x));
-      u.searchParams.set('originY', String(originCoordinate.y));
-      u.searchParams.set('destinationX', String(destinationPlace.coordinate.x));
-      u.searchParams.set('destinationY', String(destinationPlace.coordinate.y));
-      try {
-        const response = await api.get(u.toString());
-        probe.placePairStatus = response.status() === 200 ? 'HTTP_200' :
-          [401, 403].includes(response.status()) ? 'AUTH' : 'HTTP_' + response.status();
-        const body = await response.json().catch(() => null);
-        if (response.ok()) {
-          probe.placePairRoutes = (body?.results ?? []).length;
-        } else {
-          // The Worker forwards only a numeric upstream code; redact any
-          // private error string, location or provider request URL.
-          const safeCode = typeof body?.error === 'string'
-            ? /^Provider request failed: kakao-map\/public-transit-routing HTTP \d{3} CODE (-?\d{1,5})$/.exec(body.error)?.[1]
-            : undefined;
-          if (safeCode) probe.placePairUpstreamCode = Number(safeCode);
-        }
-      } catch {
-        probe.placePairStatus = 'NETWORK_ERROR';
-      }
-    }
+    // Baseline is intentionally counts-only. A direct api.get('/providers/routes')
+    // bypasses page interception and would spend real provider quota.
+    probe.placePairStatus = 'SKIPPED_QUOTA_FIREWALL';
     console.log('CBH_ROUTE_PROBE_' + label + '=' + JSON.stringify(probe));
     await page.goto(ORIGIN + '/people/' + pathId + '/commute',
       { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -463,7 +487,9 @@ async function verifyOn(browserType, label, device = {}) {
       transitOnly: 'PASS',
       transitCount: transitResults.length,
       placeBusiness: 'PASS',
-      routeDraftSelection: 'PASS',
+      routeDraftSelection: 'PASS_FIXTURE',
+      fixtureRouteRequests,
+      liveKakaoRouteRequests: 0,
       readOnlyPreferredRouteUse: preferredRouteUse,
       productionWrites: 0,
       javascriptErrors: javascriptErrors.length,
@@ -480,5 +506,6 @@ async function verifyOn(browserType, label, device = {}) {
 await verifyOn(chromium, 'desktop-chromium', { viewport: { width: 1365, height: 900 } });
 await verifyOn(webkit, 'mobile-webkit-emulation', devices['iPhone 13']);
 
-console.log(JSON.stringify({ results, failures, readOnly: true }, null, 2));
+console.log(JSON.stringify({ results, failures, readOnly: true,
+  routeProvider: 'FIXTURE_ONLY', liveKakaoRouteRequests: 0 }, null, 2));
 if (failures.length) process.exit(1);

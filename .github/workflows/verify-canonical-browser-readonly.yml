@@ -1,14 +1,9 @@
 name: Canonical Browser Read-Only QA
 
+# Explicit only during quota cooldown. Never run the canonical browser QA
+# automatically on push or PR, even with fixture guards.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/verify-canonical-browser-readonly.yml"
-      - "scripts/verify-canonical-browser-readonly.mjs"
-      - "runtime-activation/pages-browser-qa.trigger"
 
 permissions:
   contents: read
@@ -30,7 +25,9 @@ jobs:
         run: |
           npm install --no-save --ignore-scripts playwright@1.56.1
           npx playwright install --with-deps chromium webkit
-      - name: Verify production browser flows without mutating user data
+      - name: Verify same synthetic pixel matrix in Chromium and WebKit
+        run: node scripts/verify-ocr-browser-parity.mjs
+      - name: Verify production non-route browser flows without mutating user data
         run: node scripts/verify-canonical-browser-readonly.mjs
       - name: Preserve private layout-crop evidence
         if: always()

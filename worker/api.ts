@@ -1,3 +1,4 @@
+import { BUILD_COMMIT_SHA } from './build-revision';
 import type { Coordinate, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
 import type { PlaceSearchResult, TransitSearchResult } from '../src/application/contracts/providers';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
@@ -60,6 +61,14 @@ function asPlaceKind(value: string): PlaceKind {
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : 'Unexpected API error.';
   return json({ error: message }, 400);
+}
+
+// Absolute temporary quota cooldown. Only the canonical user-facing origin
+// is blocked; local fixture contract tests never dispatch real provider calls.
+// Expiry is an earliest allowed smoke time, NOT proof of quota reset.
+const KAKAO_ROUTE_FREEZE_UNTIL = Date.parse('2026-10-09T00:05:00+09:00');
+export function isKakaoRouteCooldownActive(epochMs: number): boolean {
+  return epochMs < KAKAO_ROUTE_FREEZE_UNTIL;
 }
 
 function coordinateDistanceMeters(left: Coordinate, right: Coordinate): number {
@@ -206,7 +215,7 @@ export async function handleApiRequest(
 
     if (segments.length === 2 && segments[1] === 'health' && request.method === 'GET') {
       const row = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
-      return json({ ok: row?.ok === 1 });
+      return json({ ok: row?.ok === 1, version: BUILD_COMMIT_SHA === 'unknown' ? 'unknown' : BUILD_COMMIT_SHA.slice(0, 12), commitSha: BUILD_COMMIT_SHA });
     }
 
     if (segments.length === 2 && segments[1] === 'client-config' && request.method === 'GET') {
@@ -492,6 +501,10 @@ export async function handleApiRequest(
           }
 
           if (segments[2] === 'routes') {
+            if (url.hostname === 'come-back-home.pages.dev' &&
+                isKakaoRouteCooldownActive(Date.now())) {
+              return json({ error: 'KAKAO_ROUTE_QUOTA_BLOCKED_UNTIL_20261009_0005_KST' }, 503);
+            }
             const originX = Number(url.searchParams.get('originX'));
             const originY = Number(url.searchParams.get('originY'));
             const destinationX = Number(url.searchParams.get('destinationX'));

@@ -1,414 +1,44 @@
-name: Verify Pages Transit Runtime
+name: Verify Pages Transit Runtime — One-Shot Kakao Route Smoke
 
+# Never called by push/PR/merge. Explicitly approved, one-run only, and the
+# Node script also refuses execution before 2026-10-09 00:05 KST.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/verify-pages-transit-runtime.yml"
-      - "runtime-activation/pages-transit-smoke.trigger"
+    inputs:
+      route_smoke:
+        description: "Explicitly approve exactly ONE live Kakao public-transit API request"
+        required: true
+        type: choice
+        options:
+          - DENIED
+          - APPROVED_ONE_RUN
+        default: DENIED
 
 permissions:
   contents: read
 
+concurrency:
+  group: cbh-kakao-one-shot-route-smoke
+  cancel-in-progress: false
+
 jobs:
   verify:
+    if: ${{ inputs.route_smoke == 'APPROVED_ONE_RUN' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CBH_KAKAO_ROUTE_SMOKE: ${{ inputs.route_smoke }}
     steps:
-      - name: Verify Pages same-origin transit runtime
-        shell: bash
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate guarded script syntax without network access
+        run: node --check scripts/verify-kakao-route-one-shot.mjs
+      - name: Install isolated Chromium QA dependencies
         run: |
-          node --input-type=module <<'NODE'
-          const origin = 'https://come-back-home.pages.dev';
-          const publicCoordinate = { x: 127.0276, y: 37.4979 };
-
-          const root = await fetch(origin + '/', { redirect: 'follow' });
-          if (!root.ok) throw new Error('Pages root failed: HTTP ' + root.status);
-
-          const health = await fetch(origin + '/api/health', {
-            headers: { Accept: 'application/json' },
-          });
-          const healthBody = await health.json().catch(() => null);
-          if (!health.ok || healthBody?.ok !== true) {
-            throw new Error('Pages API health failed: HTTP ' + health.status);
-          }
-
-          const clientConfig = await fetch(origin + '/api/client-config', {
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-          });
-          const clientConfigBody = await clientConfig.json().catch(() => null);
-          const clientKeyLength =
-            typeof clientConfigBody?.kakaoMaps?.javaScriptKey === 'string'
-              ? clientConfigBody.kakaoMaps.javaScriptKey.trim().length
-              : 0;
-          const interactiveKakaoMapRuntimeConfig =
-            clientConfig.ok &&
-            clientConfigBody?.kakaoMaps?.configured === true &&
-            clientKeyLength > 0;
-
-          let providerStatusBody = null;
-          for (let attempt = 0; attempt < 30; attempt += 1) {
-            const providerStatus = await fetch(origin + '/api/providers/status', {
-              headers: { Accept: 'application/json' },
-            });
-            providerStatusBody = await providerStatus.json().catch(() => null);
-            const capabilities = providerStatusBody?.capabilities ?? {};
-            if (
-              providerStatus.ok &&
-              providerStatusBody?.enabled === true &&
-              capabilities.kakao === true &&
-              capabilities.seoulBus === true &&
-              capabilities.seoulSubwayStationSearch === true &&
-              capabilities.seoulSubwayRealtime === true
-            ) break;
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-          if (
-            providerStatusBody?.enabled !== true ||
-            providerStatusBody?.capabilities?.kakao !== true ||
-            providerStatusBody?.capabilities?.seoulBus !== true ||
-            providerStatusBody?.capabilities?.seoulSubwayStationSearch !== true ||
-            providerStatusBody?.capabilities?.seoulSubwayRealtime !== true
-          ) {
-            throw new Error('Pages realtime provider bindings are not active');
-          }
-
-          const schedulerProbe = await fetch(origin + '/api/internal/scheduler-tick', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scheduledTime: Date.now() }),
-          });
-          if (schedulerProbe.status !== 401) {
-            throw new Error('Scheduler endpoint must reject unauthenticated requests');
-          }
-
-          const settingsResponse = await fetch(origin + '/api/notifications/settings', {
-            headers: { Accept: 'application/json' },
-          });
-          const settingsBody = await settingsResponse.json().catch(() => null);
-          const currentSettings = settingsBody?.settings;
-          if (!settingsResponse.ok || !currentSettings) {
-            throw new Error('Pages notification settings read failed');
-          }
-
-          const settingsWrite = await fetch(origin + '/api/notifications/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              shiftEndEnabled: currentSettings.shiftEndEnabled === true,
-              etaChangeEnabled: currentSettings.etaChangeEnabled === true,
-              leftWorkEnabled: currentSettings.leftWorkEnabled === true,
-              homeArrivalEnabled: currentSettings.homeArrivalEnabled === true,
-            }),
-          });
-          const settingsWriteBody = await settingsWrite.json().catch(() => null);
-          if (!settingsWrite.ok || !settingsWriteBody?.settings) {
-            throw new Error('Pages notification settings same-value write failed');
-          }
-          for (const key of [
-            'shiftEndEnabled',
-            'etaChangeEnabled',
-            'leftWorkEnabled',
-            'homeArrivalEnabled',
-          ]) {
-            if (settingsWriteBody.settings[key] !== currentSettings[key]) {
-              throw new Error('Pages notification settings round-trip mismatch: ' + key);
-            }
-          }
-
-          const presenceProbe = await fetch(origin + '/api/presence-events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              eventId: 'canonical-presence-auth-probe',
-              personId: 'auth-probe-only',
-              type: 'LEFT_WORK',
-            }),
-          });
-          if (presenceProbe.status !== 401) {
-            throw new Error('Presence endpoint must reject unauthenticated requests');
-          }
-
-          const pushTestProbe = await fetch(origin + '/api/notifications/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              endpoint: 'https://push.example.invalid/canonical-missing-probe',
-            }),
-          });
-          if (pushTestProbe.status !== 404) {
-            throw new Error('Test push endpoint deployment mismatch: HTTP ' + pushTestProbe.status);
-          }
-
-          const nearbyUrl = new URL(origin + '/api/providers/transit-nearby');
-          nearbyUrl.searchParams.set('x', String(publicCoordinate.x));
-          nearbyUrl.searchParams.set('y', String(publicCoordinate.y));
-          const nearby = await fetch(nearbyUrl, {
-            headers: { Accept: 'application/json' },
-          });
-          const nearbyBody = await nearby.json().catch(() => null);
-          const results = Array.isArray(nearbyBody?.results) ? nearbyBody.results : [];
-          if (!nearby.ok || results.length === 0) {
-            throw new Error('Pages nearby transit failed: HTTP ' + nearby.status + ' count=' + results.length);
-          }
-          const modes = [...new Set(results.map((item) => item?.mode).filter(Boolean))];
-          if (!modes.includes('BUS') && !modes.includes('SUBWAY')) {
-            throw new Error('Nearby transit returned no supported mode');
-          }
-
-          // Regression probe for the user's saved-origin symptom around Eonju:
-          // resolve Eonju from Kakao first, then require nearby results to remain
-          // distance-sorted and inside the same adaptive radius contract as the API.
-          const eonjuSearchUrl = new URL(origin + '/api/providers/place-search');
-          eonjuSearchUrl.searchParams.set('q', '언주역');
-          const eonjuSearch = await fetch(eonjuSearchUrl, {
-            headers: { Accept: 'application/json' },
-          });
-          const eonjuSearchBody = await eonjuSearch.json().catch(() => null);
-          const eonjuPlaces = Array.isArray(eonjuSearchBody?.results)
-            ? eonjuSearchBody.results
-            : [];
-          const eonju = eonjuPlaces.find((item) =>
-            String(item?.placeName ?? '').includes('언주') &&
-            Number.isFinite(item?.coordinate?.x) &&
-            Number.isFinite(item?.coordinate?.y)
-          );
-          if (!eonjuSearch.ok || !eonju) {
-            throw new Error('Kakao Eonju anchor resolution failed');
-          }
-
-          const eonjuNearbyUrl = new URL(origin + '/api/providers/transit-nearby');
-          eonjuNearbyUrl.searchParams.set('x', String(eonju.coordinate.x));
-          eonjuNearbyUrl.searchParams.set('y', String(eonju.coordinate.y));
-          let eonjuNearby = null;
-          let eonjuResults = [];
-          for (let attempt = 0; attempt < 30; attempt += 1) {
-            const response = await fetch(eonjuNearbyUrl, {
-              headers: { Accept: 'application/json' },
-              cache: 'no-store',
-            });
-            const body = await response.json().catch(() => null);
-            const candidateResults = Array.isArray(body?.results) ? body.results : [];
-            const candidateSubways = candidateResults.filter((item) => item?.mode === 'SUBWAY');
-            const subwayDistances = candidateSubways
-              .map((item) => Number(item?.distanceM))
-              .filter(Number.isFinite)
-              .sort((left, right) => left - right);
-            const nearest = subwayDistances[0];
-            const max = subwayDistances[subwayDistances.length - 1];
-            const threshold = Number.isFinite(nearest)
-              ? nearest <= 900
-                ? Math.min(900, Math.max(450, nearest + 250))
-                : nearest + 400
-              : null;
-            const forbiddenLeak = candidateSubways.some((item) =>
-              ['압구정', '신사', '학동'].some((name) =>
-                String(item?.name ?? '').includes(name)
-              )
-            );
-
-            eonjuNearby = response;
-            eonjuResults = candidateResults;
-            if (
-              response.ok &&
-              candidateResults.length > 0 &&
-              threshold != null &&
-              Number.isFinite(max) &&
-              max <= threshold &&
-              !forbiddenLeak
-            ) break;
-
-            if (attempt < 29) {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-            }
-          }
-          if (!eonjuNearby?.ok || eonjuResults.length === 0) {
-            throw new Error('Eonju nearby transit failed');
-          }
-
-          const eonjuDistances = eonjuResults.map((item) => Number(item?.distanceM));
-          if (eonjuDistances.some((distance) => !Number.isFinite(distance))) {
-            throw new Error('Eonju nearby transit contains missing distance evidence');
-          }
-          for (let index = 1; index < eonjuDistances.length; index += 1) {
-            if (eonjuDistances[index] < eonjuDistances[index - 1]) {
-              throw new Error('Eonju nearby transit is not sorted by Kakao distance');
-            }
-          }
-
-          const distanceContract = (mode, items) => {
-            const distances = items
-              .map((item) => Number(item?.distanceM))
-              .filter(Number.isFinite)
-              .sort((left, right) => left - right);
-            if (!distances.length) return { nearest: null, max: null, threshold: null };
-            const nearest = distances[0];
-            const baseRadius = mode === 'BUS' ? 450 : 450;
-            const delta = mode === 'BUS' ? 450 : 250;
-            const normalCap = mode === 'BUS' ? 800 : 900;
-            const threshold = nearest <= normalCap
-              ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
-              : nearest + 400;
-            const max = distances[distances.length - 1];
-            if (max > threshold) {
-              throw new Error(
-                'Eonju ' + mode + ' distance scope exceeded: max=' + max +
-                ' threshold=' + threshold
-              );
-            }
-            return { nearest, max, threshold };
-          };
-
-          const eonjuBusDistance = distanceContract(
-            'BUS',
-            eonjuResults.filter((item) => item?.mode === 'BUS'),
-          );
-          const eonjuSubwayItems = eonjuResults.filter((item) => item?.mode === 'SUBWAY');
-          const eonjuSubwayDistance = distanceContract('SUBWAY', eonjuSubwayItems);
-          const nearestEonjuSubway = eonjuSubwayItems
-            .slice()
-            .sort((left, right) => Number(left.distanceM) - Number(right.distanceM))[0];
-          if (
-            !nearestEonjuSubway ||
-            !String(nearestEonjuSubway.name ?? '').includes('언주')
-          ) {
-            throw new Error(
-              'Eonju coordinate did not rank Eonju station as the nearest subway'
-            );
-          }
-          const forbiddenEonjuStations = ['압구정', '신사', '학동'];
-          const leakedEonjuStations = eonjuSubwayItems
-            .filter((item) =>
-              forbiddenEonjuStations.some((name) =>
-                String(item?.name ?? '').includes(name)
-              )
-            )
-            .map((item) => ({
-              name: item.name,
-              distanceM: item.distanceM,
-            }));
-          if (leakedEonjuStations.length) {
-            throw new Error(
-              'Eonju nearby subway leaked out-of-scope stations: ' +
-              JSON.stringify(leakedEonjuStations)
-            );
-          }
-
-          const resolveBusUrl = new URL(origin + '/api/providers/transit-resolve');
-          resolveBusUrl.searchParams.set('mode', 'BUS');
-          resolveBusUrl.searchParams.set('name', '강남역');
-          resolveBusUrl.searchParams.set('x', String(publicCoordinate.x));
-          resolveBusUrl.searchParams.set('y', String(publicCoordinate.y));
-          const busResolve = await fetch(resolveBusUrl, {
-            headers: { Accept: 'application/json' },
-          });
-          const busResolveBody = await busResolve.json().catch(() => null);
-          const resolvedBus = busResolveBody?.resolved ?? {};
-          const busRoutes = Array.isArray(resolvedBus?.busRoutes) ? resolvedBus.busRoutes : [];
-          if (!busResolve.ok || !resolvedBus?.providerId || busRoutes.length === 0) {
-            throw new Error('Seoul bus realtime resolution failed');
-          }
-
-          let busArrivalCount = 0;
-          let busRoutesChecked = 0;
-          for (const route of busRoutes.slice(0, 5)) {
-            if (!route?.providerRouteId) continue;
-            const busArrivalUrl = new URL(origin + '/api/providers/bus-arrivals');
-            busArrivalUrl.searchParams.set('stopProviderId', String(resolvedBus.providerId));
-            busArrivalUrl.searchParams.set('routeProviderId', String(route.providerRouteId));
-            const busArrival = await fetch(busArrivalUrl, {
-              headers: { Accept: 'application/json' },
-            });
-            const busArrivalBody = await busArrival.json().catch(() => null);
-            if (!busArrival.ok || !Array.isArray(busArrivalBody?.arrivals)) {
-              throw new Error('Seoul bus realtime arrival endpoint failed');
-            }
-            busRoutesChecked += 1;
-            busArrivalCount += busArrivalBody.arrivals.length;
-          }
-          if (busRoutesChecked === 0) {
-            throw new Error('Seoul bus realtime route probe had no callable route');
-          }
-
-          const resolveSubwayUrl = new URL(origin + '/api/providers/transit-resolve');
-          resolveSubwayUrl.searchParams.set('mode', 'SUBWAY');
-          resolveSubwayUrl.searchParams.set('name', '강남역');
-          resolveSubwayUrl.searchParams.set('line', '2호선');
-          resolveSubwayUrl.searchParams.set('x', String(publicCoordinate.x));
-          resolveSubwayUrl.searchParams.set('y', String(publicCoordinate.y));
-          const subwayResolve = await fetch(resolveSubwayUrl, {
-            headers: { Accept: 'application/json' },
-          });
-          const subwayResolveBody = await subwayResolve.json().catch(() => null);
-          const resolvedSubway = subwayResolveBody?.resolved ?? {};
-          if (!subwayResolve.ok || !resolvedSubway?.providerId || !resolvedSubway?.name) {
-            throw new Error('Seoul subway station resolution failed');
-          }
-
-          const subwayArrivalUrl = new URL(origin + '/api/providers/subway-arrivals');
-          subwayArrivalUrl.searchParams.set('providerStationId', String(resolvedSubway.providerId));
-          subwayArrivalUrl.searchParams.set('stationName', String(resolvedSubway.name));
-          if (resolvedSubway.line) {
-            subwayArrivalUrl.searchParams.set('line', String(resolvedSubway.line));
-          }
-          const subwayArrival = await fetch(subwayArrivalUrl, {
-            headers: { Accept: 'application/json' },
-          });
-          const subwayArrivalBody = await subwayArrival.json().catch(() => null);
-          if (!subwayArrival.ok || !Array.isArray(subwayArrivalBody?.arrivals)) {
-            throw new Error('Seoul subway realtime arrival endpoint failed');
-          }
-          const subwayArrivalCount = subwayArrivalBody.arrivals.length;
-
-          const firstMarkers = results
-            .filter((item) => Number.isFinite(item?.coordinate?.x) && Number.isFinite(item?.coordinate?.y))
-            .slice(0, 4);
-          const mapUrl = new URL(origin + '/api/providers/static-map');
-          mapUrl.searchParams.set('centerX', String(publicCoordinate.x));
-          mapUrl.searchParams.set('centerY', String(publicCoordinate.y));
-          for (const item of firstMarkers) {
-            mapUrl.searchParams.append('marker', item.coordinate.x + ',' + item.coordinate.y);
-          }
-
-          const mapResponse = await fetch(mapUrl);
-          const contentType = mapResponse.headers.get('content-type') ?? '';
-          const mapBytes = (await mapResponse.arrayBuffer()).byteLength;
-          if (!mapResponse.ok || !contentType.startsWith('image/') || mapBytes < 1000) {
-            throw new Error(
-              'Pages static map failed: HTTP ' + mapResponse.status +
-              ' contentType=' + contentType +
-              ' bytes=' + mapBytes
-            );
-          }
-
-          console.log(JSON.stringify({
-            pagesRootReachable: true,
-            sameOriginHealth: true,
-            interactiveKakaoMapRuntimeConfig,
-            providerRuntimeEnabled: true,
-            realtimeProviderBindings: providerStatusBody.capabilities,
-            busRealtimeResolved: true,
-            busRoutesChecked,
-            busArrivalCount,
-            subwayRealtimeResolved: true,
-            subwayArrivalCount,
-            schedulerEndpointProtected: true,
-            notificationSettingsRoundTrip: true,
-            presenceEndpointProtected: true,
-            realTestPushEndpointDeployed: true,
-            nearbyTransitCount: results.length,
-            nearbyModes: modes,
-            eonjuNearbyTransitCount: eonjuResults.length,
-            eonjuNearestSubway: nearestEonjuSubway.name,
-            eonjuBusDistance,
-            eonjuSubwayDistance,
-            eonjuForbiddenStationLeakCount: leakedEonjuStations.length,
-            markerCandidates: firstMarkers.length,
-            staticMapContentType: contentType,
-            staticMapBytes: mapBytes,
-            publicTestCoordinateOnly: true,
-            valuesExposed: false,
-          }));
-          NODE
+          npm install --no-audit --no-fund
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: One live route request, then cached response UI acceptance
+        run: node scripts/verify-kakao-route-one-shot.mjs

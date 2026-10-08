@@ -144,6 +144,11 @@ export interface StructureFirstRecognitionDiagnostics {
     total: number;
   };
   roiCount: number;
+  matrixInput: ReturnType<typeof inspectScheduleMatrixInput>;
+  registeredPriorCount: number;
+  matchedRegisteredPeopleCount: number;
+  unresolvedPersonRowCount: number;
+  rejectedNonPersonLabelCount: number;
 }
 
 export function interpretStructureFirstSchedule(
@@ -333,6 +338,12 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
       ? await this.knownPersonNames()
       : this.knownPersonNames;
     const parsed = interpretStructureFirstSchedule(matrix, regionResults, currentPersonNames);
+    const normalizedPrior = new Set(
+      currentPersonNames.map(normalizePersonCandidate)
+        .filter((name): name is string => !!name),
+    );
+    const matchedRegisteredPeopleCount = parsed.detectedPeople
+      .filter((person) => normalizedPrior.has(person.sourceName)).length;
     await onProgress?.(98);
 
     return {
@@ -349,6 +360,14 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
         total: Math.round(performance.now() - started),
       },
       roiCount: regions.length,
+      matrixInput: inputDiagnostics,
+      registeredPriorCount: normalizedPrior.size,
+      matchedRegisteredPeopleCount,
+      unresolvedPersonRowCount: Math.max(0, matrix.rows.length - parsed.detectedPeople.length),
+      rejectedNonPersonLabelCount: regionResults.filter((result) =>
+        result.id.startsWith('person::') && !!result.text.trim() &&
+        normalizePersonCandidate(result.text) == null,
+      ).length,
     };
   }
 
