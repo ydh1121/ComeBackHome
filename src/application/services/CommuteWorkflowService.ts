@@ -211,7 +211,12 @@ export class TransitSearchService implements TransitSearchActions {
       busRoutes: resolved.busRoutes,
     };
     await this.commute.upsertAccessPoint(point);
-    return point;
+    // D1 de-duplicates by person/place/provider. On conflict its canonical
+    // primary key survives; never pass the speculative UUID to route FKs.
+    const saved = (await this.commute.listAccessPoints(personId, kind))
+      .find((candidate) => candidate.providerId === point.providerId && candidate.mode === point.mode);
+    if (!saved) throw new Error('Transit access was not persisted.');
+    return saved;
   }
 
 }
