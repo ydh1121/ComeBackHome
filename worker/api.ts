@@ -17,6 +17,7 @@ import {
   type PresenceEventType,
 } from './presence-event-ingest';
 import { createNotificationActivationReadiness } from './notification-activation-readiness';
+import { createPushDeliveryRuntime, inspectPushDeliveryConfig } from './push-delivery-readiness';
 import { PushDeliveryError } from './contracts';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
@@ -908,6 +909,23 @@ export async function handleApiRequest(
       }
     }
 
+    if (segments.length === 3 && segments[1] === 'notifications' &&
+        segments[2] === 'readiness' && request.method === 'GET') {
+      const push = inspectPushDeliveryConfig(env);
+      const scheduled = createNotificationActivationReadiness(env, providerRuntime);
+      const activeSubscriptionCount = (await new D1SubscriptionStore(env.DB).listActive()).length;
+      return json({
+        vapidConfigured: !push.missing.some((value) => value.startsWith('VAPID_')),
+        pushDeliveryReady: push.ready && activeSubscriptionCount > 0,
+        pushTransportConfigured: push.ready,
+        pushMissing: push.missing,
+        activeSubscriptionCount,
+        scheduledNotificationReady: scheduled.ready,
+        scheduledMissing: scheduled.missing,
+        valuesExposed: false,
+      });
+    }
+
     if (
       segments.length === 3 &&
       segments[1] === 'notifications' &&
@@ -916,18 +934,27 @@ export async function handleApiRequest(
     ) {
       const body = await readObject(request);
       const endpoint = asString(body.endpoint, 'endpoint');
-      const readiness = createNotificationActivationReadiness(env, providerRuntime);
-      if (!readiness.ready) {
-        return json({ error: 'Notification runtime is not ready.', missing: readiness.missing }, 503);
+      // Test push must not depend on Kakao, ETA or scheduled-notification
+      // planner readiness. Only VAPID, TTL, flag and the target D1 subscription.
+      const delivery = createPushDeliveryRuntime(env);
+      if (!delivery.ready || !delivery.gateway || !delivery.subscriptions) {
+        return json({
+          error: 'Push delivery runtime is not ready.',
+          reason: 'PUSH_RUNTIME_NOT_READY',
+          missing: delivery.missing,
+        }, 503);
       }
 
-      const subscriptions = readiness.dependencies.outbox.subscriptions;
+      const subscriptions = delivery.subscriptions;
       const active = await subscriptions.listActive();
       const subscription = active.find((item) => item.endpoint === endpoint);
-      if (!subscription) return json({ error: 'Active push subscription was not found.' }, 404);
+      if (!subscription) return json({
+        error: 'Active push subscription was not found.',
+        reason: 'SUBSCRIPTION_NOT_REGISTERED',
+      }, 404);
 
       try {
-        await readiness.dependencies.outbox.gateway.send(subscription, {
+        await delivery.gateway.send(subscription, {
           title: 'ComeBackHome',
           body: '테스트 알림입니다.',
           tag: 'cbh:test',
@@ -936,12 +963,23 @@ export async function handleApiRequest(
       } catch (error) {
         if (error instanceof PushDeliveryError && error.kind === 'terminal-subscription') {
           await subscriptions.deactivateByEndpoint(endpoint);
-          return json({ error: 'Push subscription is no longer active.' }, 410);
+          return json({ error: 'Push subscription is no longer active.', reason: 'STALE_SUBSCRIPTION' }, 410);
         }
-        return json({ error: 'Test push delivery failed.' }, 502);
+        return json({ error: 'Test push delivery failed.', reason: 'PUSH_PROVIDER_REJECTED' }, 502);
       }
 
       return json({ sent: true });
+    }
+
+    if (segments.length === 4 && segments[1] === 'push' &&
+        segments[2] === 'subscription' && segments[3] === 'status' &&
+        request.method === 'POST') {
+      // Read-only identity comparison. The private endpoint travels in a
+      // request body, never a URL or public response.
+      const body = await readObject(request);
+      const endpoint = asString(body.endpoint, 'endpoint');
+      const existing = await new D1SubscriptionStore(env.DB).listActive();
+      return json({ registered: existing.some((item) => item.endpoint === endpoint) });
     }
 
     if (segments.length === 3 && segments[1] === 'push' && segments[2] === 'subscription') {
