@@ -110,9 +110,16 @@ try {
   expect(routeContexts[0] === '2026-10-06T12:00:00.000Z', 'first provider context timestamp mismatch');
 
   commute.getPreferredRouteCandidateId = async () => 'missing-route';
-  const afterShiftEnd = await source.get('person-1', new Date('2026-10-06T14:00:00.000Z'));
-  expect(afterShiftEnd?.arrivalAt === '2026-10-06T13:25:00.000Z', 'without LEFT_WORK, scheduled shift end must remain the departure baseline');
+  const missingPreferred = await source.get('person-1', new Date('2026-10-06T14:00:00.000Z'));
+  expect(missingPreferred?.arrivalAt == null && missingPreferred?.confidence === 'UNKNOWN',
+    'missing saved route must NOT substitute the first provider candidate for notification ETA');
   expect(routeContexts[1] === '2026-10-06T14:00:00.000Z', 'second provider context timestamp mismatch');
+  // If the user never selected a preferred route, a provider default remains valid.
+  commute.getPreferredRouteCandidateId = async () => null;
+  const afterShiftEnd = await source.get('person-1', new Date('2026-10-06T14:00:00.000Z'));
+  expect(afterShiftEnd?.arrivalAt === '2026-10-06T13:25:00.000Z',
+    'without an explicit route or LEFT_WORK, default route may use the scheduled departure baseline');
+  commute.getPreferredRouteCandidateId = async () => 'route-preferred';
 
   presenceState = {
     personId: 'person-1',
