@@ -63,6 +63,14 @@ function errorResponse(error: unknown): Response {
   return json({ error: message }, 400);
 }
 
+// Absolute temporary quota cooldown. Only the canonical user-facing origin
+// is blocked; local fixture contract tests never dispatch real provider calls.
+// Expiry is an earliest allowed smoke time, NOT proof of quota reset.
+const KAKAO_ROUTE_FREEZE_UNTIL = Date.parse('2026-10-09T00:05:00+09:00');
+export function isKakaoRouteCooldownActive(epochMs: number): boolean {
+  return epochMs < KAKAO_ROUTE_FREEZE_UNTIL;
+}
+
 function coordinateDistanceMeters(left: Coordinate, right: Coordinate): number {
   const earthRadius = 6_371_000;
   const toRadians = (value: number) => value * Math.PI / 180;
@@ -493,6 +501,10 @@ export async function handleApiRequest(
           }
 
           if (segments[2] === 'routes') {
+            if (url.hostname === 'come-back-home.pages.dev' &&
+                isKakaoRouteCooldownActive(Date.now())) {
+              return json({ error: 'KAKAO_ROUTE_QUOTA_BLOCKED_UNTIL_20261009_0005_KST' }, 503);
+            }
             const originX = Number(url.searchParams.get('originX'));
             const originY = Number(url.searchParams.get('originY'));
             const destinationX = Number(url.searchParams.get('destinationX'));
