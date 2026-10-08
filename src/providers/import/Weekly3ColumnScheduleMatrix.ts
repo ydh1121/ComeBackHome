@@ -84,8 +84,19 @@ function strictBands(detection: ScheduleTableStructureDetection):
     { bands:fallback, source:'DETECTOR' as const },
   ];
   for(const candidate of candidates){
-    if(candidate.bands.length!==EXPECTED_BANDS)continue;
     const sorted=[...candidate.bands].sort((a,b)=>a.x-b.x);
+    // A thin trailing margin can appear as a 23rd band when the table's
+    // actual right border AND raster edge are both detected. Remove ONLY
+    // a uniquely small terminal outside band; never discard any day cell.
+    if(sorted.length===EXPECTED_BANDS+1){
+      const clockMedian=median(sorted.slice(1,-1).map(x=>x.width));
+      const last=sorted[sorted.length-1];
+      const isPhysicalMargin=last.width<clockMedian*.48 &&
+        Math.abs(last.x+last.width-detection.raster.width)<=3 &&
+        sorted[0].width>clockMedian*1.5;
+      if(isPhysicalMargin)sorted.pop();
+    }
+    if(sorted.length!==EXPECTED_BANDS)continue;
     const widths=sorted.slice(1).map(x=>x.width);
     const typical=median(widths);
     if(typical<13)continue;
@@ -196,9 +207,17 @@ export function resolveWeekly3ColumnDates(
     })),yearMonthObserved:false,observedDayAnchors:0,
     uniqueWeek:false,acceptedForAutomaticSave:false,
   });
+  const firstHeaderY=matrix.headerBands[0]?.y??0;
+  const topTokens=header.tokens.filter(token=>
+    token.y+token.height/2<firstHeaderY);
+  // OCR often returns ["년","월","2026","10"] in recognition order.
+  // Reassemble only physically adjacent, top-of-page title glyphs by x.
+  // The characters and year/month must still be genuinely OCR-observed.
+  const orderedTitle=[...topTokens].sort((a,b)=>a.x-b.x)
+    .map(x=>x.text.normalize('NFKC')).join('');
   const allText=header.tokens.map(x=>x.text).join(' ');
-  // Only a genuinely OCR-observed YYYY + month, never device/current date.
-  const title=/(20\d{2})\s*년?\s*(1[0-2]|0?[1-9])\s*월/.exec(allText.normalize('NFKC'));
+  const expression=/(20\d{2})\s*년?\s*(1[0-2]|0?[1-9])\s*월/;
+  const title=expression.exec(orderedTitle)??expression.exec(allText.normalize('NFKC'));
   const result=unresolved();
   if(!title)return result;
   result.yearMonthObserved=true;
