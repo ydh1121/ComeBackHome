@@ -668,7 +668,6 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
         });
 
         let dateCrop: Blob | null = null;
-        const dateNumericCrops: Blob[] = [];
         if (region.purpose === 'date' && region.id.startsWith('date::grid-cell::')) {
           // Decode the actual raster and isolate each structurally verified
           // header cell. Border strokes at ROI edges degrade small-digit OCR.
@@ -688,42 +687,6 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
             ctx.drawImage(bitmap, rectangle.left + insetX, rectangle.top + insetY,
               sw, sh, 0, 0, canvas.width, canvas.height);
             dateCrop = await canvasToBlob(canvas);
-            // Keep alternative views that isolate the actual leading
-            // numeric glyphs from a Korean day suffix. Pixel evidence
-            // determines the crop; no injected OCR token or day index.
-            const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const inkColumns: number[] = [];
-            for (let x = Math.ceil(canvas.width * 0.04);
-              x < Math.floor(canvas.width * 0.96); x += 1) {
-              let dark = 0;
-              for (let y = Math.ceil(canvas.height * 0.1);
-                y < Math.floor(canvas.height * 0.88); y += 1) {
-                const offset = (y * canvas.width + x) * 4;
-                if ((pixels.data[offset] + pixels.data[offset + 1] +
-                    pixels.data[offset + 2]) / 3 < 160) dark += 1;
-              }
-              if (dark >= Math.max(2, canvas.height * 0.045)) inkColumns.push(x);
-            }
-            if (inkColumns.length >= 3) {
-              const firstInk = inkColumns[0];
-              const lastInk = inkColumns[inkColumns.length - 1];
-              const span = lastInk - firstInk + 1;
-              for (const fraction of [0.54, 0.74]) {
-                const left = Math.max(0, firstInk - 9);
-                const right = Math.min(canvas.width,
-                  firstInk + Math.max(6, Math.round(span * fraction)) + 8);
-                const part = document.createElement('canvas');
-                part.width = Math.max(70, (right - left) * 3);
-                part.height = Math.max(48, canvas.height * 3);
-                const partContext = part.getContext('2d');
-                if (!partContext) continue;
-                partContext.fillStyle = '#fff';
-                partContext.fillRect(0, 0, part.width, part.height);
-                partContext.drawImage(canvas, left, 0, right - left,
-                  canvas.height, 0, 0, part.width, part.height);
-                dateNumericCrops.push(await canvasToBlob(part));
-              }
-            }
           } finally {
             bitmap.close();
           }
@@ -759,37 +722,6 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
                 .map((word) => Number(word.confidence) || 0)),
               bbox: { x0: 0, y0: 0, x1: rectangle.width, y1: rectangle.height },
             }];
-          }
-        }
-
-        if (region.purpose === 'date' && dateNumericCrops.length &&
-            !words.some((word) => /^(?:[1-9]|[12][0-9]|3[01])$/.test(
-              String(word.text ?? '').trim())) && !semanticDateWords.length) {
-          await worker.setParameters({
-            tessedit_pageseg_mode: String(PSM.SINGLE_WORD),
-            tessedit_char_whitelist: '0123456789',
-            preserve_interword_spaces: '1',
-          });
-          const alternatives: OcrWord[] = [];
-          for (const glyphs of dateNumericCrops) {
-            const read = await worker.recognize(glyphs, { rotateAuto: false },
-              { text: true, blocks: true });
-            const text = String(read.data.text ?? '').trim().replace(/\s+/g, '');
-            if (!/^(?:[1-9]|[12][0-9]|3[01])$/.test(text)) continue;
-            const confidence = Number(read.data.confidence) || 0;
-            if (confidence < 30) continue;
-            alternatives.push({
-              text,
-              confidence,
-              bbox: { x0: 0, y0: 0, x1: rectangle.width, y1: rectangle.height },
-            });
-          }
-          // Conflicting left-portion readings are not reliable date
-          // evidence. Preserve unknown rather than guessing.
-          const unique = new Set(alternatives.map((word) => word.text));
-          if (unique.size === 1 && alternatives.length) {
-            semanticDateWords = [alternatives.sort((a, b) =>
-              Number(b.confidence) - Number(a.confidence))[0]];
           }
         }
 
