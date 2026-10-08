@@ -255,6 +255,9 @@ jobs:
       - name: Verify Web Push gateway
         run: npm run verify:web-push-gateway
 
+      - name: Verify independent test push readiness and reconnection without external sends
+        run: npm run verify:push-recovery
+
       - name: Verify notification ETA source
         run: npm run verify:notification-eta-source
 
