@@ -69,7 +69,7 @@ try {
     await page.goto(ORIGIN + '/people/' + encodeURIComponent(identity) + '/commute/' + kind + '/access',
       { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.locator('[data-page="TransitAccessPicker"]').waitFor({ timeout: 35000 });
-    await page.locator('.transit-row-toggle').first().waitFor({ timeout: 35000 });
+    await page.locator('.transit-row[data-provider-id] .transit-row-toggle').first().waitFor({ timeout: 90000 });
     const baseline = initial[kind];
     const otherKind = kind === 'origin' ? 'destination' : 'origin';
     const eligible = baseline.filter(point => typeof point.selected === 'boolean');
