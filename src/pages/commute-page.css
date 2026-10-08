@@ -55,3 +55,5 @@
 .commute-page .transit-selected-chip{max-width:100%;min-height:34px;display:inline-flex;gap:6px;align-items:center;border:1px solid #dce5f9;border-radius:999px;padding:5px 11px;background:#f4f7fe;color:#2850a4;font-size:12px;white-space:normal;text-align:left;word-break:keep-all}
 .commute-page .transit-selected-chip span{min-width:0}
 .commute-page .transit-search-center{margin:4px 0 8px;color:#667085;font-size:12px}
+
+.commute-page .kakao-map-center-crosshair{position:absolute;left:50%;top:50%;z-index:5;transform:translate(-50%,-50%);width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.78);box-shadow:0 1px 5px rgba(0,0,0,.16);color:#255cff;font-size:19px;font-weight:750;line-height:1;pointer-events:none;user-select:none}
