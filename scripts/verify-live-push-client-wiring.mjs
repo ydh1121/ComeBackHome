@@ -29,7 +29,7 @@ for (const text of [
   'createWebPushClientConfig',
   'VITE_CBH_VAPID_PUBLIC_KEY',
   'new BrowserNotificationPermissionProvider()',
-  'new BrowserPushSubscriptionProvider(config)',
+  'new BrowserPushSubscriptionProvider(config, async () =>',
   'new HttpPushSubscriptionTransport(client)',
 ]) {
   expect(runtimeSource.includes(text), 'browser notification runtime missing ' + text);
