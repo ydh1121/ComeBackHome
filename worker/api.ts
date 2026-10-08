@@ -928,10 +928,12 @@ export async function handleApiRequest(
       const push = inspectPushDeliveryConfig(env);
       const scheduled = createNotificationActivationReadiness(env, providerRuntime);
       const activeSubscriptionCount = (await new D1SubscriptionStore(env.DB).listActive()).length;
+      const vapidKeyPairValid = await verifyVapidKeyPair(env);
       return json({
         vapidConfigured: !push.missing.some((value) => value.startsWith('VAPID_')),
         pushDeliveryReady: push.ready && activeSubscriptionCount > 0,
         pushTransportConfigured: push.ready,
+        vapidKeyPairValid,
         pushMissing: push.missing,
         activeSubscriptionCount,
         scheduledNotificationReady: scheduled.ready,
