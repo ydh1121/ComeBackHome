@@ -340,6 +340,9 @@ jobs:
       - name: Evaluate generated A/B/C OCR raster matrix corpus without user images
         run: npm run verify:ocr-generated-corpus
 
+      - name: Verify vertically stacked and side-by-side cell time order
+        run: npm run verify:ocr-region-order
+
       - name: Prepare real Tesseract browser runtime (temporary CI workspace)
         run: npm run prepare:ocr-assets
 
