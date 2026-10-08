@@ -28,6 +28,7 @@ export interface KakaoMapSource {
 }
 
 export interface SeoulBusSource {
+  nearbyStops(near: Coordinate, radiusM?: number, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
   searchStops(query: string, near: Coordinate, context?: ProviderRequestContext): Promise<TransitSearchResult[]>;
   routesByStop(arsId: string, context?: ProviderRequestContext): Promise<BusRouteOption[]>;
   arrivals(stopProviderId: string, routeProviderId: string, context?: ProviderRequestContext): Promise<Arrival[]>;
