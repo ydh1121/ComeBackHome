@@ -6,11 +6,10 @@ on:
     branches:
       - main
     paths:
+      # Git-connected Pages deploys application source changes itself.
+      # Only rerun this settings workflow when settings actually change.
       - ".github/workflows/configure-pages-runtime.yml"
-      - "functions/**"
-      - "worker/**"
       - "wrangler.jsonc"
-      - "src/**"
 
 permissions:
   contents: read
@@ -207,9 +206,9 @@ jobs:
           const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
           const projectName = process.env.PAGES_PROJECT;
           const sourceCommit = process.env.GITHUB_SHA ?? '';
-          const deployUrl =
+          const projectUrl =
             'https://api.cloudflare.com/client/v4/accounts/' + accountId +
-            '/pages/projects/' + projectName + '/deployments';
+            '/pages/projects/' + projectName;
           const authHeaders = { Authorization: 'Bearer ' + token };
 
           const form = new FormData();
@@ -218,19 +217,50 @@ jobs:
           form.set('commit_dirty', 'false');
           form.set('commit_message', 'Deploy canonical Pages runtime after binding update');
 
-          const response = await fetch(deployUrl, {
-            method: 'POST',
-            headers: authHeaders,
-            body: form,
-          });
-          const body = await response.json();
-          if (!response.ok || body?.success !== true || !body?.result?.id) {
-            throw new Error('Failed to trigger post-binding Pages deployment');
+          let deploymentId = '';
+          for (let attempt = 1; attempt <= 5; attempt += 1) {
+            const response = await fetch(projectUrl + '/deployments', {
+              method: 'POST',
+              headers: authHeaders,
+              body: form,
+            });
+            const raw = await response.text();
+            let body = null;
+            try { body = raw ? JSON.parse(raw) : null; } catch {}
+            if (response.ok && body?.success === true && body?.result?.id) {
+              deploymentId = body.result.id;
+              break;
+            }
+            if (response.status === 401 || response.status === 403) {
+              throw new Error('Pages deployment permission denied: HTTP ' + response.status);
+            }
+            if (response.ok) {
+              // An accepted request with an empty response may have created a
+              // deployment. Never blindly POST again and create duplicates.
+              const projectResponse = await fetch(projectUrl, { headers: authHeaders });
+              const projectBody = await projectResponse.json().catch(() => null);
+              const latest = projectBody?.result?.latest_deployment;
+              const latestCommit = latest?.deployment_trigger?.metadata?.commit_hash ?? '';
+              if (projectResponse.ok && projectBody?.success === true &&
+                  latest?.id && latestCommit === sourceCommit) {
+                deploymentId = latest.id;
+                break;
+              }
+              throw new Error('Pages accepted deployment but returned no verifiable deployment ID (HTTP ' +
+                response.status + ')');
+            }
+            if (![429, 500, 502, 503, 504].includes(response.status)) {
+              throw new Error('Pages deployment request failed: HTTP ' + response.status);
+            }
+            console.log('Retrying Pages deployment request after transient HTTP ' +
+              response.status + ' attempt=' + attempt);
+            if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, attempt * 4000));
           }
+          if (!deploymentId) throw new Error('Pages deployment request exhausted without verified ID');
 
           fs.appendFileSync(
             process.env.GITHUB_ENV,
-            'PAGES_DEPLOYMENT_ID=' + body.result.id + '\n',
+            'PAGES_DEPLOYMENT_ID=' + deploymentId + '\n',
           );
           NODE
 
