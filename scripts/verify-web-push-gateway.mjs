@@ -1,4 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { createECDH, randomBytes } from 'node:crypto';
+import webPush from 'web-push';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
 
@@ -13,6 +16,8 @@ const source = await readFile(
 for (const text of [
   "import webPush from 'web-push'",
   'class WebPushDeliveryGateway',
+  'webPush.generateRequestDetails',
+  'const response = await fetch(url.toString()',
   'vapidDetails:',
   'TTL: this.config.ttlSeconds',
   "statusCode === 404 || statusCode === 410",
@@ -121,6 +126,67 @@ try {
     'runtime errors must not be mislabeled as upstream provider refusal');
   expect(!JSON.stringify(unknownRuntimeFailure).includes('secret runtime path'),
     'raw runtime exception must not leak to client');
+
+  // Exercise the PRODUCTION default sender, not only an injected mock.
+  // A valid ephemeral P-256 client public key forces real aes128gcm encryption
+  // and VAPID signing. Fetch interception guarantees ZERO external sends.
+  const receiver=createECDH('prime256v1');
+  receiver.generateKeys();
+  const validKeys=webPush.generateVAPIDKeys();
+  const actualSubscription={
+    ...subscription,
+    endpoint:'https://web.push.apple.com/Q/example-test-only',
+    keys:{
+      p256dh:receiver.getPublicKey().toString('base64url'),
+      auth:randomBytes(16).toString('base64url'),
+    },
+  };
+  const nativeGateway=new module.WebPushDeliveryGateway({
+    subject:'mailto:test@example.invalid',
+    publicKey:validKeys.publicKey,
+    privateKey:validKeys.privateKey,
+    ttlSeconds:300,
+  });
+  const fetchOriginal=globalThis.fetch;
+  const outbound=[];
+  try {
+    globalThis.fetch=async (url, init) => {
+      outbound.push({
+        url:String(url),method:init.method,
+        authorization:init.headers.get('Authorization'),
+        encoding:init.headers.get('Content-Encoding'),
+        ttl:init.headers.get('TTL'),
+        bodyBytes:init.body?.byteLength??0,
+        contentLength:init.headers.get('Content-Length'),
+      });
+      return new Response(null,{status:201});
+    };
+    await nativeGateway.send(actualSubscription,payload);
+    assert.equal(outbound.length,1,'default sender must use native fetch');
+    assert.equal(outbound[0].url,actualSubscription.endpoint);
+    assert.equal(outbound[0].method,'POST');
+    assert.equal(outbound[0].encoding,'aes128gcm');
+    assert.equal(outbound[0].ttl,'300');
+    assert.ok(outbound[0].authorization?.startsWith('vapid '));
+    assert.ok(outbound[0].bodyBytes>40,'payload must be encrypted');
+    assert.equal(outbound[0].contentLength,null,
+      'native fetch must set Content-Length itself');
+    globalThis.fetch=async () => new Response(null,{status:403});
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.kind==='permanent' && error.providerStatus===403);
+    globalThis.fetch=async () => { throw new TypeError('mock transport failure'); };
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.kind==='transient' && error.providerStatus===null);
+  } finally {
+    globalThis.fetch=fetchOriginal;
+  }
+  console.log(JSON.stringify({
+    nativeFetchEncryptedSend:true,
+    vapidSigned:true,
+    upstreamStatusPropagated:true,
+    transportFailureClassified:true,
+    actualPushSends:0,
+  }));
 
   let invalidSubjectBlocked = false;
   try {
