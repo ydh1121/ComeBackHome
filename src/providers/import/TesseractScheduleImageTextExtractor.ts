@@ -651,8 +651,10 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
 
         await worker.setParameters({
           tessedit_pageseg_mode: String(
-            region.purpose === 'person' || region.purpose === 'date'
-              ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
+            region.purpose === 'date' && region.id.startsWith('date::grid-cell::')
+              ? PSM.SINGLE_WORD :
+              region.purpose === 'person' || region.purpose === 'date'
+                ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
           ),
           tessedit_char_whitelist:
             region.purpose === 'person'
@@ -674,9 +676,13 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           const scaleX = raster.sourceWidth / raster.rasterWidth;
           const tokens = words.map((word) => ({
             text: String(word.text ?? '').normalize('NFKC').trim(),
-            x: Math.min(word.bbox.x0, word.bbox.x1) * scaleX,
+            x: region.id.startsWith('date::grid-cell::')
+              ? region.x + region.width * 0.2
+              : Math.min(word.bbox.x0, word.bbox.x1) * scaleX,
             y: region.y + region.height * 0.15,
-            width: Math.max(1, Math.abs(word.bbox.x1 - word.bbox.x0) * scaleX),
+            width: region.id.startsWith('date::grid-cell::')
+              ? Math.max(1, region.width * 0.6)
+              : Math.max(1, Math.abs(word.bbox.x1 - word.bbox.x0) * scaleX),
             height: Math.max(1, region.height * 0.7),
             confidence: normalizeConfidence(word.confidence),
           })).filter((token) =>
