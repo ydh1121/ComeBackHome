@@ -909,6 +909,19 @@ export async function handleApiRequest(
       }
     }
 
+    // The VAPID applicationServerKey is intentionally PUBLIC. Read from the
+    // actual Pages runtime to avoid assuming a runtime env var was injected
+    // into Vite's build-time import.meta.env.
+    if (segments.length === 3 && segments[1] === 'notifications' &&
+        segments[2] === 'client-key' && request.method === 'GET') {
+      const publicKey = env.VAPID_PUBLIC_KEY?.trim() ?? '';
+      return json({
+        configured: /^[A-Za-z0-9_-]{80,100}$/.test(publicKey),
+        publicKey: /^[A-Za-z0-9_-]{80,100}$/.test(publicKey) ? publicKey : null,
+        source: 'PAGES_RUNTIME',
+      });
+    }
+
     if (segments.length === 3 && segments[1] === 'notifications' &&
         segments[2] === 'readiness' && request.method === 'GET') {
       const push = inspectPushDeliveryConfig(env);
