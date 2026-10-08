@@ -407,10 +407,15 @@ export async function handleApiRequest(
               providerRuntime.kakao.searchPlaces('버스정류장', near),
               providerRuntime.kakao.searchPlaces('지하철역', near),
             ]);
+            // Only transit-category Kakao POIs qualify for nearby access discovery.
+            const confirmedBusStops = busPlaces.filter((place) =>
+              /버스정류장|버스정류소/.test(place.category ?? ''));
+            const confirmedStations = subwayPlaces.filter((place) =>
+              /지하철|전철|철도역/.test(place.category ?? ''));
             return json({
               results: trimNearbyTransitByDistance([
-                ...busPlaces.map((place) => placeToTransit(place, near, 'BUS')),
-                ...subwayPlaces.map((place) => placeToTransit(place, near, 'SUBWAY')),
+                ...confirmedBusStops.map((place) => placeToTransit(place, near, 'BUS')),
+                ...confirmedStations.map((place) => placeToTransit(place, near, 'SUBWAY')),
               ]),
             });
           }
@@ -424,10 +429,19 @@ export async function handleApiRequest(
               return json({ error: 'x/y are required.' }, 400);
             }
             const near = { x, y };
-            const places = await providerRuntime.kakao.searchPlaces(query, near);
-            return json({
-              results: dedupeTransit(places.map((place) => placeToTransit(place, near))).slice(0, 30),
-            });
+            // Official transit registries only: never infer BUS from arbitrary POIs.
+            const [busStops, subwayStations] = await Promise.all([
+              providerRuntime.seoulBus.searchStops(query, near).catch(() => []),
+              providerRuntime.seoulSubway.searchStations(query, near).catch(() => []),
+            ]);
+            const verified = [...busStops, ...subwayStations]
+              .filter((point) => point.mode === 'BUS' || point.mode === 'SUBWAY')
+              .map((point) => {
+                if (!point.coordinate) return point;
+                const distanceM = coordinateDistanceMeters(near, point.coordinate);
+                return { ...point, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 75)) };
+              });
+            return json({ results: dedupeTransit(verified).slice(0, 30) });
           }
 
           if (segments[2] === 'routes') {
@@ -786,7 +800,10 @@ export async function handleApiRequest(
             ...(asOptionalString(body.selectedBusRouteId) ? { selectedBusRouteId: asOptionalString(body.selectedBusRouteId) } : {}),
           };
           await commute.upsertAccessPoint(point);
-          return json({ accessPoint: point });
+          const canonical = (await commute.listAccessPoints(personId, kind))
+            .find((saved) => saved.providerId === point.providerId && saved.mode === point.mode);
+          if (!canonical) return json({ error: 'Transit access write was not readable.' }, 500);
+          return json({ accessPoint: canonical });
         }
 
         if (segments[4] === 'preferred-route' && segments.length === 5 && request.method === 'PUT') {
