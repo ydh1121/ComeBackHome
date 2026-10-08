@@ -7,7 +7,7 @@ const server=await createServer({root:fileURLToPath(new URL('../',import.meta.ur
 try {
   const {pixelDateHeaderRegions}=await server.ssrLoadModule(
     '/src/providers/import/StructureFirstScheduleImageRecognizer.ts');
-  const {pixelSupportedColumnBounds}=await server.ssrLoadModule(
+  const {pixelSupportedColumnBounds,detectScheduleTableStructureFromRaster}=await server.ssrLoadModule(
     '/src/providers/import/ScheduleTableStructureDetector.ts');
   const {buildScheduleCellMatrix}=await server.ssrLoadModule(
     '/src/providers/import/ScheduleCellMatrix.ts');
@@ -71,9 +71,43 @@ try {
       ...detection.structure.evidence,verticalLinePositions:[20,120]}},
   });
   assert.equal(sparse.length,0,'Two lines are insufficient to establish a table');
+  // Long, sparse glyph strokes are not table borders even when their
+  // projection occupancy resembles a true line. This tests raster detection,
+  // without feeding any OCR token or generated calendar truth to production.
+  const imageW=480,imageH=270;
+  const gridRaster=new Uint8Array(imageW*imageH).fill(246);
+  const glyphRaster=new Uint8Array(imageW*imageH).fill(246);
+  for(const x of [30,150,270,390]){
+    for(let y=40;y<=250;y++)gridRaster[y*imageW+x]=22;
+  }
+  for(const y of [40,110,180,250]){
+    for(let x=30;x<=390;x++)gridRaster[y*imageW+x]=22;
+  }
+  for(const x of [205,210,215]){
+    for(const [top,bottom] of [[75,112],[145,182],[215,252]]){
+      for(let y=top;y<=bottom;y++){
+        gridRaster[y*imageW+x]=22;
+        glyphRaster[y*imageW+x]=22;
+      }
+    }
+  }
+  const structure=detectScheduleTableStructureFromRaster({
+    width:imageW,height:imageH,luminance:gridRaster,
+  });
+  assert.equal(structure.evidence.source,'PIXEL_GRID');
+  assert.deepEqual(structure.evidence.verticalLinePositions,[30,150,270,390],
+    'Discontinuous glyph strokes must not split grid columns');
+  assert.deepEqual(structure.evidence.horizontalLinePositions,[40,110,180,250],
+    'Full physical horizontal borders must survive filtering');
+  const glyphOnly=detectScheduleTableStructureFromRaster({
+    width:imageW,height:imageH,luminance:glyphRaster,
+  });
+  assert.equal(glyphOnly.evidence.source,'WEAK_PIXEL',
+    'Text-only glyph strokes must not claim pixel grid authority');
   console.log(JSON.stringify({
     result:'PASS',recoveredRegions:recovered.length,
     pixelSupportedPeriodicity:true,missingBordersRecovered:true,
+    continuousBorderGate:true,glyphStrokesExcluded:true,
     noDateValuesInferred:true,emptyRasterRejected:true,
     sparseDateAnchorsMappedToPhysicalColumns:true,
     missingDateValuesNeverInvented:true,
