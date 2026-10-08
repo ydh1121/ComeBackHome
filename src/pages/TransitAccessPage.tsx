@@ -67,6 +67,7 @@ export function TransitAccessPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -131,12 +132,19 @@ export function TransitAccessPage() {
   const source = searching ? searchResults : nearby;
   const visible = useMemo(
     () => source
+      // Second-layer local guard: stale cached API responses must never turn a
+      // distant stop into a nearby candidate or zoom the map out by kilometers.
+      .filter((point) => searching || (
+        point.distanceM != null && Number.isFinite(point.distanceM) &&
+        point.distanceM >= 0 &&
+        point.distanceM <= (point.mode === 'BUS' ? 800 : 900)
+      ))
       .filter((point) => filter === 'all' || point.mode.toLocaleLowerCase() === filter)
       .sort((left, right) =>
         (left.distanceM ?? Number.MAX_SAFE_INTEGER) -
         (right.distanceM ?? Number.MAX_SAFE_INTEGER)
       ),
-    [source, filter],
+    [source, filter, searching],
   );
 
   const mapPoints = useMemo(
@@ -148,6 +156,15 @@ export function TransitAccessPage() {
     }] : []),
     [visible],
   );
+
+  const activePoint = visible.find((point) => point.id === activeMarkerId) ?? null;
+  const activateMarker = (id: string) => {
+    setActiveMarkerId(id);
+    // Marker previews must never initiate D1 mutation; use the existing
+    // list/add action explicitly after the marker and row are linked.
+    const row = document.getElementById('transit-result-' + id);
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
 
   const place = placeState.status === 'ready' ? placeState.place : null;
   const kindLabel = kind === 'origin' ? '출발지' : '도착지';
@@ -310,11 +327,27 @@ export function TransitAccessPage() {
         centerLabel={place.label || kindLabel}
         points={mapPoints}
         selectedIds={[...selectedResultIds]}
-        onSelect={(id) => {
-          const result = visible.find((item) => item.id === id);
-          if (result) void toggleResult(result);
-        }}
+        selectedId={activePoint?.id}
+        onSelect={activateMarker}
       />
+      {activePoint ? (
+        <div className="transit-map-active" role="region" aria-label="지도에서 선택한 교통편">
+          <span>
+            <b>{activePoint.mode === 'BUS' ? '버스' : '지하철'} · {activePoint.name}</b>
+            {activePoint.displayCode ? ' · 정류소 ' + activePoint.displayCode : ''}
+            {activePoint.distanceM != null ? ' · ' + activePoint.distanceM.toLocaleString() + 'm' : ''}
+            {activePoint.walkMinutes != null ? ' · 도보 약 ' + activePoint.walkMinutes + '분' : ''}
+          </span>
+          <button
+            type="button"
+            className="cta secondary"
+            disabled={workingId != null}
+            onClick={() => void toggleResult(activePoint)}
+          >
+            {selectedResultIds.has(activePoint.id) ? '선택 해제' : '이 교통편 선택'}
+          </button>
+        </div>
+      ) : null}
 
       <div className="candidate-filter">
         {([['all','전체'],['bus','버스'],['subway','지하철']] as const).map(([value,label]) => (
@@ -354,11 +387,15 @@ export function TransitAccessPage() {
           return (
             <button
               type="button"
-              className={'transit-row transit-row-action' + (selected ? ' selected' : '')}
+              id={'transit-result-' + point.id}
+              className={'transit-row transit-row-action' + (selected ? ' selected' : '') + (activeMarkerId === point.id ? ' map-active' : '')}
               key={point.id}
               aria-pressed={selected}
               disabled={workingId === point.id}
-              onClick={() => void toggleResult(point)}
+              onClick={() => {
+                setActiveMarkerId(point.id);
+                void toggleResult(point);
+              }}
             >
               <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
               <span className="transit-copy">
