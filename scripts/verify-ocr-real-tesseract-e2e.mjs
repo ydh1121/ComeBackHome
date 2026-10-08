@@ -123,12 +123,14 @@ try {
           const file=new File([blob],'generated-'+input.id+'.'+input.format,
             {type:blob.type});
           const syntheticOcrHeaders=[];
+          let workerPassComplete=false;
           const extractor=new TesseractScheduleImageTextExtractor(
             new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
             new BrowserScheduleOcrPreprocessor(),{useStructureFirstMode:true});
           const originalExtract=extractor.extract.bind(extractor);
           extractor.extract=async (...args)=>{
             const layout=await originalExtract(...args);
+            workerPassComplete=true;
             syntheticOcrHeaders.push(...layout.tokens
               .filter(token=>token.y<top+rowHeight)
               .map(token=>token.text.slice(0,28)).slice(0,24));
@@ -165,9 +167,9 @@ try {
             family:input.family,codec:blob.type,bytes:blob.size,
             imageDecoded:canvas.width>0,
             generatedHeaderEvidence:syntheticOcrHeaders,
-            actualTesseractFirstPass:failure===null || /ocrTokens=[1-9]/.test(failure),
+            actualTesseractFirstPass:workerPassComplete,
             fullPipelineSuccess:failure===null,
-            realTesseractExecuted:failure===null || /ocrTokens=[1-9]/.test(failure),
+            realTesseractExecuted:workerPassComplete,
             error:failure?.slice(0,160)??null,cellCount:truth.length,correct,
             falseOff,personTotal:names.length,
             personExact:names.filter(name=>recognized.has(name)).length,
