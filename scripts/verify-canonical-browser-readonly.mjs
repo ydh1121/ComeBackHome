@@ -97,10 +97,14 @@ async function verifyOn(browserType, label, device = {}) {
 
     // This workflow MUST remain read-only. A marker click now toggles a D1
     // selection, so assert markup and test actual user gestures separately.
-    const markerDomCount = await page.locator(
+    const markerTargets = page.locator(
       '.kakao-transit-map area[title^="버스 · "], ' +
-      '.kakao-transit-map area[title^="지하철 · "]'
-    ).count();
+      '.kakao-transit-map area[title^="지하철 · "], ' +
+      '.kakao-transit-map img[title^="버스 · "], ' +
+      '.kakao-transit-map img[title^="지하철 · "]'
+    );
+    await markerTargets.first().waitFor({ state: 'attached', timeout: 20_000 });
+    const markerDomCount = await markerTargets.count();
     assert.ok(markerDomCount > 0, 'Kakao marker target DOM missing');
 
     // Render a local-only selected panel for responsive geometry QA. This
