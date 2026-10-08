@@ -305,7 +305,13 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
         '표 구조를 안정적으로 복원하지 못했습니다. ' +
         'pixelSource=' + detection.structure.evidence.source +
         ' rows=' + detection.structure.rowBands.length +
-        ' columns=' + detection.structure.columnBands.length
+        ' columns=' + detection.structure.columnBands.length +
+        ' stage=' + inputDiagnostics.failureStage +
+        ' ocrTokens=' + inputDiagnostics.ocrTokenCount +
+        ' dateAnchors=' + inputDiagnostics.dateAnchorCount +
+        ' resolvedDates=' + inputDiagnostics.resolvedDateCount +
+        ' yearKnown=' + (inputDiagnostics.recognizedYear != null) +
+        ' monthKnown=' + (inputDiagnostics.recognizedMonth != null)
       );
     }
 
