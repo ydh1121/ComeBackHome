@@ -297,6 +297,20 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
       regionalOcr: diagnostic.regionResults,
     };
   } catch (error) {
+    // Even if OCR fails at structure/date/roster recognition, retain only
+    // privacy-safe source dimensions. The decoded image is never persisted.
+    let imageDimensions: { width: number; height: number; displayedOrientation: string } | null = null;
+    try {
+      const bitmap = await createImageBitmap(file);
+      imageDimensions = {
+        width: bitmap.width,
+        height: bitmap.height,
+        displayedOrientation: bitmap.width >= bitmap.height ? 'LANDSCAPE' : 'PORTRAIT',
+      };
+      bitmap.close();
+    } catch {
+      // Invalid image format is itself a fail-closed input condition.
+    }
     return {
       source: {
         name: file.name,
@@ -308,7 +322,7 @@ async function evaluateFile(file: File): Promise<FileEvaluationResult> {
         total: Number((performance.now() - startedAt).toFixed(1)),
       },
       qaDiagnostics: {
-        source: { format: file.type || 'UNKNOWN', sizeBytes: file.size },
+        source: { format: file.type || 'UNKNOWN', sizeBytes: file.size, ...(imageDimensions ?? {}) },
         finalFailureStage: /stage=([A-Z_]+)/.exec(formatError(error))?.[1] ??
           (/사람 이름/.test(formatError(error)) ? 'PERSON_REJECTION' :
             /셀에서 일정/.test(formatError(error)) ? 'CELL_EVIDENCE' : 'UNKNOWN'),
