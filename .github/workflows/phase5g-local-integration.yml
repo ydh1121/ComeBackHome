@@ -321,6 +321,9 @@ jobs:
       - name: Verify structure-first raster schedule recognition
         run: npm run verify:ocr-structure-first
 
+      - name: Evaluate generated A/B/C OCR raster matrix corpus without user images
+        run: npm run verify:ocr-generated-corpus
+
       - name: Verify local D1 notification E2E
         run: npm run verify:notification-d1-e2e
 
