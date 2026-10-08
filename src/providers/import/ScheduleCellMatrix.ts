@@ -111,12 +111,13 @@ function parseCalendarContext(tokens: BoxToken[]): { year: number | null; month:
 function parseDateEvidence(
   value: string,
   context: { year: number | null; month: number | null },
+  allowBareDay = false,
 ): string | null {
   const direct = parseScheduleDate(value);
   if (direct) return direct;
 
   const raw = value.normalize('NFKC').trim().replace(/\s+/g, '');
-  const dayOnly = /^(\d{1,2})일$/.exec(raw);
+  const dayOnly = (allowBareDay ? /^(\d{1,2})(?:일)?$/ : /^(\d{1,2})일$/).exec(raw);
   if (dayOnly && context.year != null && context.month != null) {
     return parseScheduleDate(
       String(context.year) + '-' +
@@ -153,8 +154,16 @@ function buildDateColumns(
   detection: ScheduleTableStructureDetection,
 ): ScheduleMatrixDateColumn[] {
   const context = parseCalendarContext(tokens);
+  const firstRows = detection.structure.rowBands.slice(0, 2);
+  const headerZoneBottom = firstRows.length
+    ? Math.max(...firstRows.map((band) => band.bounds.y + band.bounds.height))
+    : detection.structure.tableBounds.y + detection.structure.tableBounds.height * 0.25;
   const anchors = tokens
-    .map((token) => ({ token, date: parseDateEvidence(token.text, context) }))
+    .map((token) => ({
+      token,
+      date: parseDateEvidence(token.text, context,
+        token.cy >= detection.structure.tableBounds.y && token.cy <= headerZoneBottom),
+    }))
     .filter((item): item is { token: BoxToken; date: string } => item.date != null)
     .sort((left, right) => left.token.cx - right.token.cx);
 
@@ -271,10 +280,9 @@ export function buildScheduleCellMatrix(
   const dateHeaderTokens = tokens.filter(
     (token) => parseDateEvidence(token.text, calendarContext) != null,
   );
-  const semanticHeaderTokens = tokens.filter(
-    (token) => classifyScheduleShiftLabel(token.text) != null,
-  );
-  const headerEvidence = [...dateHeaderTokens, ...semanticHeaderTokens];
+  // A shift label such as "쉬는시간" may occur deep in the body; it must
+  // never push the header boundary down and hide actual person rows.
+  const headerEvidence = dateHeaderTokens;
   const headerBottom = headerEvidence.length
     ? Math.max(...headerEvidence.map((token) => token.bottom))
     : Math.max(0, detection.structure.tableBounds.y);
