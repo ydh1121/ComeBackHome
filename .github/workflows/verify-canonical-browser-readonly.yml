@@ -6,6 +6,7 @@ on:
     branches:
       - main
     paths:
+      - ".github/workflows/verify-canonical-browser-readonly.yml"
       - "runtime-activation/pages-browser-qa.trigger"
 
 permissions:
