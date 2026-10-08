@@ -298,6 +298,7 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
     const initialOcrMs = performance.now() - initialOcrStarted;
     await onProgress?.(60);
 
+    const inputDiagnostics = inspectScheduleMatrixInput(detection, layout);
     const matrix = buildScheduleCellMatrix(detection, layout);
     if (!matrix || matrix.rows.length === 0 || matrix.dates.length < 2) {
       throw new Error(
