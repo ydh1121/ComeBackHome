@@ -176,6 +176,7 @@ export function CommuteRoutePage() {
             <button
               type="button"
               className={'route-candidate' + (selected ? ' selected' : '')}
+              data-route-candidate-id={route.id}
               key={route.id}
               aria-pressed={selected}
               onClick={() => {
