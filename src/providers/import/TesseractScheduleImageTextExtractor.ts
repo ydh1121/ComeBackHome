@@ -45,6 +45,8 @@ interface OcrBlock {
 
 interface OcrPage {
   blocks?: OcrBlock[] | null;
+  text?: string;
+  confidence?: number;
 }
 
 export interface ScheduleOcrWorker {
