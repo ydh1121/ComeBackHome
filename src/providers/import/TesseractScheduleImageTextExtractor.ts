@@ -695,12 +695,41 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           { text: true, blocks: true },
         );
         const words = flattenWords(response.data);
+        let semanticDateWords: OcrWord[] = [];
+        if (region.purpose === 'date' && dateCrop &&
+            !words.some((word) => /^(?:[1-9]|[12][0-9]|3[01])$/.test(
+              String(word.text ?? '').trim()))) {
+          // OCR of small Korean date labels may be "1일" instead of "1".
+          // A second full-character recognition pass is evidence-based:
+          // never guess a day without actual recognized glyphs.
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_WORD),
+            tessedit_char_whitelist: '',
+            preserve_interword_spaces: '1',
+          });
+          const semantic = await worker.recognize(
+            dateCrop, { rotateAuto: false }, { text: true, blocks: true });
+          const text = flattenWords(semantic.data)
+            .map((word) => String(word.text ?? '')).join('')
+            .normalize('NFKC').replace(/\\s+/g, '');
+          const match = /^0?([1-9]|[12][0-9]|3[01])(?:일|日)?$/.exec(text);
+          if (match) {
+            semanticDateWords = [{
+              text: String(Number(match[1])),
+              confidence: Math.max(1, ...flattenWords(semantic.data)
+                .map((word) => Number(word.confidence) || 0)),
+              bbox: { x0: 0, y0: 0, x1: rectangle.width, y1: rectangle.height },
+            }];
+          }
+        }
 
         if (region.purpose === 'date') {
           // Read real OCR bounding boxes. Equal-width synthetic token slots
           // would turn legitimate sparse date headers into invented geometry.
           const scaleX = raster.sourceWidth / raster.rasterWidth;
-          const recognizedWords = words.length ? words : (
+          const recognizedWords = words.some((word) =>
+            /^(?:[1-9]|[12][0-9]|3[01])$/.test(String(word.text ?? '').trim()))
+            ? words : semanticDateWords.length ? semanticDateWords : (
             dateCrop && /^([1-9]|[12][0-9]|3[01])$/.test(
               String(response.data.text ?? '').normalize('NFKC').trim()
             ) ? [{
