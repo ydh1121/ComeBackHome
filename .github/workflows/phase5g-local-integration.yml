@@ -176,7 +176,7 @@ permissions:
 jobs:
   phase5g-local:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -332,6 +332,11 @@ jobs:
 
       - name: Prepare real Tesseract browser runtime (temporary CI workspace)
         run: npm run prepare:ocr-assets
+
+      - name: Install Chromium, WebKit and Korean system fonts for actual OCR
+        run: |
+          npx playwright install --with-deps chromium webkit
+          sudo apt-get install -y fonts-noto-cjk
 
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
