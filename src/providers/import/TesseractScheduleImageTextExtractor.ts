@@ -700,7 +700,16 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           // Read real OCR bounding boxes. Equal-width synthetic token slots
           // would turn legitimate sparse date headers into invented geometry.
           const scaleX = raster.sourceWidth / raster.rasterWidth;
-          const tokens = words.map((word) => ({
+          const recognizedWords = words.length ? words : (
+            dateCrop && /^([1-9]|[12][0-9]|3[01])$/.test(
+              String(response.data.text ?? '').normalize('NFKC').trim()
+            ) ? [{
+              text: String(response.data.text).trim(),
+              confidence: Number(response.data.confidence) || 0,
+              bbox: { x0: 0, y0: 0, x1: dateCrop.size > 0 ? region.width : 0, y1: region.height },
+            }] : []
+          );
+          const tokens = recognizedWords.map((word) => ({
             text: String(word.text ?? '').normalize('NFKC').trim(),
             x: region.id.startsWith('date::grid-cell::')
               ? region.x + region.width * 0.2
