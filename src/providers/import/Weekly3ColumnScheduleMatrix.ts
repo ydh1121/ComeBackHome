@@ -303,6 +303,7 @@ export interface Weekly3ColumnInterpretation {
   offReviewCount:number;
   unreadableCount:number;
   breakReviewCount:number;
+  breakEvidence:Array<{rowIndex:number;dayIndex:number;minutes:number|null;verifiedByUser:false}>;
   consecutiveBlankSpans:Array<{rowIndex:number;fromDay:number;throughDay:number}>;
   dateResolution:WeeklyDateResolution;
 }
@@ -323,6 +324,7 @@ export function interpretWeekly3Column(
   let reviewCount=0,offReviewCount=0,unreadableCount=0,breakReviewCount=0;
   const review:ParsedScheduleReviewCandidate[]=[];
   const schedule:ParsedScheduleCandidate[]=[];
+  const breakEvidence:Array<{rowIndex:number;dayIndex:number;minutes:number|null;verifiedByUser:false}>=[];
   const consecutiveBlankSpans:Array<{rowIndex:number;fromDay:number;throughDay:number}>=[];
   // Repeated fully empty trios are only *candidate* OFF spans; no automatic
   // OFF classification may originate from gray/yellow/white cell backgrounds.
@@ -364,19 +366,25 @@ export function interpretWeekly3Column(
     });reviewCount++;continue;}
     const valid=start!=null&&end!=null;
     const breakHasContent=pixels.break!=='EMPTY'||!!fields.break?.text.trim();
-    if(valid&&!breakHasContent&&!dates.dates[day.index].reviewRequired){
+    // A correctly recognized break does NOT make start/end incomplete.
+    // Preserve break evidence for explicit review; schedule storage only
+    // accepts start/end and must never subtract unverified break minutes.
+    if(breakHasContent){
+      breakReviewCount++;
+      breakEvidence.push({rowIndex:row.index,dayIndex:day.index,
+        minutes:breakMinutes,verifiedByUser:false});
+    }
+    if(valid&&(!breakHasContent||breakMinutes!=null)){
       schedule.push({sourcePersonName:sourceName,date,start,end,
         sourceRow:row.index+1,
         confidence:Math.min(fields.start?.confidence??0,fields.end?.confidence??0)});
     }else{
-      if(breakHasContent)breakReviewCount++;
       if(!valid)unreadableCount++;
       reviewCount++;
       review.push({sourcePersonName:sourceName,date,start,end,
         sourceRow:row.index+1,confidence:.2,
         recognitionState:valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
-    void breakMinutes; // Preserve as review-only until DB break schema is audited.
   }
   const detectedPeople=personNames.filter((x):x is string=>!!x)
     .filter((x,i,all)=>all.indexOf(x)===i)
@@ -397,6 +405,6 @@ export function interpretWeekly3Column(
   };
   return {
     parsed,blockedReason,reviewCount,offReviewCount,unreadableCount,
-    breakReviewCount,consecutiveBlankSpans,dateResolution:dates,
+    breakReviewCount,breakEvidence,consecutiveBlankSpans,dateResolution:dates,
   };
 }
