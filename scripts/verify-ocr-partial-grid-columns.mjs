@@ -19,13 +19,20 @@ try {
   for(const x of boundaries){
     for(let y=90;y<274;y++)luminance[y*width+x]=22;
   }
+  // These repeated body-glyph strokes have high vertical continuity
+  // because text is aligned across rows, but unlike grid lines they do NOT
+  // reach the quiet margin immediately after each horizontal row border.
+  const glyphLike=[259,267,273,282];
+  for(const x of glyphLike) {
+    for(let y=110;y<274;y++) luminance[y*width+x]=22;
+  }
   const detection={
     raster:{width,height,luminance},
     structure:{
       rowBands:[{index:0,bounds:{x:20,y:40,width:700,height:50},confidence:1},
         {index:1,bounds:{x:20,y:90,width:700,height:46},confidence:1}],
       tableBounds:{x:20,y:40,width:700,height:235},
-      evidence:{verticalLinePositions:boundaries,
+      evidence:{verticalLinePositions:[...boundaries,...glyphLike].sort((a,b)=>a-b),
         horizontalLinePositions:[40,90,136,182,228,275],
         source:'PIXEL_PARTIAL'},
     },
@@ -38,7 +45,7 @@ try {
   const physical=pixelSupportedColumnBounds(detection);
   assert.deepEqual(physical.map(x=>Math.round(x.x)),
     [20,120,220,320,420,520,620],
-    'Only continuous pixel columns may recover missing strokes');
+    'Row-margin grid evidence must reject repeated glyph strokes while filling missing borders');
   // Ground truth is supplied only in this generated test, never to recognition.
   // Recognize sparse 1/3/5 date anchors while physical grid has 1..6 columns.
   // The missing day values must NOT be synthesized by matrix reconstruction.
