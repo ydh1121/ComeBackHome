@@ -136,6 +136,16 @@ export function parseScheduleHour(value: string): string | null {
     return String(hour).padStart(2, '0') + ':' + colon[2];
   }
 
+  // Standard compact HHMM with optional single-digit hour (0900, 930, 1830).
+  // Values with invalid minutes or hours remain unreadable, not fabricated.
+  const compactClock = /^(\d{1,2})([0-5]\d)$/.exec(normalized);
+  if (compactClock && (normalized.length === 3 || normalized.length === 4)) {
+    const hour = Number(compactClock[1]);
+    if (hour <= 23) {
+      return String(hour).padStart(2, '0') + ':' + compactClock[2];
+    }
+  }
+
   const decimal = /^(\d{1,2})(?:\.(0|5))?$/.exec(normalized);
   if (decimal) {
     const hour = Number(decimal[1]);
