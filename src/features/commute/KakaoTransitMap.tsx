@@ -107,6 +107,8 @@ export function KakaoTransitMap({
   onSelect,
 }: KakaoTransitMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -131,6 +133,8 @@ export function KakaoTransitMap({
           center: centerPosition,
           level: 4,
         });
+        mapRef.current = map;
+        markersRef.current.clear();
 
         new kakao.maps.Marker({
           map,
@@ -152,9 +156,15 @@ export function KakaoTransitMap({
             map,
             position,
             title: (point.mode === 'BUS' ? '버스 · ' : '지하철 · ') + point.name,
+            clickable: true,
             zIndex: selectedSet.has(point.id) ? 10 : 2,
           });
-          kakao.maps.event.addListener(marker, 'click', () => onSelectRef.current(point.id));
+          markersRef.current.set(point.id, marker);
+          kakao.maps.event.addListener(marker, 'click', () => {
+            map.panTo(position);
+            marker.setZIndex(20);
+            onSelectRef.current(point.id);
+          });
         }
 
         if (points.length) map.setBounds(bounds, 38, 38, 38, 38);
@@ -168,9 +178,20 @@ export function KakaoTransitMap({
 
     return () => {
       active = false;
+      mapRef.current = null;
+      markersRef.current.clear();
       if (containerRef.current) containerRef.current.replaceChildren();
     };
-  }, [center.x, center.y, centerLabel, points, selectedId, selectedKey, retryNonce]);
+  }, [center.x, center.y, centerLabel, points, retryNonce]);
+
+  useEffect(() => {
+    const selectedSet = new Set(selectedKey ? selectedKey.split('|') : []);
+    for (const [id, marker] of markersRef.current) {
+      marker.setZIndex(id === selectedId ? 20 : selectedSet.has(id) ? 10 : 2);
+    }
+    const active = selectedId ? markersRef.current.get(selectedId) : null;
+    if (active && mapRef.current) mapRef.current.panTo(active.getPosition());
+  }, [selectedId, selectedKey, state]);
 
   return (
     <div className="kakao-transit-map-shell" data-map-state={state}>
