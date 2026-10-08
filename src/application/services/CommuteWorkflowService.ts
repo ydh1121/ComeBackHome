@@ -161,6 +161,17 @@ export class CommuteService implements CommuteActions {
   }
 }
 
+function anchorDistanceMeters(left: Coordinate, right: Coordinate): number {
+  const rad = (value: number) => value * Math.PI / 180;
+  const lat1 = rad(left.y);
+  const lat2 = rad(right.y);
+  const dLat = lat2 - lat1;
+  const dLng = rad(right.x - left.x);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return Math.round(6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 export class TransitSearchService implements TransitSearchActions {
   private readonly resultCache = new Map<string, TransitSearchResult>();
 
@@ -197,6 +208,9 @@ export class TransitSearchService implements TransitSearchActions {
     // A map-pan search result must resolve around the discovered entity, not
     // snap back to the original saved origin/destination address.
     const resolved = await this.provider.resolve(result, result.coordinate ?? place.coordinate).catch(() => result);
+    const accessDistanceM = resolved.coordinate
+      ? anchorDistanceMeters(place.coordinate, resolved.coordinate)
+      : resolved.distanceM;
     const point: TransitAccessPoint = {
       id: crypto.randomUUID(),
       personId,
@@ -207,8 +221,12 @@ export class TransitSearchService implements TransitSearchActions {
       displayCode: resolved.displayCode,
       line: resolved.line,
       coordinate: resolved.coordinate,
-      distanceM: resolved.distanceM,
-      walkMinutes: resolved.walkMinutes,
+      // Discovery is relative to the current map center, but saved access
+      // distance and ETA must remain relative to the persisted origin/dest.
+      distanceM: accessDistanceM,
+      walkMinutes: accessDistanceM != null
+        ? Math.max(1, Math.ceil(accessDistanceM / 75))
+        : resolved.walkMinutes,
       selected: true,
       busRoutes: resolved.busRoutes,
     };
