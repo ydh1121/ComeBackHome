@@ -479,17 +479,18 @@ export function TransitAccessPage() {
         ) : visible.map((point) => {
           const selected = selectedResultIds.has(point.id);
           return (
-            <button
-              type="button"
+            <div
               id={'transit-result-' + point.id}
               className={'transit-row transit-row-action' + (selected ? ' selected' : '') + (activeMarkerId === point.id ? ' map-active' : '')}
               key={point.id}
-              aria-current={activeMarkerId === point.id ? 'true' : undefined}
-              disabled={workingId === point.id}
-              onClick={() => {
-                activateMarker(point.id);
-              }}
             >
+              <button
+                type="button"
+                className="transit-row-focus"
+                aria-label={point.name + ' 지도에서 보기'}
+                aria-current={activeMarkerId === point.id ? 'true' : undefined}
+                onClick={() => activateMarker(point.id)}
+              >
               <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
               <span className="transit-copy">
                 <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
@@ -501,10 +502,21 @@ export function TransitAccessPage() {
                   ].filter(Boolean).join(' · ')}
                 </span>
               </span>
-              <span className="transit-trailing">
-                {selected ? <Icon name="check" /> : <Icon name="chevron-right" />}
-              </span>
-            </button>
+              </button>
+              <button
+                type="button"
+                className="transit-row-toggle"
+                aria-label={point.name + (selected ? ' 선택 해제' : ' 선택')}
+                aria-pressed={selected}
+                disabled={workingId != null}
+                onClick={() => {
+                  setActiveMarkerId(point.id);
+                  void toggleResult(point);
+                }}
+              >
+                {workingId === point.id ? '처리 중' : selected ? <Icon name="check" /> : <Icon name="plus" />}
+              </button>
+            </div>
           );
         })}
         {!loading && !visible.length ? (
