@@ -198,6 +198,8 @@ async function verifyOn(browserType, label, device = {}) {
           nameWidth: nameBox?.width ?? 0,
           nameLines: nameBox && lineHeight ? Math.round(nameBox.height / lineHeight) : 0,
           actionWidth: actionBox?.width ?? 0,
+          listFocusWidth: document.querySelector('.transit-row-focus')?.getBoundingClientRect().width ?? 0,
+          listToggleWidth: document.querySelector('.transit-row-toggle')?.getBoundingClientRect().width ?? 0,
           actionVisible: Boolean(actionBox && actionBox.width > 40 && actionBox.height >= 32),
           verticalGap: filterBox ? Math.round(filterBox.top - panel.bottom) : -1,
           filterChipCount: document.querySelectorAll('.candidate-filter .filter-btn').length,
@@ -209,7 +211,8 @@ async function verifyOn(browserType, label, device = {}) {
       });
       assert.ok(geometry.panelWidth > 220 && geometry.nameWidth >= 138 &&
         geometry.nameLines >= 1 && geometry.nameLines <= 3 &&
-        geometry.panelHeight <= 128 && geometry.actionVisible && !geometry.overflow &&
+        geometry.panelHeight <= 128 && geometry.actionVisible &&
+        geometry.listFocusWidth > 165 && geometry.listToggleWidth >= 40 && !geometry.overflow &&
         geometry.verticalGap >= 12 && geometry.verticalGap <= 24 &&
         geometry.filterChipCount === 3 && geometry.searchGap >= 6,
         'Actual selected card geometry failed at ' + width + 'px: ' +
