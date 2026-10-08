@@ -75,6 +75,16 @@ export function TransitAccessPage() {
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
 
   useEffect(() => {
+    setMapCenter(null);
+    setActiveMarkerId(null);
+  }, [
+    personId, kind,
+    placeState.status === 'ready' ? placeState.place?.id : null,
+    placeState.status === 'ready' ? placeState.place?.coordinate?.x : null,
+    placeState.status === 'ready' ? placeState.place?.coordinate?.y : null,
+  ]);
+
+  useEffect(() => {
     let active = true;
     if (placeState.status !== 'ready' || !placeState.place?.coordinate || !discoveryCenter) {
       if (placeState.status !== 'loading') setNearbyLoading(false);
