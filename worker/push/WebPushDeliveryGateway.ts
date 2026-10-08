@@ -134,10 +134,14 @@ function validBase64UrlLength(value: string, expected: number): boolean {
   } catch { return false; }
 }
 
+export function pushSubscriptionKeyShapeValid(keys: { p256dh: string; auth: string }): boolean {
+  return validBase64UrlLength(keys.p256dh, 65) &&
+    validBase64UrlLength(keys.auth, 16);
+}
+
 const defaultSender: WebPushSender = {
   async sendNotification(subscription, payload, options) {
-    if (!validBase64UrlLength(subscription.keys.p256dh, 65) ||
-        !validBase64UrlLength(subscription.keys.auth, 16)) {
+    if (!pushSubscriptionKeyShapeValid(subscription.keys)) {
       throw new PushDeliveryError('Push subscription key format invalid.',
         'permanent', null, 'SUBSCRIPTION');
     }
