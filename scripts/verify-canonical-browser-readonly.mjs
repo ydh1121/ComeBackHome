@@ -120,13 +120,18 @@ async function verifyOn(browserType, label, device = {}) {
         return {
           visibleOnMap: true,
           unblocked: Boolean(top === marker || marker.contains(top)),
+          targetId: marker.getAttribute('data-transit-id'),
+          blockingId: top?.closest('.cbh-transit-map-marker')?.getAttribute('data-transit-id') ??
+            top?.tagName ?? 'NONE',
+          offset: [marker.getAttribute('data-spread-x'), marker.getAttribute('data-spread-y')],
         };
       });
     });
     assert.ok(hitChecks.filter((item) => item.visibleOnMap).length > 0,
       'No map marker is within the visible viewport');
     assert.ok(hitChecks.every((item) => !item.visibleOnMap || item.unblocked),
-      'Overlapping map marker blocks its neighbor click/tap center');
+      'Overlapping map marker blocks hit center: ' +
+      JSON.stringify(hitChecks.filter((item) => item.visibleOnMap && !item.unblocked).slice(0,8)));
     const preferred = markerTitles.find((item) => item.name.includes('차병원사거리')) ??
       markerTitles.sort((a, b) => b.name.length - a.name.length)[0];
     const marker = markerTargets.nth(preferred.index);
