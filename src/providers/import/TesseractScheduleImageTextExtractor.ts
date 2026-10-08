@@ -765,15 +765,7 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
               : 0,
           });
         } else if (region.purpose === 'person') {
-          const rawLine = String(response.data.text ?? '').normalize('NFKC')
-            .replace(/\s+/g, '').trim();
-          // Some Tesseract backends return valid page text without word blocks.
-          // Preserve real OCR evidence only; no person name is invented or injected.
-          const fallback = /^[가-힣]{2,5}$/.test(rawLine) &&
-            normalizeConfidence(Number(response.data.confidence) || 0) >= this.minimumConfidence
-            ? { text: rawLine, confidence: normalizeConfidence(Number(response.data.confidence) || 0) }
-            : null;
-          const candidate = personLabelCandidate(words, rectangle.height) ?? fallback;
+          const candidate = personLabelCandidate(words, rectangle.height);
           const token = candidate
             ? regionToken(
                 {
