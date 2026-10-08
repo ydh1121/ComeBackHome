@@ -35,6 +35,9 @@ const runner=process.platform==='win32'?'npx.cmd':'npx';
 const child=spawn(runner,['wrangler','dev','--config',configPath,
   '--local','--ip','127.0.0.1','--port',String(port),'--log-level','error'],{
   stdio:['ignore','pipe','pipe'],
+  // npx -> wrangler -> workerd spawns children. Kill the entire local
+  // process group so CI cannot hang on inherited open stdout pipes.
+  detached:process.platform!=='win32',
   env:{...process.env,WRANGLER_SEND_METRICS:'false'},
 });
 let terminated=false;
@@ -99,6 +102,12 @@ try {
     actualPushSends:0,productionD1Writes:0,
     productionSecretReads:0,liveKakaoRouteCalls:0}));
 }finally{
-  child.kill('SIGTERM');
+  if(process.platform!=='win32' && child.pid){
+    try{process.kill(-child.pid,'SIGTERM');}catch{child.kill('SIGTERM');}
+  }else{
+    child.kill('SIGTERM');
+  }
+  child.stdout.destroy();
+  child.stderr.destroy();
   await unlink(configPath).catch(()=>undefined);
 }
