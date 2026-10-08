@@ -255,18 +255,17 @@ export function resolveWeekly3ColumnDates(
 
 export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageTextProbeRegion[] {
   const headerY=matrix.headerBands[0].y;
-  const headerEnd=matrix.headerBands[matrix.headerBands.length-1].y+
-    matrix.headerBands[matrix.headerBands.length-1].height;
-  const dateRegions: ImageTextProbeRegion[]=matrix.days.map(day=>({
-    id:'weekly-date::'+day.index,purpose:'date',
+   const dateRegions: ImageTextProbeRegion[]=matrix.days.map(day=>({
+    id:'date::grid-cell::weekly::'+day.index,purpose:'date',
     x:day.bounds.x,y:headerY,
-    width:day.bounds.width,height:headerEnd-headerY,
+    width:day.bounds.width,height:matrix.headerBands[0].height,
   }));
   const nameRegions:ImageTextProbeRegion[]=matrix.rows.map(row=>({
     id:'weekly-person::'+row.index,purpose:'person',...row.nameBounds,
   }));
   const cellRegions:ImageTextProbeRegion[]=matrix.rows.flatMap(row=>
-    row.cells.map(cell=>({id:cell.id,purpose:'cell' as const,...cell.bounds})));
+    row.cells.filter(cell=>cell.visual.occupancy!=='EMPTY')
+      .map(cell=>({id:cell.id,purpose:'cell' as const,...cell.bounds})));
   return [...dateRegions,...nameRegions,...cellRegions];
 }
 
@@ -285,6 +284,7 @@ export interface Weekly3ColumnInterpretation {
   offReviewCount:number;
   unreadableCount:number;
   breakReviewCount:number;
+  consecutiveBlankSpans:Array<{rowIndex:number;fromDay:number;throughDay:number}>;
   dateResolution:WeeklyDateResolution;
 }
 export function interpretWeekly3Column(
@@ -304,6 +304,25 @@ export function interpretWeekly3Column(
   let reviewCount=0,offReviewCount=0,unreadableCount=0,breakReviewCount=0;
   const review:ParsedScheduleReviewCandidate[]=[];
   const schedule:ParsedScheduleCandidate[]=[];
+  const consecutiveBlankSpans:Array<{rowIndex:number;fromDay:number;throughDay:number}>=[];
+  // Repeated fully empty trios are only *candidate* OFF spans; no automatic
+  // OFF classification may originate from gray/yellow/white cell backgrounds.
+  for(const row of matrix.rows){
+    let start=-1;
+    for(let index=0;index<=matrix.days.length;index++){
+      const blank=index<matrix.days.length&&FIELDS.every(field=>{
+        const cell=row.cells.find(x=>x.dayIndex===index&&x.field===field);
+        return cell?.visual.occupancy==='EMPTY';
+      });
+      if(blank&&start<0)start=index;
+      if(!blank&&start>=0){
+        if(index-start>=2)consecutiveBlankSpans.push({
+          rowIndex:row.index,fromDay:start,throughDay:index-1,
+        });
+        start=-1;
+      }
+    }
+  }
   for(const row of matrix.rows)for(const day of matrix.days){
     const sourceName=personNames[row.index];
     const date=dates.dates[day.index]?.date;
@@ -359,6 +378,6 @@ export function interpretWeekly3Column(
   };
   return {
     parsed,blockedReason,reviewCount,offReviewCount,unreadableCount,
-    breakReviewCount,dateResolution:dates,
+    breakReviewCount,consecutiveBlankSpans,dateResolution:dates,
   };
 }
