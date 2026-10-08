@@ -774,7 +774,7 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           for (const glyphs of dateNumericCrops) {
             const read = await worker.recognize(glyphs, { rotateAuto: false },
               { text: true, blocks: true });
-            const text = String(read.data.text ?? '').trim().replace(/\\s+/g, '');
+            const text = String(read.data.text ?? '').trim().replace(/\s+/g, '');
             if (!/^(?:[1-9]|[12][0-9]|3[01])$/.test(text)) continue;
             const confidence = Number(read.data.confidence) || 0;
             if (confidence < 30) continue;
