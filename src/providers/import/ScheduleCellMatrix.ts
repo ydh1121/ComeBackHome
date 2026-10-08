@@ -105,6 +105,30 @@ function parseCalendarContext(tokens: BoxToken[]): { year: number | null; month:
     const monthOnly = /^(1[0-2]|0?[1-9])월$/.exec(raw);
     if (monthOnly && month == null) month = Number(monthOnly[1]);
   }
+  // Tesseract frequently splits "2026년 10월" into separate word tokens.
+  // Recover month ONLY from adjacent year-and-month tokens on the same
+  // text baseline. Never guess it from the current date or a body cell.
+  if (month == null) {
+    const ordered = [...tokens].sort((a, b) => a.cy - b.cy || a.x - b.x);
+    for (const yearToken of ordered) {
+      const yearMatch = /(20\d{2})/.exec(yearToken.text.normalize('NFKC'));
+      if (!yearMatch) continue;
+      const height = Math.max(8, yearToken.height);
+      const siblings = ordered.filter((token) =>
+        Math.abs(token.cy - yearToken.cy) <= height * 0.75 &&
+        token.x >= yearToken.x &&
+        token.x <= yearToken.right + Math.max(140, yearToken.width * 2)
+      ).sort((a, b) => a.x - b.x);
+      const joined = siblings.map((token) => token.text.normalize('NFKC')).join('')
+        .replace(/[\s_.-]/g, '');
+      const match = /(20\d{2})년?(1[0-2]|0?[1-9])월?/.exec(joined);
+      if (match) {
+        year = Number(match[1]);
+        month = Number(match[2]);
+        break;
+      }
+    }
+  }
   return { year, month };
 }
 
