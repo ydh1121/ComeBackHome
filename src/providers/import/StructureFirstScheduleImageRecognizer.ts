@@ -16,6 +16,7 @@ import type {
 import {
   buildScheduleCellMatrix,
   buildScheduleMatrixProbeRegions,
+  inspectScheduleMatrixInput,
   type ScheduleCellMatrix,
   type ScheduleMatrixPersonRow,
 } from './ScheduleCellMatrix';
