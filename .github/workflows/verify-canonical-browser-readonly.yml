@@ -30,7 +30,9 @@ jobs:
         run: |
           npm install --no-save --ignore-scripts playwright@1.56.1
           npx playwright install --with-deps chromium webkit
-      - name: Verify production browser flows without mutating user data
+      - name: Verify same synthetic pixel matrix in Chromium and WebKit
+        run: node scripts/verify-ocr-browser-parity.mjs
+      - name: Verify production non-route browser flows without mutating user data
         run: node scripts/verify-canonical-browser-readonly.mjs
       - name: Preserve private layout-crop evidence
         if: always()
