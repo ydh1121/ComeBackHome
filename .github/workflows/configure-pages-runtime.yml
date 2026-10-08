@@ -302,8 +302,20 @@ jobs:
             }
           }
 
+          const mapConfigResponse = await fetch(origin + '/api/client-config', {
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+          });
+          const mapConfig = await mapConfigResponse.json().catch(() => null);
+          if (!mapConfigResponse.ok || mapConfig?.kakaoMaps?.configured !== true ||
+              typeof mapConfig?.kakaoMaps?.javaScriptKey !== 'string' ||
+              mapConfig.kakaoMaps.javaScriptKey.length < 8) {
+            throw new Error('Canonical interactive Kakao Maps client config is missing');
+          }
+
           console.log(JSON.stringify({
             canonicalOrigin: origin + '/',
+            interactiveKakaoMapRuntimeConfig: true,
             providerCapabilities: providerBody?.capabilities ?? null,
             directPagesApi: true,
             directPagesD1: true,
