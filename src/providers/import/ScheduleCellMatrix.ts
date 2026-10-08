@@ -183,13 +183,39 @@ function buildDateColumns(
   const headerZoneBottom = firstRows.length
     ? Math.max(...firstRows.map((band) => band.bounds.y + band.bounds.height))
     : detection.structure.tableBounds.y + detection.structure.tableBounds.height * 0.25;
-  const anchors = tokens
+  // OCR commonly separates Hangul day suffixes and individual digits.
+  // Select the upper, horizontally repeated date-token row instead of
+  // assuming that a pixel-derived rowBand always contains the header.
+  // Bare numbers are permitted only when at least two DISTINCT dates
+  // share a near-horizontal header baseline.
+  const rawDateEvidence = tokens
+    .map((token) => ({ token, date: parseDateEvidence(token.text, context, true) }))
+    .filter((item): item is { token: BoxToken; date: string } => item.date != null)
+    .filter((item) => item.token.cy <= detection.raster.height * 0.5)
+    .sort((a, b) => a.token.cy - b.token.cy);
+  const headerGroups: Array<Array<{ token: BoxToken; date: string }>> = [];
+  for (const evidence of rawDateEvidence) {
+    const group = headerGroups.find((items) =>
+      Math.abs(items[0].token.cy - evidence.token.cy) <=
+      Math.max(8, Math.min(items[0].token.height, evidence.token.height) * 0.8)
+    );
+    if (group) group.push(evidence);
+    else headerGroups.push([evidence]);
+  }
+  const groupWithDates = headerGroups
+    .filter((group) => new Set(group.map((item) => item.date)).size >= 2)
+    .sort((left, right) => {
+      const distinction = new Set(right.map((item) => item.date)).size -
+        new Set(left.map((item) => item.date)).size;
+      return distinction || left[0].token.cy - right[0].token.cy;
+    })[0];
+  const anchors = (groupWithDates ?? tokens
     .map((token) => ({
       token,
       date: parseDateEvidence(token.text, context,
         token.cy >= detection.structure.tableBounds.y && token.cy <= headerZoneBottom),
     }))
-    .filter((item): item is { token: BoxToken; date: string } => item.date != null)
+    .filter((item): item is { token: BoxToken; date: string } => item.date != null))
     .sort((left, right) => left.token.cx - right.token.cx);
 
   const deduped = anchors.filter((item, index, all) =>
