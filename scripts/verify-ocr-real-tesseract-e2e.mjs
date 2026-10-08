@@ -173,7 +173,10 @@ try {
             error:failure?.slice(0,160)??null,cellCount:truth.length,correct,
             falseOff,personTotal:names.length,
             personExact:names.filter(name=>recognized.has(name)).length,
-            garbagePerson:[...recognized].filter(name=>!names.includes(name)).length,
+            reviewOnlyUnresolvedRows:[...recognized]
+              .filter(name=>name.startsWith('이름 확인 필요 (')).length,
+            garbagePerson:[...recognized].filter(name=>
+              !names.includes(name)&&!name.startsWith('이름 확인 필요 (')).length,
             dateTotal:input.days,dateRecovered:diagnostics?.matrix.dates.length??0,
             timeTotal,matchedTime,
             structure:diagnostics?.matrix.geometrySource??'FAILED',
