@@ -172,10 +172,14 @@ export class NotificationService implements NotificationActions {
 
   async connectPushFromUserGesture(): Promise<void> {
     try {
-      const before = await this.permissionProvider.getPermission();
+      // WebKit requires the permission prompt to be invoked from the tap.
+      // An awaited browser permission query before requestPermission() can
+      // discard the transient user activation on iPhone Home Screen PWAs.
+      const snapshot = this.permissionProvider.getPermissionSnapshot?.();
+      const before = snapshot ?? await this.permissionProvider.getPermission();
       if (before === 'denied') throw new PushClientError('NO_PERMISSION');
-      // Only request if permission is not already granted. The click
-      // remains the browser's user gesture for iOS PWA subscription.
+      // Only request if permission is not already granted. The prompt
+      // is initiated before the first await in the real browser adapter.
       const permission = before === 'granted'
         ? before : await this.permissionProvider.requestPermissionFromUserGesture();
       await this.repository.setPermission(permission);

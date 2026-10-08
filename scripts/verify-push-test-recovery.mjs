@@ -114,6 +114,41 @@ try{
   assert.equal(errors.categorizePushError(new errors.PushClientError('NO_PERMISSION')),
     'NO_PERMISSION');
   assert.equal(errors.PUSH_FAILURE_MESSAGES.PUSH_PROVIDER_REJECTED.includes('거부'),true);
+  // iOS Home Screen apps need the permission API invoked synchronously from
+  // the click handler. Prove the request happens BEFORE any awaited work.
+  const gestureEvents=[];
+  const localState={permission:'default',subscription:null};
+  const gesturePermission={
+    getPermissionSnapshot(){gestureEvents.push('snapshot');return 'default';},
+    async getPermission(){throw Error('Delayed permission query lost user activation');},
+    requestPermissionFromUserGesture(){
+      gestureEvents.push('requestPermission:called-synchronously');
+      return Promise.resolve('granted');
+    },
+  };
+  const gestureRepo={
+    async setPermission(value){localState.permission=value;},
+    async setSubscription(value){localState.subscription=value;},
+  };
+  const gestureBrowser={
+    async getCurrent(){return null;},
+    async subscribe(){gestureEvents.push('subscribe');return current;},
+    async unsubscribe(){},
+  };
+  const gestureService=new serviceModule.NotificationService(
+    gestureRepo,gesturePermission,gestureBrowser,{async sendTestNotification(){}},
+  );
+  const pending=gestureService.connectPushFromUserGesture();
+  assert.deepEqual(gestureEvents,
+    ['snapshot','requestPermission:called-synchronously'],
+    'Notification.requestPermission must be started in original user gesture');
+  await pending;
+  assert.equal(localState.permission,'subscribed');
+  assert.equal(localState.subscription?.endpoint,current.endpoint);
+  console.log(JSON.stringify({
+    result:'PASS',userGesturePermissionCalledBeforeAwait:true,
+    noProductionPushSent:true,liveKakaoRouteCalls:0,
+  }));
   console.log(JSON.stringify({
     result:'PASS',testEndpointWithoutKakao:'HTTP_404_SUBSCRIPTION_NOT_REGISTERED',
     providerCalls:0,actualPushSends:0,readonlyReadiness:true,vapidConfigured:true,
