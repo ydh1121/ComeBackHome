@@ -107,6 +107,26 @@ async function verifyOn(browserType, label, device = {}) {
       }))
     );
     assert.ok(markerTitles.length, 'Clickable transit markers are not rendered');
+    const hitChecks = await markerTargets.evaluateAll((nodes) => {
+      const mapRect = document.querySelector('.kakao-transit-map')?.getBoundingClientRect();
+      return nodes.map((marker) => {
+        const bounds = marker.getBoundingClientRect();
+        const x = bounds.x + bounds.width / 2;
+        const y = bounds.y + bounds.height / 2;
+        const isInside = mapRect && x >= mapRect.left && x <= mapRect.right &&
+          y >= mapRect.top && y <= mapRect.bottom;
+        if (!isInside) return { visibleOnMap: false, unblocked: true };
+        const top = document.elementFromPoint(x, y);
+        return {
+          visibleOnMap: true,
+          unblocked: Boolean(top === marker || marker.contains(top)),
+        };
+      });
+    });
+    assert.ok(hitChecks.filter((item) => item.visibleOnMap).length > 0,
+      'No map marker is within the visible viewport');
+    assert.ok(hitChecks.every((item) => !item.visibleOnMap || item.unblocked),
+      'Overlapping map marker blocks its neighbor click/tap center');
     const preferred = markerTitles.find((item) => item.name.includes('차병원사거리')) ??
       markerTitles.sort((a, b) => b.name.length - a.name.length)[0];
     const marker = markerTargets.nth(preferred.index);
@@ -278,6 +298,7 @@ async function verifyOn(browserType, label, device = {}) {
       mapDOM: 'PASS',
       mapMarkerDOM: 'PASS',
       markerInteraction: clickMode + '_PASS',
+      markerHitCentersClear: hitChecks.filter((item) => item.visibleOnMap).length,
       markerListSync: 'FOCUS_ONLY_PASS',
       realActiveCard: 'PASS',
       activeCardGeometry: measured,
