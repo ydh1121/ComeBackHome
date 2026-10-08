@@ -132,6 +132,21 @@ try {
     'Kakao Maps public client key mapping mismatch',
   );
 
+  const fallbackConfigResponse = await workerApi.handleApiRequest(
+    new Request('https://local.test/api/client-config'),
+    {
+      ...env,
+      VITE_CBH_KAKAO_JAVASCRIPT_KEY: undefined,
+      KAKAO_JAVASCRIPT_KEY: 'fixture-public-browser-app-key',
+    },
+    providerRuntime,
+  );
+  const fallbackConfigBody = await fallbackConfigResponse.json();
+  expect(fallbackConfigResponse.ok && fallbackConfigBody?.kakaoMaps?.configured === true,
+    'runtime-only Maps JS app-key binding must work without a build key');
+  expect(fallbackConfigBody?.kakaoMaps?.javaScriptKey === 'fixture-public-browser-app-key',
+    'Maps JS app key fallback must never substitute the Kakao REST secret');
+
   globalThis.fetch = async (input, init) => {
     if (typeof input !== 'string' || !input.startsWith('/api')) {
       throw new Error('Unexpected external fetch in Phase5O harness: ' + String(input));
