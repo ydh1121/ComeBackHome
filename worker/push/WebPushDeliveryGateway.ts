@@ -109,9 +109,45 @@ export function classifyPushProviderFailure(error: unknown): {
   return { reason: 'PUSH_PROVIDER_REJECTED', upstreamStatus: status };
 }
 
+/**
+ * web-push implements transport with Node's https.request(). Workers' native
+ * fetch() is the supported outbound HTTP path: use web-push only for standards-
+ * compliant aes128gcm encryption and VAPID request construction.
+ * Preserve the same VAPID keys and browser subscriptions.
+ */
 const defaultSender: WebPushSender = {
-  sendNotification(subscription, payload, options) {
-    return webPush.sendNotification(subscription, payload, options);
+  async sendNotification(subscription, payload, options) {
+    const details = webPush.generateRequestDetails(subscription, payload, {
+      ...options,
+      contentEncoding: 'aes128gcm',
+    });
+    const url = new URL(details.endpoint);
+    if (url.protocol !== 'https:') {
+      throw new Error('Push endpoint must use HTTPS.');
+    }
+
+    // fetch() sets Content-Length from the actual body. Do not forward Node's
+    // transport-level headers, which Workers fetch forbids setting explicitly.
+    const headers = new Headers(details.headers as HeadersInit);
+    headers.delete('content-length');
+    headers.delete('host');
+    const body = details.body ? Uint8Array.from(details.body).buffer : null;
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers,
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      // Preserve only the HTTP status for public classification. Never echo
+      // the upstream body, endpoint, auth header or subscription encryption keys.
+      const failure = new Error('Push provider returned an unsuccessful HTTP status') as
+        Error & { statusCode: number };
+      failure.statusCode = response.status;
+      throw failure;
+    }
+    return { statusCode: response.status };
   },
 };
 
