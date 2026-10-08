@@ -1,0 +1,6 @@
+{
+  "name": "cbh-push-workerd-test-only",
+  "main": "./push-workerd-probe.ts",
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": ["nodejs_compat"]
+}

@@ -87,13 +87,23 @@ function classifyDeliveryError(error: unknown): PushDeliveryError {
 export function classifyPushProviderFailure(error: unknown): {
   reason: 'PUSH_PROVIDER_BAD_REQUEST' | 'PUSH_PROVIDER_AUTH_REJECTED' |
     'PUSH_PROVIDER_RATE_LIMITED' | 'PUSH_PROVIDER_UNAVAILABLE' |
-    'PUSH_TRANSPORT_ERROR' | 'PUSH_PROVIDER_REJECTED';
+    'PUSH_TRANSPORT_ERROR' | 'PUSH_PROVIDER_REJECTED' |
+    'PUSH_SUBSCRIPTION_KEY_INVALID' | 'PUSH_REQUEST_PREPARATION_FAILED' |
+    'PUSH_REQUEST_HEADERS_FAILED' | 'PUSH_NETWORK_CONNECT_FAILED';
   upstreamStatus: number | null;
 } {
   const raw = error instanceof PushDeliveryError ? error.providerStatus : null;
   const status = raw != null && Number.isInteger(raw) && raw >= 400 && raw <= 599
     ? raw : null;
-  if (status == null) return { reason: 'PUSH_TRANSPORT_ERROR', upstreamStatus: null };
+  if (status == null) {
+    const stage = error instanceof PushDeliveryError ? error.failureStage : null;
+    const reason = stage === 'SUBSCRIPTION' ? 'PUSH_SUBSCRIPTION_KEY_INVALID'
+      : stage === 'PREPARE' ? 'PUSH_REQUEST_PREPARATION_FAILED'
+      : stage === 'HEADERS' ? 'PUSH_REQUEST_HEADERS_FAILED'
+      : stage === 'FETCH' ? 'PUSH_NETWORK_CONNECT_FAILED'
+      : 'PUSH_TRANSPORT_ERROR';
+    return { reason, upstreamStatus: null };
+  }
   if (status === 400 || status === 413 || status === 422) {
     return { reason: 'PUSH_PROVIDER_BAD_REQUEST', upstreamStatus: status };
   }
@@ -115,37 +125,70 @@ export function classifyPushProviderFailure(error: unknown): {
  * compliant aes128gcm encryption and VAPID request construction.
  * Preserve the same VAPID keys and browser subscriptions.
  */
+function validBase64UrlLength(value: string, expected: number): boolean {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return false;
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/')
+      .padEnd(Math.ceil(value.length / 4) * 4, '=');
+    return atob(padded).length === expected;
+  } catch { return false; }
+}
+
+export function pushSubscriptionKeyShapeValid(keys: { p256dh: string; auth: string }): boolean {
+  return validBase64UrlLength(keys.p256dh, 65) &&
+    validBase64UrlLength(keys.auth, 16);
+}
+
 const defaultSender: WebPushSender = {
   async sendNotification(subscription, payload, options) {
-    const details = webPush.generateRequestDetails(subscription, payload, {
-      ...options,
-      contentEncoding: 'aes128gcm',
-    });
-    const url = new URL(details.endpoint);
-    if (url.protocol !== 'https:') {
-      throw new Error('Push endpoint must use HTTPS.');
+    if (!pushSubscriptionKeyShapeValid(subscription.keys)) {
+      throw new PushDeliveryError('Push subscription key format invalid.',
+        'permanent', null, 'SUBSCRIPTION');
     }
-
-    // fetch() sets Content-Length from the actual body. Do not forward Node's
-    // transport-level headers, which Workers fetch forbids setting explicitly.
-    const headers = new Headers(details.headers as HeadersInit);
-    headers.delete('content-length');
-    headers.delete('host');
-    const body = details.body ? Uint8Array.from(details.body).buffer : null;
-
-    const response = await fetch(url.toString(), {
-      method: 'POST',
-      headers,
-      body,
-      signal: AbortSignal.timeout(15000),
-    });
+    let details: ReturnType<typeof webPush.generateRequestDetails>;
+    try {
+      details = webPush.generateRequestDetails(subscription, payload, {
+        ...options,
+        contentEncoding: 'aes128gcm',
+      });
+    } catch {
+      throw new PushDeliveryError('Push encryption or VAPID signing failed.',
+        'permanent', null, 'PREPARE');
+    }
+    let url: URL;
+    let headers: Headers;
+    let body: ArrayBuffer | null;
+    try {
+      url = new URL(details.endpoint);
+      if (url.protocol !== 'https:') throw new Error('HTTPS required');
+      headers = new Headers(details.headers as HeadersInit);
+      headers.delete('content-length');
+      headers.delete('host');
+      body = details.body ? Uint8Array.from(details.body).buffer : null;
+    } catch {
+      throw new PushDeliveryError('Push outbound HTTP request setup failed.',
+        'permanent', null, 'HEADERS');
+    }
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      throw new PushDeliveryError('Push outbound fetch failed.',
+        'transient', null, 'FETCH');
+    }
     if (!response.ok) {
-      // Preserve only the HTTP status for public classification. Never echo
-      // the upstream body, endpoint, auth header or subscription encryption keys.
-      const failure = new Error('Push provider returned an unsuccessful HTTP status') as
-        Error & { statusCode: number };
-      failure.statusCode = response.status;
-      throw failure;
+      const status = response.status;
+      const kind = status === 404 || status === 410
+        ? 'terminal-subscription'
+        : status === 408 || status === 425 || status === 429 || status >= 500
+          ? 'transient' : 'permanent';
+      throw new PushDeliveryError('Push provider responded with HTTP failure.',
+        kind, status, 'PROVIDER');
     }
     return { statusCode: response.status };
   },
@@ -186,6 +229,7 @@ export class WebPushDeliveryGateway implements PushDeliveryGateway {
         },
       );
     } catch (error) {
+      if (error instanceof PushDeliveryError) throw error;
       throw classifyDeliveryError(error);
     }
   }

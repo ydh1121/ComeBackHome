@@ -17,7 +17,7 @@ for (const text of [
   "import webPush from 'web-push'",
   'class WebPushDeliveryGateway',
   'webPush.generateRequestDetails',
-  'const response = await fetch(url.toString()',
+  'response = await fetch(url.toString()',
   'vapidDetails:',
   'TTL: this.config.ttlSeconds',
   "statusCode === 404 || statusCode === 410",
@@ -187,6 +187,32 @@ try {
     transportFailureClassified:true,
     actualPushSends:0,
   }));
+
+  // Isolate actual default-sender failure stage without a network request.
+  const stageCases = [
+    {
+      name:'invalid subscription', keys:{p256dh:'wrong',auth:'wrong'},
+      status:'PUSH_SUBSCRIPTION_KEY_INVALID',
+    },
+  ];
+  for (const item of stageCases) {
+    const malformed={...actualSubscription,keys:item.keys};
+    await assert.rejects(nativeGateway.send(malformed,payload),error =>
+      module.classifyPushProviderFailure(error).reason===item.status);
+  }
+  const mockedOriginal=globalThis.fetch;
+  try {
+    globalThis.fetch=async () => { throw new TypeError('Synthetic fetch failed'); };
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.failureStage==='FETCH' &&
+      module.classifyPushProviderFailure(error).reason==='PUSH_NETWORK_CONNECT_FAILED');
+    globalThis.fetch=async () => new Response(null,{status:403});
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.failureStage==='PROVIDER' &&
+      module.classifyPushProviderFailure(error).reason==='PUSH_PROVIDER_AUTH_REJECTED');
+  } finally {
+    globalThis.fetch=mockedOriginal;
+  }
 
   let invalidSubjectBlocked = false;
   try {

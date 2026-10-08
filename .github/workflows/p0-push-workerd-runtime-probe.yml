@@ -1,0 +1,47 @@
+name: P0 Push Local Workerd Compatibility
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/push-workerd-probe.ts"
+      - "scripts/push-workerd-probe.wrangler.jsonc"
+      - "worker/push/WebPushDeliveryGateway.ts"
+      - ".github/workflows/p0-push-workerd-runtime-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run local workerd fixture without any Cloudflare remote resource
+        shell: bash
+        run: |
+          npx wrangler dev --local --port 8791 --config scripts/push-workerd-probe.wrangler.jsonc > /tmp/cbh-workerd-probe.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for n in $(seq 1 45); do
+            if curl --silent --max-time 2 -o /tmp/cbh-push-probe-response.json http://127.0.0.1:8791/; then
+              break
+            fi
+            if ! kill -0 "$PID" 2>/dev/null; then
+              tail -n 35 /tmp/cbh-workerd-probe.log
+              exit 1
+            fi
+            sleep 2
+          done
+          test -s /tmp/cbh-push-probe-response.json || { tail -n 35 /tmp/cbh-workerd-probe.log; exit 1; }
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const o=JSON.parse(fs.readFileSync("/tmp/cbh-push-probe-response.json","utf8"));
+            console.log(JSON.stringify(o));
+            if(o.stage!=="OK" || o.actualPushSends!==0 || !o.networkMocked || !o.intercepted)process.exit(1);
+          '

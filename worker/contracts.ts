@@ -79,6 +79,7 @@ export interface NotificationJobStore {
 }
 
 export type PushDeliveryErrorKind = 'transient' | 'terminal-subscription' | 'permanent';
+export type PushDeliveryFailureStage = 'SUBSCRIPTION' | 'PREPARE' | 'HEADERS' | 'FETCH' | 'PROVIDER';
 
 export class PushDeliveryError extends Error {
   constructor(
@@ -86,6 +87,7 @@ export class PushDeliveryError extends Error {
     readonly kind: PushDeliveryErrorKind,
     /** Upstream push provider HTTP status, if present. Never an endpoint or response body. */
     readonly providerStatus: number | null = null,
+    readonly failureStage: PushDeliveryFailureStage | null = null,
   ) {
     super(message);
     this.name = 'PushDeliveryError';
