@@ -393,13 +393,17 @@ jobs:
       - name: Prepare local Tesseract assets
         run: npm run prepare:ocr-assets
 
-      - name: Check Korean font availability
+      - name: Install and pin realistic Korean test font
         run: |
-          if ! fc-list :lang=ko | grep -q .; then
-            echo 'Missing Korean glyph font in browser image'
-            exit 1
+          export DEBIAN_FRONTEND=noninteractive
+          # Unifont-JP satisfies fc-list :lang=ko but produces different Korean
+          # training pixels than a real Nanum font. Fail closed if unavailable.
+          if ! fc-match -f '%{family}' 'Nanum Gothic:lang=ko' | grep -qi Nanum; then
+            timeout 360s bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends fonts-nanum'
+            fc-cache -f
           fi
-          fc-list :lang=ko | head -n 1
+          fc-match -f '%{family}' 'Nanum Gothic:lang=ko' | grep -qi Nanum
+          fc-match -f '%{family}\n' 'Nanum Gothic:lang=ko'
 
       - name: Verify image-derived partial grid column geometry
         run: npm run verify:ocr-partial-grid
