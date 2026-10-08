@@ -1,0 +1,36 @@
+name: Canonical Transit Reversible Write E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-canonical-transit-write.yml"
+      - "scripts/verify-canonical-reversible-transit-write.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-canonical-transit-write-e2e
+  cancel-in-progress: false
+
+jobs:
+  reversible-production-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install ephemeral Chromium
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify reversible origin/destination API-D1-browser selection roundtrip
+        run: node scripts/verify-canonical-reversible-transit-write.mjs
