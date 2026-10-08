@@ -48,9 +48,23 @@ function decodeCtc(output, alphabet) {
       const score=Number(data[offset+c]);
       if(score>best){best=score;index=c;}
     }
-    let sum=0;
-    for(let c=0;c<classes;c++)sum+=Math.exp(Number(data[offset+c])-best);
-    const probability=sum>0?1/sum:0;
+    let rawSum=0,allUnit=true;
+    for(let c=0;c<classes;c++){
+      const value=Number(data[offset+c]);
+      rawSum+=value;
+      if(value<0||value>1)allUnit=false;
+    }
+    // Official PP-OCRv5 ONNX often emits probabilities, not logits.
+    // Applying softmax to a probability vector collapses near-certain
+    // classes to ~1/11947 and invalidates confidence gating.
+    let probability=0;
+    if(allUnit&&Math.abs(rawSum-1)<.02){
+      probability=Math.max(0,Math.min(1,best));
+    }else{
+      let sum=0;
+      for(let c=0;c<classes;c++)sum+=Math.exp(Number(data[offset+c])-best);
+      probability=sum>0?1/sum:0;
+    }
     if(index!==0&&index!==last){
       text+=alphabet[index-1];
       confidences.push(probability);
