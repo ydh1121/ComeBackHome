@@ -73,7 +73,9 @@ export function NotificationPage() {
         <b>{permissionView.title}</b>
         <div className="row-sub">{permissionView.subtitle}</div>
       </div>
-      {permissionView.enabled ? <Icon name="check" /> : permissionView.canRequest ? <Icon name="chevron-right" /> : null}
+      {permissionView.enabled ? <Icon name="check" /> : permissionView.canRequest
+        ? <span className="permission-connect-cta">{settings.permission === 'granted' || settings.permission === 'stale' ? '알림 연결' : '알림 허용'}</span>
+        : null}
     </>
   );
 
