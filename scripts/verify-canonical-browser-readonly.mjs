@@ -164,8 +164,9 @@ async function verifyOn(browserType, label, device = {}) {
     const reverseId = await alternateRow.getAttribute('id');
     const reverseTransitId = reverseId?.replace(/^transit-result-/, '');
     assert.ok(reverseTransitId, 'List row lacks stable transit identity');
-    if (label.startsWith('mobile')) await alternateRow.tap();
-    else await alternateRow.click();
+    const focusControl = alternateRow.locator('.transit-row-focus');
+    if (label.startsWith('mobile')) await focusControl.tap();
+    else await focusControl.click();
     await page.waitForFunction((id) =>
       document.querySelector('.cbh-transit-map-marker.is-active')?.getAttribute('data-transit-id') === id,
       reverseTransitId, { timeout: 10_000 });
