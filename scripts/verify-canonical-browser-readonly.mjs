@@ -147,7 +147,15 @@ async function verifyOn(browserType, label, device = {}) {
       await marker.evaluate((area) => area.click());
     }
     const activePanel = page.getByRole('region', { name: '지도에서 선택한 교통편' });
-    await activePanel.waitFor({ timeout: 10_000 });
+    await page.waitForTimeout(600);
+    let clickMode = markerClick.type;
+    if (!(await activePanel.isVisible())) {
+      // Browser-marker polygon coordinates may not yield a usable pointer hit.
+      // Keep this separate from true physical mouse/touch acceptance.
+      await marker.evaluate((area) => area.click());
+      clickMode = 'DOM_FALLBACK_AFTER_' + markerClick.type;
+    }
+    await activePanel.waitFor({ timeout: 8_000 });
     const activeName = markerClick.name.replace(/^(버스|지하철) · /, '');
     assert.ok((await activePanel.innerText()).includes(activeName),
       'Live active transit panel did not match focused marker');
@@ -307,7 +315,8 @@ async function verifyOn(browserType, label, device = {}) {
       mapSDK: 'PASS',
       mapDOM: 'PASS',
       mapMarkerDOM: 'PASS',
-      markerInteraction: markerClick.type === 'POINTER' ? 'POINTER_PREVIEW_PASS' : 'DOM_PREVIEW_PASS',
+      markerInteraction: clickMode === 'POINTER' ? 'POINTER_PREVIEW_PASS' :
+        clickMode === 'DOM_CLICK' ? 'DOM_PREVIEW_PASS' : 'DOM_FALLBACK_ONLY',
       markerListSync: 'FOCUS_ONLY_PASS',
       realActiveCard: 'PASS',
       activeCardGeometry: measured,
