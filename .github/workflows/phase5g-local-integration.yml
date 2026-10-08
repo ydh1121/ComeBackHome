@@ -222,6 +222,9 @@ jobs:
       - name: Verify provider E2E
         run: npm run verify:provider-e2e
 
+      - name: Enforce zero live Kakao routes in standard CI
+        run: npm run verify:route-firewall
+
       - name: Verify schedule workflow
         run: npm run verify:schedule
 
