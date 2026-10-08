@@ -181,7 +181,13 @@ export function TransitAccessPage() {
     ? overview?.originAccessPoints ?? []
     : overview?.destinationAccessPoints ?? [];
   const selectedRouteIds = new Set(routeAccessIds(route, routeRole));
-  const selectedPoints = persistedPoints.filter((point) => selectedRouteIds.has(point.id));
+  // The standalone picker tracks D1 access-point.selected. Route-edit pickers
+  // instead track membership of the current saved-route access set.
+  const selectedPoints = persistedPoints.filter((point) =>
+    routeId && (routeRole === 'origin' || routeRole === 'destination')
+      ? selectedRouteIds.has(point.id)
+      : point.selected
+  );
 
   const selectedResultIds = new Set(
     visible
@@ -277,13 +283,17 @@ export function TransitAccessPage() {
         return;
       }
 
+      const expectedSelected = existing ? !point.selected : true;
       if (existing) {
-        await services.actions.transitAccess.toggleAccess(point.id, !point.selected);
+        await services.actions.transitAccess.toggleAccess(point.id, expectedSelected);
       }
-      // All successful mutations must survive the repository readback.
+      // Accept only the exact D1-backed selected flag; a row's existence
+      // alone does not prove that + / deselect actually took effect.
       const persisted = await services.queries.getTransitAccess(personId, kind, 'all');
-      if (!persisted.some((candidate) => candidate.id === point.id)) {
-        throw new Error('교통편 저장 후 다시 조회되지 않았습니다.');
+      if (!persisted.some((candidate) =>
+        candidate.id === point.id && candidate.selected === expectedSelected
+      )) {
+        throw new Error('교통편 선택 상태가 저장 후 일치하지 않습니다.');
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '교통편 저장에 실패했습니다.');
