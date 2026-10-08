@@ -18,9 +18,9 @@ import type {
 import { calculateArrivalEta } from '../../application/services/ArrivalEtaCalculator';
 import type {
   CommuteRepository,
-  type RouteDiscovery,
-  type RouteProviderErrorCategory,
-  type RouteSearchSource,
+  RouteDiscovery,
+  RouteProviderErrorCategory,
+  RouteSearchSource,
   PlaceRepository,
   PresenceRepository,
   ScheduleRepository,
