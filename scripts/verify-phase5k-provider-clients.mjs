@@ -72,6 +72,11 @@ const busXmlByCapability = new Map([
 </ServiceResult>`],
 ]);
 
+busXmlByCapability.set('bus-stop-nearby-position',
+  busXmlByCapability.get('bus-stop-name-search'));
+busXmlByCapability.set('bus-stop-ars-search',
+  busXmlByCapability.get('bus-stop-name-search'));
+
 const requests = [];
 const fakeTransport = {
   async getText(request, context) {
@@ -122,10 +127,17 @@ try {
   expect(routes[0]?.totalMinutes === 15, 'Kakao client did not pass fixture through route mapper');
 
   const bus = new clients.SeoulBusRequestClient(fakeTransport);
+  const nearBus = await bus.nearbyStops({ x: 127.03, y: 37.49 }, 800);
   const stops = await bus.searchStops('강남역', { x: 127.03, y: 37.49 });
+  const stopsByNumber = await bus.searchStops('23813', { x: 127.03, y: 37.49 });
+  const stopsByPrefixedNumber = await bus.searchStops('정류장번호 23813', { x: 127.03, y: 37.49 });
   const busRoutes = await bus.routesByStop('23813');
   const busArrivals = await bus.arrivals('122000606', '100100118');
   expect(stops[0]?.providerId === '122000606', 'Seoul bus client XML stop mapping mismatch');
+  expect(nearBus[0]?.providerId === '122000606',
+    'Official nearby bus lookup lost stop identity');
+  expect(stopsByNumber[0]?.displayCode === '23813', 'Official ARS-ID stop-number lookup missing');
+  expect(stopsByPrefixedNumber[0]?.displayCode === '23813', 'Prefixed stop-number lookup missing');
   expect(stops[0]?.name === '강남역', 'Seoul bus CDATA decoding mismatch');
   expect(stops[0]?.coordinate?.x === 127.0300921798, 'Seoul bus client tmX mapping mismatch');
   expect(stops[0]?.coordinate?.y === 37.4985037086, 'Seoul bus client tmY mapping mismatch');
@@ -155,11 +167,27 @@ try {
   expect(routeRequest?.query?.start_x === '127.11119217', 'Kakao route start_x mismatch');
   expect(routeRequest?.query?.input_coord === 'WGS84', 'Kakao route coordinate contract mismatch');
 
+  const nearbyBusRequest = byCapability.get('bus-stop-nearby-position');
+  expect(nearbyBusRequest?.urlTemplate.endsWith('/stationinfo/getStationByPos'),
+    'Nearby bus source must be official coordinate-based API');
+  expect(nearbyBusRequest?.query?.tmX === '127.03' &&
+    nearbyBusRequest?.query?.tmY === '37.49' &&
+    nearbyBusRequest?.query?.radius === '800',
+    'Official nearby bus WGS84 x/y and radius request mismatch');
+
   const busSearchRequest = byCapability.get('bus-stop-name-search');
   expect(busSearchRequest?.urlTemplate.endsWith('/stationinfo/getStationByName'), 'Seoul bus stop endpoint mismatch');
   expect(busSearchRequest?.query?.stSrch === '강남역', 'Seoul bus stSrch mismatch');
   expect(busSearchRequest?.auth?.secretName === 'SEOUL_BUS_SERVICE_KEY', 'Seoul bus secret reference mismatch');
   expect(busSearchRequest?.security === 'DOCUMENTED_HTTP_REQUIRES_VALIDATION', 'Seoul bus HTTP risk must remain explicit');
+
+  const arsSearchRequest = byCapability.get('bus-stop-ars-search');
+  expect(arsSearchRequest?.urlTemplate.endsWith('/stationinfo/getStationByUid'),
+    'Stop-number search must call official getStationByUid');
+  expect(arsSearchRequest?.query?.arsId === '23813',
+    'Stop-number search must retain the 5-digit ARS ID');
+  expect(arsSearchRequest?.auth?.secretName === 'SEOUL_BUS_SERVICE_KEY',
+    'Stop-number lookup must use existing Seoul Bus credentials');
 
   const busRoutesRequest = byCapability.get('bus-routes-by-stop');
   expect(busRoutesRequest?.urlTemplate.endsWith('/stationinfo/getRouteByStation'), 'Seoul bus routes-by-stop endpoint mismatch');

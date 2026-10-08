@@ -70,6 +70,16 @@ try {
       },
     },
     seoulBus: {
+      async nearbyStops(near) {
+        return [
+          { id: 'seoul-bus:near', providerId: 'near', mode: 'BUS',
+            name: '근처 공식 정류장', displayCode: '23813',
+            coordinate: { x: near.x + 0.001, y: near.y } },
+          { id: 'seoul-bus:far', providerId: 'far', mode: 'BUS',
+            name: '세종대왕기념관', displayCode: '99999',
+            coordinate: { x: near.x + 0.105, y: near.y } },
+        ];
+      },
       async searchStops() {
         calls.transit += 1;
         return [];
@@ -193,6 +203,14 @@ try {
 
   const nearbyTransit = await transitProvider.nearby({ x: 127.03, y: 37.49 });
   expect(nearbyTransit.some((item) => item.mode === 'BUS'), 'nearby transit must include bus candidates');
+  expect(nearbyTransit.some((item) => item.providerId === 'near' && item.displayCode === '23813'),
+    'official bus identity and ARS number must be preserved');
+  expect(!nearbyTransit.some((item) => item.providerId === 'far'),
+    '9-km bus candidate must never leak into nearby list');
+  expect(nearbyTransit.every((item) => item.distanceM <= (item.mode === 'BUS' ? 800 : 900)),
+    'normal nearby transit must be capped to walkable distances');
+  expect(nearbyTransit.every((item, i) => i === 0 || nearbyTransit[i - 1].distanceM <= item.distanceM),
+    'nearby transit must be distance ascending');
   expect(nearbyTransit.some((item) => item.mode === 'SUBWAY'), 'nearby transit must include subway candidates');
 
   const subwayResolveUrl = new URL('https://local.test/api/providers/transit-resolve');
@@ -270,7 +288,7 @@ try {
     disabledError = error instanceof Error ? error.message : String(error);
   }
   expect(disabledError === 'Provider runtime is disabled.', 'disabled Worker provider contract mismatch');
-  expect(calls.place === 3, 'disabled Worker provider call reached fake Kakao source');
+  expect(calls.place === 2, 'disabled Worker provider call reached fake Kakao source');
 } finally {
   globalThis.fetch = originalFetch;
   await vite.close();

@@ -121,9 +121,9 @@ function trimNearbyTransitByDistance(results: TransitSearchResult[]): TransitSea
     const baseRadius = mode === 'BUS' ? 450 : 450;
     const delta = mode === 'BUS' ? 450 : 250;
     const normalCap = mode === 'BUS' ? 800 : 900;
-    const threshold = nearest <= normalCap
-      ? Math.min(normalCap, Math.max(baseRadius, nearest + delta))
-      : nearest + 400;
+    // Do not expand the local search just because the nearest hit is 9 km away.
+    if (nearest > normalCap) continue;
+    const threshold = Math.min(normalCap, Math.max(baseRadius, nearest + delta));
     kept.push(...group.filter((item) => (item.distanceM ?? Number.MAX_SAFE_INTEGER) <= threshold));
   }
 
@@ -404,18 +404,22 @@ export async function handleApiRequest(
               return json({ error: 'x/y are required.' }, 400);
             }
             const near = { x, y };
-            const [busPlaces, subwayPlaces] = await Promise.all([
-              providerRuntime.kakao.searchPlaces('버스정류장', near),
+            // Official bus registry gives stable stop ID, ARS code and coordinates.
+            const [officialBusStops, subwayPlaces] = await Promise.all([
+              providerRuntime.seoulBus.nearbyStops(near, 800).catch(() => []),
               providerRuntime.kakao.searchPlaces('지하철역', near),
             ]);
-            // Only transit-category Kakao POIs qualify for nearby access discovery.
-            const confirmedBusStops = busPlaces.filter((place) =>
-              /버스정류장|버스정류소/.test(place.category ?? ''));
+            const confirmedBusStops = officialBusStops
+              .filter((stop) => stop.mode === 'BUS' && stop.coordinate)
+              .map((stop) => {
+                const distanceM = coordinateDistanceMeters(near, stop.coordinate!);
+                return { ...stop, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 75)) };
+              });
             const confirmedStations = subwayPlaces.filter((place) =>
               /지하철|전철|철도역/.test(place.category ?? ''));
             return json({
               results: trimNearbyTransitByDistance([
-                ...confirmedBusStops.map((place) => placeToTransit(place, near, 'BUS')),
+                ...confirmedBusStops,
                 ...confirmedStations.map((place) => placeToTransit(place, near, 'SUBWAY')),
               ]),
             });

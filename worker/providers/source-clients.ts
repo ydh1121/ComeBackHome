@@ -218,15 +218,33 @@ export class KakaoMapRequestClient implements KakaoMapSource {
 export class SeoulBusRequestClient implements SeoulBusSource {
   constructor(private readonly transport: ProviderJsonTransport) {}
 
-  async searchStops(query: string, _near: Coordinate, context?: ProviderRequestContext) {
+  async nearbyStops(near: Coordinate, radiusM = 800, context?: ProviderRequestContext) {
+    const radius = Math.min(800, Math.max(100, Math.round(radiusM)));
     const request: ProviderJsonRequest = {
       source: 'seoul-bus',
-      capability: 'bus-stop-name-search',
+      capability: 'bus-stop-nearby-position',
       method: 'GET',
-      urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName',
-      query: {
-        stSrch: query,
-      },
+      urlTemplate: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos',
+      query: { tmX: String(near.x), tmY: String(near.y), radius: String(radius) },
+      auth: seoulBusAuth(),
+      security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
+    };
+    return mapSeoulBusStops(await readSeoulBusPayload(this.transport, request, context));
+  }
+
+  async searchStops(query: string, _near: Coordinate, context?: ProviderRequestContext) {
+    const normalized = query.normalize('NFKC').trim();
+    const numericText = normalized.replace(/^(?:정류장|정류소)(?:번호)?\s*[:#]?\s*/, '').replace(/[-\s]/g, '');
+    const arsId = /^\d{4,5}$/.test(numericText) ? numericText.padStart(5, '0') : null;
+    const nameQuery = normalized.replace(/(?:정류장|정류소)$/, '').trim();
+    const request: ProviderJsonRequest = {
+      source: 'seoul-bus',
+      capability: arsId ? 'bus-stop-ars-search' : 'bus-stop-name-search',
+      method: 'GET',
+      urlTemplate: arsId
+        ? 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid'
+        : 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName',
+      query: arsId ? { arsId } : { stSrch: nameQuery || normalized },
       auth: seoulBusAuth(),
       security: 'DOCUMENTED_HTTP_REQUIRES_VALIDATION',
     };
