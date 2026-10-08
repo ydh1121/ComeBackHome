@@ -122,6 +122,7 @@ try {
             input.format==='jpeg'?'image/jpeg':'image/png',input.quality));
           const file=new File([blob],'generated-'+input.id+'.'+input.format,
             {type:blob.type});
+          const syntheticOcrHeaders=[];
           const recognizer=new StructureFirstScheduleImageRecognizer(
             new BrowserScheduleTableStructureDetector(),
             new TesseractScheduleImageTextExtractor(
@@ -156,6 +157,7 @@ try {
           return {
             family:input.family,codec:blob.type,bytes:blob.size,
             imageDecoded:canvas.width>0,
+            generatedHeaderEvidence:syntheticOcrHeaders,
             actualTesseractFirstPass:failure===null || /ocrTokens=[1-9]/.test(failure),
             fullPipelineSuccess:failure===null,
             realTesseractExecuted:failure===null || /ocrTokens=[1-9]/.test(failure),
