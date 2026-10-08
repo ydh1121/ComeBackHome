@@ -233,8 +233,21 @@ try{
     familyResult.endTimeAccuracy=+(familyResult.endCorrect/Math.max(1,familyResult.totalEnd)).toFixed(4);
     results.push(familyResult);
   }
-  console.log(JSON.stringify({generatorFamilies:families.length,totalRasterPngImages:results.reduce((s,x)=>s+x.images,0),
-    expectedOriginalImage:'UNSEEN_USER_HOLDOUT',realOcrTokens:'GENERATED_REGION_FIXTURE_ONLY',results},null,2));
+  const unseen=results.find((item)=>item.family==='C');
+  const generatedHoldoutPass=Boolean(unseen && unseen.cellMatrixAccuracy>=0.98 &&
+    unseen.falseOff===0 && unseen.garbagePerson===0 &&
+    unseen.personAccuracy>=0.98 && unseen.dateAccuracy>=0.98);
+  console.log(JSON.stringify({
+    generatorFamilies:families.length,
+    totalRasterPngImages:results.reduce((sum,item)=>sum+item.images,0),
+    testExecution:'PASS_METRIC_COLLECTION_ONLY',
+    generatedUnseenHoldoutVerdict:generatedHoldoutPass?'PASS':'FAIL',
+    userHoldoutVerdict:'PENDING_USER_QA',
+    expectedOriginalImage:'UNSEEN_USER_HOLDOUT',
+    realOcrTokens:'GENERATED_REGION_FIXTURE_ONLY',
+    codecCoverage:'PNG_ONLY',
+    results,
+  },null,2));
   const total=results.reduce((s,x)=>s+x.images,0);
   assert.equal(total,72,'A/B/C generated raster corpus incomplete');
   assert.ok(results.every(r=>r.cells>0 && r.images===24),'Generated corpus missing cell truth');
