@@ -210,6 +210,9 @@ try {
             garbagePerson:[...recognized].filter(name=>
               !names.includes(name)&&!name.startsWith('이름 확인 필요 (')).length,
             dateTotal:input.days,dateRecovered:diagnostics?.matrix.dates.length??0,
+            dateExact:(diagnostics?.matrix.dates??[]).filter(day=>
+              truth.some(cell=>cell.date===day.date)).length,
+            nonOffCount:truth.filter(cell=>cell.state!=='OFF').length,
             timeTotal,matchedTime,
             structure:diagnostics?.matrix.geometrySource??'FAILED',
             ocrTokens:diagnostics?.layoutTokenCount??0,
@@ -222,11 +225,17 @@ try {
   }
   const lines=[];
   let allCells=0,allCorrect=0,falseOff=0,garbage=0;
+  let personTotal=0,personExact=0,dateTotal=0,dateExact=0;
+  let timeTotal=0,matchedTime=0,nonOffCount=0;
   for(const item of observed){
     allCells+=item.cellCount;
     allCorrect+=item.correct;
     falseOff+=item.falseOff;
     garbage+=item.garbagePerson;
+    personTotal+=item.personTotal;personExact+=item.personExact;
+    dateTotal+=item.dateTotal;dateExact+=item.dateExact;
+    timeTotal+=item.timeTotal;matchedTime+=item.matchedTime;
+    nonOffCount+=item.nonOffCount;
     const {logicalSignature,...safe}=item;
     lines.push(safe);
   }
@@ -244,6 +253,10 @@ try {
     realOcrAcceptance:observed.every(item=>item.fullPipelineSuccess)?'METRICS_ONLY':'FAIL',
     cellAccuracy:allCells?Number((allCorrect/allCells).toFixed(4)):0,
     falseOff:parityEligible?falseOff:null,
+    falseOffRate:parityEligible&&nonOffCount?Number((falseOff/nonOffCount).toFixed(4)):null,
+    personAccuracy:personTotal?Number((personExact/personTotal).toFixed(4)):0,
+    dateAccuracy:dateTotal?Number((dateExact/dateTotal).toFixed(4)):0,
+    timeAccuracy:timeTotal?Number((matchedTime/timeTotal).toFixed(4)):0,
     falseOffOnParsedCells:parityEligible?falseOff:0,
     cellsWithoutCompletePipeline:observed.filter(item=>!item.fullPipelineSuccess)
       .reduce((sum,item)=>sum+item.cellCount,0),
@@ -254,9 +267,18 @@ try {
     userOriginalImageUsed:false,acceptance:'NOT_CLAIMED',
     byImage:lines,
   };
+  const pilotPass=metrics.completedRealE2E &&
+    metrics.logicalParity==='PASS' &&
+    metrics.cellAccuracy>=0.95 &&
+    metrics.falseOffRate!==null && metrics.falseOffRate<=0.01 &&
+    metrics.personAccuracy>=0.95 && metrics.dateAccuracy>=0.98 &&
+    metrics.timeAccuracy>=0.95 && metrics.garbagePerson===0;
+  metrics.pilotQualityGate=pilotPass?'PASS':'FAIL';
+  metrics.fullIndependentHoldoutAcceptance='NOT_TESTED';
   console.log(JSON.stringify(metrics,null,2));
   assert.equal(metrics.realRasterImages,6,'Generated real glyph fixture matrix incomplete');
   assert.ok(metrics.executed,'No actual Tesseract pipeline executed');
+  assert.ok(pilotPass,'Actual Tesseract pilot failed objective quality thresholds');
 } finally {
   await server.close();
 }
