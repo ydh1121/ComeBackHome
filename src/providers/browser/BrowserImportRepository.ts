@@ -118,7 +118,10 @@ export class BrowserImportRepository implements ImportRepository {
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       item.personId = personId;
-      if (personId && item.resolution == null) item.resolution = 'NEW';
+      if (personId && item.resolution == null &&
+          batch.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
+        item.resolution = 'NEW';
+      }
     }
     this.persist();
   }
