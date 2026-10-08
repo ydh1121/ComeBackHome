@@ -124,6 +124,8 @@ try {
             {type:blob.type});
           const syntheticOcrHeaders=[];
           let workerPassComplete=false;
+          let gridProof=null;
+          const focusedDates=[];
           const extractor=new TesseractScheduleImageTextExtractor(
             new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),
             new BrowserScheduleOcrPreprocessor(),{useStructureFirstMode:true});
@@ -136,8 +138,30 @@ try {
               .map(token=>token.text.slice(0,28)).slice(0,24));
             return layout;
           };
+          const originalRegions=extractor.extractRegions.bind(extractor);
+          extractor.extractRegions=async (...args)=>{
+            const out=await originalRegions(...args);
+            if(args[1].some(r=>r.purpose==='date')){
+              focusedDates.push(...out.flatMap(r=>r.tokens.map(t=>({
+                text:t.text,x:Math.round(t.x),confidence:Number(t.confidence.toFixed(2))
+              }))));
+            }
+            return out;
+          };
+          const detector=new BrowserScheduleTableStructureDetector();
+          const originalDetect=detector.detect.bind(detector);
+          detector.detect=async (...args)=>{
+            const value=await originalDetect(...args);
+            gridProof={
+              topBand:value.structure.rowBands[0]?.bounds??null,
+              vertical:value.structure.evidence.verticalLinePositions.map(x=>Math.round(x)),
+              rows:value.structure.rowBands.length,
+              tableBounds:value.structure.tableBounds,
+            };
+            return value;
+          };
           const recognizer=new StructureFirstScheduleImageRecognizer(
-            new BrowserScheduleTableStructureDetector(),extractor,
+            detector,extractor,
             async()=>[...names],
           );
           let diagnostics=null;
@@ -167,6 +191,8 @@ try {
             family:input.family,codec:blob.type,bytes:blob.size,
             imageDecoded:canvas.width>0,
             generatedHeaderEvidence:syntheticOcrHeaders,
+            generatedGrid: gridProof,
+            generatedFocusedDateTokens: focusedDates,
             actualTesseractFirstPass:workerPassComplete,
             fullPipelineSuccess:failure===null,
             realTesseractExecuted:workerPassComplete,
