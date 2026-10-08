@@ -42,6 +42,7 @@ export interface WorkerEnv {
   PROVIDER_RUNTIME_ENABLED?: string;
   KAKAO_REST_API_KEY?: string;
   CBH_KAKAO_MAPS_JAVASCRIPT_KEY?: string;
+  KAKAO_JAVASCRIPT_KEY?: string;
   VITE_CBH_KAKAO_JAVASCRIPT_KEY?: string;
   SEOUL_BUS_SERVICE_KEY?: string;
   SEOUL_OPENAPI_KEY?: string;
