@@ -408,6 +408,9 @@ jobs:
       - name: Verify image-derived partial grid column geometry
         run: npm run verify:ocr-partial-grid
 
+      - name: Verify weekly 7x3 physical roster in Chromium and WebKit
+        run: node scripts/verify-ocr-weekly-3col-physical.mjs
+
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
 
