@@ -14,9 +14,10 @@ const source = await readFile(
 );
 
 for (const text of [
-  "import webPush from 'web-push'",
+  "import { buildPushPayload } from '@block65/webcrypto-web-push'",
   'class WebPushDeliveryGateway',
-  'webPush.generateRequestDetails',
+  'buildWorkerEncryptedPushPayload',
+  'return await buildPushPayload',
   'response = await fetch(url.toString()',
   'vapidDetails:',
   'TTL: this.config.ttlSeconds',
@@ -165,7 +166,7 @@ try {
     assert.equal(outbound.length,1,'default sender must use native fetch');
     assert.equal(outbound[0].url,actualSubscription.endpoint);
     assert.equal(outbound[0].method,'POST');
-    assert.equal(outbound[0].encoding,'aes128gcm');
+    assert.equal(outbound[0].encoding,'aes128gcm','iPhone requires RFC8291 aes128gcm');
     assert.equal(outbound[0].ttl,'300');
     assert.ok(outbound[0].authorization?.startsWith('vapid '));
     assert.ok(outbound[0].bodyBytes>40,'payload must be encrypted');
