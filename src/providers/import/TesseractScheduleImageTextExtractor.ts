@@ -665,9 +665,33 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           preserve_interword_spaces: '1',
         });
 
+        let dateCrop: Blob | null = null;
+        if (region.purpose === 'date' && region.id.startsWith('date::grid-cell::')) {
+          // Decode the actual raster and isolate each structurally verified
+          // header cell. Border strokes at ROI edges degrade small-digit OCR.
+          const bitmap = await createImageBitmap(raster.image);
+          try {
+            const insetX = Math.max(2, Math.round(rectangle.width * 0.09));
+            const insetY = Math.max(2, Math.round(rectangle.height * 0.09));
+            const sw = Math.max(1, rectangle.width - insetX * 2);
+            const sh = Math.max(1, rectangle.height - insetY * 2);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(64, sw * 2);
+            canvas.height = Math.max(36, sh * 2);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Date OCR raster canvas is unavailable.');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap, rectangle.left + insetX, rectangle.top + insetY,
+              sw, sh, 0, 0, canvas.width, canvas.height);
+            dateCrop = await canvasToBlob(canvas);
+          } finally {
+            bitmap.close();
+          }
+        }
         const response = await worker.recognize(
-          raster.image,
-          { rotateAuto: false, rectangle },
+          dateCrop ?? raster.image,
+          dateCrop ? { rotateAuto: false } : { rotateAuto: false, rectangle },
           { text: true, blocks: true },
         );
         const words = flattenWords(response.data);
