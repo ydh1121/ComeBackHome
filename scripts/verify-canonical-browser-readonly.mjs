@@ -144,12 +144,6 @@ async function verifyOn(browserType, label, device = {}) {
       checkedWidths.push(width);
     }
     await page.locator('[data-test-layout]').evaluate((node) => node.remove());
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.locator('[data-map-state="ready"]').waitFor({ timeout: 35_000 });
-    assert.equal(await page.locator('.transit-selected-chip').count(), selectedOriginCount,
-      'Saved selection count not restored after real browser reload');
-
-    // Simulate actual map drag in a browser, never a state-only unit mock.
     const savedAccessResponse = await api.get(
       ORIGIN + '/api/people/' + pathId + '/commute?kind=origin'
     );
@@ -159,6 +153,12 @@ async function verifyOn(browserType, label, device = {}) {
     const selectedChipCountBeforePan = await page.locator('.transit-selected-chip').count();
     assert.equal(selectedChipCountBeforePan, selectedOriginCount,
       'Standalone picker selection count differs from persisted D1 flags');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-map-state="ready"]').waitFor({ timeout: 35_000 });
+    assert.equal(await page.locator('.transit-selected-chip').count(), selectedOriginCount,
+      'Saved selection count not restored after real browser reload');
+
+    // Simulate actual map drag in a browser, never a state-only unit mock.
     const mapBox = await page.locator('.kakao-transit-map').boundingBox();
     assert.ok(mapBox, 'Interactive map has no drag target');
     const startX = mapBox.x + mapBox.width * 0.65;
