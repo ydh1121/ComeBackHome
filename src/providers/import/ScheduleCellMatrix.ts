@@ -268,6 +268,55 @@ function expandWeakRowsFromAnchors(
   });
 }
 
+export interface ScheduleMatrixInputDiagnostics {
+  failureStage: 'DATE_CONTEXT' | 'DATE_ANCHORS' | 'BODY_ROWS' | 'NONE';
+  imageWidth: number;
+  imageHeight: number;
+  pixelRows: number;
+  pixelColumns: number;
+  ocrTokenCount: number;
+  recognizedYear: number | null;
+  recognizedMonth: number | null;
+  dateAnchorCount: number;
+  resolvedDateCount: number;
+  bodyRowCount: number;
+}
+
+// Private, derived geometry/counts only. Never export the source image,
+// unreviewed person names or raw OCR text to persistent diagnostics.
+export function inspectScheduleMatrixInput(
+  detection: ScheduleTableStructureDetection,
+  layout: ImageTextLayout,
+): ScheduleMatrixInputDiagnostics {
+  const tokens = layout.tokens.map(box);
+  const context = parseCalendarContext(tokens);
+  const dates = buildDateColumns(tokens, detection);
+  const dateAnchorCount = tokens.filter((token) =>
+    parseDateEvidence(token.text, context, true) != null
+  ).length;
+  const bodyRowCount = detection.structure.rowBands.length;
+  const failureStage = context.year == null && dates.length < 2
+    ? 'DATE_CONTEXT'
+    : dates.length < 2
+      ? 'DATE_ANCHORS'
+      : bodyRowCount === 0
+        ? 'BODY_ROWS'
+        : 'NONE';
+  return {
+    failureStage,
+    imageWidth: detection.raster.width,
+    imageHeight: detection.raster.height,
+    pixelRows: detection.structure.rowBands.length,
+    pixelColumns: detection.structure.columnBands.length,
+    ocrTokenCount: tokens.length,
+    recognizedYear: context.year,
+    recognizedMonth: context.month,
+    dateAnchorCount,
+    resolvedDateCount: dates.length,
+    bodyRowCount,
+  };
+}
+
 export function buildScheduleCellMatrix(
   detection: ScheduleTableStructureDetection,
   layout: ImageTextLayout,
