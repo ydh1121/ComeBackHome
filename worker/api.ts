@@ -425,9 +425,31 @@ export async function handleApiRequest(
               .filter((place) => /버스정류장|버스정류소/.test(place.category ?? ''))
               .map((place) => placeToTransit(place, near, 'BUS'))
               .filter((stop) => stop.distanceM != null && stop.distanceM <= 800);
-            const buses = officialBusStops.length > 0 ? officialBusStops : categoryBusStops;
             const confirmedStations = subwayPlaces.filter((place) =>
               /지하철|전철|철도역/.test(place.category ?? ''));
+            // Official name lookup is a second independent bus-index path when
+            // the positional endpoint is empty. Search only nearby confirmed
+            // station names; validate each returned stop's actual coordinates.
+            const closestStation = confirmedStations
+              .slice()
+              .sort((left, right) =>
+                coordinateDistanceMeters(near, left.coordinate) -
+                coordinateDistanceMeters(near, right.coordinate))[0];
+            const nearestStationName = closestStation?.placeName
+              ?.replace(/\s*\d+호선.*$/, '').trim() ?? '';
+            const stationNamedBusStops = !officialBusStops.length && nearestStationName
+              ? await providerRuntime.seoulBus.searchStops(nearestStationName, near)
+                .catch(() => [])
+              : [];
+            const matchingOfficialStops = stationNamedBusStops
+              .filter((point) => point.mode === 'BUS' && point.coordinate)
+              .map((point) => {
+                const distanceM = coordinateDistanceMeters(near, point.coordinate!);
+                return { ...point, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 75)) };
+              })
+              .filter((point) => point.distanceM <= 800);
+            const buses = officialBusStops.length ? officialBusStops :
+              matchingOfficialStops.length ? matchingOfficialStops : categoryBusStops;
             return json({
               results: trimNearbyTransitByDistance([
                 ...buses,
@@ -435,9 +457,11 @@ export async function handleApiRequest(
               ]),
               sourceStatus: {
                 bus: officialBusStops.length ? 'OFFICIAL' :
+                  matchingOfficialStops.length ? 'OFFICIAL_STATION_NAME' :
                   categoryBusStops.length ? 'VERIFIED_CATEGORY_FALLBACK' :
                   officialResult.failed ? 'OFFICIAL_UNAVAILABLE' : 'NO_NEARBY_BUS',
                 officialBusCount: officialBusStops.length,
+                stationNameBusCount: matchingOfficialStops.length,
                 categoryBusCount: categoryBusStops.length,
               },
             });
