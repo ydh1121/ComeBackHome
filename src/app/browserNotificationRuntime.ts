@@ -24,8 +24,13 @@ export function createBrowserNotificationRuntime(
 
   return {
     permissionProvider: new BrowserNotificationPermissionProvider(),
-    subscriptionProvider: new BrowserPushSubscriptionProvider(config),
+    subscriptionProvider: new BrowserPushSubscriptionProvider(config, async () => {
+      const response = await client.get<{ configured: boolean; publicKey: string | null }>(
+        '/notifications/client-key',
+      );
+      return response.configured ? response.publicKey : null;
+    }),
     subscriptionTransport: new HttpPushSubscriptionTransport(client),
-    configured: config.applicationServerKey != null,
+    configured: true, // The public key is supplied from canonical Pages runtime.
   };
 }

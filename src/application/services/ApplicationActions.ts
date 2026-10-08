@@ -136,6 +136,7 @@ export class NotificationService implements NotificationActions {
 
   async syncCurrentSubscription(): Promise<void> {
     try {
+      await this.subscriptionProvider.prepare?.().catch(() => undefined);
       const permission = await this.permissionProvider.getPermission();
       if (permission !== 'granted') {
         await this.repository.setSubscription(null);
@@ -182,12 +183,23 @@ export class NotificationService implements NotificationActions {
         await this.repository.setSubscription(null);
         throw new PushClientError('NO_PERMISSION');
       }
-      if (this.subscriptionProvider.isCompatible &&
+      const previous = await this.subscriptionProvider.getCurrent();
+      if (previous && this.subscriptionProvider.isCompatible &&
           !(await this.subscriptionProvider.isCompatible())) {
         await this.subscriptionProvider.unsubscribe();
       }
       const subscription = await this.subscriptionProvider.subscribe();
-      if (this.subscriptionTransport) await this.subscriptionTransport.upsert(subscription);
+      if (this.subscriptionTransport) {
+        await this.subscriptionTransport.upsert(subscription);
+        // Retire stale endpoint only after the new subscription is stored.
+        if (previous && previous.endpoint !== subscription.endpoint) {
+          await this.subscriptionTransport.remove(previous.endpoint);
+        }
+        if (this.subscriptionTransport.checkRegistered &&
+            !(await this.subscriptionTransport.checkRegistered(subscription.endpoint))) {
+          throw new PushClientError('SERVER_REGISTER_FAILED');
+        }
+      }
       await this.repository.setSubscription(subscription);
       await this.repository.setPermission('subscribed');
     } catch (error) {

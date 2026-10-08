@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import webPush from 'web-push';
 import { createServer } from 'vite';
 import { fileURLToPath } from 'node:url';
 
@@ -22,9 +23,10 @@ try{
     },
     async batch(){throw Error('No D1 batch writes');},
   };
+  const vapid=webPush.generateVAPIDKeys();
   const env={
     DB:db, VAPID_SUBJECT:'mailto:owner@example.invalid',
-    VAPID_PUBLIC_KEY:'A'.repeat(87), VAPID_PRIVATE_KEY:'private-placeholder',
+    VAPID_PUBLIC_KEY:vapid.publicKey, VAPID_PRIVATE_KEY:vapid.privateKey,
     WEB_PUSH_TTL_SECONDS:'300',PUSH_DELIVERY_ENABLED:'1',
     PROVIDER_RUNTIME_ENABLED:'0',
   };
@@ -39,6 +41,7 @@ try{
   let body=await response.json();
   assert.equal(body.vapidConfigured,true);
   assert.equal(body.pushTransportConfigured,true);
+  assert.equal(body.vapidKeyPairValid,true);
   assert.equal(body.pushDeliveryReady,false);
   assert.equal(body.activeSubscriptionCount,0);
   assert.equal(body.scheduledNotificationReady,false);

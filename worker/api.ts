@@ -18,6 +18,7 @@ import {
 } from './presence-event-ingest';
 import { createNotificationActivationReadiness } from './notification-activation-readiness';
 import { createPushDeliveryRuntime, inspectPushDeliveryConfig } from './push-delivery-readiness';
+import { verifyVapidKeyPair } from './vapid-pair-validation';
 import { PushDeliveryError } from './contracts';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
@@ -909,15 +910,30 @@ export async function handleApiRequest(
       }
     }
 
+    // The VAPID applicationServerKey is intentionally PUBLIC. Read from the
+    // actual Pages runtime to avoid assuming a runtime env var was injected
+    // into Vite's build-time import.meta.env.
+    if (segments.length === 3 && segments[1] === 'notifications' &&
+        segments[2] === 'client-key' && request.method === 'GET') {
+      const publicKey = env.VAPID_PUBLIC_KEY?.trim() ?? '';
+      return json({
+        configured: /^[A-Za-z0-9_-]{80,100}$/.test(publicKey),
+        publicKey: /^[A-Za-z0-9_-]{80,100}$/.test(publicKey) ? publicKey : null,
+        source: 'PAGES_RUNTIME',
+      });
+    }
+
     if (segments.length === 3 && segments[1] === 'notifications' &&
         segments[2] === 'readiness' && request.method === 'GET') {
       const push = inspectPushDeliveryConfig(env);
       const scheduled = createNotificationActivationReadiness(env, providerRuntime);
       const activeSubscriptionCount = (await new D1SubscriptionStore(env.DB).listActive()).length;
+      const vapidKeyPairValid = await verifyVapidKeyPair(env);
       return json({
         vapidConfigured: !push.missing.some((value) => value.startsWith('VAPID_')),
-        pushDeliveryReady: push.ready && activeSubscriptionCount > 0,
-        pushTransportConfigured: push.ready,
+        pushDeliveryReady: push.ready && vapidKeyPairValid && activeSubscriptionCount > 0,
+        pushTransportConfigured: push.ready && vapidKeyPairValid,
+        vapidKeyPairValid,
         pushMissing: push.missing,
         activeSubscriptionCount,
         scheduledNotificationReady: scheduled.ready,

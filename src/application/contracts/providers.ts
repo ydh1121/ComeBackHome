@@ -58,7 +58,7 @@ export interface PreparedImageRaster {
 export interface ImageRasterPreprocessor { prepare(file: File): Promise<PreparedImageRaster>; }
 export interface ImageScheduleRecognizer { parse(file: File, onProgress?: ImportProgressReporter): Promise<ParsedImport>; }
 export interface NotificationPermissionProvider { getPermission(): Promise<NotificationPermission>; requestPermissionFromUserGesture(): Promise<NotificationPermission>; }
-export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; isCompatible?(): Promise<boolean>; }
+export interface PushSubscriptionProvider { getCurrent(): Promise<WebPushSubscriptionRecord | null>; subscribe(): Promise<WebPushSubscriptionRecord>; unsubscribe(): Promise<void>; isCompatible?(): Promise<boolean>; prepare?(): Promise<void>; }
 export interface PushSubscriptionTransport { upsert(subscription: WebPushSubscriptionRecord): Promise<void>; remove(endpoint: string): Promise<void>; checkRegistered?(endpoint: string): Promise<boolean>; }
 export interface NotificationTestGateway { sendTestNotification(): Promise<void>; }
 
