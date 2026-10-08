@@ -40,20 +40,135 @@ function decodeCtc(output, alphabet) {
   const time=shape[1],classes=shape[2],data=output.data;
   if(classes!==alphabet.length+1)throw Error(
     'CTC alphabet mismatch: '+classes+' outputs vs '+alphabet.length+' characters');
-  let last=-1,text='',confidences=[];
+  let last=-1,text='',confidences=[],rawScores=[];
   for(let t=0;t<time;t++){
     let best=-Infinity,index=-1;
+    const offset=t*classes;
     for(let c=0;c<classes;c++){
-      const score=Number(data[t*classes+c]);
+      const score=Number(data[offset+c]);
       if(score>best){best=score;index=c;}
     }
+    let sum=0;
+    for(let c=0;c<classes;c++)sum+=Math.exp(Number(data[offset+c])-best);
+    const probability=sum>0?1/sum:0;
     if(index!==0&&index!==last){
       text+=alphabet[index-1];
-      confidences.push(best);
+      confidences.push(probability);
+      rawScores.push(best);
     }
     last=index;
   }
-  return {text,rawScores:confidences};
+  const confidence=confidences.length
+    ? confidences.reduce((a,b)=>a+b,0)/confidences.length : 0;
+  return {text,confidence,rawScores};
+}
+
+function clampRegion(region, width, height) {
+  const x=Math.max(0,Math.min(width-1,Math.floor(region.x)));
+  const y=Math.max(0,Math.min(height-1,Math.floor(region.y)));
+  const right=Math.max(x+1,Math.min(width,Math.ceil(region.x+region.width)));
+  const bottom=Math.max(y+1,Math.min(height,Math.ceil(region.y+region.height)));
+  return {x,y,width:right-x,height:bottom-y};
+}
+
+function preprocessBitmapRegion(bitmap, region) {
+  const safe=clampRegion(region,bitmap.width,bitmap.height);
+  const ratio=safe.width/Math.max(1,safe.height);
+  const resizedWidth=Math.max(1,Math.min(320,Math.ceil(48*ratio)));
+  const canvas=document.createElement('canvas');
+  canvas.width=320;canvas.height=48;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true,alpha:false});
+  if(!ctx)throw Error('Paddle region canvas unavailable');
+  ctx.fillStyle='black';ctx.fillRect(0,0,320,48);
+  ctx.drawImage(bitmap,safe.x,safe.y,safe.width,safe.height,0,0,resizedWidth,48);
+  const rgba=ctx.getImageData(0,0,resizedWidth,48).data;
+  const chw=new Float32Array(3*48*320);
+  for(let y=0;y<48;y++)for(let x=0;x<resizedWidth;x++){
+    const k=(y*resizedWidth+x)*4;
+    for(let channel=0;channel<3;channel++){
+      chw[channel*48*320+y*320+x]=(rgba[k+(2-channel)]/255-.5)/.5;
+    }
+  }
+  return new ort.Tensor('float32',chw,[1,3,48,320]);
+}
+
+export async function createPaddleDetectedRegionRecognizer(){
+  const fetchStarted=performance.now();
+  const [modelResponse,dictResponse]=await Promise.all([
+    fetch(MODEL_URL),fetch(DICT_URL),
+  ]);
+  if(!modelResponse.ok||!dictResponse.ok)throw Error('Missing pinned official ONNX or dictionary');
+  const [model,alphabet]=await Promise.all([
+    modelResponse.arrayBuffer(),dictResponse.json(),
+  ]);
+  if(!Array.isArray(alphabet)||!alphabet.length)throw Error('Empty Korean CTC dictionary');
+  const downloadMs=Math.round(performance.now()-fetchStarted);
+  const initStarted=performance.now();
+  const session=await ort.InferenceSession.create(model,{
+    executionProviders:['wasm'],graphOptimizationLevel:'all',
+  });
+  const modelInitMs=Math.round(performance.now()-initStarted);
+  const inputKey=session.inputNames[0],outputKey=session.outputNames[0];
+
+  const infer=async(bitmap,region)=>{
+    const tensor=preprocessBitmapRegion(bitmap,region);
+    const started=performance.now();
+    const output=await session.run({[inputKey]:tensor});
+    const inferenceMs=Math.round(performance.now()-started);
+    const decoded=decodeCtc(output[outputKey],alphabet);
+    return {...decoded,inferenceMs};
+  };
+
+  return {
+    metadata:{
+      backend:'wasm',threads:1,modelBytes:model.byteLength,
+      dictionaryCharacters:alphabet.length,downloadMs,modelInitMs,
+    },
+    async recognizeRegions(file,regions){
+      const bitmap=await createImageBitmap(file);
+      const results=[];
+      let inferenceMs=0;
+      try{
+        for(const region of regions){
+          if(region.purpose==='cell'){
+            const half=Math.max(1,region.height/2);
+            const top=await infer(bitmap,{...region,height:half});
+            const bottom=await infer(bitmap,{...region,y:region.y+half,height:region.height-half});
+            inferenceMs+=top.inferenceMs+bottom.inferenceMs;
+            const pieces=[top,bottom].filter(x=>x.text.trim().length>0);
+            const tokens=pieces.map((item,index)=>({
+              text:item.text.trim(),
+              x:region.x+region.width*0.08,
+              y:region.y+(index===0?0.08:0.53)*region.height,
+              width:region.width*0.84,
+              height:region.height*0.39,
+              confidence:item.confidence,
+            }));
+            results.push({
+              id:region.id,purpose:region.purpose,
+              text:tokens.map(x=>x.text).join(' '),tokens,
+              confidence:tokens.length?Math.min(...tokens.map(x=>x.confidence)):0,
+            });
+          }else{
+            const item=await infer(bitmap,region);
+            inferenceMs+=item.inferenceMs;
+            const text=item.text.trim();
+            const token=text?{
+              text,x:region.x+region.width*0.04,y:region.y+region.height*0.08,
+              width:region.width*0.92,height:region.height*0.84,
+              confidence:item.confidence,
+            }:null;
+            results.push({
+              id:region.id,purpose:region.purpose,text,
+              tokens:token?[token]:[],confidence:item.confidence,
+            });
+          }
+        }
+      }finally{bitmap.close();}
+      return {results,inferenceMs};
+    },
+    async release(){await session.release();},
+  };
 }
 
 export async function runPaddleBrowserProbe(){
