@@ -165,6 +165,54 @@ try {
     expect(contentCell?.visual.occupancy !== 'EMPTY', 'visual content cell must not classify EMPTY');
   }
 
+  const bareDays = dates.map((date, index) => ({
+    ...date,
+    text: String(20 + index),
+  }));
+  const bareDayMatrix = matrixModule.buildScheduleCellMatrix(detection, {
+    ...layout,
+    tokens: [
+      token('2026년', 24, 18, 55),
+      token('10월', 93, 18, 42),
+      ...bareDays,
+      ...names,
+    ],
+  });
+  expect(bareDayMatrix?.dates.length === 7,
+    'numeric-only day headers must resolve against the visible year/month context');
+  expect(bareDayMatrix?.rows.length === 4,
+    'calendar-only header must not be promoted into a person row');
+
+  const interpreter = await vite.ssrLoadModule('/src/providers/import/StructureFirstScheduleImageRecognizer.ts');
+  if (matrix) {
+    const mislabeledMatrix = {
+      ...matrix,
+      rows: matrix.rows.map((row, index) => index === 0
+        ? { ...row, preliminaryName: '쉬는시간', preliminaryConfidence: 0.99 }
+        : index === 1
+          ? { ...row, preliminaryName: 'za', preliminaryConfidence: 0.99 }
+          : index === 2
+            ? { ...row, preliminaryName: '사아자', preliminaryConfidence: 0.2 }
+            : row),
+    };
+    const personRegions = [
+      { id: 'person::1', purpose: 'person', text: '쉬는시간', tokens: [], confidence: 0.99 },
+      { id: 'person::2', purpose: 'person', text: 'sole', tokens: [], confidence: 0.99 },
+      { id: 'person::3', purpose: 'person', text: '사아자', tokens: [], confidence: 0.2 },
+    ];
+    const interpreted = interpreter.interpretStructureFirstSchedule(
+      mislabeledMatrix, personRegions, ['사아자'],
+    );
+    const personNames = interpreted.detectedPeople.map((person) => person.sourceName);
+    expect(!personNames.includes('쉬는시간') && !personNames.includes('za') && !personNames.includes('sole'),
+      'header and Latin OCR noise must never be detected as people');
+    expect(personNames.includes('사아자'),
+      'registered person name must be accepted as a strong OCR prior');
+    expect(interpreted.scheduleCandidates.concat(interpreted.reviewCandidates ?? [])
+      .every((candidate) => personNames.includes(candidate.sourcePersonName)),
+      'unrecognized person rows must not produce import candidates');
+  }
+
   // Color/fill alone must not imply work or off. A flat darker background with
   // no text remains EMPTY because occupancy is measured relative to local background.
   const colored = makeRaster({
