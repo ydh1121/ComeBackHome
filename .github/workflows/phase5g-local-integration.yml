@@ -465,6 +465,11 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Setup Python for official model fetch and YAML parsing
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install JS browser OCR benchmark runtime
         run: |
           npm install --no-audit --no-fund
