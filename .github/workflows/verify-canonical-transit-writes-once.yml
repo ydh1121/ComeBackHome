@@ -24,5 +24,6 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: node --check scripts/verify-canonical-transit-writes-reversible.mjs
       - run: npx playwright install --with-deps chromium
+      - run: sleep 45
       - name: Verify UI→D1→reload and restore original flags
         run: node scripts/verify-canonical-transit-writes-reversible.mjs
