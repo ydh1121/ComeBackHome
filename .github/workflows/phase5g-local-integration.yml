@@ -332,27 +332,3 @@ jobs:
 
       - name: Run Phase 5G local integration
         run: npm run verify:local-integration
-
-      - name: Record main Phase 5G success evidence
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          fs.mkdirSync('runtime-evidence', { recursive: true });
-          fs.writeFileSync(
-            'runtime-evidence/phase5g-main.json',
-            JSON.stringify({
-              workflow: 'Phase 5G Local Integration',
-              sourceCommit: process.env.GITHUB_SHA ?? null,
-              status: 'SUCCESS',
-              valuesExposed: false,
-            }, null, 2) + '\n',
-          );
-          NODE
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add runtime-evidence/phase5g-main.json
-          git diff --cached --quiet || git commit -m "chore: record main Phase 5G verification"
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "HEAD:$GITHUB_REF_NAME"
