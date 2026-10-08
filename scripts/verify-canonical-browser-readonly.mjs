@@ -339,7 +339,7 @@ async function verifyOn(browserType, label, device = {}) {
       localStorage.setItem('cbh:selected-person-id', id);
     }, target);
     await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.locator('[data-page="TodayPage"]').waitFor({ timeout: 35000 });
+    await page.locator('[data-page="TodayPage"][data-eta-status]').waitFor({ timeout: 35000 });
     const todayRouteId = await page.locator('[data-page="TodayPage"]')
       .getAttribute('data-selected-route-id');
     const todayEtaStatus = await page.locator('[data-page="TodayPage"]')
