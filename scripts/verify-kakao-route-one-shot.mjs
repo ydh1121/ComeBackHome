@@ -12,7 +12,7 @@ if (Date.now() < Date.parse('2026-10-09T00:05:00+09:00')) {
 }
 const ORIGIN = 'https://come-back-home.pages.dev';
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ locale: 'ko-KR', timezoneId: 'Asia/Seoul' });
+const context = await browser.newContext({ locale: 'ko-KR', timezoneId: 'Asia/Seoul', serviceWorkers: 'block' });
 let actualProviderCalls = 0;
 let replayedUiRequests = 0;
 const page = await context.newPage();
@@ -72,22 +72,25 @@ try {
   const routes = Array.isArray(body?.results) ? body.results : [];
   assert.ok(routes.length > 0, 'KAKAO_ROUTE_PROVIDER_ZERO_RESULTS');
 
-  // The browser receives the already-fetched provider response. This tests
-  // card rendering without a second external route call or saving anything.
-  await page.unroute(/\/api\/providers\/routes(?:\?|$)/);
-  await page.route(/\/api\/providers\/routes(?:\?|$)/, async (route) => {
-    replayedUiRequests++;
-    await route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify({ results: routes }),
-    });
-  });
+  // Reuse the single permitted response in both browser-level routing and
+  // app fetch, blocking a PWA service-worker or browser bypass.
+  await context.addInitScript((cachedResults) => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input :
+        input instanceof Request ? input.url : String(input);
+      if (new URL(url, location.origin).pathname === '/api/providers/routes') {
+        return Promise.resolve(new Response(JSON.stringify({ results: cachedResults }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      return nativeFetch(input, init);
+    };
+  }, routes);
   await page.route('**/api/**', async (route) => {
     if (route.request().method() !== 'GET') return route.abort('blockedbyclient');
     return route.continue();
   });
-  // Later-added routes win: ensure the provider replay still has precedence.
-  await page.unroute(/\/api\/providers\/routes(?:\?|$)/);
   await page.route(/\/api\/providers\/routes(?:\?|$)/, async (route) => {
     replayedUiRequests++;
     await route.fulfill({
