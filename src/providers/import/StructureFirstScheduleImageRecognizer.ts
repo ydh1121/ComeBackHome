@@ -338,13 +338,12 @@ function pixelDateHeaderRegions(
   const lines = structure.evidence.verticalLinePositions.map((position) => {
     const x = Math.max(1, Math.min(raster.width - 2, Math.round(position)));
     let dark = 0, count = 0;
+    // Only continuous dark pixels at the same X are structural lines.
+    // Taking the MINIMUM over neighbouring X coordinates admits
+    // text strokes as spurious column boundaries.
     for (let y = yStart; y < yEnd; y += 3) {
       const offset = y * raster.width + x;
-      if (Math.min(
-        raster.luminance[offset - 1],
-        raster.luminance[offset],
-        raster.luminance[offset + 1],
-      ) < 140) dark += 1;
+      if (raster.luminance[offset] < 140) dark += 1;
       count += 1;
     }
     return { x, continuity: count > 0 ? dark / count : 0 };
