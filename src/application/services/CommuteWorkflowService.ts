@@ -175,17 +175,17 @@ export class TransitSearchService implements TransitSearchActions {
     private readonly provider: TransitAccessSearchProvider,
   ) {}
 
-  async search(personId: EntityId, kind: PlaceKind, query: string) {
+  async search(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate) {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate || query.trim().length < 1) return [];
-    const results = await this.provider.search(query.trim(), place.coordinate);
+    const results = await this.provider.search(query.trim(), center ?? place.coordinate);
     return this.remember(results);
   }
 
-  async nearby(personId: EntityId, kind: PlaceKind) {
+  async nearby(personId: EntityId, kind: PlaceKind, center?: Coordinate) {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate) return [];
-    const results = await this.provider.nearby(place.coordinate);
+    const results = await this.provider.nearby(center ?? place.coordinate);
     return this.remember(results);
   }
 
@@ -194,7 +194,9 @@ export class TransitSearchService implements TransitSearchActions {
     if (!result) throw new Error('Transit search result was not found.');
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate) throw new Error('Transit place coordinate is required.');
-    const resolved = await this.provider.resolve(result, place.coordinate).catch(() => result);
+    // A map-pan search result must resolve around the discovered entity, not
+    // snap back to the original saved origin/destination address.
+    const resolved = await this.provider.resolve(result, result.coordinate ?? place.coordinate).catch(() => result);
     const point: TransitAccessPoint = {
       id: crypto.randomUUID(),
       personId,
