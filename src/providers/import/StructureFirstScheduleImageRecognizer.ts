@@ -16,6 +16,7 @@ import type {
 import {
   buildScheduleCellMatrix,
   buildScheduleMatrixProbeRegions,
+  inspectScheduleMatrixInput,
   type ScheduleCellMatrix,
   type ScheduleMatrixPersonRow,
 } from './ScheduleCellMatrix';
@@ -297,13 +298,20 @@ export class StructureFirstScheduleImageRecognizer implements ImageScheduleRecog
     const initialOcrMs = performance.now() - initialOcrStarted;
     await onProgress?.(60);
 
+    const inputDiagnostics = inspectScheduleMatrixInput(detection, layout);
     const matrix = buildScheduleCellMatrix(detection, layout);
     if (!matrix || matrix.rows.length === 0 || matrix.dates.length < 2) {
       throw new Error(
         '표 구조를 안정적으로 복원하지 못했습니다. ' +
         'pixelSource=' + detection.structure.evidence.source +
         ' rows=' + detection.structure.rowBands.length +
-        ' columns=' + detection.structure.columnBands.length
+        ' columns=' + detection.structure.columnBands.length +
+        ' stage=' + inputDiagnostics.failureStage +
+        ' ocrTokens=' + inputDiagnostics.ocrTokenCount +
+        ' dateAnchors=' + inputDiagnostics.dateAnchorCount +
+        ' resolvedDates=' + inputDiagnostics.resolvedDateCount +
+        ' yearKnown=' + (inputDiagnostics.recognizedYear != null) +
+        ' monthKnown=' + (inputDiagnostics.recognizedMonth != null)
       );
     }
 

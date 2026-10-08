@@ -156,6 +156,27 @@ async function verifyOn(browserType, label, device = {}) {
     assert.equal(attemptedWrites.length, 0,
       'Focusing a map marker must not mutate production D1');
 
+    // Reverse direction: clicking a LIST row focuses the identical Kakao
+    // marker, opens preview and must not send any D1 write request.
+    const focusRows = page.locator('.transit-row');
+    const alternateRow = focusRows.filter({ hasNotText: activeName }).first();
+    await alternateRow.waitFor({ state: 'visible', timeout: 10_000 });
+    const reverseId = await alternateRow.getAttribute('id');
+    const reverseTransitId = reverseId?.replace(/^transit-result-/, '');
+    assert.ok(reverseTransitId, 'List row lacks stable transit identity');
+    const focusControl = alternateRow.locator('.transit-row-focus');
+    if (label.startsWith('mobile')) await focusControl.tap();
+    else await focusControl.click();
+    await page.waitForFunction((id) =>
+      document.querySelector('.cbh-transit-map-marker.is-active')?.getAttribute('data-transit-id') === id,
+      reverseTransitId, { timeout: 10_000 });
+    assert.equal(await page.locator('.transit-row.map-active').getAttribute('id'), reverseId,
+      'List click did not activate matching transit row');
+    assert.equal(await activePanel.getAttribute('data-active-id'), reverseTransitId,
+      'List click did not update active preview identity');
+    assert.equal(attemptedWrites.length, 0,
+      'Viewing a list row must not change persisted selection');
+
     const checkedWidths = [];
     const measured = [];
     mkdirSync('artifacts/cbh-transit-card', { recursive: true });
@@ -177,6 +198,8 @@ async function verifyOn(browserType, label, device = {}) {
           nameWidth: nameBox?.width ?? 0,
           nameLines: nameBox && lineHeight ? Math.round(nameBox.height / lineHeight) : 0,
           actionWidth: actionBox?.width ?? 0,
+          listFocusWidth: document.querySelector('.transit-row-focus')?.getBoundingClientRect().width ?? 0,
+          listToggleWidth: document.querySelector('.transit-row-toggle')?.getBoundingClientRect().width ?? 0,
           actionVisible: Boolean(actionBox && actionBox.width > 40 && actionBox.height >= 32),
           verticalGap: filterBox ? Math.round(filterBox.top - panel.bottom) : -1,
           filterChipCount: document.querySelectorAll('.candidate-filter .filter-btn').length,
@@ -188,7 +211,8 @@ async function verifyOn(browserType, label, device = {}) {
       });
       assert.ok(geometry.panelWidth > 220 && geometry.nameWidth >= 138 &&
         geometry.nameLines >= 1 && geometry.nameLines <= 3 &&
-        geometry.panelHeight <= 128 && geometry.actionVisible && !geometry.overflow &&
+        geometry.panelHeight <= 128 && geometry.actionVisible &&
+        geometry.listFocusWidth > 165 && geometry.listToggleWidth >= 40 && !geometry.overflow &&
         geometry.verticalGap >= 12 && geometry.verticalGap <= 24 &&
         geometry.filterChipCount === 3 && geometry.searchGap >= 6,
         'Actual selected card geometry failed at ' + width + 'px: ' +
@@ -305,8 +329,42 @@ async function verifyOn(browserType, label, device = {}) {
     await page.getByRole('button', { name: '선택한 추천 경로 저장' })
       .waitFor({ timeout: 10_000 });
 
+    // Existing persisted preference -> actual Today route, without writing a
+    // new preference or triggering real commute/presence events.
+    const preferenceResponse = await api.get(
+      ORIGIN + '/api/people/' + pathId + '/commute?kind=origin'
+    );
+    assert.equal(preferenceResponse.status(), 200, 'D1 route preference readback');
+    const preferredRoute = (await preferenceResponse.json()).preferredRouteCandidateId;
+    const visibleRouteIds = await routeCards.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('data-route-candidate-id')));
+    await page.evaluate((id) => {
+      localStorage.setItem('cbh:selected-person-id', id);
+    }, target);
+    await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.locator('[data-page="TodayPage"][data-eta-status]').waitFor({ timeout: 35000 });
+    const todayRouteId = await page.locator('[data-page="TodayPage"]')
+      .getAttribute('data-selected-route-id');
+    const todayEtaStatus = await page.locator('[data-page="TodayPage"]')
+      .getAttribute('data-eta-status');
+    const preferredRouteUse = !preferredRoute ? 'NO_SAVED_PREFERENCE' :
+      !visibleRouteIds.includes(preferredRoute) ? 'SAVED_ROUTE_NOT_IN_CURRENT_CANDIDATES' :
+      todayRouteId === preferredRoute && todayEtaStatus !== 'UNKNOWN'
+        ? 'PASS_EXISTING_SAVED_ROUTE'
+        : 'NOT_MATCHED_WITH_ETA';
+
     assert.equal(attemptedWrites.length, 0,
       'Read-only QA unexpectedly attempted production mutations');
+    const destinationReadback = await api.get(
+      ORIGIN + '/api/people/' + pathId + '/commute?kind=destination'
+    );
+    const destinationPoints = destinationReadback.ok()
+      ? ((await destinationReadback.json()).accessPoints ?? []) : [];
+    const destinationPlaceResponse = await api.get(
+      ORIGIN + '/api/people/' + pathId + '/places/destination'
+    );
+    const hasDestination = destinationPlaceResponse.ok() &&
+      Boolean((await destinationPlaceResponse.json()).place?.coordinate);
     results.push({
       browser: label,
       mapSDK: 'PASS',
@@ -315,6 +373,7 @@ async function verifyOn(browserType, label, device = {}) {
       markerInteraction: clickMode + '_PASS',
       markerHitCentersClear: hitChecks.filter((item) => item.visibleOnMap).length,
       markerListSync: 'FOCUS_ONLY_PASS',
+      listMarkerSync: 'FOCUS_ONLY_PASS_NO_WRITES',
       realActiveCard: 'PASS',
       activeCardGeometry: measured,
       mapCenterRequery: label.startsWith('mobile') ? 'NOT_RUN_TOUCH_DRAG' : 'PASS',
@@ -323,6 +382,10 @@ async function verifyOn(browserType, label, device = {}) {
       nearbyTotal: nearby.length,
       nearbyBusCount: nearby.filter((item) => item.mode === 'BUS').length,
       originPersistedSelectionCount: selectedOriginCount,
+      originUnselectedAccessCount: savedOriginPoints.filter((item) => item.selected === false).length,
+      destinationSavedPlace: hasDestination,
+      destinationPersistedSelectionCount: destinationPoints.filter((item) => item.selected === true).length,
+      destinationUnselectedAccessCount: destinationPoints.filter((item) => item.selected === false).length,
       persistedSelectionReload: 'PASS_READ_ONLY',
       busSource: nearbyPayload.sourceStatus?.bus ?? 'UNKNOWN',
       nearbySubwayCount: nearby.filter((item) => item.mode === 'SUBWAY').length,
@@ -331,6 +394,7 @@ async function verifyOn(browserType, label, device = {}) {
       transitCount: transitResults.length,
       placeBusiness: 'PASS',
       routeDraftSelection: 'PASS',
+      readOnlyPreferredRouteUse: preferredRouteUse,
       productionWrites: 0,
       javascriptErrors: javascriptErrors.length,
       sensitiveValuesLogged: false,

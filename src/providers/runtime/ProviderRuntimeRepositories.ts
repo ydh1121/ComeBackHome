@@ -179,12 +179,17 @@ export class ProviderCommuteRepository implements CommuteRepository {
         (activeSavedRoute.destinationAccessPointId ? [activeSavedRoute.destinationAccessPointId] : [])
       : [];
     const viaIds = activeSavedRoute?.viaAccessPointIds ?? [];
-    const originConfiguredPoints = originIds
-      .map((id) => pointsById.get(id))
-      .filter((point): point is TransitAccessPoint => point != null);
-    const destinationConfiguredPoints = destinationIds
-      .map((id) => pointsById.get(id))
-      .filter((point): point is TransitAccessPoint => point != null);
+    // Route-specific 0..N access sets take priority. When no route access
+    // is configured, use the standalone persisted selected sets rather than
+    // silently dropping them in favor of bare place coordinates.
+    const originConfiguredPoints = originIds.length
+      ? originIds.map((id) => pointsById.get(id))
+          .filter((point): point is TransitAccessPoint => point != null)
+      : originPoints.filter((point) => point.selected);
+    const destinationConfiguredPoints = destinationIds.length
+      ? destinationIds.map((id) => pointsById.get(id))
+          .filter((point): point is TransitAccessPoint => point != null)
+      : destinationPoints.filter((point) => point.selected);
     const viaConfiguredPoints = viaIds
       .map((id) => pointsById.get(id))
       .filter((point): point is TransitAccessPoint => point != null);
@@ -339,10 +344,12 @@ export class ProviderTodayRepository implements TodayRepository {
 
     const currentPresence = presence?.workDate === date ? presence : null;
 
-    const route =
-      routes.find((candidate) => candidate.id === preferredRouteCandidateId) ??
-      routes.slice().sort(compareRoutes)[0] ??
-      null;
+    // A persisted preferred route must never silently turn into another
+    // route when the provider refresh changes candidate IDs. Report UNKNOWN
+    // until that exact stable route can be resolved again.
+    const route = preferredRouteCandidateId
+      ? routes.find((candidate) => candidate.id === preferredRouteCandidateId) ?? null
+      : routes.slice().sort(compareRoutes)[0] ?? null;
 
     const shiftEnd = schedule?.enabled ? schedule.end : undefined;
     const leftWorkAt = currentPresence?.leftWorkAt;
