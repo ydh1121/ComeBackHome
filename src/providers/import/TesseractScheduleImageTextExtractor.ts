@@ -711,7 +711,7 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
             dateCrop, { rotateAuto: false }, { text: true, blocks: true });
           const text = flattenWords(semantic.data)
             .map((word) => String(word.text ?? '')).join('')
-            .normalize('NFKC').replace(/\\s+/g, '');
+            .normalize('NFKC').replace(/\s+/g, '');
           const match = /^0?([1-9]|[12][0-9]|3[01])(?:일|日)?$/.exec(text);
           if (match) {
             semanticDateWords = [{
