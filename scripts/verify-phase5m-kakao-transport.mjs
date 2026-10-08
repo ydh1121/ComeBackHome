@@ -205,6 +205,35 @@ try {
   }
   expect(sanitizedError === 'Provider request failed: kakao-map/keyword-place-search HTTP 429', 'provider error sanitization mismatch');
   expect(!sanitizedError.includes(fakeSecretValue), 'provider error leaked secret');
+  // Kakao routing often returns HTTP 400 with numeric code -10 for a quota
+  // denial. Preserve only the trusted number, not the private message/body.
+  const routingFail = new network.SecureProviderJsonTransport(
+    async () => Response.json({
+      errorType: 'BadRequest', code: -10,
+      message: 'secret-private-user-coordinate-must-not-leak',
+    }, { status: 400 }),
+    new network.ObjectProviderSecretResolver({ KAKAO_REST_API_KEY: fakeSecretValue }),
+  );
+  let routingError = '';
+  try {
+    await routingFail.getJson({
+      source: 'kakao-map', capability: 'public-transit-routing', method: 'GET',
+      urlTemplate: 'https://dapi.kakao.com/v2/routing/publictraffic',
+      query: { start_x: '127', start_y: '37.5', end_x: '127.1', end_y: '37.6' },
+      auth: {
+        secretName: 'KAKAO_REST_API_KEY', placement: 'header',
+        target: 'Authorization', prefix: 'KakaoAK ',
+      },
+      security: 'TLS_VERIFIED',
+    });
+  } catch (error) {
+    routingError = error instanceof Error ? error.message : String(error);
+  }
+  expect(routingError === 'Provider request failed: kakao-map/public-transit-routing HTTP 400 CODE -10',
+    'numeric Kakao quota code must be retained with no upstream response text');
+  expect(!routingError.includes('secret-private') && !routingError.includes(fakeSecretValue),
+    'private provider content leaked into a route failure');
+
 } finally {
   await vite.close();
 }
