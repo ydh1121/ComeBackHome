@@ -40,6 +40,8 @@ export interface ScheduleMatrixCell {
   personLabelBounds: SchedulePixelBounds;
   bounds: SchedulePixelBounds;
   visual: ScheduleCellVisualEvidence;
+  /** OCR saw body content even when local pixel occupancy is borderline empty. */
+  initialTextEvidence?: boolean;
 }
 
 export interface ScheduleCellMatrix {
@@ -486,6 +488,11 @@ export function buildScheduleCellMatrix(
         personLabelBounds: labelBounds,
         bounds: item.bounds,
         visual: item.visual,
+        initialTextEvidence: tokens.some((token) =>
+          tokenInside(token, item.bounds) &&
+          token.confidence >= 0.25 &&
+          /[가-힣0-9]/.test(token.normalized)
+        ),
       });
     }
   }
