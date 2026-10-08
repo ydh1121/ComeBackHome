@@ -114,7 +114,10 @@ for (const token of [
 
 expect(
   commuteRuntime.includes('destinationAccessPointIds') &&
-  commuteRuntime.includes('destinationConfiguredPoints.some'),
+  commuteRuntime.includes('destinationRouteTargets') &&
+  commuteRuntime.includes('destinationSelectedTargets') &&
+  commuteRuntime.includes('accessPriority') &&
+  commuteRuntime.includes('placeFallbackUsed'),
   'destination transit set does not affect provider route matching',
 );
 expect(commuteRuntime.includes('selectedAccess.providerId'), 'persisted transit provider ID does not reach realtime ETA');
