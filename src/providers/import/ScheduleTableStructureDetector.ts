@@ -260,6 +260,61 @@ function bandsFromLines(
   return bands;
 }
 
+/**
+ * Physical table columns supported by continuous vertical strokes below the
+ * header. No OCR tokens, calendar values, or known fixture geometry enter here.
+ * Returns [] when the raster does not support a trustworthy column grid.
+ */
+export function pixelSupportedColumnBounds(
+  detection: ScheduleTableStructureDetection,
+): SchedulePixelBounds[] {
+  const { raster, structure } = detection;
+  const header = structure.rowBands[0]?.bounds;
+  if (!header || header.height < 14) return [];
+  const y0 = Math.max(0, Math.round(header.y + header.height));
+  const y1 = Math.min(raster.height, Math.round(
+    structure.tableBounds.y + structure.tableBounds.height));
+  if (y1 - y0 < 18) return [];
+
+  const continuous = structure.evidence.verticalLinePositions
+    .map((position) => {
+      const x = Math.max(1, Math.min(raster.width - 2, Math.round(position)));
+      let dark = 0, count = 0;
+      for (let y = y0; y < y1; y += 3) {
+        if (raster.luminance[y * raster.width + x] < 140) dark++;
+        count++;
+      }
+      return { x, continuity: count ? dark / count : 0 };
+    })
+    .filter((item) => item.continuity >= 0.58)
+    .sort((a, b) => a.x - b.x)
+    .filter((item, index, items) => index === 0 || item.x - items[index - 1].x > 3);
+  const gaps = continuous.slice(1)
+    .map((item, i) => item.x - continuous[i].x)
+    .filter((width) => width >= Math.max(30, header.height * 0.6))
+    .sort((a, b) => a - b);
+  const shortlist = gaps.slice(0, Math.max(2, Math.ceil(gaps.length * 0.6)));
+  const typical = shortlist.length >= 3 ? shortlist[Math.floor(shortlist.length / 2)] : 0;
+  const borders = continuous.map((item) => item.x);
+  if (typical > 0) {
+    for (let i = 1; i < continuous.length; i++) {
+      const left = continuous[i - 1].x, gap = continuous[i].x - left;
+      const pieces = Math.round(gap / typical);
+      if (pieces < 2 || pieces > 4 ||
+          Math.abs(gap / pieces - typical) > typical * 0.16) continue;
+      for (let j = 1; j < pieces; j++) borders.push(left + gap * j / pieces);
+    }
+  }
+  borders.sort((a, b) => a - b);
+  const bands: SchedulePixelBounds[] = [];
+  for (let i = 1; i < borders.length; i++) {
+    const x = borders[i - 1], width = borders[i] - x;
+    if (width < Math.max(32, header.height * 0.7)) continue;
+    bands.push({ x, y: 0, width, height: raster.height });
+  }
+  return bands.length >= 2 && bands.length <= 32 ? bands : [];
+}
+
 export function detectScheduleTableStructureFromRaster(
   raster: ScheduleRasterPlane,
 ): ScheduleTableStructure {
