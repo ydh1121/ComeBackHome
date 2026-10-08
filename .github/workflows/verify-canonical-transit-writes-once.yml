@@ -23,6 +23,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: node --check scripts/verify-canonical-transit-writes-reversible.mjs
+      - run: node --check scripts/verify-saved-route-once.mjs
       - run: npm install --no-save --ignore-scripts playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - run: sleep 45
