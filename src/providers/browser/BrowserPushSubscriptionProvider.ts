@@ -6,7 +6,11 @@ function decodeBase64Url(value: string): Uint8Array {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
   const raw = atob(padded);
-  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  const decoded = Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  if (decoded.length !== 65 || decoded[0] !== 4) {
+    throw new Error('Application server key invalid.');
+  }
+  return decoded;
 }
 
 function normalizeSubscription(subscription: PushSubscription): WebPushSubscriptionRecord {
@@ -78,7 +82,16 @@ export class BrowserPushSubscriptionProvider implements PushSubscriptionProvider
   private async getRegistration(): Promise<ServiceWorkerRegistration> {
     if (!globalThis.isSecureContext) throw new Error('Secure context is required.');
     if (!('serviceWorker' in navigator)) throw new Error('Service Worker is not supported.');
-    const registration = await navigator.serviceWorker.ready;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const readinessDeadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('Service Worker is not ready.')), 12000);
+    });
+    let registration: ServiceWorkerRegistration;
+    try {
+      registration = await Promise.race([navigator.serviceWorker.ready, readinessDeadline]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
     if (!registration.pushManager) throw new Error('PushManager is not supported.');
     return registration;
   }
