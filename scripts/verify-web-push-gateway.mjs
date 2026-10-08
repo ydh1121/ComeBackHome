@@ -17,7 +17,7 @@ for (const text of [
   "import webPush from 'web-push'",
   'class WebPushDeliveryGateway',
   'webPush.generateRequestDetails',
-  'const response = await fetch(url.toString()',
+  'response = await fetch(url.toString()',
   'vapidDetails:',
   'TTL: this.config.ttlSeconds',
   "statusCode === 404 || statusCode === 410",
