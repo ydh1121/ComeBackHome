@@ -225,6 +225,9 @@ jobs:
       - name: Enforce zero live Kakao routes in standard CI
         run: npm run verify:route-firewall
 
+      - name: Confirm reversible D1 QA readiness without any writes
+        run: npm run verify:d1-readiness
+
       - name: Verify schedule workflow
         run: npm run verify:schedule
 
