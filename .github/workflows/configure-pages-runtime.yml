@@ -99,6 +99,10 @@ jobs:
               type: 'plain_text',
               value: process.env.KAKAO_JAVASCRIPT_KEY.trim(),
             };
+            runtimeEnv.CBH_KAKAO_MAPS_JAVASCRIPT_KEY = {
+              type: 'plain_text',
+              value: process.env.KAKAO_JAVASCRIPT_KEY.trim(),
+            };
           }
 
           const directPagesConfig = {
