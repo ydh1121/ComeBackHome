@@ -1,3 +1,4 @@
+import { BUILD_COMMIT_SHA } from './build-revision';
 import type { Coordinate, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
 import type { PlaceSearchResult, TransitSearchResult } from '../src/application/contracts/providers';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
@@ -206,7 +207,7 @@ export async function handleApiRequest(
 
     if (segments.length === 2 && segments[1] === 'health' && request.method === 'GET') {
       const row = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
-      return json({ ok: row?.ok === 1 });
+      return json({ ok: row?.ok === 1, version: BUILD_COMMIT_SHA === 'unknown' ? 'unknown' : BUILD_COMMIT_SHA.slice(0, 12), commitSha: BUILD_COMMIT_SHA });
     }
 
     if (segments.length === 2 && segments[1] === 'client-config' && request.method === 'GET') {
