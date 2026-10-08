@@ -34,6 +34,20 @@ try {
   const routesAgain = mappers.mapKakaoPublicTransitRoutes(routePayload);
   expect(routes.length === 1, 'Kakao route fixture count mismatch');
   expect(routes[0]?.id === routesAgain[0]?.id, 'Kakao route id must be deterministic');
+  const trafficVariant = structuredClone(routePayload);
+  trafficVariant.routes[0].properties.totalTime += 420;
+  trafficVariant.routes[0].properties.fare.value += 250;
+  for (const step of trafficVariant.routes[0].steps) step.properties.time += 60;
+  const trafficUpdated = mappers.mapKakaoPublicTransitRoutes(trafficVariant);
+  expect(trafficUpdated[0]?.id === routes[0]?.id,
+    'Preferred route identity must survive changes to ETA, walk minutes and fare');
+  expect(trafficUpdated[0]?.totalMinutes !== routes[0]?.totalMinutes,
+    'Traffic test fixture must actually change calculated travel time');
+
+  const differentRoute = structuredClone(routePayload);
+  differentRoute.routes[0].steps[1].properties.vehicles[0].name = '87';
+  expect(mappers.mapKakaoPublicTransitRoutes(differentRoute)[0]?.id !== routes[0]?.id,
+    'Different transit service must have a distinct stable route identity');
   expect(routes[0]?.totalMinutes === 15, 'Kakao route totalTime mapping mismatch');
   expect(routes[0]?.transferCount === 1, 'Kakao transfer mapping mismatch');
   expect(routes[0]?.walkMinutes === 5, 'Kakao walking step time mapping mismatch');
