@@ -67,9 +67,15 @@ try {
           const names = [];
           const truth = [];
           for(let p=0;p<input.people;p++){
-            // Varied three-syllable Hangul names are generated, not user names.
-            const name=[0,1,2].map((j) =>
-              String.fromCharCode(0xac00+((p*173+j*1321+input.people*77+19)%11172))).join('');
+            // Synthesize ordinary Korean name-shaped syllable combinations.
+            // Uniform random Unicode produced rare unreadable Hangul; no
+            // person name from the user or production database is used.
+            const surnames=['김','이','박','최','정','강','조','윤','장','임','한','오','신','서'];
+            const middle=['민','서','지','하','도','수','예','현','주','은','채','태','유','다','준'];
+            const last=['준','진','원','우','윤','현','아','나','민','영','호','린','희','빈','솔','온'];
+            const name=surnames[(p*3+input.days)%surnames.length]
+              +middle[(p*5+input.people)%middle.length]
+              +last[(p*7+input.days)%last.length];
             names.push(name);
             const y=top+(p+1)*rowHeight;
             ctx.font='bold 24px sans-serif';
