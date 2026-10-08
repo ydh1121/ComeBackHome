@@ -85,7 +85,7 @@ export function TodayPage() {
         : 'NO_SCHEDULE_TODAY';
 
   return (
-    <section className="today-page" data-route="/" data-page="TodayPage" data-state={(online ? statusState : 'OFFLINE ' + statusState)}>
+    <section className="today-page" data-route="/" data-page="TodayPage" data-state={(online ? statusState : 'OFFLINE ' + statusState)} data-selected-route-id={data.route?.id ?? ''} data-eta-status={data.eta?.status ?? 'UNKNOWN'}>
       <div className="person-switch">
         <button type="button" className="person-select" onClick={() => setPickerOpen((open) => !open)} aria-expanded={pickerOpen}>
           {data.person?.name ?? '사람 선택'}
