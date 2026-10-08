@@ -1,5 +1,5 @@
 import type { EntityId } from '../../domain/common';
-import type { BusRouteOption, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
+import type { BusRouteOption, Coordinate, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint } from '../../domain/models';
 import type { BusRouteActions, CommuteActions, PlaceActions, PlaceInput, TransitSearchActions } from '../contracts/actions';
 import type { BusRouteLookupProvider, PlaceSearchProvider, TransitAccessSearchProvider, TransitRouteProvider, TransitSearchResult } from '../contracts/providers';
 import type { CommuteRepository, PlaceRepository } from '../contracts/repositories';
