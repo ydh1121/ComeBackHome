@@ -155,7 +155,10 @@ try {
           const recognized=new Set((parsed?.detectedPeople??[]).map(x=>x.sourceName));
           return {
             family:input.family,codec:blob.type,bytes:blob.size,
-            imageDecoded:canvas.width>0,realTesseractExecuted:failure==null,
+            imageDecoded:canvas.width>0,
+            actualTesseractFirstPass:failure===null || /ocrTokens=[1-9]/.test(failure),
+            fullPipelineSuccess:failure===null,
+            realTesseractExecuted:failure===null || /ocrTokens=[1-9]/.test(failure),
             error:failure?.slice(0,160)??null,cellCount:truth.length,correct,
             falseOff,personTotal:names.length,
             personExact:names.filter(name=>recognized.has(name)).length,
@@ -189,7 +192,9 @@ try {
     realRasterGeneratorFamilies:3,realRasterImages:observed.length,
     codecs:['PNG','JPEG'],engine:'Tesseract.js kor+eng / production structure recognizer',
     precomputedOcrTokensSupplied:false,
-    executed:observed.some(item=>item.realTesseractExecuted),
+    executed:observed.every(item=>item.realTesseractExecuted),
+    completedRealE2E:observed.every(item=>item.fullPipelineSuccess),
+    realOcrAcceptance:observed.every(item=>item.fullPipelineSuccess)?'METRICS_ONLY':'FAIL',
     cellAccuracy:allCells?Number((allCorrect/allCells).toFixed(4)):0,
     falseOff,garbagePerson:garbage,
     chromium:observed.filter(item=>item.browser==='CHROMIUM').some(x=>x.realTesseractExecuted)?'RAN':'FAIL',
