@@ -532,5 +532,8 @@ jobs:
       - name: Reuse installed packages to prepare local Tesseract browser assets
         run: npm run prepare:ocr-assets
 
+      - name: Compare real weekly 7x3 Tesseract and Paddle on identical detected crops
+        run: node scripts/verify-ocr-weekly-3col-real.mjs
+
       - name: Complete common detected-crop Tesseract Paddle Hybrid matrix comparison
         run: node scripts/verify-ocr-detected-engine-comparison.mjs
