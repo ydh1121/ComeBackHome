@@ -196,6 +196,12 @@ export function TransitAccessPage() {
             await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
           await services.actions.commute.addRouteOriginAccess(personId, routeId, point.id);
         }
+        const confirmed = await services.queries.getCommuteOverview(personId);
+        const updated = confirmed.savedRoutes.find((item) => item.id === routeId);
+        const expected = existing?.id ?? null;
+        if (!updated || (!expected && !updated.originAccessPointIds?.length)) {
+          throw new Error('출발 교통편 저장을 다시 확인하지 못했습니다.');
+        }
         return;
       }
 
@@ -206,6 +212,12 @@ export function TransitAccessPage() {
           const point = existing ??
             await services.actions.transitSearch.addAccessPoint(personId, kind, result.id);
           await services.actions.commute.addRouteDestinationAccess(personId, routeId, point.id);
+        }
+        const confirmed = await services.queries.getCommuteOverview(personId);
+        const updated = confirmed.savedRoutes.find((item) => item.id === routeId);
+        const expected = existing?.id ?? null;
+        if (!updated || (!expected && !updated.destinationAccessPointIds?.length)) {
+          throw new Error('도착 교통편 저장을 다시 확인하지 못했습니다.');
         }
         return;
       }
