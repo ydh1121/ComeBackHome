@@ -76,6 +76,15 @@ function percentile(values: number[], ratio: number): number {
   return sorted[index];
 }
 
+function sampledBackgroundLuminance(raster: ScheduleRasterPlane): number {
+  const values: number[] = [];
+  const step = Math.max(1, Math.floor(raster.luminance.length / 4096));
+  for (let index = 0; index < raster.luminance.length; index += step) {
+    values.push(raster.luminance[index]);
+  }
+  return percentile(values, 0.82) || 255;
+}
+
 function repeatedSpacingScore(positions: number[]): number {
   if (positions.length < 3) return 0;
   const gaps = positions
@@ -97,6 +106,13 @@ function projectionScores(
   const length = direction === 'horizontal' ? height : width;
   const cross = direction === 'horizontal' ? width : height;
   const scores = new Array<number>(length).fill(0);
+  // JPEG resize/blur can lift a gray physical border well above the old
+  // fixed 118 cutoff. Estimate only the background luminance, then allow
+  // moderate gray candidates. The later long-run continuity gate still
+  // rejects compact Hangul/number strokes.
+  const background = sampledBackgroundLuminance(raster);
+  const darkCutoff = clamp(background - 38, 145, 205);
+  const edgeCutoff = 24;
 
   for (let primary = 0; primary < length; primary += 1) {
     let dark = 0;
@@ -108,13 +124,13 @@ function projectionScores(
       const y = direction === 'horizontal' ? primary : secondary;
       const index = y * width + x;
       const value = luminance[index];
-      if (value < 118) dark += 1;
+      if (value < darkCutoff) dark += 1;
 
       if (primary > 0) {
         const previousIndex = direction === 'horizontal'
           ? (y - 1) * width + x
           : y * width + (x - 1);
-        if (Math.abs(value - luminance[previousIndex]) >= 36) strongEdge += 1;
+        if (Math.abs(value - luminance[previousIndex]) >= edgeCutoff) strongEdge += 1;
       }
       sampled += 1;
     }
@@ -172,6 +188,8 @@ function continuousGridPeaks(
   const alongLength = direction === 'horizontal' ? raster.width : raster.height;
   const acrossLength = direction === 'horizontal' ? raster.height : raster.width;
   const minimumRun = Math.max(24, Math.round(alongLength * 0.32));
+  const background = sampledBackgroundLuminance(raster);
+  const lineDarkCutoff = clamp(background - 24, 165, 220);
 
   return peaks.filter(({ position }) => {
     const coordinate = Math.round(position);
@@ -185,7 +203,7 @@ function continuousGridPeaks(
         if (across < 0 || across >= acrossLength) continue;
         const x = direction === 'horizontal' ? along : across;
         const y = direction === 'horizontal' ? across : along;
-        if (raster.luminance[y * raster.width + x] < 155) {
+        if (raster.luminance[y * raster.width + x] < lineDarkCutoff) {
           dark = true;
           break;
         }
