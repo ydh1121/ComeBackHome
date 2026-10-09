@@ -10,6 +10,7 @@ on:
       - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
+      - ".github/workflows/ocr-generic-diagnostic.yml"
       - "wrangler.local.jsonc"
       - "wrangler.jsonc"
       - "wrangler.scheduler.jsonc"
@@ -100,6 +101,7 @@ on:
       - main
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
+      - ".github/workflows/ocr-generic-diagnostic.yml"
       - "wrangler.jsonc"
       - "wrangler.scheduler.jsonc"
       - "functions/**"
