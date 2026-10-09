@@ -75,5 +75,38 @@ try {
   assert.ok(parsed.reviewCandidates.every(x=>
     x.recognitionState==='OFF_CANDIDATE' && x.enabled===true &&
     x.start===null&&x.end===null));
+
+  const {
+    buildWeekly3ColumnPhysicalMatrix,resolveWeekly3ColumnDates,
+    weekly3ColumnProbeRegions,
+  }=await vite.ssrLoadModule('/src/providers/import/Weekly3ColumnScheduleMatrix.ts');
+  const matrix=buildWeekly3ColumnPhysicalMatrix(
+    await detector.detect(),{width,height,tokens:[]});
+  assert.ok(matrix,'Generated test grid should exist independently of title OCR');
+  const regions=weekly3ColumnProbeRegions(matrix);
+  const probes=await regional.extractRegions(null,regions);
+  const first={width,height,tokens:[]};
+  const title=probes.find(x=>x.id==='weekly::title::observed');
+  assert.ok(title,'Physical title crop must exist in the same image');
+  const observedYearMonth={
+    ...title,text:'2026년 10월',confidence:.99,
+  };
+  const dated=resolveWeekly3ColumnDates(matrix,first,[
+    ...probes.filter(x=>x.purpose==='date'),observedYearMonth,
+  ]);
+  assert.equal(dated.yearMonthObserved,true);
+  assert.equal(dated.observedDayAnchors,7);
+  assert.equal(dated.uniqueWeek,true);
+  assert.deepEqual(dated.dates.map(x=>x.date),parsed.reviewCandidates.map(x=>x.date));
+  assert.equal(dated.acceptedForAutomaticSave,false);
+  const conflict=resolveWeekly3ColumnDates(matrix,{
+    width,height,tokens:titleTokens,
+  },[...probes.filter(x=>x.purpose==='date'),{
+    ...observedYearMonth,text:'2026년 11월',
+  }]);
+  assert.equal(conflict.yearMonthObserved,false,
+    'Contradictory calendar OCR must not be auto-resolved');
+  assert.ok(conflict.dates.every(x=>x.date===null));
+  console.log('WEEKLY_TITLE_FALLBACK_AND_CONFLICT_REVIEW_UNIT_PASS');
   console.log('WEEKLY_ADAPTER_UNIT_DATE_INDEPENDENCE_AND_MANUAL_OFF_REVIEW_PASS');
 }finally{await vite.close()}
