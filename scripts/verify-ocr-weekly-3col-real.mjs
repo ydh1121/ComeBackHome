@@ -414,6 +414,123 @@ try{
                 })),
               };
             }
+            // Exercise the actual application service composition and the
+            // IMAGE upload action (not just a standalone OCR test adapter).
+            // Browser-only HTTP mock is explicitly separate from the real
+            // isolated Wrangler D1 replay verified after these cases.
+            let productCompositionE2E=null;
+            if(spec.id==='A-CLEAN'){
+              const realFetch=globalThis.fetch.bind(globalThis);
+              const sourcePeople=names[spec.family].map((name,i)=>({
+                id:'app-composition-person-'+i,name,relation:'synthetic',
+              }));
+              const apiStored=new Map();
+              const fetchTrace={personReads:0,scheduleReads:0,writes:0,
+                forwardedAssetFetches:0,unexpectedApiCalls:0};
+              globalThis.fetch=async(input,init={})=>{
+                const raw=typeof input==='string'?input:input.url;
+                const url=new URL(raw,location.origin);
+                const method=(init.method??'GET').toUpperCase();
+                const respond=value=>new Response(JSON.stringify(value),{
+                  status:200,headers:{'content-type':'application/json'},
+                });
+                if(url.pathname==='/api/people'&&method==='GET'){
+                  fetchTrace.personReads++;
+                  return respond({people:sourcePeople});
+                }
+                const match=/^\\/api\\/people\\/([^/]+)\\/schedules(?:\\/([^/]+))?$/.exec(url.pathname);
+                if(match){
+                  const id=decodeURIComponent(match[1]);
+                  const date=match[2]?decodeURIComponent(match[2]):null;
+                  if(method==='GET'&&date){
+                    fetchTrace.scheduleReads++;
+                    return respond({schedule:apiStored.get(id+'|'+date)??null});
+                  }
+                  if(method==='PUT'&&!date){
+                    const body=JSON.parse(init.body);
+                    for(const schedule of body.schedules){
+                      if(schedule.personId!==id)throw Error('Cross-person schedule write');
+                      apiStored.set(id+'|'+schedule.date,structuredClone(schedule));
+                      fetchTrace.writes++;
+                    }
+                    return respond({schedules:body.schedules});
+                  }
+                }
+                if(url.pathname.startsWith('/api/')){
+                  fetchTrace.unexpectedApiCalls++;
+                  throw Error('Unexpected app API call '+method+' '+url.pathname);
+                }
+                // Model, dictionary, WASM: genuine same-origin HTTP only.
+                if(url.origin!==location.origin)throw Error('External OCR asset fetch forbidden');
+                fetchTrace.forwardedAssetFetches++;
+                return realFetch(input,init);
+              };
+              try{
+                const {createHybridApiApplicationServices}=
+                  await import('/src/app/composition.ts');
+                const app=await createHybridApiApplicationServices('disabled');
+                const actualBatchId=await app.actions.importFiles.accept([
+                  {kind:'IMAGE',file},
+                ]);
+                const initialBatch=await app.repositories.imports.getBatch(actualBatchId);
+                if(!initialBatch||initialBatch.reviewItems.length!==truth.length||
+                   initialBatch.reviewItems.some(item=>item.resolution!==null)||
+                   initialBatch.detectedPeople.length!==sourcePeople.length||
+                   initialBatch.detectedPeople.some(item=>!item.matchedPersonId))
+                  throw Error('Actual product composition lost people or review-required days');
+                let blockedBeforeReview=false;
+                try{await app.actions.commitImportReview.execute(actualBatchId)}
+                catch(e){blockedBeforeReview=String(e).includes('unreviewed');}
+                if(!blockedBeforeReview||apiStored.size)
+                  throw Error('Actual product composition bypassed manual approval');
+                let approvedOff=0,approvedWork=0;
+                for(const item of initialBatch.reviewItems){
+                  const recognized=initialBatch.detectedPeople.find(
+                    x=>x.id===item.detectedPersonId);
+                  const expected=truth.find(
+                    x=>x.person===recognized?.sourceName&&x.date===item.date);
+                  if(!expected||!item.personId)throw Error('Product unmatched image person/date');
+                  if(expected.state==='OFF'){
+                    if(item.recognitionState!=='OFF_CANDIDATE'||
+                       item.imported.enabled===false)
+                      throw Error('Product auto-confirmed OFF from OCR');
+                    await app.actions.importReview.setImportedEnabled(actualBatchId,item.id,false);
+                    approvedOff++;
+                  }else{
+                    if(item.imported.start!==expected.start||
+                       item.imported.end!==expected.end||
+                       item.imported.breakMinutes!==30)
+                      throw Error('Product did not preserve shift and 30 minute break');
+                    approvedWork++;
+                  }
+                  await app.actions.importReview.setResolution(actualBatchId,item.id,'NEW');
+                }
+                await app.actions.commitImportReview.execute(actualBatchId);
+                if(apiStored.size!==truth.length||fetchTrace.writes!==truth.length)
+                  throw Error('Product app HTTP schedule write count mismatch');
+                for(const expected of truth){
+                  const person=sourcePeople.find(x=>x.name===expected.person);
+                  const actual=apiStored.get(person?.id+'|'+expected.date);
+                  if(!actual||actual.enabled!==(expected.state==='WORK')||
+                     actual.breakMinutes!==(expected.state==='WORK'?30:null)||
+                     (actual.enabled&&(actual.start!==expected.start||actual.end!==expected.end)))
+                    throw Error('Product app postapproval HTTP payload differs from image truth');
+                }
+                productCompositionE2E={
+                  source:'ACTUAL_CREATE_HYBRID_API_APPLICATION_SERVICES',
+                  imageUpload:'APPLICATION_IMPORT_FILES_ACCEPT',
+                  browserApi:'ISOLATED_IN_MEMORY_HTTP_MOCK_NOT_D1',
+                  modelAndWasm:'ACTUAL_SAME_ORIGIN_FETCH',
+                  personCount:initialBatch.detectedPeople.length,
+                  cells:initialBatch.reviewItems.length,
+                  approvedWork,approvedOff,
+                  unreviewedSaveBlocked:blockedBeforeReview,
+                  written:apiStored.size,storedBreakMinutes30:approvedWork,
+                  ...fetchTrace,productionRemoteWrites:0,
+                };
+              }finally{globalThis.fetch=realFetch;}
+            }
+
             const paddleTrace=truth.flatMap(cell=>
               (['start','end','break']).flatMap(field=>{
                 const expected=cell[field];
@@ -462,7 +579,7 @@ try{
                 confidence:r?.confidence??null,crop:crop??null}];
             });
             comparisons.push({
-              nameTrace,imageToReviewToMockDb,paddleTrace,debug,
+              nameTrace,imageToReviewToMockDb,productCompositionE2E,paddleTrace,debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
@@ -608,6 +725,17 @@ for(const result of all)for(const item of result.result.comparisons){
   }
 }
 console.log('CBH_WEEKLY_LOCAL_D1_E2E='+JSON.stringify(localD1));
+const actualAppFlows=all.flatMap(run=>run.result.comparisons
+  .filter(item=>item.productCompositionE2E!=null)
+  .map(item=>({browser:run.browser,id:item.id,...item.productCompositionE2E})));
+if(actualAppFlows.length!==2||
+   actualAppFlows.some(item=>item.unreviewedSaveBlocked!==true||
+     item.personCount!==2||item.cells!==14||
+     item.approvedWork!==12||item.approvedOff!==2||
+     item.storedBreakMinutes30!==12||item.written!==14||
+     item.productionRemoteWrites!==0||item.unexpectedApiCalls!==0))
+  throw Error('Actual app composition image upload and approval E2E failed');
+console.log('CBH_WEEKLY_ACTUAL_PRODUCT_COMPOSITION_E2E='+JSON.stringify(actualAppFlows));
 
 const engines=['TESSERACT','PADDLE','H1','H2','H3'];
 const summary={};
