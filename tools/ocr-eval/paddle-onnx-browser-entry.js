@@ -185,11 +185,14 @@ export async function createPaddleDetectedRegionRecognizer(){
               (region.id.endsWith('::start')||region.id.endsWith('::end'));
             let retryEvidence=[];
             if(isClockField&&!parseScheduleImageClock(initialText)){
+              console.info('CBH_OCR_TRACE: RETRY_START '+region.id+' original='+JSON.stringify(initialText));
               const variants=[];
               for(const mode of ['CRISP','PADDED']){
                 const next=await infer(bitmap,region,mode);
                 inferenceMs+=next.inferenceMs;
                 variants.push(next);
+                console.info('CBH_OCR_TRACE: RETRY_'+mode+' '+region.id+
+                  ' text='+JSON.stringify(next.text)+' confidence='+next.confidence.toFixed(3));
                 retryEvidence.push({
                   mode,text:next.text.trim(),confidence:next.confidence,
                   parsed:parseScheduleImageClock(next.text.trim()),
