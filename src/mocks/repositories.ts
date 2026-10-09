@@ -208,7 +208,19 @@ export class MockImportRepository implements ImportRepository {
       if (!enabled) {
         item.imported.start = null;
         item.imported.end = null;
+        item.imported.breakMinutes = null;
       }
+      item.resolution = null;
+    });
+  }
+  async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
+    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
+      throw new Error('INVALID_BREAK_MINUTES');
+    }
+    this.store.mutate((state) => {
+      const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
+      if (!item || item.imported.breakMinutes === minutes) return;
+      item.imported.breakMinutes = minutes;
       item.resolution = null;
     });
   }
