@@ -271,7 +271,7 @@ try{
             // actual parser -> import review action -> approved mock DB writes.
             // This is not a production D1 verification or a user-image test.
             let imageToReviewToMockDb=null;
-            if(spec.id==='A-CLEAN'&&physical){
+            if(physical){
               const resolvedDates=resolveWeekly3ColumnDates(physical,titleLayout,
                 pResults.filter(x=>x.purpose==='date'));
               const parsed=interpretWeekly3Column(
@@ -553,19 +553,37 @@ for(const engine of engines){
   }
   parity[engine]={match:equal,total,rate:total?equal/total:null};
 }
+const e2eCases=all.flatMap(x=>x.result.comparisons
+  .map(y=>({browser:x.browser,id:y.id,review:y.imageToReviewToMockDb})));
+const reviewedWork=e2eCases.reduce((n,x)=>n+(x.review?.approvedWork??0),0);
+const reviewedOff=e2eCases.reduce((n,x)=>n+(x.review?.approvedOff??0),0);
+const persistedTotal=e2eCases.reduce((n,x)=>n+(x.review?.persisted??0),0);
+const expectedTotal=e2eCases.reduce((n,x)=>n+(x.review?.expected??0),0);
+const simulatedReview={
+  source:'GENERATED_ONLY_EXPLICIT_APPROVAL_SIMULATION_NOT_AUTO_OCR',
+  imageCount:e2eCases.length,workApproved:reviewedWork,offApproved:reviewedOff,
+  persisted: persistedTotal, expected:expectedTotal,
+  exactPostReviewRate:expectedTotal?persistedTotal/expectedTotal:null,
+  humanUserAcceptance:'NOT_VERIFIED',
+};
 const report={
   scope:'MONDAY_SUNDAY_7_DAYS_X_START_END_BREAK_3_COLUMNS',
   oracleInjected:false,userRealImages:false,sharedDetectedRois:true,
   physicalIPhone:'PHYSICAL_IPHONE_NOT_VERIFIED',
-  all,summary,parity,localD1,
+  all,summary,parity,localD1,simulatedReview,
 };
 console.log('CBH_WEEKLY_3COL_REAL_COMPARE='+JSON.stringify(report));
 if(all.some(x=>x.pageErrors.length))throw Error('Weekly OCR runtime errors');
 for(const run of all){
-  const a=run.result.comparisons.find(x=>x.id==='A-CLEAN');
-  if(a?.imageToReviewToMockDb?.persisted!==14)
-    throw Error('Generated raster to explicit-review mock DB E2E failed in '+run.browser);
+  for(const a of run.result.comparisons){
+    if(a?.imageToReviewToMockDb?.persisted!==14)
+      throw Error('Generated raster to explicit-review mock DB E2E failed in '+run.browser+' '+a.id);
+  }
 }
+if(simulatedReview.imageCount!==8||simulatedReview.offApproved!==16||
+   simulatedReview.workApproved!==96||simulatedReview.persisted!==112)
+  throw Error('Generated eight-image explicit review simulation incomplete');
+console.log('CBH_WEEKLY_SIMULATED_REVIEW_E2E='+JSON.stringify(simulatedReview));
 const accepted=engines.filter(engine=>{
   const q=summary[engine];
   return q.person>=.98&&q.date>=.99&&q.start>=.97&&q.end>=.97&&
