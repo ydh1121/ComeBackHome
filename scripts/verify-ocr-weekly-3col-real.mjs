@@ -466,6 +466,7 @@ async function verifyEphemeralLocalD1(cases){
     ]);
     const schedules=new D1ScheduleRepository(db);
     let persisted=0,enabled=0,disabled=0,committedCases=0;
+    let repeatedSaveVerifiedRows=0,repeatedSaveVerifiedCases=0;
     // Store each generated case, namespaced per browser and image: original names and
     // source dates are not changed, but test-only person IDs do not collide.
     for(const {browser,id,review} of cases){
@@ -497,6 +498,7 @@ async function verifyEphemeralLocalD1(cases){
       await new CommitImportReview(imports,schedules).execute(batch.id);
       if(!committed)throw Error('Local D1 import did not commit');
       committedCases++;
+      const firstReadback=[];
       for(const expected of review._expectedRows){
         const owner=batch.detectedPeople.find(x=>x.sourceName===expected.person);
         if(!owner)throw Error('Missing expected person in local D1 verification');
@@ -506,18 +508,33 @@ async function verifyEphemeralLocalD1(cases){
           throw Error('Approved weekly cell does not match local D1 state');
         persisted++;
         if(row.enabled)enabled++;else disabled++;
+        firstReadback.push({...row});
       }
+      // Repeat the same explicitly-approved commit. The real D1 upsert must
+      // retain row identity and values, never insert duplicate person/date rows.
+      await new CommitImportReview(imports,schedules).execute(batch.id);
+      for(const prior of firstReadback){
+        const next=await schedules.getByDate(prior.personId,prior.date);
+        if(!next||next.id!==prior.id||next.enabled!==prior.enabled||
+           next.start!==prior.start||next.end!==prior.end)
+          throw Error('Repeated local D1 approval changed stored schedule identity or values');
+        repeatedSaveVerifiedRows++;
+      }
+      repeatedSaveVerifiedCases++;
     }
     const count=await db.prepare('SELECT COUNT(*) AS n FROM schedules').first();
     if(Number(count?.n)!==persisted)throw Error('Local D1 count differs from actual approved cells');
     const expectedCases=specs.length*2;
     if(cases.length!==expectedCases||committedCases!==expectedCases||
        persisted!==expectedCases*14||
-       enabled!==expectedCases*12||disabled!==expectedCases*2)
-      throw Error('Eight-image local D1 full review acceptance mismatch');
+       enabled!==expectedCases*12||disabled!==expectedCases*2||
+       repeatedSaveVerifiedCases!==expectedCases||
+       repeatedSaveVerifiedRows!==persisted)
+      throw Error('Generated-image local D1 full review or repeat-save acceptance mismatch');
     return {storage:'WRANGLER_ISOLATED_LOCAL_D1',
       generatedRasterToApprovedReview:true,actualD1ScheduleRepository:true,
       committedCases,persisted,enabled,disabled,
+      repeatedSaveVerifiedCases,repeatedSaveVerifiedRows,
       remoteWrites:0,liveKakaoRouteCalls:0};
   }finally{
     if(loader)await loader.close();
