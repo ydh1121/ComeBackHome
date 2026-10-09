@@ -783,14 +783,10 @@ try{
   }
   negativeLocalD1=await realLocalHttpD1.negativeChecks();
 }finally{
-  if(realLocalHttpD1){
-    // Negative HTTP tests are called here while the local Worker is alive.
-    // Their evidence survives shutdown; all SQLite files are then deleted.
-    if(!negativeLocalD1)throw Error('REAL_HTTP_D1_NEGATIVE_CONTROLS_NOT_RUN');
-  }
-  await server.close();
-  if(realLocalHttpD1)await realLocalHttpD1.close();
+  try{await server.close()}
+  finally{if(realLocalHttpD1)await realLocalHttpD1.close()}
 }
+if(!negativeLocalD1)throw Error('REAL_HTTP_D1_NEGATIVE_CONTROLS_NOT_RUN');
 console.log('CBH_WEEKLY_REAL_HTTP_D1_NEGATIVE_CONTROLS='+JSON.stringify(negativeLocalD1));
 
 async function verifyEphemeralLocalD1(cases){
