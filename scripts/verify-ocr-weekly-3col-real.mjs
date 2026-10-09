@@ -561,6 +561,102 @@ try{
               }finally{globalThis.fetch=realFetch;}
             }
 
+            // Genuine product application -> same-origin loopback Wrangler
+            // HTTP server -> worker/api.ts -> isolated local D1, NOT a mock.
+            let linkedHttpD1=null;
+            if(spec.id==='A-CLEAN'){
+              const original=globalThis.fetch.bind(globalThis);
+              let atomicRequests=0;
+              globalThis.fetch=(input,init={})=>{
+                const url=new URL(typeof input==='string'?input:input.url,location.origin);
+                if(url.origin!==location.origin)throw Error('EXTERNAL_FETCH_FORBIDDEN');
+                if(url.pathname==='/api/schedules/import'&&init.method==='PUT')
+                  atomicRequests++;
+                return original(input,init);
+              };
+              try{
+                const {createHybridApiApplicationServices}=
+                  await import('/src/app/composition.ts');
+                const app=await createHybridApiApplicationServices('disabled');
+                const people=await app.repositories.people.list();
+                if(people.length!==2||names.A.some(name=>
+                   people.filter(p=>p.name===name).length!==1))
+                  throw Error('REAL_D1_EMPLOYEE_SOURCE_NOT_UNIQUE');
+                const batchId=await app.actions.importFiles.accept([{kind:'IMAGE',file}]);
+                const batch=await app.repositories.imports.getBatch(batchId);
+                if(!batch||batch.reviewItems.length!==14||
+                   batch.detectedPeople.length!==2||
+                   batch.detectedPeople.some(p=>!p.matchedPersonId||
+                     !people.some(known=>known.name===p.sourceName&&
+                       known.id===p.matchedPersonId)))
+                  throw Error('REAL_D1_EMPLOYEE_MATCH_UNSAFE');
+                let unapprovedBlocked=false;
+                try{await app.actions.commitImportReview.execute(batchId)}
+                catch(e){unapprovedBlocked=String(e).includes('unreviewed');}
+                if(!unapprovedBlocked||atomicRequests)
+                  throw Error('REAL_D1_UNAPPROVED_SAVE_ALLOWED');
+                let work=0,off=0;
+                for(const item of batch.reviewItems){
+                  const owner=batch.detectedPeople.find(p=>p.id===item.detectedPersonId);
+                  const expected=truth.find(x=>x.person===owner?.sourceName&&x.date===item.date);
+                  if(!expected||!item.personId)throw Error('REAL_D1_UNKNOWN_SCHEDULE_OWNER');
+                  if(expected.state==='OFF'){
+                    if(item.recognitionState!=='OFF_CANDIDATE'||item.imported.enabled===false)
+                      throw Error('REAL_D1_OFF_AUTO_CONFIRMED');
+                    await app.actions.importReview.setImportedEnabled(batchId,item.id,false);
+                    off++;
+                  }else{
+                    if(item.imported.start!==expected.start||
+                       item.imported.end!==expected.end||
+                       item.imported.breakMinutes!==30)
+                      throw Error('REAL_D1_TIME_OR_BREAK_RECOGNITION_DRIFT');
+                    work++;
+                  }
+                  await app.actions.importReview.setResolution(batchId,item.id,'NEW');
+                }
+                await app.actions.commitImportReview.execute(batchId);
+                if(atomicRequests!==1||work!==12||off!==2)
+                  throw Error('REAL_D1_MULTI_PERSON_NOT_ATOMIC');
+                const readback=[];
+                for(const person of people)for(
+                  const row of await app.repositories.schedules.list(person.id))
+                  readback.push({...row});
+                readback.sort((a,b)=>
+                  (a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
+                if(readback.length!==14)throw Error('REAL_D1_MISSING_SAVED_ROW');
+                for(const expected of truth){
+                  const person=people.find(x=>x.name===expected.person);
+                  const stored=readback.find(x=>x.personId===person?.id&&x.date===expected.date);
+                  if(!stored||stored.enabled!==(expected.state==='WORK')||
+                     (stored.breakMinutes??null)!==(expected.state==='WORK'?30:null)||
+                     (stored.enabled&&(stored.start!==expected.start||
+                                       stored.end!==expected.end)))
+                    throw Error('REAL_D1_BREAK_OR_SCHEDULE_READBACK_MISMATCH');
+                }
+                const repeated=await fetch('/api/schedules/import',{
+                  method:'PUT',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({schedules:readback}),
+                });
+                if(!repeated.ok||atomicRequests!==2)
+                  throw Error('REAL_D1_REPEAT_ATOMIC_SAVE_REJECTED');
+                const rows=[];
+                for(const person of people)for(
+                  const row of await app.repositories.schedules.list(person.id))
+                  rows.push({...row});
+                rows.sort((a,b)=>
+                  (a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
+                if(JSON.stringify(readback)!==JSON.stringify(rows))
+                  throw Error('REAL_D1_REPEAT_SAVE_CHANGED_ID_OR_VALUE');
+                linkedHttpD1={source:'ACTUAL_APP_IMAGE_UPLOAD_AND_PADDLE',
+                  backend:'LOOPBACK_WRANGLER_WORKER_API_AND_D1',
+                  people:2,cells:14,approvedWork:work,explicitlyApprovedOff:off,
+                  unapprovedBlocked,atomicRequests,firstReadback:readback.length,
+                  repeatedReadback:rows.length,breakMinutes30:work,offBreakNull:off,
+                  rowIdsStable:readback.every((x,i)=>x.id===rows[i].id),
+                  productionD1Writes:0,liveKakaoCalls:0};
+              }finally{globalThis.fetch=original;}
+            }
+
             const paddleTrace=truth.flatMap(cell=>
               (['start','end','break']).flatMap(field=>{
                 const expected=cell[field];
@@ -609,7 +705,7 @@ try{
                 confidence:r?.confidence??null,crop:crop??null}];
             });
             comparisons.push({
-              nameTrace,imageToReviewToMockDb,productCompositionE2E,paddleTrace,debug,
+              nameTrace,imageToReviewToMockDb,productCompositionE2E,linkedHttpD1,paddleTrace,debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
@@ -765,6 +861,21 @@ for(const result of all)for(const item of result.result.comparisons){
   }
 }
 console.log('CBH_WEEKLY_LOCAL_D1_E2E='+JSON.stringify(localD1));
+const continuous=all.flatMap(run=>run.result.comparisons
+  .filter(item=>item.linkedHttpD1!=null)
+  .map(item=>({browser:run.browser,...item.linkedHttpD1})));
+if(continuous.length!==2||continuous.some(row=>
+   row.people!==2||row.cells!==14||row.approvedWork!==12||
+   row.explicitlyApprovedOff!==2||row.unapprovedBlocked!==true||
+   row.atomicRequests!==2||row.firstReadback!==14||
+   row.repeatedReadback!==14||row.breakMinutes30!==12||
+   row.offBreakNull!==2||row.rowIdsStable!==true||
+   row.productionD1Writes!==0||row.liveKakaoCalls!==0))
+  throw Error('REAL_APP_HTTP_D1_CONTINUOUS_E2E_FAILED');
+console.log('CBH_WEEKLY_REAL_APP_HTTP_D1_E2E='+JSON.stringify({
+   browserFlows:continuous,negativeControls:negativeLocalD1,
+   network:'LOOPBACK_ONLY',externalOCR:0,productionD1Writes:0,
+}));
 const actualAppFlows=all.flatMap(run=>run.result.comparisons
   .filter(item=>item.productCompositionE2E!=null)
   .map(item=>({browser:run.browser,id:item.id,...item.productCompositionE2E})));
