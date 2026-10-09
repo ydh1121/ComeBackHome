@@ -64,7 +64,9 @@ export class D1ScheduleRepository implements ScheduleRepository {
         enabled = excluded.enabled,
         start_time = excluded.start_time,
         end_time = excluded.end_time,
-        break_minutes = CASE WHEN ?9 = 1 THEN excluded.break_minutes
+        break_minutes = CASE
+          WHEN excluded.enabled = 0 THEN NULL
+          WHEN ?9 = 1 THEN excluded.break_minutes
           ELSE schedules.break_minutes END,
         updated_at = excluded.updated_at`,
     ).bind(
