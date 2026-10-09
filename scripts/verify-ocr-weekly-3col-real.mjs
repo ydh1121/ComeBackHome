@@ -332,6 +332,9 @@ try{
                 return [{
                   id,field,expected,raw,parsed,confidence:source?.confidence??null,
                   crop:region?{x:region.x,y:region.y,width:region.width,height:region.height}:null,
+                  initialText:source?.initialText??null,
+                  selectedMode:source?.selectedMode??'DEFAULT',
+                  retries:source?.retryEvidence??[],
                   occupancy:pix?.visual.occupancy??null,
                   imgWidth:detection.raster.width,imgHeight:detection.raster.height,
                   stage:raw!==expected?'OCR_OR_TEXT_NORMALIZATION':'PARSER',
@@ -353,8 +356,16 @@ try{
               rawColumnXs:detection.structure.columnBands.map(x=>
                 Math.round(x.bounds.x)),
             };
+            const nameTrace=names[spec.family].flatMap((expected,index)=>{
+              const id='weekly-person::'+index;
+              const r=pMap.get(id);
+              if(r?.text?.trim()===expected)return [];
+              const crop=shared.find(x=>x.id===id);
+              return [{id,expected,raw:r?.text?.trim()??'',
+                confidence:r?.confidence??null,crop:crop??null}];
+            });
             comparisons.push({
-              imageToReviewToMockDb,paddleTrace,debug,
+              nameTrace,imageToReviewToMockDb,paddleTrace,debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
