@@ -273,7 +273,7 @@ try{
             let imageToReviewToMockDb=null;
             if(physical){
               const resolvedDates=resolveWeekly3ColumnDates(physical,titleLayout,
-                pResults.filter(x=>x.purpose==='date'));
+                pResults.filter(x=>x.purpose==='date'||x.purpose==='context'));
               const parsed=interpretWeekly3Column(
                 physical,resolvedDates,pResults,names[spec.family]).parsed;
               if(!parsed)throw Error('Weekly E2E actual image did not parse');
