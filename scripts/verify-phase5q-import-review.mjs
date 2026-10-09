@@ -233,7 +233,7 @@ try {
         reviewCandidates: [{
           sourcePersonName: '여자친구', date: '2099-04-06',
           start: null, end: null, sourceRow: 1, confidence: .1,
-          recognitionState: 'UNREADABLE', enabled: true,
+          recognitionState: 'OFF_CANDIDATE', enabled: true,
         }],
         structure: {
           sheet: 'weekly 7 day x start/end/break physical matrix',
@@ -256,8 +256,8 @@ try {
   const weeklyBlank = weeklyBatch?.reviewItems.find((item) => item.date === '2099-04-06');
   const weeklyWork = weeklyBatch?.reviewItems.find((item) => item.date === '2099-04-05');
   expect(weeklyBlank?.imported.enabled === true &&
-    weeklyBlank.recognitionState === 'UNREADABLE',
-    'blank must not be pre-classified as OFF');
+    weeklyBlank.recognitionState === 'OFF_CANDIDATE',
+    'blank must stay a review-only OFF_CANDIDATE, never auto-confirmed OFF');
   if (weeklyBlank && weeklyWork) {
     const weeklyCommit = new commitModule.CommitImportReview(weeklyImports, weeklySchedules);
     await weeklyImports.setDetectedPersonMatch(weeklyId, weeklyBlank.detectedPersonId, 'mock-person-1');
