@@ -202,7 +202,7 @@ try{
                 return o??{id:region.id,purpose:region.purpose,text:'',tokens:[],confidence:0};
               });
               const dateEvidence=physical?resolveWeekly3ColumnDates(
-                physical,titleLayout,resolved.filter(x=>x.purpose==='date')):null;
+                physical,titleLayout,resolved.filter(x=>x.purpose==='date'||x.purpose==='context')):null;
               const interpreted=physical?interpretWeekly3Column(physical,dateEvidence,resolved,names[spec.family]):null;
               let peopleCorrect=0,dateCorrect=0,startCorrect=0,endCorrect=0,
                 breakCorrect=0,startTotal=0,endTotal=0,breakTotal=0,falseOff=0;
