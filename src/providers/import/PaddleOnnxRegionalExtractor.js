@@ -122,11 +122,39 @@ function preprocessBitmapRegion(bitmap, region, mode='DEFAULT') {
 
 // Tested Korean PP-OCRv5 ONNX. Never accept an unverified replacement model.
 const VERIFIED_MODEL_SHA256='92f0b7785e64fc9090106a241cf4c1eb97472824558272751b88a2a4476d3a08';
-async function checkModelHash(bytes){
+async function sha256Hex(bytes){
   if(!globalThis.crypto?.subtle)throw Error('WEEKLY_PADDLE_WEBCRYPTO_REQUIRED');
   const digest=await crypto.subtle.digest('SHA-256',bytes);
-  const hex=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
-  if(hex!==VERIFIED_MODEL_SHA256)throw Error('WEEKLY_PADDLE_MODEL_INTEGRITY_MISMATCH');
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function checkModelHash(bytes){
+  if((await sha256Hex(bytes))!==VERIFIED_MODEL_SHA256)
+    throw Error('WEEKLY_PADDLE_MODEL_INTEGRITY_MISMATCH');
+}
+async function verifyProductAssetIntegrity(manifestUrl,model,dictionaryBytes){
+  const response=await fetch(assertSameOriginAsset(manifestUrl),{
+    credentials:'same-origin',redirect:'error',
+  });
+  if(!response.ok)throw Error('WEEKLY_PADDLE_INTEGRITY_MANIFEST_MISSING');
+  const manifest=await response.json();
+  if(manifest.kind!=='COMEBACKHOME_OFFICIAL_KOREAN_PP_OCRV5_WEEKLY'||
+     manifest.onnxRuntimeWeb!=='1.23.2'||
+     manifest.modelSha256!==VERIFIED_MODEL_SHA256||
+     !Array.isArray(manifest.assets))
+    throw Error('WEEKLY_PADDLE_INVALID_ASSET_MANIFEST');
+  const declared=(url)=>manifest.assets.find(item=>item.url===url)?.sha256;
+  if(declared('/ocr/weekly/inference.onnx')!==VERIFIED_MODEL_SHA256||
+     declared('/ocr/weekly/dict.json')!==(await sha256Hex(dictionaryBytes)))
+    throw Error('WEEKLY_PADDLE_DICTIONARY_INTEGRITY_MISMATCH');
+  const wasmUrl='/ort/ort-wasm-simd-threaded.wasm';
+  const wasmHash=declared(wasmUrl);
+  if(!/^[0-9a-f]{64}$/.test(wasmHash??''))
+    throw Error('WEEKLY_PADDLE_WASM_MANIFEST_MISSING');
+  const wasm=await fetch(assertSameOriginAsset(wasmUrl),{
+    credentials:'same-origin',redirect:'error',
+  });
+  if(!wasm.ok||await sha256Hex(await wasm.arrayBuffer())!==wasmHash)
+    throw Error('WEEKLY_PADDLE_WASM_INTEGRITY_MISMATCH');
 }
 function assertSameOriginAsset(url){
   if(typeof url!=='string'||!url.startsWith('/')||url.startsWith('//')||
@@ -148,10 +176,14 @@ export async function createPaddleDetectedRegionRecognizer(options={}){
     fetch(dictionaryUrl,{credentials:'same-origin',redirect:'error'}),
   ]);
   if(!modelResponse.ok||!dictResponse.ok)throw Error('Missing pinned official ONNX or dictionary');
-  const [model,alphabet]=await Promise.all([
-    modelResponse.arrayBuffer(),dictResponse.json(),
+  const [model,dictionaryBytes]=await Promise.all([
+    modelResponse.arrayBuffer(),dictResponse.arrayBuffer(),
   ]);
+  const alphabet=JSON.parse(new TextDecoder().decode(dictionaryBytes));
   await checkModelHash(model);
+  if(options.manifestUrl){
+    await verifyProductAssetIntegrity(options.manifestUrl,model,dictionaryBytes);
+  }
   if(!Array.isArray(alphabet)||alphabet.length!==11946||
      !alphabet.includes('강')||!alphabet.includes('0'))
     throw Error('WEEKLY_PADDLE_DICTIONARY_INVALID');
