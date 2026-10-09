@@ -138,8 +138,10 @@ try {
     'Production app composition must activate the local OCR extractor',
   );
   assert(
-    composition.includes('StructureFirstScheduleImageRecognizer'),
-    'Production app composition must connect OCR to the structure-first schedule recognizer',
+    composition.includes('new Weekly3ColumnScheduleImageRecognizer') &&
+      composition.includes('new PaddleWeeklyRegionalTextExtractor') &&
+      !composition.includes('new StructureFirstScheduleImageRecognizer'),
+    'Production app must compose weekly Paddle while keeping legacy structure-first confined to private evaluation',
   );
   assert(
     !composition.includes('tools/ocr-eval'),
