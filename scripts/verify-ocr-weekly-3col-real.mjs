@@ -235,10 +235,17 @@ try{
                   x.recognitionState??'UNREADABLE']),
               ]):new Map();
               let cellCorrect=0,reviewableCellCorrect=0,
+                autoStateCount=0,autoStateCorrect=0,falseWork=0,
                 offCandidateCount=0,offCandidateCorrect=0,offCandidateFalse=0,offTruth=0;
               for(const cell of truth){
                 const observed=reconstructed.get(cell.person+'|'+cell.date);
                 if(observed===cell.state)cellCorrect++;
+                // This is a predicted state, not permission to bypass import review.
+                if(observed==='WORK'||observed==='OFF'){
+                  autoStateCount++;
+                  if(observed===cell.state)autoStateCorrect++;
+                }
+                if(observed==='WORK'&&cell.state==='OFF')falseWork++;
                 if(observed===cell.state||
                    (cell.state==='OFF'&&observed==='OFF_CANDIDATE'))
                   reviewableCellCorrect++;
@@ -257,6 +264,7 @@ try{
                 dateCorrect,dateTotal:7,startCorrect,startTotal,
                 endCorrect,endTotal,breakCorrect,breakTotal,
                 cellCorrect,cellTotal:truth.length,reviewableCellCorrect,
+                autoStateCount,autoStateCorrect,falseWork,
                 offCandidateCount,offCandidateCorrect,offCandidateFalse,offTruth,
                 falseOff,complete:completed&&reconstructed.size===truth.length,
                 blockedReason:interpreted?interpreted.blockedReason:'STRUCTURE_NOT_DETECTED',
@@ -536,7 +544,8 @@ for(const engine of engines){
   let sums={personCorrect:0,personTotal:0,dateCorrect:0,dateTotal:0,
     startCorrect:0,startTotal:0,endCorrect:0,endTotal:0,
     breakCorrect:0,breakTotal:0,cellCorrect:0,cellTotal:0,
-    reviewableCellCorrect:0,offCandidateCount:0,offCandidateCorrect:0,
+    reviewableCellCorrect:0,autoStateCount:0,autoStateCorrect:0,falseWork:0,
+    offCandidateCount:0,offCandidateCorrect:0,
     offCandidateFalse:0,offTruth:0,
     falseOff:0,complete:0,images:0};
   for(const browser of all)for(const image of browser.result.comparisons){
@@ -554,8 +563,12 @@ for(const engine of engines){
     end:ratio(sums.endCorrect,sums.endTotal),
     break:ratio(sums.breakCorrect,sums.breakTotal),
     cell:ratio(sums.cellCorrect,sums.cellTotal),
-    // Reviewable coverage is NOT the exact-state accuracy or acceptance gate.
+    // Reviewable candidate agreement includes manually reviewed OFF_CANDIDATE.
+    // It is NOT the exact automatic state accuracy or merge acceptance gate.
     reviewableCell:ratio(sums.reviewableCellCorrect,sums.cellTotal),
+    autoStateCoverage:ratio(sums.autoStateCount,sums.cellTotal),
+    autoStateConditionalAccuracy:ratio(sums.autoStateCorrect,sums.autoStateCount),
+    falseWork:sums.falseWork,
     offCandidatePrecision:ratio(sums.offCandidateCorrect,sums.offCandidateCount),
     offCandidateRecall:ratio(sums.offCandidateCorrect,sums.offTruth),
     offCandidateFalse:sums.offCandidateFalse,
@@ -625,6 +638,61 @@ const qualityGates=Object.fromEntries(engines.map(engine=>{
   };
   return [engine,{checks,accepted:Object.values(checks).every(Boolean)}];
 }));
+// Three distinct accounting layers. Keep the original >=98% strict exactCell
+// acceptance check above unchanged; review coverage cannot satisfy that check.
+const threeLayerMetrics={
+  engines:Object.fromEntries(engines.map(engine=>{
+    const q=summary[engine];
+    assert.ok(q.totals.autoStateCorrect<=q.totals.autoStateCount);
+    assert.ok(q.totals.autoStateCount<=q.totals.cellTotal);
+    assert.ok(q.totals.reviewableCellCorrect>=q.totals.autoStateCorrect);
+    return [engine,{
+      recognition:{
+        person:q.person,date:q.date,start:q.start,end:q.end,break:q.break,
+        candidateStateAgreement:q.reviewableCell,
+        offCandidatePrecision:q.offCandidatePrecision,
+        offCandidateRecall:q.offCandidateRecall,
+        falseOffCandidate:q.offCandidateFalse,
+      },
+      automatic:{
+        // A WORK or OFF prediction is not an actual write; all imports still
+        // require review. Unknown and OFF_CANDIDATE are excluded here.
+        stateCoverage:q.autoStateCoverage,
+        conditionalStateAccuracy:q.autoStateConditionalAccuracy,
+        allCellStrictExactAccuracy:q.cell,
+        falselyPredictedWork:q.falseWork,
+        falselyConfirmedOff:q.falseOff,
+        persistedWithoutReview:false,
+      },
+      contract:{
+        strictAutomaticExactThreshold:.98,
+        strictAutomaticExactPass:qualityGates[engine].checks.exactCell,
+        candidateAgreementPassesSameNumericThreshold:q.reviewableCell>=.98,
+        candidateAgreementMayReplaceStrictGate:false,
+        changeRequiresUserApproval:true,
+      },
+    }];
+  })),
+  afterExplicitSimulatedReview:{
+    source:'GENERATED_ONLY_NOT_HUMAN_APPROVAL',
+    actualRepository:'WRANGLER_ISOLATED_LOCAL_D1',
+    approvedWork:simulatedReview.workApproved,
+    approvedOff:simulatedReview.offApproved,
+    readbackMatchedRows:localD1.persisted,
+    expectedRows:simulatedReview.expected,
+    exactStorageRate:simulatedReview.expected?
+      localD1.persisted/simulatedReview.expected:null,
+    humanAcceptance:'NOT_VERIFIED',
+    productionD1Writes:localD1.remoteWrites,
+  },
+};
+assert.equal(threeLayerMetrics.engines.PADDLE.contract.strictAutomaticExactPass,
+  summary.PADDLE.cell>=.98);
+assert.equal(threeLayerMetrics.engines.PADDLE.contract.candidateAgreementMayReplaceStrictGate,
+  false);
+assert.equal(threeLayerMetrics.afterExplicitSimulatedReview.readbackMatchedRows,
+  threeLayerMetrics.afterExplicitSimulatedReview.expectedRows);
+console.log('CBH_WEEKLY_THREE_LAYER_METRICS='+JSON.stringify(threeLayerMetrics));
 const stageBreakdown={};
 for(const engine of engines){
   const browserVariants=all.flatMap(result=>result.result.comparisons.map(item=>({
