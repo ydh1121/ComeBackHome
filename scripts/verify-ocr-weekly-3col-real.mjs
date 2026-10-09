@@ -31,6 +31,7 @@ const specs=[
   {id:'C-DEGRADED-HOLDOUT',family:'C',degraded:true,scale:.74,people:2,firstDay:19},
 ];
 const all=[];
+let immutableImageBytes=null;
 try{
   await server.listen();
   const port=server.httpServer.address()?.port;
@@ -41,9 +42,12 @@ try{
       page.setDefaultTimeout(900000);
       const pageErrors=[];
       page.on('pageerror',e=>pageErrors.push(e.message.slice(0,200)));
+      page.on('console',m=>{
+        if(m.text().startsWith('CBH_OCR_TRACE:'))console.log(m.text());
+      });
       await page.goto('http://127.0.0.1:'+port+'/tools/ocr-eval/index.html',
         {waitUntil:'domcontentloaded'});
-      const result=await page.evaluate(async(specs)=>{
+      const result=await page.evaluate(async({specs,immutableImageBytes})=>{
         const [
           {BrowserScheduleTableStructureDetector},
           {TesseractScheduleImageTextExtractor,TesseractJsWorkerFactory,BrowserScheduleOcrPreprocessor},
@@ -134,10 +138,31 @@ try{
           return {file:new File([blob],spec.id+'.png',{type:blob.type}),truth:shifts};
         };
         const paddle=await createPaddleDetectedRegionRecognizer();
-        const comparisons=[];
+        const comparisons=[],generatedRasters=[];
         try{
           for(const spec of specs){
-            const {file,truth}=await painter(spec);
+            console.info('CBH_OCR_TRACE: START '+spec.id);
+            const generated=await painter(spec);
+            let {file}=generated;
+            const {truth}=generated;
+            if(immutableImageBytes){
+              const encoded=immutableImageBytes[spec.id];
+              if(!encoded)throw Error('Missing immutable shared browser input');
+              const binary=atob(encoded.base64);
+              const bytes=new Uint8Array(binary.length);
+              for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+              file=new File([bytes],spec.id+'.png',{type:encoded.type});
+            }else{
+              const bytes=new Uint8Array(await file.arrayBuffer());
+              const pieces=[];
+              for(let at=0;at<bytes.length;at+=8192){
+                pieces.push(String.fromCharCode(...bytes.subarray(at,at+8192)));
+              }
+              generatedRasters.push({
+                id:spec.id,base64:btoa(pieces.join('')),type:file.type,
+                bytes:bytes.length,
+              });
+            }
             const detector=new BrowserScheduleTableStructureDetector();
             const started=performance.now();
             const detection=await detector.detect(file);
@@ -373,11 +398,18 @@ try{
               detectedColumns:detection.structure.columnBands.length,
               geometryMs,tMs,pMs,architectures,
             });
+            console.info('CBH_OCR_TRACE: DONE '+spec.id);
           }
         }finally{await paddle.release()}
-        return {model:paddle.metadata,comparisons,
+        return {model:paddle.metadata,generatedRasters,comparisons,
           browserHeapBytes:performance.memory?.usedJSHeapSize??null};
-      },specs);
+      },{specs,immutableImageBytes});
+      if(!immutableImageBytes){
+        immutableImageBytes=Object.fromEntries(result.generatedRasters.map(
+          x=>[x.id,{base64:x.base64,type:x.type,bytes:x.bytes}]));
+        console.log('CBH_SHARED_RASTER_CANONICAL_BYTES='+JSON.stringify(
+          result.generatedRasters.map(x=>({id:x.id,bytes:x.bytes,type:x.type}))));
+      }
       all.push({browser:browserName,pageErrors,result});
     }finally{await browser.close();}
   }
