@@ -14,6 +14,7 @@ const httpSchedules=source('src/providers/http/HttpRepositories.ts');
 const commitReview=source('src/application/use-cases/commitImportReview.ts');
 const migration=source('db/migrations/0008_weekly_ocr_break_minutes.sql');
 const workflow=source('.github/workflows/phase5g-local-integration.yml');
+const diagnosticWorkflow=source('.github/workflows/ocr-generic-diagnostic.yml');
 const stage=source('scripts/stage-weekly-paddle-assets.mjs');
 assert.match(composition,/new Weekly3ColumnScheduleImageRecognizer\(/);
 assert.match(composition,/new PaddleWeeklyRegionalTextExtractor\(/);
@@ -43,8 +44,18 @@ assert.match(api,/Import references unknown person/,
   'Atomic import must reject unresolved people');
 assert.match(migration,/ADD COLUMN break_minutes INTEGER/);
 assert.match(workflow,/Stage verified Korean ONNX, dictionary and WASM/);
-assert.match(workflow,/legacy generic|Legacy general 4-6d/i);
+assert.match(workflow,/PRODUCT_REQUIRED_GATE/);
+assert.match(workflow,/SHARED_SAFETY_GATE/);
+assert.doesNotMatch(workflow,/verify:ocr-real-tesseract-e2e/,
+  'Generic 4/5/6-day Tesseract must not remain in the blocking product workflow');
+assert.doesNotMatch(workflow,/verify-ocr-detected-engine-comparison/,
+  'Generic StructureFirst matrix must not remain in the blocking product workflow');
+assert.match(diagnosticWorkflow,/GENERIC_OCR_DIAGNOSTIC/);
+assert.match(diagnosticWorkflow,/D-CBH-20261009-OCR-GATE-C-DISPOSITION-001/);
+assert.match(diagnosticWorkflow,/verify:ocr-real-tesseract-e2e/);
+assert.match(diagnosticWorkflow,/verify-ocr-detected-engine-comparison/);
 assert.doesNotMatch(workflow,/continue-on-error:\s*true/);
+assert.doesNotMatch(diagnosticWorkflow,/continue-on-error:\s*true/);
 console.log('CBH_WEEKLY_PRODUCT_STATIC_SOURCE_CONTRACT_PASS='+JSON.stringify({
   productComposition:'WEEKLY_PADDLE',
   xlsx:'PRESERVED',
@@ -52,6 +63,7 @@ console.log('CBH_WEEKLY_PRODUCT_STATIC_SOURCE_CONTRACT_PASS='+JSON.stringify({
   stageSameOrigin:true,
   reviewApprovalRequired:true,
   breakDataPath:'PARSER_TO_HTTP_TO_D1',
-  legacyGenericTesseractCI:'STILL_BLOCKING',
+  requiredGateClasses:['PRODUCT_REQUIRED_GATE','SHARED_SAFETY_GATE'],
+  genericOcrDiagnostic:'RESEARCH_DIAGNOSTIC_NON_BLOCKING_FAIL_PRESERVED',
   sourceOnlyNotRealBrowserE2E:true,
 }));
