@@ -17,9 +17,9 @@ export interface BusRouteLookupProvider { listByStop(arsId: string): Promise<Bus
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
 export interface RealtimeSubwayProvider { arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
-export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; sourceRow: number; confidence: number; }
+export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; breakMinutes?: number | null; sourceRow: number; confidence: number; }
 export type ImageScheduleCellState = 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
-export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; sourceRow: number; confidence: number; recognitionState?: ImageScheduleCellState; enabled?: boolean; }
+export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; breakMinutes?: number | null; sourceRow: number; confidence: number; recognitionState?: ImageScheduleCellState; enabled?: boolean; }
 export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; reviewCandidates?: ParsedScheduleReviewCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageTextToken { text: string; x: number; y: number; width: number; height: number; confidence: number; }
