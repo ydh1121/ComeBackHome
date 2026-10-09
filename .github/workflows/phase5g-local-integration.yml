@@ -545,6 +545,9 @@ jobs:
       - name: Reuse installed packages to prepare local Tesseract browser assets
         run: npm run prepare:ocr-assets
 
+      - name: Stage verified Korean ONNX, dictionary and WASM for same-origin product adapter
+        run: node scripts/stage-weekly-paddle-assets.mjs
+
       - name: Compare real weekly 7x3 Tesseract and Paddle on identical detected crops
         run: node scripts/verify-ocr-weekly-3col-real.mjs
 
