@@ -55,6 +55,15 @@ function asBoolean(value: unknown, name: string): boolean {
   return value;
 }
 
+function optionalScheduleBreakMinutes(object: JsonObject): number | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(object, 'breakMinutes')) return undefined;
+  const value = object.breakMinutes;
+  if (value === null) return null;
+  if (typeof value !== 'number' || !Number.isInteger(value) ||
+      value < 0 || value > 720) throw new Error('INVALID_BREAK_MINUTES');
+  return value;
+}
+
 function asPlaceKind(value: string): PlaceKind {
   if (value !== 'origin' && value !== 'destination') throw new Error('Invalid place kind.');
   return value;
@@ -677,6 +686,8 @@ export async function handleApiRequest(
               enabled: asBoolean(value.enabled, 'schedule.enabled'),
               start: asString(value.start, 'schedule.start'),
               end: asString(value.end, 'schedule.end'),
+              ...(optionalScheduleBreakMinutes(value) !== undefined
+                ? { breakMinutes: optionalScheduleBreakMinutes(value) } : {}),
             };
           });
           await schedules.upsertMany(entries);
@@ -700,6 +711,8 @@ export async function handleApiRequest(
               enabled: asBoolean(body.enabled, 'enabled'),
               start: asString(body.start, 'start'),
               end: asString(body.end, 'end'),
+              ...(optionalScheduleBreakMinutes(body) !== undefined
+                ? { breakMinutes: optionalScheduleBreakMinutes(body) } : {}),
             };
             await schedules.upsert(entry);
             return json({ schedule: entry });
