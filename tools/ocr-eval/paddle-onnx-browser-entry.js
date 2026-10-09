@@ -1,4 +1,5 @@
 import * as ort from 'onnxruntime-web/wasm';
+import { parseScheduleImageClock } from '../../src/providers/import/StructuredTableImageScheduleRecognizer.ts';
 
 // Browser-only isolated candidate benchmark; NOT production wiring.
 const MODEL_URL = '/ocr-paddle-probe/inference.onnx';
@@ -85,22 +86,35 @@ function clampRegion(region, width, height) {
   return {x,y,width:right-x,height:bottom-y};
 }
 
-function preprocessBitmapRegion(bitmap, region) {
+function preprocessBitmapRegion(bitmap, region, mode='DEFAULT') {
+  // Every mode operates strictly INSIDE the SAME detected physical cell.
+  // No neighbor/time/weekday/OCR truth may enter a recognition retry.
   const safe=clampRegion(region,bitmap.width,bitmap.height);
   const ratio=safe.width/Math.max(1,safe.height);
-  const resizedWidth=Math.max(1,Math.min(320,Math.ceil(48*ratio)));
+  const padding=mode==='DEFAULT'?0:mode==='CRISP'?7:12;
+  const resizedWidth=Math.max(1,Math.min(320-padding,Math.ceil(48*ratio)));
   const canvas=document.createElement('canvas');
   canvas.width=320;canvas.height=48;
   const ctx=canvas.getContext('2d',{willReadFrequently:true,alpha:false});
   if(!ctx)throw Error('Paddle region canvas unavailable');
   ctx.fillStyle='black';ctx.fillRect(0,0,320,48);
-  ctx.drawImage(bitmap,safe.x,safe.y,safe.width,safe.height,0,0,resizedWidth,48);
-  const rgba=ctx.getImageData(0,0,resizedWidth,48).data;
+  if(mode!=='DEFAULT'){
+    // A white in-image margin separates weak leading digits from
+    // a neighboring black table border. Right ONNX padding remains zero.
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,padding,48);
+  }
+  ctx.drawImage(bitmap,safe.x,safe.y,safe.width,safe.height,
+    padding,0,resizedWidth,48);
+  const span=resizedWidth+padding;
+  const rgba=ctx.getImageData(0,0,span,48).data;
   const chw=new Float32Array(3*48*320);
-  for(let y=0;y<48;y++)for(let x=0;x<resizedWidth;x++){
-    const k=(y*resizedWidth+x)*4;
+  const contrast=mode==='DEFAULT'?1:mode==='CRISP'?1.55:1.35;
+  for(let y=0;y<48;y++)for(let x=0;x<span;x++){
+    const k=(y*span+x)*4;
     for(let channel=0;channel<3;channel++){
-      chw[channel*48*320+y*320+x]=(rgba[k+(2-channel)]/255-.5)/.5;
+      const unadjusted=rgba[k+(2-channel)];
+      const adjusted=Math.max(0,Math.min(255,(unadjusted-127.5)*contrast+127.5));
+      chw[channel*48*320+y*320+x]=(adjusted/255-.5)/.5;
     }
   }
   return new ort.Tensor('float32',chw,[1,3,48,320]);
@@ -124,13 +138,13 @@ export async function createPaddleDetectedRegionRecognizer(){
   const modelInitMs=Math.round(performance.now()-initStarted);
   const inputKey=session.inputNames[0],outputKey=session.outputNames[0];
 
-  const infer=async(bitmap,region)=>{
-    const tensor=preprocessBitmapRegion(bitmap,region);
+  const infer=async(bitmap,region,mode='DEFAULT')=>{
+    const tensor=preprocessBitmapRegion(bitmap,region,mode);
     const started=performance.now();
     const output=await session.run({[inputKey]:tensor});
     const inferenceMs=Math.round(performance.now()-started);
     const decoded=decodeCtc(output[outputKey],alphabet);
-    return {...decoded,inferenceMs};
+    return {...decoded,inferenceMs,mode};
   };
 
   return {
@@ -164,8 +178,33 @@ export async function createPaddleDetectedRegionRecognizer(){
               confidence:tokens.length?Math.min(...tokens.map(x=>x.confidence)):0,
             });
           }else{
-            const item=await infer(bitmap,region);
+            let item=await infer(bitmap,region);
             inferenceMs+=item.inferenceMs;
+            const initialText=item.text.trim();
+            const isClockField=region.id.startsWith('weekly::')&&
+              (region.id.endsWith('::start')||region.id.endsWith('::end'));
+            let retryEvidence=[];
+            if(isClockField&&!parseScheduleImageClock(initialText)){
+              const variants=[];
+              for(const mode of ['CRISP','PADDED']){
+                const next=await infer(bitmap,region,mode);
+                inferenceMs+=next.inferenceMs;
+                variants.push(next);
+                retryEvidence.push({
+                  mode,text:next.text.trim(),confidence:next.confidence,
+                  parsed:parseScheduleImageClock(next.text.trim()),
+                });
+              }
+              const first=parseScheduleImageClock(variants[0].text.trim());
+              const second=parseScheduleImageClock(variants[1].text.trim());
+              // Contradicting or low-confidence retry results MUST stay
+              // REVIEW_REQUIRED, never infer missing first digits by context.
+              if(first&&first===second&&
+                 variants.every(v=>v.confidence>=.70)){
+                item=variants[0].confidence>=variants[1].confidence
+                  ?variants[0]:variants[1];
+              }
+            }
             const text=item.text.trim();
             const token=text?{
               text,x:region.x+region.width*0.04,y:region.y+region.height*0.08,
@@ -175,6 +214,11 @@ export async function createPaddleDetectedRegionRecognizer(){
             results.push({
               id:region.id,purpose:region.purpose,text,
               tokens:token?[token]:[],confidence:item.confidence,
+              ...(retryEvidence.length?{
+                initialText,
+                retryEvidence,
+                selectedMode:item.mode,
+              }:{}),
             });
           }
         }
