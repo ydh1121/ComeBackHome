@@ -26,6 +26,8 @@ const server=await createServer({
 });
 const specs=[
   {id:'A-CLEAN',family:'A',degraded:false,scale:1,people:2,firstDay:12},
+  {id:'A-DEGRADED',family:'A',degraded:true,scale:.8,people:2,firstDay:19},
+  {id:'B-CLEAN',family:'B',degraded:false,scale:1,people:2,firstDay:12},
   {id:'B-DEGRADED',family:'B',degraded:true,scale:.80,people:2,firstDay:19},
   {id:'C-CLEAN-HOLDOUT',family:'C',degraded:false,scale:1,people:2,firstDay:12},
   {id:'C-DEGRADED-HOLDOUT',family:'C',degraded:true,scale:.74,people:2,firstDay:19},
@@ -456,7 +458,7 @@ async function verifyEphemeralLocalD1(cases){
     ]);
     const schedules=new D1ScheduleRepository(db);
     let persisted=0,enabled=0,disabled=0,committedCases=0;
-    // Store all 8 cases, namespaced per browser and image: original names and
+    // Store each generated case, namespaced per browser and image: original names and
     // source dates are not changed, but test-only person IDs do not collide.
     for(const {browser,id,review} of cases){
       if(!review?._approvedBatch||!review?._expectedRows)
@@ -500,8 +502,10 @@ async function verifyEphemeralLocalD1(cases){
     }
     const count=await db.prepare('SELECT COUNT(*) AS n FROM schedules').first();
     if(Number(count?.n)!==persisted)throw Error('Local D1 count differs from actual approved cells');
-    if(cases.length!==8||committedCases!==8||persisted!==112||
-       enabled!==96||disabled!==16)
+    const expectedCases=specs.length*2;
+    if(cases.length!==expectedCases||committedCases!==expectedCases||
+       persisted!==expectedCases*14||
+       enabled!==expectedCases*12||disabled!==expectedCases*2)
       throw Error('Eight-image local D1 full review acceptance mismatch');
     return {storage:'WRANGLER_ISOLATED_LOCAL_D1',
       generatedRasterToApprovedReview:true,actualD1ScheduleRepository:true,
@@ -599,14 +603,50 @@ for(const run of all){
       throw Error('Generated raster to explicit-review mock DB E2E failed in '+run.browser+' '+a.id);
   }
 }
-if(simulatedReview.imageCount!==8||simulatedReview.offApproved!==16||
-   simulatedReview.workApproved!==96||simulatedReview.persisted!==112)
-  throw Error('Generated eight-image explicit review simulation incomplete');
+const expectedCases=specs.length*2;
+if(simulatedReview.imageCount!==expectedCases||
+   simulatedReview.offApproved!==expectedCases*2||
+   simulatedReview.workApproved!==expectedCases*12||
+   simulatedReview.persisted!==expectedCases*14)
+  throw Error('Generated clean/degraded image explicit review simulation incomplete');
 console.log('CBH_WEEKLY_SIMULATED_REVIEW_E2E='+JSON.stringify(simulatedReview));
-const accepted=engines.filter(engine=>{
+const qualityGates=Object.fromEntries(engines.map(engine=>{
   const q=summary[engine];
-  return q.person>=.98&&q.date>=.99&&q.start>=.97&&q.end>=.97&&
-    q.cell>=.98&&q.falseOff===0&&q.completeRate>=.99&&parity[engine].rate>=.99;
-});
+  const checks={
+    person:q.person>=.98,
+    date:q.date>=.99,
+    start:q.start>=.97,
+    end:q.end>=.97,
+    break:q.break>=.97,
+    exactCell:q.cell>=.98,
+    falseOff:q.falseOff===0,
+    complete:q.completeRate>=.99,
+    parity:parity[engine].rate!=null&&parity[engine].rate>=.99,
+  };
+  return [engine,{checks,accepted:Object.values(checks).every(Boolean)}];
+}));
+const stageBreakdown={};
+for(const engine of engines){
+  const browserVariants=all.flatMap(result=>result.result.comparisons.map(item=>({
+    browser:result.browser,holdout:item.family==='C',
+    degraded:item.degraded,metrics:item.architectures[engine],
+  })));
+  stageBreakdown[engine]={};
+  for(const group of ['CLEAN','DEGRADED','C_HOLDOUT']){
+    const items=browserVariants.filter(x=>
+      group==='C_HOLDOUT'?x.holdout:
+      group==='CLEAN'?!x.degraded:x.degraded);
+    const total=items.reduce((v,x)=>v+x.metrics.cellTotal,0);
+    const exact=items.reduce((v,x)=>v+x.metrics.cellCorrect,0);
+    const reviewable=items.reduce((v,x)=>v+x.metrics.reviewableCellCorrect,0);
+    stageBreakdown[engine][group]={
+      images:items.length,exactCell:total?exact/total:null,
+      reviewableCell:total?reviewable/total:null,
+      complete:items.filter(x=>x.metrics.complete).length,
+    };
+  }
+}
+console.log('CBH_WEEKLY_STRICT_AND_REVIEW_GATES='+JSON.stringify({qualityGates,stageBreakdown}));
+const accepted=engines.filter(engine=>qualityGates[engine].accepted);
 console.log('CBH_WEEKLY_3COL_ACCEPTED='+JSON.stringify(accepted));
 if(!accepted.length)throw Error('Weekly 3col OCR still below quality gate; do not merge PR81');
