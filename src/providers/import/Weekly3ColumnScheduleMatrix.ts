@@ -268,6 +268,9 @@ export function resolveWeekly3ColumnDates(
     set.add(parsed.day);candidates.set(parsed.index,set);
   }
   for(const [index,days] of dedicated)candidates.set(index,days);
+  // Do not allow a contradictory dedicated crop to be silently filled by
+  // calendar interpolation from other days.
+  if([...dedicated.values()].some(days=>days.size>1))return result;
   const unambiguous=[...candidates.entries()]
     .filter(([,days])=>days.size===1)
     .map(([index,days])=>({index,day:[...days][0]}));
