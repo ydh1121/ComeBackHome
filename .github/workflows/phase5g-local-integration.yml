@@ -319,6 +319,9 @@ jobs:
       - name: Verify weekly 7x3 adapter and fail-closed synthetic contract
         run: node scripts/verify-ocr-weekly-3col-adapter-unit.mjs
 
+      - name: Verify actual product Paddle wiring and break-minute source contract
+        run: node scripts/verify-ocr-product-static-contract.mjs
+
       - name: Verify OCR runtime assets
         run: npm run verify:ocr-assets
 
