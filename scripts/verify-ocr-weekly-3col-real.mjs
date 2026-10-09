@@ -424,7 +424,7 @@ try{
   }
 }finally{await server.close();}
 
-async function verifyEphemeralLocalD1(approvedBatch,expectedRows){
+async function verifyEphemeralLocalD1(cases){
   const [{execFile},{promisify},{mkdtemp,rm},{tmpdir},{join,resolve},{getPlatformProxy}]=
     await Promise.all([
       import('node:child_process'),import('node:util'),import('node:fs/promises'),
@@ -435,54 +435,72 @@ async function verifyEphemeralLocalD1(approvedBatch,expectedRows){
   const wrangler=resolve(root,'node_modules/.bin/wrangler');
   let proxy=null,loader=null;
   try{
-    // Forced local-only, isolated Wrangler persistence. NEVER --remote.
+    // Every SQLite byte is local and isolated; NEVER pass --remote.
     await promisify(execFile)(wrangler,[
       'd1','migrations','apply','come-back-home-db','--local',
       '--config',config,'--persist-to',tmp,
     ],{cwd:root,env:{...process.env,CI:'true'},maxBuffer:4*1024*1024});
-    proxy=await getPlatformProxy({
-      configPath:config,persist:{path:join(tmp,'v3')},
-    });
+    proxy=await getPlatformProxy({configPath:config,persist:{path:join(tmp,'v3')}});
     const db=proxy.env.DB;
     if(!db||typeof db.prepare!=='function')throw Error('Missing local DB binding');
-    const names=approvedBatch.detectedPeople;
-    for(const person of names){
-      if(!person.matchedPersonId)throw Error('Missing approved generated person ID');
-      await db.prepare(
-        'INSERT INTO people (id,name,relation,created_at,updated_at) VALUES (?1,?2,?3,?4,?4)',
-      ).bind(person.matchedPersonId,person.sourceName,'synthetic',
-        '2026-10-09T00:00:00.000Z').run();
-    }
     loader=await createServer({root,appType:'custom',logLevel:'error',
       server:{middlewareMode:true}});
     const [{CommitImportReview},{D1ScheduleRepository}]=await Promise.all([
       loader.ssrLoadModule('/src/application/use-cases/commitImportReview.ts'),
       loader.ssrLoadModule('/worker/repositories/D1ScheduleRepository.ts'),
     ]);
-    const scheduleRepo=new D1ScheduleRepository(db);
-    let committed=false;
-    const imports={
-      async getBatch(id){return id===approvedBatch.id?approvedBatch:null;},
-      async markCommitted(id){if(id===approvedBatch.id)committed=true;},
-    };
-    await new CommitImportReview(imports,scheduleRepo).execute(approvedBatch.id);
-    if(!committed)throw Error('Local D1 import not marked committed');
-    let persisted=0,disabled=0,enabled=0;
-    for(const expected of expectedRows){
-      const owner=names.find(x=>x.sourceName===expected.person);
-      const actual=await scheduleRepo.getByDate(owner.matchedPersonId,expected.date);
-      if(!actual||actual.enabled!==(expected.state==='WORK')||
-        (actual.enabled&&(actual.start!==expected.start||actual.end!==expected.end))){
-        throw Error('Local D1 schedule row mismatch after approved OCR import');
+    const schedules=new D1ScheduleRepository(db);
+    let persisted=0,enabled=0,disabled=0,committedCases=0;
+    // Store all 8 cases, namespaced per browser and image: original names and
+    // source dates are not changed, but test-only person IDs do not collide.
+    for(const {browser,id,review} of cases){
+      if(!review?._approvedBatch||!review?._expectedRows)
+        throw Error('Missing approved actual OCR evidence for '+browser+'/'+id);
+      const batch=structuredClone(review._approvedBatch);
+      const personIds=new Map();
+      for(const person of batch.detectedPeople){
+        if(!person.matchedPersonId)throw Error('Unmatched weekly generated person');
+        const old=person.matchedPersonId;
+        const updated='generated:'+browser+':'+id+':'+old;
+        personIds.set(old,updated);
+        person.matchedPersonId=updated;
+        await db.prepare(
+          'INSERT INTO people (id,name,relation,created_at,updated_at) VALUES (?1,?2,?3,?4,?4)',
+        ).bind(updated,person.sourceName,'synthetic',
+          '2026-10-09T00:00:00.000Z').run();
       }
-      persisted++;if(actual.enabled)enabled++;else disabled++;
+      for(const item of batch.reviewItems){
+        if(!item.personId||!personIds.has(item.personId))
+          throw Error('Weekly D1 importer encountered an unresolved person');
+        item.personId=personIds.get(item.personId);
+      }
+      let committed=false;
+      const imports={
+        async getBatch(requested){return requested===batch.id?batch:null;},
+        async markCommitted(requested){if(requested===batch.id)committed=true;},
+      };
+      await new CommitImportReview(imports,schedules).execute(batch.id);
+      if(!committed)throw Error('Local D1 import did not commit');
+      committedCases++;
+      for(const expected of review._expectedRows){
+        const owner=batch.detectedPeople.find(x=>x.sourceName===expected.person);
+        if(!owner)throw Error('Missing expected person in local D1 verification');
+        const row=await schedules.getByDate(owner.matchedPersonId,expected.date);
+        if(!row||row.enabled!==(expected.state==='WORK')||
+          (row.enabled&&(row.start!==expected.start||row.end!==expected.end)))
+          throw Error('Approved weekly cell does not match local D1 state');
+        persisted++;
+        if(row.enabled)enabled++;else disabled++;
+      }
     }
     const count=await db.prepare('SELECT COUNT(*) AS n FROM schedules').first();
-    if(Number(count?.n)!==expectedRows.length)throw Error('Unexpected local D1 row count');
+    if(Number(count?.n)!==persisted)throw Error('Local D1 count differs from actual approved cells');
+    if(cases.length!==8||committedCases!==8||persisted!==112||
+       enabled!==96||disabled!==16)
+      throw Error('Eight-image local D1 full review acceptance mismatch');
     return {storage:'WRANGLER_ISOLATED_LOCAL_D1',
-      generatedRasterToApprovedReview:true,
-      actualD1ScheduleRepository:true,
-      committed,persisted,enabled,disabled,
+      generatedRasterToApprovedReview:true,actualD1ScheduleRepository:true,
+      committedCases,persisted,enabled,disabled,
       remoteWrites:0,liveKakaoRouteCalls:0};
   }finally{
     if(loader)await loader.close();
@@ -491,14 +509,10 @@ async function verifyEphemeralLocalD1(approvedBatch,expectedRows){
   }
 }
 
-const approvedEvidence=all.find(x=>x.browser==='CHROMIUM')
-  ?.result.comparisons.find(x=>x.id==='A-CLEAN')?.imageToReviewToMockDb;
-if(!approvedEvidence?._approvedBatch||!approvedEvidence?._expectedRows)
-  throw Error('Missing generated raster approved-review D1 handoff');
-const localD1=await verifyEphemeralLocalD1(
-  approvedEvidence._approvedBatch,approvedEvidence._expectedRows,
-);
-// No generated names or image bytes are retained in log payloads.
+const d1Cases=all.flatMap(x=>x.result.comparisons.map(item=>({
+  browser:x.browser,id:item.id,review:item.imageToReviewToMockDb,
+})));
+const localD1=await verifyEphemeralLocalD1(d1Cases);
 for(const result of all)for(const item of result.result.comparisons){
   if(item.imageToReviewToMockDb){
     delete item.imageToReviewToMockDb._approvedBatch;
