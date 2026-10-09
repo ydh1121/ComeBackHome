@@ -55,6 +55,11 @@ export class CommitImportReview implements CommitImportReviewAction {
         enabled,
         start,
         end,
+        ...(item.imported.breakMinutes !== undefined
+          ? { breakMinutes: enabled ? item.imported.breakMinutes : null }
+          : current?.breakMinutes !== undefined
+            ? { breakMinutes: enabled ? current.breakMinutes : null }
+            : {}),
       });
     }
     if (entries.length) {
