@@ -99,6 +99,36 @@ try {
   assert.equal(dated.uniqueWeek,true);
   assert.deepEqual(dated.dates.map(x=>x.date),parsed.reviewCandidates.map(x=>x.date));
   assert.equal(dated.acceptedForAutomaticSave,false);
+  // Broad header OCR can see an unrelated numeral inside a date group's
+  // physical header. An exact dedicated date crop must outrank that noise.
+  const falselyLocatedDate={
+    text:'25일',x:matrix.days[0].bounds.x+8,
+    y:matrix.headerBands[0].y+8,width:24,height:18,confidence:.9,
+  };
+  const scoped=resolveWeekly3ColumnDates(matrix,{
+    width,height,tokens:[...titleTokens,falselyLocatedDate],
+  },[...probes.filter(x=>x.purpose==='date')]);
+  assert.deepEqual(scoped.dates.map(x=>x.date),dated.dates.map(x=>x.date),
+    'Broad OCR noise must not veto clean dedicated date-crop evidence');
+  // Two contradictory high-confidence readings INSIDE the same dedicated
+  // physical date crop remain unresolved, never calendar-interpolated.
+  const dayZero=probes.find(x=>x.id==='date::grid-cell::weekly::0');
+  assert.ok(dayZero);
+  const contradictory={...dayZero,tokens:[
+    ...dayZero.tokens,{
+      text:'25일',x:dayZero.tokens[0].x,
+      y:dayZero.tokens[0].y,
+      width:dayZero.tokens[0].width,
+      height:dayZero.tokens[0].height,
+      confidence:.99,
+    },
+  ]};
+  const ambiguous=resolveWeekly3ColumnDates(matrix,{
+    width,height,tokens:titleTokens,
+  },[...probes.filter(x=>x.purpose==='date'&&x.id!==dayZero.id),
+    contradictory]);
+  assert.ok(ambiguous.dates.every(x=>x.date===null),
+    'Contradictory dedicated OCR evidence must remain review-only');
   const conflict=resolveWeekly3ColumnDates(matrix,{
     width,height,tokens:titleTokens,
   },[...probes.filter(x=>x.purpose==='date'),{
