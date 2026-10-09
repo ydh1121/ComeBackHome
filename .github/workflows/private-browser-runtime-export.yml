@@ -1,0 +1,235 @@
+name: PRIVATE_BROWSER_RUNTIME_EXPORT_TEMP
+
+on:
+  push:
+    branches:
+      - "fix/p0-production-push-key-ocr-real-e2e"
+    paths:
+      - ".github/workflows/private-browser-runtime-export.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export-playwright-browser:
+    name: TEMP / export CI Playwright browser runtime only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Discover, package and split Playwright browser runtime
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ROOT=/ms-playwright
+          OUT="$GITHUB_WORKSPACE/.cbh-browser-export"
+          CHUNKS="$OUT/chunks"
+          ARCHIVE="$OUT/cbh-playwright-browser.tgz"
+          MANIFEST="$OUT/browser-export-manifest.json"
+          mkdir -p "$CHUNKS"
+
+          HEADLESS="$(find "$ROOT" -type f -name headless_shell -print -quit 2>/dev/null || true)"
+          if [ -n "$HEADLESS" ]; then
+            BROWSER_TYPE="chromium_headless_shell"
+            EXE="$HEADLESS"
+          else
+            CHROME="$(find "$ROOT" -type f -name chrome -print -quit 2>/dev/null || true)"
+            if [ -z "$CHROME" ]; then
+              echo "No Playwright Chromium/headless-shell executable found under $ROOT" >&2
+              find "$ROOT" -maxdepth 4 -type f | head -200 || true
+              exit 1
+            fi
+            BROWSER_TYPE="chromium"
+            EXE="$CHROME"
+          fi
+
+          case "$EXE" in
+            "$ROOT"/*) ;;
+            *) echo "Executable escaped Playwright root" >&2; exit 1 ;;
+          esac
+
+          REL_FROM_ROOT="${EXE#"$ROOT"/}"
+          BROWSER_TOP="${REL_FROM_ROOT%%/*}"
+          BROWSER_DIR="$ROOT/$BROWSER_TOP"
+          REL_EXE="${EXE#"$BROWSER_DIR"/}"
+          BROWSER_VERSION="$("$EXE" --version | head -1 | tr -d '\r')"
+
+          echo "CBH_BROWSER_SOURCE_CONTAINER=mcr.microsoft.com/playwright:v1.58.2-noble"
+          echo "CBH_BROWSER_TYPE=$BROWSER_TYPE"
+          echo "CBH_BROWSER_DIR=$BROWSER_TOP"
+          echo "CBH_BROWSER_EXECUTABLE=$REL_EXE"
+          echo "CBH_BROWSER_VERSION=$BROWSER_VERSION"
+
+          tar -C "$ROOT" -czf "$ARCHIVE" "$BROWSER_TOP"
+          split -b 45m -d -a 2 "$ARCHIVE" "$CHUNKS/part-"
+
+          export CBH_BROWSER_TYPE="$BROWSER_TYPE"
+          export CBH_BROWSER_TOP="$BROWSER_TOP"
+          export CBH_REL_EXE="$REL_EXE"
+          export CBH_BROWSER_VERSION="$BROWSER_VERSION"
+          export CBH_ARCHIVE="$ARCHIVE"
+          export CBH_CHUNKS="$CHUNKS"
+          export CBH_MANIFEST="$MANIFEST"
+
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          limit = 104_857_600
+          archive = Path(os.environ["CBH_ARCHIVE"])
+          chunks_dir = Path(os.environ["CBH_CHUNKS"])
+          manifest_path = Path(os.environ["CBH_MANIFEST"])
+
+          def sha256(path: Path) -> str:
+              h = hashlib.sha256()
+              with path.open("rb") as f:
+                  for block in iter(lambda: f.read(1024 * 1024), b""):
+                      h.update(block)
+              return h.hexdigest()
+
+          chunks = []
+          for p in sorted(chunks_dir.glob("part-*")):
+              size = p.stat().st_size
+              assert 0 < size < limit, f"transport chunk violates <100MiB contract: {p}={size}"
+              chunks.append({
+                  "filename": p.name,
+                  "bytes": size,
+                  "sha256": sha256(p),
+              })
+
+          assert chunks, "no browser transport chunks created"
+          assert len(chunks) <= 12, f"unexpected chunk count {len(chunks)} > 12"
+
+          manifest = {
+              "schema": "cbh-private-browser-export-v1",
+              "sourceContainer": "mcr.microsoft.com/playwright:v1.58.2-noble",
+              "playwrightVersion": "1.58.2",
+              "browserType": os.environ["CBH_BROWSER_TYPE"],
+              "browserDirectoryBasename": os.environ["CBH_BROWSER_TOP"],
+              "executableRelativePath": os.environ["CBH_REL_EXE"],
+              "browserVersion": os.environ["CBH_BROWSER_VERSION"],
+              "archiveFilename": archive.name,
+              "archiveBytes": archive.stat().st_size,
+              "archiveSha256": sha256(archive),
+              "chunks": chunks,
+              "privateFiles": 0,
+          }
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(manifest, indent=2))
+          PY
+
+          for i in $(seq -w 0 11); do
+            if [ -f "$CHUNKS/part-$i" ]; then
+              echo "part_$i=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "part_$i=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - name: Upload browser export manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-manifest-${{ github.sha }}
+          path: .cbh-browser-export/browser-export-manifest.json
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload browser chunk 00
+        if: steps.pack.outputs.part_00 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-00
+          path: .cbh-browser-export/chunks/part-00
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 01
+        if: steps.pack.outputs.part_01 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-01
+          path: .cbh-browser-export/chunks/part-01
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 02
+        if: steps.pack.outputs.part_02 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-02
+          path: .cbh-browser-export/chunks/part-02
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 03
+        if: steps.pack.outputs.part_03 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-03
+          path: .cbh-browser-export/chunks/part-03
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 04
+        if: steps.pack.outputs.part_04 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-04
+          path: .cbh-browser-export/chunks/part-04
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 05
+        if: steps.pack.outputs.part_05 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-05
+          path: .cbh-browser-export/chunks/part-05
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 06
+        if: steps.pack.outputs.part_06 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-06
+          path: .cbh-browser-export/chunks/part-06
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 07
+        if: steps.pack.outputs.part_07 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-07
+          path: .cbh-browser-export/chunks/part-07
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 08
+        if: steps.pack.outputs.part_08 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-08
+          path: .cbh-browser-export/chunks/part-08
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 09
+        if: steps.pack.outputs.part_09 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-09
+          path: .cbh-browser-export/chunks/part-09
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 10
+        if: steps.pack.outputs.part_10 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-10
+          path: .cbh-browser-export/chunks/part-10
+          retention-days: 1
+          compression-level: 0
+      - name: Upload browser chunk 11
+        if: steps.pack.outputs.part_11 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-playwright-browser-${{ github.sha }}-part-11
+          path: .cbh-browser-export/chunks/part-11
+          retention-days: 1
+          compression-level: 0
