@@ -575,20 +575,3 @@ jobs:
           echo "CBH_GATE_CLASS=PRODUCT_REQUIRED_GATE"
           echo "CBH_GATE_BLOCKING=true"
           echo "CBH_GENERIC_STRUCTUREFIRST_SCOPE=SEPARATE_DIAGNOSTIC_WORKFLOW"
-
-      # PR-only bootstrap contains public repository/runtime dependencies only.
-      # Private roster images are never uploaded to Actions or stored in this artifact.
-      - name: Package private-local acceptance runtime bootstrap
-        if: github.event_name == 'push' && github.ref == 'refs/heads/fix/p0-production-push-key-ocr-real-e2e'
-        run: |
-          tar --exclude=.git --exclude=.wrangler --exclude=.tmp --exclude=.tmp-pages-functions \
-            -czf /tmp/cbh-private-runtime-bootstrap.tgz .
-
-      - name: Upload private-local acceptance runtime bootstrap
-        if: github.event_name == 'push' && github.ref == 'refs/heads/fix/p0-production-push-key-ocr-real-e2e'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cbh-private-runtime-bootstrap-${{ github.sha }}
-          path: /tmp/cbh-private-runtime-bootstrap.tgz
-          retention-days: 1
-          if-no-files-found: error
