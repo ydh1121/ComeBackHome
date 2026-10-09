@@ -2,9 +2,7 @@ import type {
   ImageTextLayout, ImageTextProbeRegion, ImageTextProbeResult,
   ImportProgressReporter, RegionalImageTextExtractor,
 } from '../../application/contracts/providers';
-import {
-  createPaddleDetectedRegionRecognizer, type PaddleRegionResult,
-} from './PaddleOnnxRegionalExtractor.js';
+import type { PaddleRegionResult } from './PaddleOnnxRegionalExtractor.js';
 
 /**
  * Actual app adapter, not a fixture recognizer. Source images stay inside
@@ -22,7 +20,12 @@ export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtra
 
   constructor() {
     if (typeof window !== 'undefined') {
-      window.addEventListener('pagehide', () => { void this.dispose(); }, {once:true});
+      window.addEventListener('pagehide', () => { void this.dispose(); });
+      window.addEventListener('pageshow', (event) => {
+        // A page restored from Safari bfcache must be allowed to lazily
+        // initialize a fresh local WASM session.
+        if (event.persisted) this.disposed = false;
+      });
     }
   }
 
@@ -44,11 +47,12 @@ export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtra
     const task = this.queue.catch(() => undefined).then(async () => {
       if (this.disposed) throw new Error('WEEKLY_PADDLE_SESSION_DISPOSED');
       await onProgress?.(5);
-      const running = this.session ??= createPaddleDetectedRegionRecognizer({
-        modelUrl:'/ocr/weekly/inference.onnx',
-        dictionaryUrl:'/ocr/weekly/dict.json',
-        wasmBase:'/ort/',
-      });
+      const running = this.session ??= import('./PaddleOnnxRegionalExtractor.js')
+        .then(module => module.createPaddleDetectedRegionRecognizer({
+          modelUrl:'/ocr/weekly/inference.onnx',
+          dictionaryUrl:'/ocr/weekly/dict.json',
+          wasmBase:'/ort/',
+        }));
       let recognizer: PaddleRegionResult;
       try {
         recognizer = await running;
