@@ -8,6 +8,7 @@ on:
       - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
       - ".github/workflows/ocr-generic-diagnostic.yml"
+      - ".github/workflows/phase5g-local-integration.yml"
       - "scripts/verify-ocr-product-static-contract.mjs"
       - "package.json"
       - "src/providers/import/**"
@@ -20,6 +21,7 @@ on:
       - main
     paths:
       - ".github/workflows/ocr-generic-diagnostic.yml"
+      - ".github/workflows/phase5g-local-integration.yml"
       - "scripts/verify-ocr-product-static-contract.mjs"
       - "package.json"
       - "src/providers/import/**"
