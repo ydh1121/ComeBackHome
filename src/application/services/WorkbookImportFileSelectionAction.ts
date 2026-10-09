@@ -104,6 +104,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       availablePeople.map((person) => [normalizeName(person.name), person]),
     );
 
+    const weeklyRequiresPerCellApproval = parsedResults.some(
+      (parsed) => parsed.structure.sheet === 'weekly 7 day x start/end/break physical matrix',
+    );
     const detectedByName = new Map<string, DetectedImportPerson>();
     for (const parsed of parsedResults) {
       for (const person of parsed.detectedPeople) {
@@ -116,7 +119,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
             sourceName: person.sourceName,
             matchedPersonId: matched?.id ?? null,
             confidence: person.confidence,
-            ignored: matched ? false : true,
+            // Unlike legacy imports, a weekly OCR row with no DB match
+            // must stay visible and block continuation until manually mapped.
+            ignored: weeklyRequiresPerCellApproval ? false : !matched,
           });
         } else {
           existing.confidence = Math.max(existing.confidence, person.confidence);
@@ -219,9 +224,6 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
     // The store-specific weekly OCR is review-first. Even a successfully
     // matched DB person does not constitute approval of every WORK/OFF date.
-    const weeklyRequiresPerCellApproval = parsedResults.some(
-      (parsed) => parsed.structure.sheet === 'weekly 7 day x start/end/break physical matrix',
-    );
     const reviewItems: ImportReviewItem[] = [];
     for (const candidate of candidateByKey.values()) {
       const existing = candidate.personId
