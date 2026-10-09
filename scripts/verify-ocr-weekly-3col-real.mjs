@@ -438,7 +438,7 @@ try{
                   fetchTrace.personReads++;
                   return respond({people:sourcePeople});
                 }
-                const match=/^\\/api\\/people\\/([^/]+)\\/schedules(?:\\/([^/]+))?$/.exec(url.pathname);
+                const match=/^[/]api[/]people[/]([^/]+)[/]schedules(?:[/]([^/]+))?$/.exec(url.pathname);
                 if(match){
                   const id=decodeURIComponent(match[1]);
                   const date=match[2]?decodeURIComponent(match[2]):null;
