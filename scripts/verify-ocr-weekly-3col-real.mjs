@@ -199,10 +199,20 @@ try{
                 ...(interpreted.parsed.reviewCandidates??[]).map(x=>[x.sourcePersonName+'|'+x.date,
                   x.recognitionState??'UNREADABLE']),
               ]):new Map();
-              let cellCorrect=0;
+              let cellCorrect=0,reviewableCellCorrect=0,
+                offCandidateCount=0,offCandidateCorrect=0,offCandidateFalse=0,offTruth=0;
               for(const cell of truth){
                 const observed=reconstructed.get(cell.person+'|'+cell.date);
                 if(observed===cell.state)cellCorrect++;
+                if(observed===cell.state||
+                   (cell.state==='OFF'&&observed==='OFF_CANDIDATE'))
+                  reviewableCellCorrect++;
+                if(cell.state==='OFF')offTruth++;
+                if(observed==='OFF_CANDIDATE'){
+                  offCandidateCount++;
+                  if(cell.state==='OFF')offCandidateCorrect++;
+                  else offCandidateFalse++;
+                }
                 if(cell.state!=='OFF'&&observed==='OFF')falseOff++;
               }
               const logical=truth.map(cell=>
@@ -211,7 +221,8 @@ try{
                 personCorrect:peopleCorrect,personTotal:spec.people,
                 dateCorrect,dateTotal:7,startCorrect,startTotal,
                 endCorrect,endTotal,breakCorrect,breakTotal,
-                cellCorrect,cellTotal:truth.length,
+                cellCorrect,cellTotal:truth.length,reviewableCellCorrect,
+                offCandidateCount,offCandidateCorrect,offCandidateFalse,offTruth,
                 falseOff,complete:completed&&reconstructed.size===truth.length,
                 blockedReason:interpreted?interpreted.blockedReason:'STRUCTURE_NOT_DETECTED',
                 offReviewCount:interpreted?.offReviewCount??0,
@@ -261,6 +272,8 @@ for(const engine of engines){
   let sums={personCorrect:0,personTotal:0,dateCorrect:0,dateTotal:0,
     startCorrect:0,startTotal:0,endCorrect:0,endTotal:0,
     breakCorrect:0,breakTotal:0,cellCorrect:0,cellTotal:0,
+    reviewableCellCorrect:0,offCandidateCount:0,offCandidateCorrect:0,
+    offCandidateFalse:0,offTruth:0,
     falseOff:0,complete:0,images:0};
   for(const browser of all)for(const image of browser.result.comparisons){
     const score=image.architectures[engine];
@@ -277,6 +290,11 @@ for(const engine of engines){
     end:ratio(sums.endCorrect,sums.endTotal),
     break:ratio(sums.breakCorrect,sums.breakTotal),
     cell:ratio(sums.cellCorrect,sums.cellTotal),
+    // Reviewable coverage is NOT the exact-state accuracy or acceptance gate.
+    reviewableCell:ratio(sums.reviewableCellCorrect,sums.cellTotal),
+    offCandidatePrecision:ratio(sums.offCandidateCorrect,sums.offCandidateCount),
+    offCandidateRecall:ratio(sums.offCandidateCorrect,sums.offTruth),
+    offCandidateFalse:sums.offCandidateFalse,
     completeRate:ratio(sums.complete,sums.images),
     falseOff:sums.falseOff,totals:sums};
 }
