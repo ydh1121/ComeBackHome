@@ -435,7 +435,7 @@ jobs:
 
   ocr-paddle-official-oracle:
     name: Official Korean Paddle vs Tesseract / generated ORACLE
-    if: (github.event_name == 'pull_request' && github.event.pull_request.number == 81) || (github.event_name == 'push' && github.ref == 'refs/heads/fix/p0-production-push-key-ocr-real-e2e')
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 81
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -471,7 +471,7 @@ jobs:
 
   ocr-paddle-official-onnx-browser:
     name: Official Korean ONNX / real Chromium + WebKit WASM
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 81
+    if: (github.event_name == 'pull_request' && github.event.pull_request.number == 81) || (github.event_name == 'push' && github.ref == 'refs/heads/fix/p0-production-push-key-ocr-real-e2e')
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
