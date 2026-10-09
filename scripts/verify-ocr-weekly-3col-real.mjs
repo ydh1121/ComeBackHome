@@ -964,10 +964,6 @@ if(headerResults.length!==2||headerResults.some(gate=>
    gate.autoSave!==false))
   throw Error('WEEKLY_TESSERACT_HEADER_PRODUCT_GATE_FAILED');
 console.log('CBH_WEEKLY_HEADER_ONLY_GATE='+JSON.stringify(headerResults));
-console.log('CBH_WEEKLY_REAL_APP_HTTP_D1_E2E='+JSON.stringify({
-   browserFlows:continuous,negativeControls:negativeLocalD1,
-   network:'LOOPBACK_ONLY',externalOCR:0,productionD1Writes:0,
-}));
 const actualAppFlows=all.flatMap(run=>run.result.comparisons
   .filter(item=>item.productCompositionE2E!=null)
   .map(item=>({browser:run.browser,id:item.id,...item.productCompositionE2E})));
