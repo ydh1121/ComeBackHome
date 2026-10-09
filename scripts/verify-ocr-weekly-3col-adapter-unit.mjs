@@ -110,6 +110,19 @@ try {
   },[...probes.filter(x=>x.purpose==='date')]);
   assert.deepEqual(scoped.dates.map(x=>x.date),dated.dates.map(x=>x.date),
     'Broad OCR noise must not veto clean dedicated date-crop evidence');
+  // OCR boxes reported by rec runtimes may drift into adjacent dates;
+  // the already-detected crop ID is the authoritative physical owner.
+  const dateZero=probes.find(x=>x.id==='date::grid-cell::weekly::0');
+  assert.ok(dateZero);
+  const shiftedBox={...dateZero,tokens:dateZero.tokens.map(token=>({
+    ...token,
+    x:matrix.days[1].bounds.x+matrix.days[1].bounds.width*.20,
+  }))};
+  const ownership=resolveWeekly3ColumnDates(matrix,{
+    width,height,tokens:titleTokens,
+  },[...probes.filter(x=>x.purpose==='date'&&x.id!==dateZero.id),shiftedBox]);
+  assert.deepEqual(ownership.dates.map(x=>x.date),dated.dates.map(x=>x.date),
+    'A dated crop cannot change weekday when OCR text boxes shift');
   // Two contradictory high-confidence readings INSIDE the same dedicated
   // physical date crop remain unresolved, never calendar-interpolated.
   const dayZero=probes.find(x=>x.id==='date::grid-cell::weekly::0');

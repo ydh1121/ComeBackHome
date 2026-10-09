@@ -253,6 +253,32 @@ export function resolveWeekly3ColumnDates(
   // header. Such unscoped noise cannot veto a valid dedicated crop. Wrong
   // or contradictory dedicated crops still fail the unique-week check.
   for(const probe of probes.filter(p=>p.purpose==='date'&&p.confidence>=.75)){
+    // A region named by weekly3ColumnProbeRegions has a physical owner
+    // established BEFORE text recognition. OCR token bounding boxes are
+    // synthetic estimates (especially in degraded WebKit), so they must
+    // not reassign the recognized date to a neighboring weekday.
+    const owned=/^date::grid-cell::weekly::([0-6])$/.exec(probe.id);
+    if(owned){
+      const index=Number(owned[1]);
+      if(!matrix.days[index])continue;
+      const values=new Set<number>();
+      const observed=dayLabel(probe.text);
+      if(observed!=null)values.add(observed);
+      // Multiple contradictory date glyphs in the SAME detected crop
+      // invalidate the whole week. Never silently prefer one value.
+      for(const token of probe.tokens){
+        const value=dayLabel(token.text);
+        if(value!=null)values.add(value);
+      }
+      if(values.size){
+        const set=dedicated.get(index)??new Set<number>();
+        for(const value of values)set.add(value);
+        dedicated.set(index,set);
+      }
+      continue;
+    }
+    // Older non-weekly region providers have no trustworthy physical ID.
+    // Their coordinates remain evidence rather than guessed ownership.
     for(const token of probe.tokens){
       const parsed=readDay(token);
       if(!parsed)continue;
