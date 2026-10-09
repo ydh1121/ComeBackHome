@@ -19,9 +19,11 @@ import {
  * Store-specific Monday-Sunday, start/end/break OCR.
  * The injected region recognizer is evaluated independently in CI.
  *
- * This class is deliberately NOT selected in composition.ts until the
- * objective clean/degraded/browser and user-private holdout gates pass.
- * No source image is sent over the network by this adapter.
+ * Selected by the actual image-upload composition only for the current
+ * workplace 7x3 format. Unsupported images are rejected, not interpreted by
+ * a generic fallback. OCR image bytes never leave the user's browser; the
+ * only fetches are same-origin model/dictionary/WASM static assets.
+ * Live release remains blocked pending private-original acceptance.
  */
 export class Weekly3ColumnScheduleImageRecognizer implements ImageScheduleRecognizer {
   constructor(
