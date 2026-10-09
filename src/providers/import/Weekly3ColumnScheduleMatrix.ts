@@ -217,11 +217,26 @@ export function resolveWeekly3ColumnDates(
     .map(x=>x.text.normalize('NFKC')).join('');
   const allText=header.tokens.map(x=>x.text).join(' ');
   const expression=/(20\d{2})\s*년?\s*(1[0-2]|0?[1-9])\s*월/;
-  const title=expression.exec(orderedTitle)??expression.exec(allText.normalize('NFKC'));
+  // When the broad Tesseract header drops a glyph, the already-loaded
+  // Korean Paddle can read a *separate physical title crop* on the same
+  // image. A disagreement is review-only; no year/month can be inferred
+  // from current date, timetable, source filename, or generated truth.
+  const texts=[
+    orderedTitle,allText.normalize('NFKC'),
+    ...probes.filter(p=>p.id==='weekly::title::observed')
+      .map(p=>p.text.normalize('NFKC')),
+  ];
+  const observedTitles=texts.map(text=>expression.exec(text)).filter(
+    (x):x is RegExpExecArray=>x!=null,
+  );
   const result=unresolved();
-  if(!title)return result;
+  const uniqueTitles=new Map(observedTitles.map(match=>[
+    match[1]+'-'+String(Number(match[2])).padStart(2,'0'),
+    [Number(match[1]),Number(match[2])],
+  ]));
+  if(uniqueTitles.size!==1)return result;
   result.yearMonthObserved=true;
-  const year=Number(title[1]),month=Number(title[2]);
+  const [year,month]=[...uniqueTitles.values()][0];
   const candidates=new Map<number,Set<number>>();
   for(const item of [...header.tokens,...probes.flatMap(p=>p.tokens)]){
     const day=dayLabel(item.text);
@@ -274,7 +289,15 @@ export function resolveWeekly3ColumnDates(
 
 export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageTextProbeRegion[] {
   const headerY=matrix.headerBands[0].y;
-   const dateRegions: ImageTextProbeRegion[]=matrix.days.map(day=>({
+   const nameColumn=matrix.rows[0].nameBounds;
+  const titleRegion:ImageTextProbeRegion={
+    id:'weekly::title::observed',purpose:'context',
+    x:nameColumn.x,y:0,
+    width:Math.max(1,Math.min(nameColumn.width*2,
+      matrix.days[0].bounds.x+matrix.days[0].bounds.width-nameColumn.x)),
+    height:Math.max(1,headerY),
+  };
+  const dateRegions: ImageTextProbeRegion[]=matrix.days.map(day=>({
     id:'date::grid-cell::weekly::'+day.index,purpose:'date',
     x:day.bounds.x,y:headerY,
     width:day.bounds.width,height:matrix.headerBands[0].height,
@@ -285,7 +308,7 @@ export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageText
   const cellRegions:ImageTextProbeRegion[]=matrix.rows.flatMap(row=>
     row.cells.filter(cell=>cell.visual.occupancy!=='EMPTY')
       .map(cell=>({id:cell.id,purpose:'cell' as const,...cell.bounds})));
-  return [...dateRegions,...nameRegions,...cellRegions];
+  return [titleRegion,...dateRegions,...nameRegions,...cellRegions];
 }
 
 function parseBreakMinutes(value:string):number|null {
