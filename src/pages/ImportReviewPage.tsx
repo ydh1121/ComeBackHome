@@ -124,7 +124,7 @@ export function ImportReviewPage() {
                   </button>
                 ) : null}
 
-                {item.imported.enabled !== false && !importedComplete ? (
+                {item.imported.enabled !== false && (weekly3ColumnReview || !importedComplete) ? (
                   <div className="review-time-editor" data-state={item.recognitionState === 'UNREADABLE' || item.recognitionState === 'OFF_CANDIDATE' ? 'UNREADABLE_TIME' : 'INCOMPLETE_TIME'}>
                     <TimeRangeWheelPicker
                       start={item.imported.start}
