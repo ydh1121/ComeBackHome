@@ -258,6 +258,11 @@ try{
                 offCandidateCount,offCandidateCorrect,offCandidateFalse,offTruth,
                 falseOff,complete:completed&&reconstructed.size===truth.length,
                 blockedReason:interpreted?interpreted.blockedReason:'STRUCTURE_NOT_DETECTED',
+                dateEvidence:dateEvidence?{
+                  yearMonthObserved:dateEvidence.yearMonthObserved,
+                  observedDayAnchors:dateEvidence.observedDayAnchors,
+                  uniqueWeek:dateEvidence.uniqueWeek,
+                }:null,
                 offReviewCount:interpreted?.offReviewCount??0,
                 blankSpans:interpreted?.consecutiveBlankSpans.length??0,
                 logical,
