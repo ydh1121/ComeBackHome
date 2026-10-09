@@ -5,6 +5,7 @@ import {chromium,webkit} from 'playwright';
 import {startWeeklyRealHttpD1} from './ocr-weekly-real-http-d1-harness.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
+const focusedRealHttpD1=process.env.CBH_OCR_REAL_HTTP_D1_FOCUSED==='1';
 let realLocalHttpD1=null;
 let negativeLocalD1=null;
 const server=await createServer({
@@ -32,7 +33,7 @@ const server=await createServer({
     });
   }}],
 });
-const specs=[
+const fullSpecs=[
   {id:'A-CLEAN',family:'A',degraded:false,scale:1,people:2,firstDay:12},
   {id:'A-DEGRADED',family:'A',degraded:true,scale:.8,people:2,firstDay:19},
   {id:'B-CLEAN',family:'B',degraded:false,scale:1,people:2,firstDay:12},
@@ -40,10 +41,11 @@ const specs=[
   {id:'C-CLEAN-HOLDOUT',family:'C',degraded:false,scale:1,people:2,firstDay:12},
   {id:'C-DEGRADED-HOLDOUT',family:'C',degraded:true,scale:.74,people:2,firstDay:19},
 ];
+const specs=focusedRealHttpD1?[fullSpecs[0]]:fullSpecs;
 const all=[];
 let immutableImageBytes=null;
 try{
-  realLocalHttpD1=await startWeeklyRealHttpD1();
+  if(focusedRealHttpD1)realLocalHttpD1=await startWeeklyRealHttpD1();
   await server.listen();
   const port=server.httpServer.address()?.port;
   for(const [browserName,engine] of [['CHROMIUM',chromium],['WEBKIT',webkit]]){
@@ -614,7 +616,7 @@ try{
             // Genuine product application -> same-origin loopback Wrangler
             // HTTP server -> worker/api.ts -> isolated local D1, NOT a mock.
             let linkedHttpD1=null;
-            if(spec.id==='A-CLEAN'){
+            if(focusedRealHttpD1&&spec.id==='A-CLEAN'){
               const original=globalThis.fetch.bind(globalThis);
               let atomicRequests=0;
               globalThis.fetch=(input,init={})=>{
@@ -781,13 +783,47 @@ try{
       all.push({browser:browserName,pageErrors,result});
     }finally{await browser.close();}
   }
-  negativeLocalD1=await realLocalHttpD1.negativeChecks();
+  if(focusedRealHttpD1)negativeLocalD1=await realLocalHttpD1.negativeChecks();
 }finally{
   try{await server.close()}
   finally{if(realLocalHttpD1)await realLocalHttpD1.close()}
 }
-if(!negativeLocalD1)throw Error('REAL_HTTP_D1_NEGATIVE_CONTROLS_NOT_RUN');
-console.log('CBH_WEEKLY_REAL_HTTP_D1_NEGATIVE_CONTROLS='+JSON.stringify(negativeLocalD1));
+if(focusedRealHttpD1){
+  if(!negativeLocalD1||negativeLocalD1.negativeCases?.length!==6||
+     negativeLocalD1.atomicSqlRollbackVerified!==true||
+     negativeLocalD1.singleDateGetPutBackwardCompatible!==true)
+    throw Error('REAL_HTTP_D1_NEGATIVE_CONTROLS_NOT_VERIFIED');
+  const continuous=all.flatMap(run=>run.result.comparisons
+    .filter(item=>item.linkedHttpD1!=null)
+    .map(item=>({browser:run.browser,...item.linkedHttpD1})));
+  if(continuous.length!==2||
+     new Set(continuous.map(item=>item.browser)).size!==2||
+     continuous.some(item=>
+       item.people!==2||item.cells!==14||item.approvedWork!==12||
+       item.explicitlyApprovedOff!==2||item.unapprovedBlocked!==true||
+       item.atomicRequests!==2||item.firstReadback!==14||
+       item.repeatedReadback!==14||item.breakMinutes30!==12||
+       item.offBreakNull!==2||item.rowIdsStable!==true||
+       item.productionD1Writes!==0||item.liveKakaoCalls!==0))
+    throw Error('REAL_APP_HTTP_D1_CONTINUOUS_E2E_FAILED');
+  const headerResults=all.flatMap(run=>run.result.comparisons
+    .filter(item=>item.headerGate!=null)
+    .map(item=>({browser:run.browser,...item.headerGate})));
+  if(headerResults.length!==2||headerResults.some(item=>
+     item.observedWeekDays!==7||item.observedDayAnchors<2||
+     item.missingTitleFailClosed!==true||item.wrongMonthFailClosed!==true||
+     item.wrongDayFailClosed!==true||item.missingLabelsReviewOnly!==true||
+     item.autoSave!==false))
+    throw Error('REAL_APP_TESSERACT_HEADER_GATE_FAILED');
+  console.log('CBH_WEEKLY_REAL_HTTP_D1_NEGATIVE_CONTROLS='+JSON.stringify(negativeLocalD1));
+  console.log('CBH_WEEKLY_REAL_APP_HTTP_D1_E2E='+JSON.stringify({
+    browserFlows:continuous,negativeControls:negativeLocalD1,
+    network:'LOOPBACK_ONLY',externalOCR:0,productionD1Writes:0,
+  }));
+  console.log('CBH_WEEKLY_HEADER_ONLY_GATE='+JSON.stringify(headerResults));
+  process.exit(0);
+}
+
 
 async function verifyEphemeralLocalD1(cases){
   const [{execFile},{promisify},{mkdtemp,rm},{tmpdir},{join,resolve},{getPlatformProxy}]=
@@ -910,7 +946,7 @@ console.log('CBH_WEEKLY_LOCAL_D1_E2E='+JSON.stringify(localD1));
 const continuous=all.flatMap(run=>run.result.comparisons
   .filter(item=>item.linkedHttpD1!=null)
   .map(item=>({browser:run.browser,...item.linkedHttpD1})));
-if(continuous.length!==2||continuous.some(row=>
+if(continuous.length!==0||continuous.some(row=>
    row.people!==2||row.cells!==14||row.approvedWork!==12||
    row.explicitlyApprovedOff!==2||row.unapprovedBlocked!==true||
    row.atomicRequests!==2||row.firstReadback!==14||
