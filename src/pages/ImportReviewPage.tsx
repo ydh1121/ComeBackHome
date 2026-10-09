@@ -30,7 +30,9 @@ export function ImportReviewPage() {
   );
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
     item.imported.enabled === false ||
-    (item.imported.start != null && item.imported.end != null);
+    (item.imported.start != null && item.imported.end != null &&
+     (!weekly3ColumnReview || item.recognitionState !== 'INCOMPLETE' ||
+      item.imported.breakMinutes != null));
   const exactDuplicate = (item: (typeof batch.reviewItems)[number]) =>
     item.existing != null &&
     (
