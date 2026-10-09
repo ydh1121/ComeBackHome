@@ -608,7 +608,8 @@ const report={
   physicalIPhone:'PHYSICAL_IPHONE_NOT_VERIFIED',
   all,summary,parity,localD1,simulatedReview,
 };
-console.log('CBH_WEEKLY_3COL_REAL_COMPARE='+JSON.stringify(report));
+// The full JSON line can exceed GitHub Actions stdout per-line limits.
+// Emit compact contract and safety evidence before writing this detailed report.
 if(all.some(x=>x.pageErrors.length))throw Error('Weekly OCR runtime errors');
 for(const run of all){
   for(const a of run.result.comparisons){
@@ -717,4 +718,5 @@ for(const engine of engines){
 console.log('CBH_WEEKLY_STRICT_AND_REVIEW_GATES='+JSON.stringify({qualityGates,stageBreakdown}));
 const accepted=engines.filter(engine=>qualityGates[engine].accepted);
 console.log('CBH_WEEKLY_3COL_ACCEPTED='+JSON.stringify(accepted));
+console.log('CBH_WEEKLY_3COL_REAL_COMPARE='+JSON.stringify(report));
 if(!accepted.length)throw Error('Weekly 3col OCR still below quality gate; do not merge PR81');
