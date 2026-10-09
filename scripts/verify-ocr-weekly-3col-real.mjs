@@ -236,7 +236,11 @@ try{
               ]):new Map();
               let cellCorrect=0,reviewableCellCorrect=0,
                 autoStateCount=0,autoStateCorrect=0,falseWork=0,
+                workTruth=0,workCorrect=0,workPredicted=0,
+                reviewRequiredTotal=0,reviewRequiredSurfaced=0,
                 offCandidateCount=0,offCandidateCorrect=0,offCandidateFalse=0,offTruth=0;
+              const reviewKeys=new Set((interpreted?.parsed?.reviewCandidates??[])
+                .map(x=>x.sourcePersonName+'|'+x.date));
               for(const cell of truth){
                 const observed=reconstructed.get(cell.person+'|'+cell.date);
                 if(observed===cell.state)cellCorrect++;
@@ -245,7 +249,20 @@ try{
                   autoStateCount++;
                   if(observed===cell.state)autoStateCorrect++;
                 }
+                if(cell.state==='WORK')workTruth++;
+                if(observed==='WORK'){
+                  workPredicted++;
+                  if(cell.state==='WORK')workCorrect++;
+                }
                 if(observed==='WORK'&&cell.state==='OFF')falseWork++;
+                // The user must be able to review every unresolved / disputed
+                // state. Missing cells and false WORK-on-OFF are review-required,
+                // but may NOT be counted as visible unless in reviewCandidates.
+                if(observed!=='WORK'||cell.state!=='WORK'){
+                  reviewRequiredTotal++;
+                  if(reviewKeys.has(cell.person+'|'+cell.date))
+                    reviewRequiredSurfaced++;
+                }
                 if(observed===cell.state||
                    (cell.state==='OFF'&&observed==='OFF_CANDIDATE'))
                   reviewableCellCorrect++;
@@ -265,6 +282,8 @@ try{
                 endCorrect,endTotal,breakCorrect,breakTotal,
                 cellCorrect,cellTotal:truth.length,reviewableCellCorrect,
                 autoStateCount,autoStateCorrect,falseWork,
+                workTruth,workCorrect,workPredicted,
+                reviewRequiredTotal,reviewRequiredSurfaced,
                 offCandidateCount,offCandidateCorrect,offCandidateFalse,offTruth,
                 falseOff,complete:completed&&reconstructed.size===truth.length,
                 blockedReason:interpreted?interpreted.blockedReason:'STRUCTURE_NOT_DETECTED',
@@ -562,6 +581,8 @@ for(const engine of engines){
     startCorrect:0,startTotal:0,endCorrect:0,endTotal:0,
     breakCorrect:0,breakTotal:0,cellCorrect:0,cellTotal:0,
     reviewableCellCorrect:0,autoStateCount:0,autoStateCorrect:0,falseWork:0,
+    workTruth:0,workCorrect:0,workPredicted:0,
+    reviewRequiredTotal:0,reviewRequiredSurfaced:0,
     offCandidateCount:0,offCandidateCorrect:0,
     offCandidateFalse:0,offTruth:0,
     falseOff:0,complete:0,images:0};
@@ -585,6 +606,9 @@ for(const engine of engines){
     reviewableCell:ratio(sums.reviewableCellCorrect,sums.cellTotal),
     autoStateCoverage:ratio(sums.autoStateCount,sums.cellTotal),
     autoStateConditionalAccuracy:ratio(sums.autoStateCorrect,sums.autoStateCount),
+    workPrecision:ratio(sums.workCorrect,sums.workPredicted),
+    workRecall:ratio(sums.workCorrect,sums.workTruth),
+    reviewRequiredCoverage:ratio(sums.reviewRequiredSurfaced,sums.reviewRequiredTotal),
     falseWork:sums.falseWork,
     offCandidatePrecision:ratio(sums.offCandidateCorrect,sums.offCandidateCount),
     offCandidateRecall:ratio(sums.offCandidateCorrect,sums.offTruth),
@@ -641,23 +665,67 @@ if(simulatedReview.imageCount!==expectedCases||
    simulatedReview.persisted!==expectedCases*14)
   throw Error('Generated clean/degraded image explicit review simulation incomplete');
 console.log('CBH_WEEKLY_SIMULATED_REVIEW_E2E='+JSON.stringify(simulatedReview));
-const qualityGates=Object.fromEntries(engines.map(engine=>{
-  const q=summary[engine];
+// D-CBH-20261009-OCR-GATE-B: approved 7x3-only acceptance semantics.
+// This is not approval for automatic OFF, human consent, production writes,
+// generic OCR layouts, MAIN merge, or deployment.
+const weeklyPostReviewPass=
+  localD1.storage==='WRANGLER_ISOLATED_LOCAL_D1' &&
+  localD1.persisted===simulatedReview.expected &&
+  localD1.persisted>0 &&
+  localD1.repeatedSaveVerifiedRows===localD1.persisted &&
+  localD1.repeatedSaveVerifiedCases===expectedCases &&
+  localD1.committedCases===expectedCases &&
+  simulatedReview.persisted===simulatedReview.expected &&
+  simulatedReview.workApproved===expectedCases*12 &&
+  simulatedReview.offApproved===expectedCases*2 &&
+  e2eCases.every(x=>x.review?.reviewUnapprovedBlocked===true) &&
+  localD1.remoteWrites===0 && localD1.liveKakaoRouteCalls===0;
+const evaluateWeeklyOptionB=(q,browserParity,engine)=>{
   const checks={
-    person:q.person>=.98,
-    date:q.date>=.99,
-    start:q.start>=.97,
-    end:q.end>=.97,
-    break:q.break>=.97,
-    exactCell:q.cell>=.98,
+    person:q.person!=null&&q.person>=.98,
+    date:q.date!=null&&q.date>=.98,
+    start:q.start!=null&&q.start>=.98,
+    end:q.end!=null&&q.end>=.98,
+    break:q.break!=null&&q.break>=.98,
+    workPrecision:q.workPrecision!=null&&q.workPrecision>=.98,
+    workRecall:q.workRecall!=null&&q.workRecall>=.98,
+    offCandidatePrecision:q.offCandidatePrecision!=null&&q.offCandidatePrecision>=.98,
+    offCandidateRecall:q.offCandidateRecall!=null&&q.offCandidateRecall>=.98,
     falseOff:q.falseOff===0,
-    complete:q.completeRate>=.99,
-    parity:parity[engine].rate!=null&&parity[engine].rate>=.99,
+    uncertainReview:q.reviewRequiredCoverage===1 &&
+      q.totals.reviewRequiredTotal>0,
+    // Every successfully classified image still has to reconstruct its matrix.
+    complete:q.completeRate!=null&&q.completeRate>=.99,
+    parity:browserParity.rate!=null&&browserParity.rate>=.99,
+    // Only standalone PADDLE is tested image->manual review->actual local D1.
+    // Never silently give other engines credit for Paddle's post-review run.
+    localD1:engine==='PADDLE'&&weeklyPostReviewPass,
   };
-  return [engine,{checks,accepted:Object.values(checks).every(Boolean)}];
-}));
-// Three distinct accounting layers. Keep the original >=98% strict exactCell
-// acceptance check above unchanged; review coverage cannot satisfy that check.
+  return {checks,accepted:Object.values(checks).every(Boolean)};
+};
+const qualityGates=Object.fromEntries(engines.map(engine=>
+  [engine,evaluateWeeklyOptionB(summary[engine],parity[engine],engine)]));
+// Fail-closed contract regression: a missing OFF review, missing work, or a
+// single unsafe confirmed OFF must fail even if other recognition is perfect.
+const good=summary.PADDLE;
+const weakened={
+  missingWork:{...good,workRecall:0},
+  missingOff:{...good,offCandidateRecall:0},
+  falseConfirmedOff:{...good,falseOff:1},
+  lostReview:{...good,reviewRequiredCoverage:0},
+  noPerson:{...good,person:null},
+  conditionalOnly:{...good,workPrecision:1,workRecall:0},
+};
+for(const [defect,score] of Object.entries(weakened)){
+  assert.equal(evaluateWeeklyOptionB(score,parity.PADDLE,'PADDLE').accepted,false,
+    'Option B must fail closed on '+defect);
+}
+assert.equal(qualityGates.TESSERACT.checks.localD1,false,
+  'Tesseract cannot inherit Paddle local D1 acceptance');
+console.log('CBH_WEEKLY_OPTION_B_SAFETY_NEGATIVE_CONTROLS=PASS');
+// Three independent reporting layers. Legacy all-cell strict auto-exact
+// remains a diagnostic; only the user-approved weekly Option B gates decide
+// current workplace 7x3 acceptance. Review coverage is not auto-accuracy.
 const threeLayerMetrics={
   engines:Object.fromEntries(engines.map(engine=>{
     const q=summary[engine];
@@ -668,6 +736,10 @@ const threeLayerMetrics={
       recognition:{
         person:q.person,date:q.date,start:q.start,end:q.end,break:q.break,
         candidateStateAgreement:q.reviewableCell,
+        workPrecision:q.workPrecision,workRecall:q.workRecall,
+        reviewRequiredCoverage:q.reviewRequiredCoverage,
+        reviewRequiredCount:q.totals.reviewRequiredTotal,
+        reviewRequiredSurfaced:q.totals.reviewRequiredSurfaced,
         offCandidatePrecision:q.offCandidatePrecision,
         offCandidateRecall:q.offCandidateRecall,
         falseOffCandidate:q.offCandidateFalse,
@@ -683,11 +755,15 @@ const threeLayerMetrics={
         persistedWithoutReview:false,
       },
       contract:{
-        strictAutomaticExactThreshold:.98,
-        strictAutomaticExactPass:qualityGates[engine].checks.exactCell,
+        decision:'D-CBH-20261009-OCR-GATE-B',
+        decisionApproved:true,scope:'CURRENT_WORKPLACE_WEEKLY_7X3_ONLY',
+        legacyAllCellAutomaticExactThreshold:.98,
+        legacyAllCellAutomaticExactPass:q.cell>=.98,
         candidateAgreementPassesSameNumericThreshold:q.reviewableCell>=.98,
         candidateAgreementMayReplaceStrictGate:false,
-        changeRequiresUserApproval:true,
+        weeklyOptionBAccepted:qualityGates[engine].accepted,
+        optionBChecks:qualityGates[engine].checks,
+        furtherProductReleaseApprovalRequired:true,
       },
     }];
   })),
@@ -704,7 +780,7 @@ const threeLayerMetrics={
     productionD1Writes:localD1.remoteWrites,
   },
 };
-assert.equal(threeLayerMetrics.engines.PADDLE.contract.strictAutomaticExactPass,
+assert.equal(threeLayerMetrics.engines.PADDLE.contract.legacyAllCellAutomaticExactPass,
   summary.PADDLE.cell>=.98);
 assert.equal(threeLayerMetrics.engines.PADDLE.contract.candidateAgreementMayReplaceStrictGate,
   false);
@@ -735,5 +811,14 @@ for(const engine of engines){
 console.log('CBH_WEEKLY_STRICT_AND_REVIEW_GATES='+JSON.stringify({qualityGates,stageBreakdown}));
 const accepted=engines.filter(engine=>qualityGates[engine].accepted);
 console.log('CBH_WEEKLY_3COL_ACCEPTED='+JSON.stringify(accepted));
+console.log('CBH_WEEKLY_OPTION_B_CONTRACT='+JSON.stringify({
+  decision:'D-CBH-20261009-OCR-GATE-B',approved:true,
+  scope:'CURRENT_WORKPLACE_WEEKLY_7X3_ONLY',
+  candidateIsNotConfirmedOff:true,autoOffWrites:0,
+  formerAllCellStrictExact:summary.PADDLE.cell,
+  formerAllCellExactPass:summary.PADDLE.cell>=.98,
+  productCompositionWired:false,privateUserImageAcceptance:'NOT_VERIFIED',
+  physicalIPhone:'NOT_VERIFIED',mergeOrDeployApproved:false,
+}));
 console.log('CBH_WEEKLY_3COL_REAL_COMPARE='+JSON.stringify(report));
 if(!accepted.length)throw Error('Weekly 3col OCR still below quality gate; do not merge PR81');
