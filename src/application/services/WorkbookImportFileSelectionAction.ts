@@ -140,6 +140,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       enabled: boolean;
       start: string | null;
       end: string | null;
+      breakMinutes?: number | null;
       confidence: number;
       recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
     }>();
@@ -150,6 +151,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       date: string;
       start: string | null;
       end: string | null;
+      breakMinutes?: number | null;
       confidence: number;
       enabled?: boolean;
       recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
@@ -165,6 +167,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         enabled: candidate.enabled ?? true,
         start: candidate.start,
         end: candidate.end,
+        ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         confidence: candidate.confidence,
         recognitionState:
           candidate.recognitionState ??
@@ -239,7 +242,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
             candidate.start != null &&
             candidate.end != null &&
             existing.start === candidate.start &&
-            existing.end === candidate.end
+            existing.end === candidate.end &&
+            (!weeklyRequiresPerCellApproval ||
+             (existing.breakMinutes ?? null) === (candidate.breakMinutes ?? null))
           )
         )
       );
@@ -248,11 +253,13 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         detectedPersonId: candidate.detectedPersonId,
         personId: candidate.personId,
         date: candidate.date,
-        ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end } } : {}),
+        ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end,
+          breakMinutes: existing.breakMinutes ?? null } } : {}),
         imported: {
           enabled: candidate.enabled,
           start: candidate.start,
           end: candidate.end,
+          ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         },
         recognitionState: candidate.recognitionState,
         // Weekly OCR requires an explicit decision even when a generated
