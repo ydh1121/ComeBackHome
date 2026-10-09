@@ -15,6 +15,9 @@ import {
 export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtractor {
   private session: Promise<PaddleRegionResult> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
+  private modelMetadata: PaddleRegionResult['metadata'] | null = null;
+
+  get metadata(): PaddleRegionResult['metadata'] | null { return this.modelMetadata; }
   private disposed = false;
 
   constructor() {
@@ -49,6 +52,7 @@ export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtra
       let recognizer: PaddleRegionResult;
       try {
         recognizer = await running;
+        this.modelMetadata = recognizer.metadata;
         await onProgress?.(35);
         const result = await recognizer.recognizeRegions(file,regions);
         await onProgress?.(100);
@@ -57,6 +61,7 @@ export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtra
         // A partial or aborted model state must never silently fall back to
         // Tesseract, fabricate OCR data, or continue with stale approval.
         this.session = null;
+        this.modelMetadata = null;
         try { await running.then(x => x.release()); } catch { /* init failed */ }
         throw error;
       }
