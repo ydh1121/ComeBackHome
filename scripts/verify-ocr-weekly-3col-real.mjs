@@ -52,6 +52,10 @@ try{
             resolveWeekly3ColumnDates,interpretWeekly3Column},
           {createPaddleDetectedRegionRecognizer},
           {parseScheduleImageClock},
+          {MockStateStore,MOCK_FIXTURE},
+          {MockPersonRepository,MockScheduleRepository,MockImportRepository},
+          {WorkbookImportFileSelectionAction},
+          {CommitImportReview},
         ]=await Promise.all([
           import('/src/providers/import/ScheduleTableStructureDetector.ts'),
           import('/src/providers/import/TesseractScheduleImageTextExtractor.ts'),
@@ -59,6 +63,10 @@ try{
           import('/src/providers/import/Weekly3ColumnScheduleMatrix.ts'),
           import('/tools/ocr-eval/paddle-onnx-browser-entry.js'),
           import('/src/providers/import/StructuredTableImageScheduleRecognizer.ts'),
+          import('/src/mocks/state.ts'),
+          import('/src/mocks/repositories.ts'),
+          import('/src/application/services/WorkbookImportFileSelectionAction.ts'),
+          import('/src/application/use-cases/commitImportReview.ts'),
         ]);
         const names={A:['강하현','정지윤'],B:['박민준','최서연'],C:['한채린','서유진']};
         const painter=async spec=>{
@@ -234,6 +242,81 @@ try{
             }
             // Generic crop-to-text-to-parser failure trace for *every*
             // generated layout. Holdout samples remain excluded from tuning.
+            // End-to-end: generated real raster -> actual Paddle output ->
+            // actual parser -> import review action -> approved mock DB writes.
+            // This is not a production D1 verification or a user-image test.
+            let imageToReviewToMockDb=null;
+            if(spec.id==='A-CLEAN'&&physical){
+              const resolvedDates=resolveWeekly3ColumnDates(physical,titleLayout,
+                pResults.filter(x=>x.purpose==='date'));
+              const parsed=interpretWeekly3Column(
+                physical,resolvedDates,pResults,names[spec.family]).parsed;
+              if(!parsed)throw Error('Weekly E2E actual image did not parse');
+              const state=new MockStateStore(structuredClone(MOCK_FIXTURE));
+              state.mutate(data=>{
+                data.people=names[spec.family].map((name,i)=>({
+                  id:'generated-person-'+i,name,relation:'generated',
+                }));
+                data.schedules=[];
+                data.importBatches=[];
+                data.committedImportBatchIds=[];
+              });
+              const imports=new MockImportRepository(state),
+                peopleRepo=new MockPersonRepository(state),
+                schedules=new MockScheduleRepository(state);
+              const selection=new WorkbookImportFileSelectionAction(
+                imports,peopleRepo,schedules,
+                {async parse(){throw Error('Unexpected workbook selection');}},
+                {async parse(){return parsed;}},
+              );
+              const batchId=await selection.accept([{kind:'IMAGE',file}]);
+              const initial=await imports.getBatch(batchId);
+              if(!initial||initial.reviewItems.length!==truth.length||
+                 initial.reviewItems.some(x=>x.resolution!==null))
+                throw Error('Weekly E2E review count or unreviewed default failed');
+              let blocked=false;
+              try{await new CommitImportReview(imports,schedules).execute(batchId)}
+              catch(error){blocked=String(error).includes('unreviewed');}
+              if(!blocked||state.read().schedules.length)
+                throw Error('Weekly E2E skipped required user approvals');
+              let approvedOff=0,approvedWork=0;
+              for(const item of initial.reviewItems){
+                const expected=truth.find(x=>x.person===
+                  initial.detectedPeople.find(p=>p.id===item.detectedPersonId)?.sourceName
+                  &&x.date===item.date);
+                if(!expected)throw Error('Weekly E2E missing associated ground-truth row');
+                if(expected.state==='OFF'){
+                  if(item.recognitionState!=='OFF_CANDIDATE' ||
+                    item.imported.enabled!==true)throw Error('Unexpected OFF auto-confirmation');
+                  await imports.setImportedEnabled(batchId,item.id,false);
+                  approvedOff++;
+                }else{
+                  if(item.imported.enabled===false||
+                    item.imported.start!==expected.start||
+                    item.imported.end!==expected.end)
+                    throw Error('Weekly E2E wrong source OCR schedule must not be committed');
+                  approvedWork++;
+                }
+                await imports.setResolution(batchId,item.id,'NEW');
+              }
+              await new CommitImportReview(imports,schedules).execute(batchId);
+              let persisted=0;
+              for(const expected of truth){
+                const owner=state.read().people.find(p=>p.name===expected.person);
+                const actual=await schedules.getByDate(owner.id,expected.date);
+                if(!actual||actual.enabled!==(expected.state==='WORK')||
+                   (actual.enabled&&(actual.start!==expected.start||
+                                     actual.end!==expected.end)))
+                  throw Error('Weekly E2E mock DB state differs from approved schedule');
+                persisted++;
+              }
+              imageToReviewToMockDb={
+                generatedImage:true,actualPaddleOcr:true,
+                actualParser:true,reviewUnapprovedBlocked:blocked,
+                approvedOff,approvedWork,persisted,expected:truth.length,
+                storage:'IN_MEMORY_MOCK_NOT_D1',
+              };
+            }
             const paddleTrace=truth.flatMap(cell=>
               (['start','end','break']).flatMap(field=>{
                 const expected=cell[field];
@@ -271,7 +354,7 @@ try{
                 Math.round(x.bounds.x)),
             };
             comparisons.push({
-              paddleTrace,debug,
+              imageToReviewToMockDb,paddleTrace,debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
@@ -343,6 +426,11 @@ const report={
 };
 console.log('CBH_WEEKLY_3COL_REAL_COMPARE='+JSON.stringify(report));
 if(all.some(x=>x.pageErrors.length))throw Error('Weekly OCR runtime errors');
+for(const run of all){
+  const a=run.result.comparisons.find(x=>x.id==='A-CLEAN');
+  if(a?.imageToReviewToMockDb?.persisted!==14)
+    throw Error('Generated raster to explicit-review mock DB E2E failed in '+run.browser);
+}
 const accepted=engines.filter(engine=>{
   const q=summary[engine];
   return q.person>=.98&&q.date>=.99&&q.start>=.97&&q.end>=.97&&
