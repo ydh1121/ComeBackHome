@@ -324,6 +324,7 @@ try{
                 }
                 await imports.setResolution(batchId,item.id,'NEW');
               }
+              const approvedBatch=await imports.getBatch(batchId);
               await new CommitImportReview(imports,schedules).execute(batchId);
               let persisted=0;
               for(const expected of truth){
@@ -340,6 +341,11 @@ try{
                 actualParser:true,reviewUnapprovedBlocked:blocked,
                 approvedOff,approvedWork,persisted,expected:truth.length,
                 storage:'IN_MEMORY_MOCK_NOT_D1',
+                // Generated-only, transient handoff to the local D1 test.
+                _approvedBatch:approvedBatch,
+                _expectedRows:truth.map(x=>({
+                  person:x.person,date:x.date,state:x.state,start:x.start,end:x.end,
+                })),
               };
             }
             const paddleTrace=truth.flatMap(cell=>
@@ -418,6 +424,89 @@ try{
   }
 }finally{await server.close();}
 
+async function verifyEphemeralLocalD1(approvedBatch,expectedRows){
+  const [{execFile},{promisify},{mkdtemp,rm},{tmpdir},{join,resolve},{getPlatformProxy}]=
+    await Promise.all([
+      import('node:child_process'),import('node:util'),import('node:fs/promises'),
+      import('node:os'),import('node:path'),import('wrangler'),
+    ]);
+  const tmp=await mkdtemp(join(tmpdir(),'cbh-weekly-ocr-local-d1-'));
+  const config=resolve(root,'wrangler.phase5u.jsonc');
+  const wrangler=resolve(root,'node_modules/.bin/wrangler');
+  let proxy=null,loader=null;
+  try{
+    // Forced local-only, isolated Wrangler persistence. NEVER --remote.
+    await promisify(execFile)(wrangler,[
+      'd1','migrations','apply','come-back-home-db','--local',
+      '--config',config,'--persist-to',tmp,
+    ],{cwd:root,env:{...process.env,CI:'true'},maxBuffer:4*1024*1024});
+    proxy=await getPlatformProxy({
+      configPath:config,persist:{path:join(tmp,'v3')},
+    });
+    const db=proxy.env.DB;
+    if(!db||typeof db.prepare!=='function')throw Error('Missing local DB binding');
+    const names=approvedBatch.detectedPeople;
+    for(const person of names){
+      if(!person.matchedPersonId)throw Error('Missing approved generated person ID');
+      await db.prepare(
+        'INSERT INTO people (id,name,relation,created_at,updated_at) VALUES (?1,?2,?3,?4,?4)',
+      ).bind(person.matchedPersonId,person.sourceName,'synthetic',
+        '2026-10-09T00:00:00.000Z').run();
+    }
+    loader=await createServer({root,appType:'custom',logLevel:'error',
+      server:{middlewareMode:true}});
+    const [{CommitImportReview},{D1ScheduleRepository}]=await Promise.all([
+      loader.ssrLoadModule('/src/application/use-cases/commitImportReview.ts'),
+      loader.ssrLoadModule('/worker/repositories/D1ScheduleRepository.ts'),
+    ]);
+    const scheduleRepo=new D1ScheduleRepository(db);
+    let committed=false;
+    const imports={
+      async getBatch(id){return id===approvedBatch.id?approvedBatch:null;},
+      async markCommitted(id){if(id===approvedBatch.id)committed=true;},
+    };
+    await new CommitImportReview(imports,scheduleRepo).execute(approvedBatch.id);
+    if(!committed)throw Error('Local D1 import not marked committed');
+    let persisted=0,disabled=0,enabled=0;
+    for(const expected of expectedRows){
+      const owner=names.find(x=>x.sourceName===expected.person);
+      const actual=await scheduleRepo.getByDate(owner.matchedPersonId,expected.date);
+      if(!actual||actual.enabled!==(expected.state==='WORK')||
+        (actual.enabled&&(actual.start!==expected.start||actual.end!==expected.end))){
+        throw Error('Local D1 schedule row mismatch after approved OCR import');
+      }
+      persisted++;if(actual.enabled)enabled++;else disabled++;
+    }
+    const count=await db.prepare('SELECT COUNT(*) AS n FROM schedules').first();
+    if(Number(count?.n)!==expectedRows.length)throw Error('Unexpected local D1 row count');
+    return {storage:'WRANGLER_ISOLATED_LOCAL_D1',
+      generatedRasterToApprovedReview:true,
+      actualD1ScheduleRepository:true,
+      committed,persisted,enabled,disabled,
+      remoteWrites:0,liveKakaoRouteCalls:0};
+  }finally{
+    if(loader)await loader.close();
+    if(proxy)await proxy.dispose();
+    await rm(tmp,{recursive:true,force:true});
+  }
+}
+
+const approvedEvidence=all.find(x=>x.browser==='CHROMIUM')
+  ?.result.comparisons.find(x=>x.id==='A-CLEAN')?.imageToReviewToMockDb;
+if(!approvedEvidence?._approvedBatch||!approvedEvidence?._expectedRows)
+  throw Error('Missing generated raster approved-review D1 handoff');
+const localD1=await verifyEphemeralLocalD1(
+  approvedEvidence._approvedBatch,approvedEvidence._expectedRows,
+);
+// No generated names or image bytes are retained in log payloads.
+for(const result of all)for(const item of result.result.comparisons){
+  if(item.imageToReviewToMockDb){
+    delete item.imageToReviewToMockDb._approvedBatch;
+    delete item.imageToReviewToMockDb._expectedRows;
+  }
+}
+console.log('CBH_WEEKLY_LOCAL_D1_E2E='+JSON.stringify(localD1));
+
 const engines=['TESSERACT','PADDLE','H1','H2','H3'];
 const summary={};
 for(const engine of engines){
@@ -468,7 +557,7 @@ const report={
   scope:'MONDAY_SUNDAY_7_DAYS_X_START_END_BREAK_3_COLUMNS',
   oracleInjected:false,userRealImages:false,sharedDetectedRois:true,
   physicalIPhone:'PHYSICAL_IPHONE_NOT_VERIFIED',
-  all,summary,parity,
+  all,summary,parity,localD1,
 };
 console.log('CBH_WEEKLY_3COL_REAL_COMPARE='+JSON.stringify(report));
 if(all.some(x=>x.pageErrors.length))throw Error('Weekly OCR runtime errors');
