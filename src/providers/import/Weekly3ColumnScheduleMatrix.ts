@@ -238,16 +238,36 @@ export function resolveWeekly3ColumnDates(
   result.yearMonthObserved=true;
   const [year,month]=[...uniqueTitles.values()][0];
   const candidates=new Map<number,Set<number>>();
-  for(const item of [...header.tokens,...probes.flatMap(p=>p.tokens)]){
+  const dedicated=new Map<number,Set<number>>();
+  const readDay=(item:{text:string;x:number;y:number;width:number;height:number})=>{
     const day=dayLabel(item.text);
-    if(day==null)continue;
+    if(day==null)return null;
     const cx=item.x+item.width/2,cy=item.y+item.height/2;
-    if(!matrix.headerBands.some(r=>cy>=r.y&&cy<r.y+r.height))continue;
+    if(!matrix.headerBands.some(r=>cy>=r.y&&cy<r.y+r.height))
+      return null;
     const group=matrix.days.find(d=>cx>=d.bounds.x&&cx<d.bounds.x+d.bounds.width);
-    if(!group)continue;
-    const set=candidates.get(group.index)??new Set<number>();
-    set.add(day);candidates.set(group.index,set);
+    return group ? {index:group.index,day} : null;
+  };
+  // The dedicated date-cell OCR has exact physical ownership of its group.
+  // Global full-table Tesseract may put stray day-looking text in that same
+  // header. Such unscoped noise cannot veto a valid dedicated crop. Wrong
+  // or contradictory dedicated crops still fail the unique-week check.
+  for(const probe of probes.filter(p=>p.purpose==='date'&&p.confidence>=.75)){
+    for(const token of probe.tokens){
+      const parsed=readDay(token);
+      if(!parsed)continue;
+      const set=dedicated.get(parsed.index)??new Set<number>();
+      set.add(parsed.day);dedicated.set(parsed.index,set);
+    }
   }
+  // Use broad OCR only for physical date groups without dedicated evidence.
+  for(const token of header.tokens){
+    const parsed=readDay(token);
+    if(!parsed||dedicated.has(parsed.index))continue;
+    const set=candidates.get(parsed.index)??new Set<number>();
+    set.add(parsed.day);candidates.set(parsed.index,set);
+  }
+  for(const [index,days] of dedicated)candidates.set(index,days);
   const unambiguous=[...candidates.entries()]
     .filter(([,days])=>days.size===1)
     .map(([index,days])=>({index,day:[...days][0]}));
