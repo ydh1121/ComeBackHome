@@ -52,6 +52,7 @@ export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtra
           modelUrl:'/ocr/weekly/inference.onnx',
           dictionaryUrl:'/ocr/weekly/dict.json',
           wasmBase:'/ort/',
+          manifestUrl:'/ocr/weekly/integrity.json',
         }));
       let recognizer: PaddleRegionResult;
       try {
