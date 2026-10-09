@@ -182,6 +182,7 @@ concurrency:
 
 jobs:
   phase5g-local:
+    name: PRODUCT_REQUIRED_GATE / full product + shared safety local integration
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -377,11 +378,11 @@ jobs:
         run: npm run verify:local-integration
 
   ocr-real-tesseract:
-    # This existing generic corpus is 4/5/6 days (not the approved weekly
-    # 7x3 layout). Its failure is still a blocking regression because MAIN's
-    # current Tesseract runtime has not been replaced/released.
-    # Do not suppress this job while approval only covers the weekly Draft.
-    name: Legacy general 4-6d Tesseract / Chromium + WebKit (blocking)
+    # Blocking B gate only: actual weekly header/Tesseract lifecycle and
+    # weekly 7x3 physical browser safety. Generic 4/5/6-day quality moved
+    # unchanged to the separate GENERIC_OCR_DIAGNOSTIC workflow by
+    # D-CBH-20261009-OCR-GATE-C-DISPOSITION-001.
+    name: SHARED_SAFETY_GATE / weekly Tesseract + 7x3 physical / Chromium + WebKit
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Image includes browser binaries and host libraries; no slow apt install-deps.
@@ -418,20 +419,17 @@ jobs:
           fc-match -f '%{family}' 'Nanum Gothic:lang=ko' | grep -qi Nanum
           fc-match -f '%{family}\n' 'Nanum Gothic:lang=ko'
 
+      - name: Declare shared-safety gate class
+        run: |
+          echo "CBH_GATE_CLASS=SHARED_SAFETY_GATE"
+          echo "CBH_GATE_BLOCKING=true"
+          echo "CBH_GENERIC_4_5_6_DAY_SCOPE=SEPARATE_DIAGNOSTIC_WORKFLOW"
+
       - name: Verify image-derived partial grid column geometry
         run: npm run verify:ocr-partial-grid
 
       - name: Verify weekly 7x3 physical roster in Chromium and WebKit
         run: node scripts/verify-ocr-weekly-3col-physical.mjs
-
-      - name: Disclose legacy corpus relevance and unchanged blocking status
-        run: |
-          echo "CBH_LEGACY_TESSERACT_SCOPE=GENERATED_4_5_6_DAY_LAYOUTS_NOT_WEEKLY_7X3"
-          echo "CBH_LEGACY_TESSERACT_STATUS=REMAINS_BLOCKING_UNTIL_RUNTIME_DISPOSITION"
-          echo "CBH_OPTION_B_DOES_NOT_APPROVE_GENERIC_TESSERACT_OR_DEPLOYMENT"
-
-      - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
-        run: npm run verify:ocr-real-tesseract-e2e
 
   ocr-paddle-official-oracle:
     name: Official Korean Paddle vs Tesseract / generated ORACLE
@@ -470,7 +468,7 @@ jobs:
         run: timeout 1500s python -u scripts/ocr-korean-paddle-probe.py
 
   ocr-paddle-official-onnx-browser:
-    name: Official Korean ONNX / real Chromium + WebKit WASM
+    name: PRODUCT_REQUIRED_GATE / weekly 7x3 Paddle / real Chromium + WebKit WASM
     if: (github.event_name == 'pull_request' && github.event.pull_request.number == 81) || (github.event_name == 'push' && github.ref == 'refs/heads/fix/p0-production-push-key-ocr-real-e2e')
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -570,5 +568,8 @@ jobs:
         run: node scripts/verify-ocr-weekly-3col-real.mjs
         timeout-minutes: 12
 
-      - name: Complete common detected-crop Tesseract Paddle Hybrid matrix comparison
-        run: node scripts/verify-ocr-detected-engine-comparison.mjs
+      - name: Declare product-required gate class
+        run: |
+          echo "CBH_GATE_CLASS=PRODUCT_REQUIRED_GATE"
+          echo "CBH_GATE_BLOCKING=true"
+          echo "CBH_GENERIC_STRUCTUREFIRST_SCOPE=SEPARATE_DIAGNOSTIC_WORKFLOW"
