@@ -48,26 +48,51 @@ try{
  await web.listen();
  const port=web.httpServer.address()?.port;
  for(const [label,engine] of browsers){
+   const launchedAt=Date.now();
    const browser=await engine.launch({headless:true});
+   const state={phase:'LAUNCHED',pageCrashed:false,disconnected:false};
+   browser.on('disconnected',()=>{
+     state.disconnected=true;
+     console.log('CBH_ONNX_BROWSER_DISCONNECTED='+JSON.stringify({
+       browser:label,phase:state.phase,elapsedMs:Date.now()-launchedAt,
+     }));
+   });
    try{
      const page=await browser.newPage({serviceWorkers:'block'});
      const errors=[];
      page.on('pageerror',e=>errors.push(e.message.slice(0,300)));
+     page.on('crash',()=>{
+       state.pageCrashed=true;
+       console.log('CBH_ONNX_BROWSER_PAGE_CRASH='+JSON.stringify({
+         browser:label,phase:state.phase,elapsedMs:Date.now()-launchedAt,
+       }));
+     });
      page.setDefaultTimeout(120000);
      await page.goto('http://127.0.0.1:'+port+'/tools/ocr-eval/index.html',
        {waitUntil:'domcontentloaded'});
      const started=Date.now();
+     state.phase='MODEL_LOADING_AND_INFERENCE';
+     console.log('CBH_ONNX_BROWSER_START='+JSON.stringify({browser:label}));
      try{
        const metrics=await page.evaluate(async()=>{
          const {runPaddleBrowserProbe}=await import(
            '/tools/ocr-eval/paddle-onnx-browser-entry.js');
          return await runPaddleBrowserProbe();
        });
+       state.phase='COMPLETE';
        results.push({browser:label,...metrics,totalMs:Date.now()-started,
-         pageErrors:errors});
+         pageErrors:errors,lifecycle:{
+           pageCrashed:state.pageCrashed,
+           disconnectedBeforeCompletion:state.disconnected,
+         }});
      }catch(e){
+       state.phase='FAILED';
        results.push({browser:label,error:String(e).slice(0,1000),
-         totalMs:Date.now()-started,pageErrors:errors});
+         totalMs:Date.now()-started,pageErrors:errors,
+         lifecycle:{
+           pageCrashed:state.pageCrashed,
+           disconnectedBeforeCompletion:state.disconnected,
+         }});
      }
    }finally{await browser.close()}
  }
