@@ -355,8 +355,9 @@ try{
                 }else{
                   if(item.imported.enabled===false||
                     item.imported.start!==expected.start||
-                    item.imported.end!==expected.end)
-                    throw Error('Weekly E2E wrong source OCR schedule must not be committed');
+                    item.imported.end!==expected.end||
+                    item.imported.breakMinutes!==30)
+                    throw Error('Weekly E2E wrong OCR time or 30-minute break must not be committed');
                   approvedWork++;
                 }
                 await imports.setResolution(batchId,item.id,'NEW');
@@ -369,7 +370,8 @@ try{
                 const actual=await schedules.getByDate(owner.id,expected.date);
                 if(!actual||actual.enabled!==(expected.state==='WORK')||
                    (actual.enabled&&(actual.start!==expected.start||
-                                     actual.end!==expected.end)))
+                                     actual.end!==expected.end))||
+                   (actual.breakMinutes??null)!==(expected.state==='WORK'?30:null))
                   throw Error('Weekly E2E mock DB state differs from approved schedule');
                 persisted++;
               }
@@ -526,7 +528,8 @@ async function verifyEphemeralLocalD1(cases){
         if(!owner)throw Error('Missing expected person in local D1 verification');
         const row=await schedules.getByDate(owner.matchedPersonId,expected.date);
         if(!row||row.enabled!==(expected.state==='WORK')||
-          (row.enabled&&(row.start!==expected.start||row.end!==expected.end)))
+          (row.enabled&&(row.start!==expected.start||row.end!==expected.end))||
+          (row.breakMinutes??null)!==(expected.state==='WORK'?30:null))
           throw Error('Approved weekly cell does not match local D1 state');
         persisted++;
         if(row.enabled)enabled++;else disabled++;
@@ -538,7 +541,8 @@ async function verifyEphemeralLocalD1(cases){
       for(const prior of firstReadback){
         const next=await schedules.getByDate(prior.personId,prior.date);
         if(!next||next.id!==prior.id||next.enabled!==prior.enabled||
-           next.start!==prior.start||next.end!==prior.end)
+           next.start!==prior.start||next.end!==prior.end||
+           (next.breakMinutes??null)!==(prior.breakMinutes??null))
           throw Error('Repeated local D1 approval changed stored schedule identity or values');
         repeatedSaveVerifiedRows++;
       }
@@ -557,6 +561,7 @@ async function verifyEphemeralLocalD1(cases){
       generatedRasterToApprovedReview:true,actualD1ScheduleRepository:true,
       committedCases,persisted,enabled,disabled,
       repeatedSaveVerifiedCases,repeatedSaveVerifiedRows,
+      breakMinutesWorkRows:enabled,breakMinutesOffNullRows:disabled,
       remoteWrites:0,liveKakaoRouteCalls:0};
   }finally{
     if(loader)await loader.close();
