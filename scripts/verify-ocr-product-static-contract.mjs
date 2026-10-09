@@ -10,7 +10,7 @@ const selection=source('src/application/services/WorkbookImportFileSelectionActi
 const review=source('src/pages/ImportReviewPage.tsx');
 const api=source('worker/api.ts');
 const d1=source('worker/repositories/D1ScheduleRepository.ts');
-const migration=source('db/migrations/9999_weekly_ocr_break_minutes.sql');
+const migration=source('db/migrations/0008_weekly_ocr_break_minutes.sql');
 const workflow=source('.github/workflows/phase5g-local-integration.yml');
 const stage=source('scripts/stage-weekly-paddle-assets.mjs');
 assert.match(composition,/new Weekly3ColumnScheduleImageRecognizer\(/);
