@@ -205,6 +205,56 @@ try{
               pResults=(await paddle.recognizeRegions(file,shared)).results;
               pMs=Math.round(performance.now()-pt);
             }
+            // Header acceptance is separate from the Paddle shift-cell score:
+            // Actual Tesseract title/label tokens + real OCR date probes feed
+            // the same weekly parser used by product composition.
+            let headerGate=null;
+            if(spec.id==='A-CLEAN'){
+              if(!physical)throw Error('WEEKLY_HEADER_NO_PHYSICAL_GRID');
+              const dateProbes=pResults.filter(p=>
+                p.purpose==='date'||p.purpose==='context');
+              const valid=resolveWeekly3ColumnDates(physical,titleLayout,dateProbes);
+              if(!valid.uniqueWeek||valid.observedDayAnchors<2||
+                 valid.dates.some((item,i)=>
+                   item.date!=='2026-10-'+String(spec.firstDay+i).padStart(2,'0')))
+                throw Error('WEEKLY_HEADER_DATE_ANCHORS_NOT_RELIABLE');
+              const noTitle=resolveWeekly3ColumnDates(
+                physical,{...titleLayout,tokens:[]},
+                dateProbes.filter(p=>p.id!=='weekly::title::observed'));
+              if(noTitle.yearMonthObserved||noTitle.uniqueWeek||
+                 noTitle.dates.some(d=>d.date!=null))
+                throw Error('WEEKLY_HEADER_MISSING_MONTH_ACCEPTED');
+              const wrongMonth=resolveWeekly3ColumnDates(physical,titleLayout,
+                dateProbes.map(p=>p.id==='weekly::title::observed'
+                  ? {...p,text:'2025년 10월',tokens:[],confidence:1}:p));
+              if(wrongMonth.uniqueWeek||wrongMonth.dates.some(d=>d.date!=null))
+                throw Error('WEEKLY_HEADER_CONTRADICTORY_MONTH_ACCEPTED');
+              const wrongDate=resolveWeekly3ColumnDates(physical,titleLayout,
+                dateProbes.map(p=>p.id==='date::grid-cell::weekly::0'
+                  ? {...p,text:'1일',tokens:[],confidence:1}:p));
+              if(wrongDate.uniqueWeek||wrongDate.dates.some(d=>d.date!=null))
+                throw Error('WEEKLY_HEADER_CONTRADICTORY_DATE_ACCEPTED');
+              const withoutLabels=buildWeekly3ColumnPhysicalMatrix(detection,{
+                ...titleLayout,
+                tokens:titleLayout.tokens.filter(t=>
+                  !/(출근|퇴근|쉬는시간)/.test(String(t.text))),
+              });
+              if(!withoutLabels||withoutLabels.headerSource!=='GEOMETRY_REVIEW')
+                throw Error('WEEKLY_HEADER_MISSING_LABELS_NOT_EXPLICIT_REVIEW');
+              // Missing label glyphs MUST NOT grant automatic schedule approval.
+              const labelFallback=resolveWeekly3ColumnDates(
+                withoutLabels,titleLayout,dateProbes);
+              if(labelFallback.acceptedForAutomaticSave)
+                throw Error('WEEKLY_HEADER_GEOMETRY_FALLBACK_AUTO_APPROVED');
+              headerGate={
+                observedWeekDays:7,observedDayAnchors:valid.observedDayAnchors,
+                headerSource:physical.headerSource,
+                tesseractHeaderTokenCount:titleLayout.tokens.length,
+                missingTitleFailClosed:true,wrongMonthFailClosed:true,
+                wrongDayFailClosed:true,missingLabelsReviewOnly:true,
+                autoSave:false,externalImages:0,
+              };
+            }
             const tMap=new Map(tResults.map(r=>[r.id,r]));
             const pMap=new Map(pResults.map(r=>[r.id,r]));
             const architectures={};
@@ -705,7 +755,7 @@ try{
                 confidence:r?.confidence??null,crop:crop??null}];
             });
             comparisons.push({
-              nameTrace,imageToReviewToMockDb,productCompositionE2E,linkedHttpD1,paddleTrace,debug,
+              nameTrace,imageToReviewToMockDb,productCompositionE2E,linkedHttpD1,headerGate,paddleTrace,debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
@@ -872,6 +922,16 @@ if(continuous.length!==2||continuous.some(row=>
    row.offBreakNull!==2||row.rowIdsStable!==true||
    row.productionD1Writes!==0||row.liveKakaoCalls!==0))
   throw Error('REAL_APP_HTTP_D1_CONTINUOUS_E2E_FAILED');
+const headerResults=all.flatMap(run=>run.result.comparisons
+  .filter(item=>item.headerGate!=null)
+  .map(item=>({browser:run.browser,...item.headerGate})));
+if(headerResults.length!==2||headerResults.some(gate=>
+   gate.observedWeekDays!==7||gate.observedDayAnchors<2||
+   gate.missingTitleFailClosed!==true||gate.wrongMonthFailClosed!==true||
+   gate.wrongDayFailClosed!==true||gate.missingLabelsReviewOnly!==true||
+   gate.autoSave!==false))
+  throw Error('WEEKLY_TESSERACT_HEADER_PRODUCT_GATE_FAILED');
+console.log('CBH_WEEKLY_HEADER_ONLY_GATE='+JSON.stringify(headerResults));
 console.log('CBH_WEEKLY_REAL_APP_HTTP_D1_E2E='+JSON.stringify({
    browserFlows:continuous,negativeControls:negativeLocalD1,
    network:'LOOPBACK_ONLY',externalOCR:0,productionD1Writes:0,
