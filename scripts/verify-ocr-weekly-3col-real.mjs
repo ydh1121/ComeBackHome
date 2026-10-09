@@ -60,7 +60,7 @@ try{
       });
       await page.goto('http://127.0.0.1:'+port+'/tools/ocr-eval/index.html',
         {waitUntil:'domcontentloaded'});
-      const result=await page.evaluate(async({specs,immutableImageBytes})=>{
+      const result=await page.evaluate(async({specs,immutableImageBytes,focusedRealHttpD1})=>{
         const [
           {BrowserScheduleTableStructureDetector},
           {TesseractScheduleImageTextExtractor,TesseractJsWorkerFactory,BrowserScheduleOcrPreprocessor},
@@ -770,7 +770,7 @@ try{
         }finally{await paddle.release()}
         return {model:paddle.metadata,generatedRasters,comparisons,
           browserHeapBytes:performance.memory?.usedJSHeapSize??null};
-      },{specs,immutableImageBytes});
+      },{specs,immutableImageBytes,focusedRealHttpD1});
       if(!immutableImageBytes){
         immutableImageBytes=Object.fromEntries(result.generatedRasters.map(
           x=>[x.id,{base64:x.base64,type:x.type,bytes:x.bytes}]));
