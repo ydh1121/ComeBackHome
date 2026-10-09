@@ -166,8 +166,20 @@ export class BrowserImportRepository implements ImportRepository {
     if (!enabled) {
       item.imported.start = null;
       item.imported.end = null;
+      item.imported.breakMinutes = null;
     }
     // Switching work/off reopens explicit approval, never silently persists.
+    item.resolution = null;
+    this.persist();
+  }
+
+  async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
+    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
+      throw new Error('INVALID_BREAK_MINUTES');
+    }
+    const item = this.requireReviewItem(batchId, reviewItemId);
+    if (item.imported.breakMinutes === minutes) return;
+    item.imported.breakMinutes = minutes;
     item.resolution = null;
     this.persist();
   }
