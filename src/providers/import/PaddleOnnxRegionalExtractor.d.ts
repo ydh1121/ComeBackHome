@@ -5,6 +5,6 @@ export interface PaddleRegionResult {
   release():Promise<void>;
 }
 export function createPaddleDetectedRegionRecognizer(options?:{
-  modelUrl?:string;dictionaryUrl?:string;wasmBase?:string;
+  modelUrl?:string;dictionaryUrl?:string;wasmBase?:string;manifestUrl?:string;
 }):Promise<PaddleRegionResult>;
 export function runPaddleBrowserProbe():Promise<unknown>;
