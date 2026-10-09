@@ -255,8 +255,10 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
           end: candidate.end,
         },
         recognitionState: candidate.recognitionState,
-        resolution: exactDuplicate ? 'SKIP' :
-          candidate.personId && !weeklyRequiresPerCellApproval ? 'NEW' : null,
+        // Weekly OCR requires an explicit decision even when a generated
+        // OCR candidate happens to equal the already-stored schedule.
+        resolution: weeklyRequiresPerCellApproval ? null :
+          exactDuplicate ? 'SKIP' : candidate.personId ? 'NEW' : null,
       });
     }
 
