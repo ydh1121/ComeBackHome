@@ -562,8 +562,13 @@ jobs:
       - name: Verify built product bundle and pinned same-origin runtime assets
         run: node scripts/verify-ocr-built-assets.mjs
 
+      - name: Verify actual app weekly Paddle through loopback HTTP and isolated D1 in Chromium and WebKit
+        run: CBH_OCR_REAL_HTTP_D1_FOCUSED=1 node scripts/verify-ocr-weekly-3col-real.mjs
+        timeout-minutes: 8
+
       - name: Compare real weekly 7x3 Tesseract and Paddle on identical detected crops
         run: node scripts/verify-ocr-weekly-3col-real.mjs
+        timeout-minutes: 12
 
       - name: Complete common detected-crop Tesseract Paddle Hybrid matrix comparison
         run: node scripts/verify-ocr-detected-engine-comparison.mjs
