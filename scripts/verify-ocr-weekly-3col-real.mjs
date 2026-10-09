@@ -236,6 +236,7 @@ try{
               ]):new Map();
               let cellCorrect=0,reviewableCellCorrect=0,
                 autoStateCount=0,autoStateCorrect=0,falseWork=0,
+                confirmedOffPredicted=0,
                 workTruth=0,workCorrect=0,workPredicted=0,
                 reviewRequiredTotal=0,reviewRequiredSurfaced=0,
                 offCandidateCount=0,offCandidateCorrect=0,offCandidateFalse=0,offTruth=0;
@@ -255,6 +256,8 @@ try{
                   if(cell.state==='WORK')workCorrect++;
                 }
                 if(observed==='WORK'&&cell.state==='OFF')falseWork++;
+                // Even a correctly guessed OFF is prohibited before consent.
+                if(observed==='OFF')confirmedOffPredicted++;
                 // The user must be able to review every unresolved / disputed
                 // state. Missing cells and false WORK-on-OFF are review-required,
                 // but may NOT be counted as visible unless in reviewCandidates.
@@ -281,7 +284,7 @@ try{
                 dateCorrect,dateTotal:7,startCorrect,startTotal,
                 endCorrect,endTotal,breakCorrect,breakTotal,
                 cellCorrect,cellTotal:truth.length,reviewableCellCorrect,
-                autoStateCount,autoStateCorrect,falseWork,
+                autoStateCount,autoStateCorrect,falseWork,confirmedOffPredicted,
                 workTruth,workCorrect,workPredicted,
                 reviewRequiredTotal,reviewRequiredSurfaced,
                 offCandidateCount,offCandidateCorrect,offCandidateFalse,offTruth,
@@ -581,7 +584,7 @@ for(const engine of engines){
     startCorrect:0,startTotal:0,endCorrect:0,endTotal:0,
     breakCorrect:0,breakTotal:0,cellCorrect:0,cellTotal:0,
     reviewableCellCorrect:0,autoStateCount:0,autoStateCorrect:0,falseWork:0,
-    workTruth:0,workCorrect:0,workPredicted:0,
+    confirmedOffPredicted:0,workTruth:0,workCorrect:0,workPredicted:0,
     reviewRequiredTotal:0,reviewRequiredSurfaced:0,
     offCandidateCount:0,offCandidateCorrect:0,
     offCandidateFalse:0,offTruth:0,
@@ -609,7 +612,7 @@ for(const engine of engines){
     workPrecision:ratio(sums.workCorrect,sums.workPredicted),
     workRecall:ratio(sums.workCorrect,sums.workTruth),
     reviewRequiredCoverage:ratio(sums.reviewRequiredSurfaced,sums.reviewRequiredTotal),
-    falseWork:sums.falseWork,
+    falseWork:sums.falseWork,confirmedOffPredicted:sums.confirmedOffPredicted,
     offCandidatePrecision:ratio(sums.offCandidateCorrect,sums.offCandidateCount),
     offCandidateRecall:ratio(sums.offCandidateCorrect,sums.offTruth),
     offCandidateFalse:sums.offCandidateFalse,
@@ -691,7 +694,7 @@ const evaluateWeeklyOptionB=(q,browserParity,engine)=>{
     workRecall:q.workRecall!=null&&q.workRecall>=.98,
     offCandidatePrecision:q.offCandidatePrecision!=null&&q.offCandidatePrecision>=.98,
     offCandidateRecall:q.offCandidateRecall!=null&&q.offCandidateRecall>=.98,
-    falseOff:q.falseOff===0,
+    falseOff:q.falseOff===0 && q.confirmedOffPredicted===0,
     uncertainReview:q.reviewRequiredCoverage===1 &&
       q.totals.reviewRequiredTotal>0,
     // Every successfully classified image still has to reconstruct its matrix.
@@ -712,6 +715,7 @@ const weakened={
   missingWork:{...good,workRecall:0},
   missingOff:{...good,offCandidateRecall:0},
   falseConfirmedOff:{...good,falseOff:1},
+  evenTrueAutoOff:{...good,confirmedOffPredicted:1},
   lostReview:{...good,reviewRequiredCoverage:0},
   noPerson:{...good,person:null},
   conditionalOnly:{...good,workPrecision:1,workRecall:0},
@@ -752,6 +756,7 @@ const threeLayerMetrics={
         allCellStrictExactAccuracy:q.cell,
         falselyPredictedWork:q.falseWork,
         falselyConfirmedOff:q.falseOff,
+        prohibitedConfirmedOffPredictions:q.confirmedOffPredicted,
         persistedWithoutReview:false,
       },
       contract:{
