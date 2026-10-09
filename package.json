@@ -89,7 +89,8 @@
     "tesseract.js-core": "7.0.0",
     "@tesseract.js-data/kor": "1.0.0",
     "@tesseract.js-data/eng": "1.0.0",
-    "web-push": "3.6.7"
+    "web-push": "3.6.7",
+    "onnxruntime-web": "1.23.2"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
