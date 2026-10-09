@@ -73,7 +73,10 @@ export class HttpScheduleRepository implements ScheduleRepository {
     if (!entries.length) return;
     const personId = entries[0].personId;
     if (entries.some((entry) => entry.personId !== personId)) {
-      throw new Error('Schedule batch must belong to one person.');
+      // ONE D1.batch transaction on the server. Splitting this into one
+      // request per employee would allow partial weekly roster imports.
+      await this.client.put('/schedules/import', { schedules: entries });
+      return;
     }
     await this.client.put(
       '/people/' + encodeURIComponent(personId) + '/schedules',
