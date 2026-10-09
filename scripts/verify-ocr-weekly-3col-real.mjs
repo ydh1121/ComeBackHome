@@ -2,13 +2,21 @@ import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {chromium,webkit} from 'playwright';
+import {startWeeklyRealHttpD1} from './ocr-weekly-real-http-d1-harness.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
+let realLocalHttpD1=null;
+let negativeLocalD1=null;
 const server=await createServer({
   root,logLevel:'error',server:{host:'127.0.0.1',port:0},
   plugins:[{name:'ocr-weekly-runtime',enforce:'pre',configureServer(vite){
     vite.middlewares.use((request,response,next)=>{
       const u=new URL(request.url??'/','http://127.0.0.1');
+      if(u.pathname==='/api'||u.pathname.startsWith('/api/')){
+        if(!realLocalHttpD1){response.statusCode=503;response.end('LOCAL_D1_NOT_READY');return}
+        void realLocalHttpD1.proxy(request,response);
+        return;
+      }
       if(!u.pathname.startsWith('/ort/'))return next();
       const name=u.pathname.slice(5);
       if(!/^ort-wasm-[a-z0-9.-]+\.(?:mjs|wasm)$/.test(name)){
@@ -35,6 +43,7 @@ const specs=[
 const all=[];
 let immutableImageBytes=null;
 try{
+  realLocalHttpD1=await startWeeklyRealHttpD1();
   await server.listen();
   const port=server.httpServer.address()?.port;
   for(const [browserName,engine] of [['CHROMIUM',chromium],['WEBKIT',webkit]]){
@@ -626,7 +635,17 @@ try{
       all.push({browser:browserName,pageErrors,result});
     }finally{await browser.close();}
   }
-}finally{await server.close();}
+  negativeLocalD1=await realLocalHttpD1.negativeChecks();
+}finally{
+  if(realLocalHttpD1){
+    // Negative HTTP tests are called here while the local Worker is alive.
+    // Their evidence survives shutdown; all SQLite files are then deleted.
+    if(!negativeLocalD1)throw Error('REAL_HTTP_D1_NEGATIVE_CONTROLS_NOT_RUN');
+  }
+  await server.close();
+  if(realLocalHttpD1)await realLocalHttpD1.close();
+}
+console.log('CBH_WEEKLY_REAL_HTTP_D1_NEGATIVE_CONTROLS='+JSON.stringify(negativeLocalD1));
 
 async function verifyEphemeralLocalD1(cases){
   const [{execFile},{promisify},{mkdtemp,rm},{tmpdir},{join,resolve},{getPlatformProxy}]=
