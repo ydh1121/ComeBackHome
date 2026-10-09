@@ -216,6 +216,11 @@ try {
     state.schedules = state.schedules.filter((entry) =>
       !['2099-04-05', '2099-04-06'].includes(entry.date)
     );
+    // Already-existing exact WORK must also be reviewed in this OCR format.
+    state.schedules.push({
+      id:'weekly-existing-identical',personId:'mock-person-1',
+      date:'2099-04-05',enabled:true,start:'09:30',end:'23:30',
+    });
   });
   const weeklyImports = new reposModule.MockImportRepository(weeklyStore);
   const weeklyPeople = new reposModule.MockPersonRepository(weeklyStore);
@@ -285,6 +290,8 @@ try {
       'OFF can be saved only after user explicitly toggles and approves');
     expect(work?.enabled !== false && work?.start === '09:30' && work?.end === '23:30',
       'approved weekly decimal-time schedule did not save correctly');
+    expect(work?.id === 'weekly-existing-identical',
+      'approved identical weekly OCR row must retain existing schedule identity');
   }
 } finally {
   await vite.close();
