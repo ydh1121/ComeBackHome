@@ -426,7 +426,7 @@ try{
               }));
               const apiStored=new Map();
               const fetchTrace={personReads:0,scheduleReads:0,writes:0,
-                forwardedAssetFetches:0,unexpectedApiCalls:0};
+                atomicBatches:0,forwardedAssetFetches:0,unexpectedApiCalls:0};
               globalThis.fetch=async(input,init={})=>{
                 const raw=typeof input==='string'?input:input.url;
                 const url=new URL(raw,location.origin);
@@ -437,6 +437,26 @@ try{
                 if(url.pathname==='/api/people'&&method==='GET'){
                   fetchTrace.personReads++;
                   return respond({people:sourcePeople});
+                }
+                if(url.pathname==='/api/schedules/import'&&method==='PUT'){
+                  const body=JSON.parse(init.body);
+                  const rows=body.schedules;
+                  if(!Array.isArray(rows)||rows.length!==14||
+                     new Set(rows.map(x=>x.personId)).size!==2)
+                    throw Error('Expected two-person atomic import payload');
+                  const pending=new Map(apiStored);
+                  for(const row of rows){
+                    if(!sourcePeople.some(person=>person.id===row.personId))
+                      throw Error('Atomic import references unknown person');
+                    const key=row.personId+'|'+row.date;
+                    if(pending.has(key))throw Error('Unexpected duplicate person/date');
+                    pending.set(key,structuredClone(row));
+                  }
+                  apiStored.clear();
+                  for(const [key,value] of pending)apiStored.set(key,value);
+                  fetchTrace.writes+=rows.length;
+                  fetchTrace.atomicBatches++;
+                  return respond({schedules:rows});
                 }
                 const match=/^[/]api[/]people[/]([^/]+)[/]schedules(?:[/]([^/]+))?$/.exec(url.pathname);
                 if(match){
@@ -506,8 +526,9 @@ try{
                   await app.actions.importReview.setResolution(actualBatchId,item.id,'NEW');
                 }
                 await app.actions.commitImportReview.execute(actualBatchId);
-                if(apiStored.size!==truth.length||fetchTrace.writes!==truth.length)
-                  throw Error('Product app HTTP schedule write count mismatch');
+                if(apiStored.size!==truth.length||fetchTrace.writes!==truth.length||
+                   fetchTrace.atomicBatches!==1)
+                  throw Error('Product app multi-person write must be one atomic HTTP request');
                 for(const expected of truth){
                   const person=sourcePeople.find(x=>x.name===expected.person);
                   const actual=apiStored.get(person?.id+'|'+expected.date);
@@ -733,7 +754,8 @@ if(actualAppFlows.length!==2||
      item.personCount!==2||item.cells!==14||
      item.approvedWork!==12||item.approvedOff!==2||
      item.storedBreakMinutes30!==12||item.written!==14||
-     item.productionRemoteWrites!==0||item.unexpectedApiCalls!==0))
+     item.productionRemoteWrites!==0||item.unexpectedApiCalls!==0||
+     item.atomicBatches!==1))
   throw Error('Actual app composition image upload and approval E2E failed');
 console.log('CBH_WEEKLY_ACTUAL_PRODUCT_COMPOSITION_E2E='+JSON.stringify(actualAppFlows));
 
