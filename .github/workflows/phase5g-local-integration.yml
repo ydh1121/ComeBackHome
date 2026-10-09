@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - "feat/**"
+      # Existing Draft PR #81 execution branch only; this workflow does
+      # not deploy, merge or mutate production D1.
+      - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
       - ".github/workflows/phase5g-local-integration.yml"
       - "wrangler.local.jsonc"
@@ -432,7 +435,7 @@ jobs:
 
   ocr-paddle-official-oracle:
     name: Official Korean Paddle vs Tesseract / generated ORACLE
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 81
+    if: (github.event_name == 'pull_request' && github.event.pull_request.number == 81) || (github.event_name == 'push' && github.ref == 'refs/heads/fix/p0-production-push-key-ocr-real-e2e')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
