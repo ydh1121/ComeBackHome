@@ -215,7 +215,12 @@ export class MockImportRepository implements ImportRepository {
   async setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void> {
     this.store.mutate((state) => {
       const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
-      if (item) item.imported[field] = value;
+      if (!item || item.imported[field] === value) return;
+      item.imported[field] = value;
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      if (batch?.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
+        item.resolution = null;
+      }
     });
   }
   async markCommitted(batchId: EntityId): Promise<void> {

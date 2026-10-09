@@ -178,9 +178,17 @@ export class BrowserImportRepository implements ImportRepository {
     field: 'start' | 'end',
     value: string | null,
   ): Promise<void> {
+    const batch = this.requireBatch(batchId);
     const item = this.requireReviewItem(batchId, reviewItemId);
-    item.imported[field] = value;
-    this.persist();
+    if (item.imported[field] !== value) {
+      item.imported[field] = value;
+      // Weekly image OCR requires fresh approval after *any* time edit.
+      // Existing workbook review semantics are left unchanged.
+      if (batch.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
+        item.resolution = null;
+      }
+      this.persist();
+    }
   }
 
   async markCommitted(batchId: EntityId): Promise<void> {
