@@ -10,6 +10,8 @@ const selection=source('src/application/services/WorkbookImportFileSelectionActi
 const review=source('src/pages/ImportReviewPage.tsx');
 const api=source('worker/api.ts');
 const d1=source('worker/repositories/D1ScheduleRepository.ts');
+const httpSchedules=source('src/providers/http/HttpRepositories.ts');
+const commitReview=source('src/application/use-cases/commitImportReview.ts');
 const migration=source('db/migrations/0008_weekly_ocr_break_minutes.sql');
 const workflow=source('.github/workflows/phase5g-local-integration.yml');
 const stage=source('scripts/stage-weekly-paddle-assets.mjs');
@@ -29,6 +31,16 @@ assert.match(review,/setImportedBreakMinutes/);
 assert.match(api,/optionalScheduleBreakMinutes/);
 assert.match(d1,/break_minutes/);
 assert.match(d1,/WHEN excluded.enabled = 0 THEN NULL/);
+assert.match(httpSchedules,/this\.client\.put\('\/schedules\/import'/,
+  'Multi-person client must send one atomic import request');
+assert.match(commitReview,/await this\.schedules\.upsertMany\(entries\)/,
+  'Reviewed people must remain one D1 batch');
+assert.match(api,/segments\[1\] === 'schedules'/,
+  'Server must expose same-origin atomic import route');
+assert.match(api,/Duplicate person\/date in import batch/,
+  'Atomic import must reject ambiguous duplicate person/date');
+assert.match(api,/Import references unknown person/,
+  'Atomic import must reject unresolved people');
 assert.match(migration,/ADD COLUMN break_minutes INTEGER/);
 assert.match(workflow,/Stage verified Korean ONNX, dictionary and WASM/);
 assert.match(workflow,/legacy generic|Legacy general 4-6d/i);
