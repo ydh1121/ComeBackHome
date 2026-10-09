@@ -61,7 +61,7 @@ export class Weekly3ColumnScheduleImageRecognizer implements ImageScheduleRecogn
     const recognized = await this.regionExtractor.extractRegions(file, regions, async (percent) => {
       await onProgress?.(Math.min(92, 49 + Math.round(percent * 0.43)));
     });
-    const dates = resolveWeekly3ColumnDates(matrix, title, recognized.filter(x => x.purpose === 'date'));
+    const dates = resolveWeekly3ColumnDates(matrix, title, recognized.filter(x => x.purpose === 'date' || x.purpose === 'context'));
     const names = typeof this.knownPersonNames === 'function'
       ? await this.knownPersonNames()
       : this.knownPersonNames;
