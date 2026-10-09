@@ -34,7 +34,17 @@ if (!runtime.includes('importMatch: ImportMatchActions')) failures.push('match a
 if (!runtime.includes('importReview: ImportReviewActions')) failures.push('review action missing');
 if (!composition.includes('new WorkbookImportFileSelectionAction')) failures.push('real workbook file action not composed');
 if (!composition.includes('new ReadExcelWorkbookParser')) failures.push('real workbook parser not composed');
-if (!composition.includes('new StructureFirstScheduleImageRecognizer')) failures.push('structure-first production image recognizer not composed');
+// The real IMAGE path intentionally uses the current workplace 7x3 Paddle
+// adapter. StructureFirst is a legacy general OCR path, not a valid product
+// requirement. Keep independent XLSX, people, review, and commit guards below.
+if (!composition.includes('new Weekly3ColumnScheduleImageRecognizer'))
+  failures.push('weekly 7x3 production image recognizer not composed');
+if (!composition.includes('new PaddleWeeklyRegionalTextExtractor'))
+  failures.push('real Paddle regional OCR adapter not composed');
+if (!composition.includes('new TesseractScheduleImageTextExtractor'))
+  failures.push('Tesseract header/geometry recognizer not composed');
+if (composition.includes('new StructureFirstScheduleImageRecognizer'))
+  failures.push('legacy structure-first image recognizer is still in product composition');
 if (!composition.includes('new BrowserScheduleTableStructureDetector')) failures.push('pixel table structure detector not composed');
 if (!composition.includes('new TesseractScheduleImageTextExtractor')) failures.push('production OCR extractor not composed');
 if (!composition.includes('new BrowserImportRepository')) failures.push('production import repository not composed');
@@ -48,6 +58,18 @@ if (!commit.includes('ignoredDetectedIds') || !commit.includes('includedItems'))
 if (!review.includes('visibleReviewItems') || !review.includes('ignoredDetectedIds')) failures.push('ignored roster people must be excluded from review');
 if (!commit.includes("item.resolution === 'KEEP'") || !commit.includes("item.resolution === 'SKIP'")) failures.push('KEEP/SKIP commit rule missing');
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
+if (!composition.includes('new ReadExcelWorkbookParser()'))
+  failures.push('XLSX import cannot be removed by Paddle composition');
+if (!commit.includes('Import contains unreviewed schedules.'))
+  failures.push('unreviewed image cell must never reach schedule storage');
+if (!commit.includes('Import contains unreviewed break minutes.'))
+  failures.push('unreadable non-empty break must require manual correction');
+if (!review.includes('weekly3ColumnReview || !exactDuplicate(item)'))
+  failures.push('weekly OCR rows may not be hidden as duplicates before review');
+if (!review.includes('setImportedBreakMinutes'))
+  failures.push('weekly break correction action missing');
+if (!browserImports.includes('item.resolution = null'))
+  failures.push('review edits must revoke previous approval');
 if (!css.includes('.import-page .upload')) failures.push('upload style missing');
 if (!css.includes('.import-page .review-choice')) failures.push('review style missing');
 if (!root.includes('import-file-diagnostic')) failures.push('failed OCR diagnostic rendering missing');
