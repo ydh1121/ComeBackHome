@@ -40,10 +40,12 @@ export async function startWeeklyRealHttpD1(){
     return {status:res.status,ok:res.ok,body:await res.json().catch(()=>null)};
   };
   try{
+    console.info('CBH_REAL_HTTP_D1_TRACE: APPLY_LOCAL_MIGRATIONS');
     await run(wrangler,['d1','migrations','apply','come-back-home-db','--local',
       '--config',config,'--persist-to',tmp],{
         cwd:root,env:{...process.env,CI:'true'},maxBuffer:5*1024*1024,
       });
+    console.info('CBH_REAL_HTTP_D1_TRACE: LOCAL_MIGRATIONS_COMPLETE');
     const port=await freePort();
     origin='http://127.0.0.1:'+port;
     processHandle=spawn(wrangler,[
@@ -53,13 +55,25 @@ export async function startWeeklyRealHttpD1(){
     ],{cwd:root,env:{...process.env,CI:'true'},stdio:['ignore','pipe','pipe'],shell:false});
     processHandle.stdout.on('data',v=>{output+=v.toString();output=output.slice(-10000)});
     processHandle.stderr.on('data',v=>{output+=v.toString();output=output.slice(-10000)});
-    let ready=false;
-    for(let i=0;i<120;i++){
-      if(processHandle.exitCode!==null)throw Error('Local Wrangler exited: '+output);
-      try{if((await json('/api/health')).body?.ok===true){ready=true;break}}catch{}
+    console.info('CBH_REAL_HTTP_D1_TRACE: STARTED_LOOPBACK_WORKER');
+    let ready=false,lastHealthError=null;
+    const deadline=Date.now()+45_000;
+    while(Date.now()<deadline){
+      if(processHandle.exitCode!==null)
+        throw Error('Local Wrangler exited: '+output);
+      try{
+        const health=await fetch(origin+'/api/health',{
+          signal:AbortSignal.timeout(2000),redirect:'error',
+        });
+        const payload=await health.json().catch(()=>null);
+        if(health.ok&&payload?.ok===true){ready=true;break}
+        lastHealthError=JSON.stringify({status:health.status,body:payload});
+      }catch(error){lastHealthError=String(error)}
       await nap(250);
     }
-    if(!ready)throw Error('Local Wrangler health failed: '+output);
+    if(!ready)throw Error('Local Wrangler health failed after 45s: '+
+      String(lastHealthError)+' '+output);
+    console.info('CBH_REAL_HTTP_D1_TRACE: WORKER_HEALTH_PASS');
     const people=[];
     for(const name of ['강하현','정지윤']){
       const r=await json('/api/people',{method:'POST',
@@ -68,6 +82,7 @@ export async function startWeeklyRealHttpD1(){
       if(!r.ok||typeof r.body?.person?.id!=='string')
         throw Error('Unable to seed local D1 person '+name+': '+JSON.stringify(r));
       people.push(r.body.person);stats.postPeople++;
+      console.info('CBH_REAL_HTTP_D1_TRACE: SEEDED_PERSON_'+stats.postPeople);
     }
     return{
       origin,people,stats,json,close,
@@ -76,7 +91,10 @@ export async function startWeeklyRealHttpD1(){
       async proxy(request,response){
         stats.proxiedApi++;
         const path=new URL(request.url??'/','http://localhost').pathname;
-        if(path==='/api/schedules/import'&&request.method==='PUT')stats.atomicImports++;
+        if(path==='/api/schedules/import'&&request.method==='PUT'){
+          stats.atomicImports++;
+          console.info('CBH_REAL_HTTP_D1_TRACE: HTTP_ATOMIC_REQUEST_'+stats.atomicImports);
+        }
         try{
           const chunks=[];
           for await(const chunk of request)chunks.push(Buffer.from(chunk));
@@ -103,6 +121,7 @@ export async function startWeeklyRealHttpD1(){
         return result.sort((a,b)=>(a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
       },
       async negativeChecks(){
+        console.info('CBH_REAL_HTTP_D1_TRACE: NEGATIVE_GATES_BEGIN');
         const baseline=await this.snapshot();
         if(baseline.length!==14)throw Error('Expected exactly 14 persisted local HTTP/D1 rows');
         const create=(personId,date,id='negative-'+date)=>({
@@ -144,6 +163,7 @@ export async function startWeeklyRealHttpD1(){
         const afterSingle=await this.snapshot();
         if(JSON.stringify(afterSingle)!==JSON.stringify(baseline))
           throw Error('Single-date PUT changed already approved row');
+        console.info('CBH_REAL_HTTP_D1_TRACE: NEGATIVE_GATES_PASS');
         return {negativeCases:outcomes,atomicSqlRollbackVerified:true,
           singleDateGetPutBackwardCompatible:true,persisted:baseline.length,
           remoteWrites:0};
