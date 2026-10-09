@@ -371,7 +371,11 @@ jobs:
         run: npm run verify:local-integration
 
   ocr-real-tesseract:
-    name: Real OCR raster / Chromium + WebKit
+    # This existing generic corpus is 4/5/6 days (not the approved weekly
+    # 7x3 layout). Its failure is still a blocking regression because MAIN's
+    # current Tesseract runtime has not been replaced/released.
+    # Do not suppress this job while approval only covers the weekly Draft.
+    name: Legacy general 4-6d Tesseract / Chromium + WebKit (blocking)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Image includes browser binaries and host libraries; no slow apt install-deps.
@@ -413,6 +417,12 @@ jobs:
 
       - name: Verify weekly 7x3 physical roster in Chromium and WebKit
         run: node scripts/verify-ocr-weekly-3col-physical.mjs
+
+      - name: Disclose legacy corpus relevance and unchanged blocking status
+        run: |
+          echo "CBH_LEGACY_TESSERACT_SCOPE=GENERATED_4_5_6_DAY_LAYOUTS_NOT_WEEKLY_7X3"
+          echo "CBH_LEGACY_TESSERACT_STATUS=REMAINS_BLOCKING_UNTIL_RUNTIME_DISPOSITION"
+          echo "CBH_OPTION_B_DOES_NOT_APPROVE_GENERIC_TESSERACT_OR_DEPLOYMENT"
 
       - name: Execute real glyph raster and Tesseract E2E in Chromium and WebKit
         run: npm run verify:ocr-real-tesseract-e2e
