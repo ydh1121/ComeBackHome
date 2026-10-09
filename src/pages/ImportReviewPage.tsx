@@ -41,13 +41,14 @@ export function ImportReviewPage() {
         item.imported.start != null &&
         item.imported.end != null &&
         item.existing.start === item.imported.start &&
-        item.existing.end === item.imported.end
+        item.existing.end === item.imported.end &&
+        (!weekly3ColumnReview || (item.existing.breakMinutes ?? null) === (item.imported.breakMinutes ?? null))
       )
     );
   const visibleReviewItems = batch.reviewItems.filter(
     (item) =>
       !ignoredDetectedIds.has(item.detectedPersonId) &&
-      !exactDuplicate(item),
+      (weekly3ColumnReview || !exactDuplicate(item)),
   );
   const allReviewed = visibleReviewItems.every((item) =>
     item.personId != null &&
@@ -136,6 +137,29 @@ export function ImportReviewPage() {
                       }
                     />
                   </div>
+                ) : null}
+
+                {weekly3ColumnReview && item.imported.enabled !== false ? (
+                  <label className="review-break-editor" data-field="breakMinutes">
+                    쉬는시간 (분)
+                    <input
+                      type="number"
+                      min={0}
+                      max={720}
+                      step={1}
+                      inputMode="numeric"
+                      aria-label="쉬는시간 분 단위 수정"
+                      value={item.imported.breakMinutes ?? ''}
+                      placeholder="확인 필요"
+                      onChange={(event) => {
+                        const raw = event.currentTarget.value;
+                        if (raw !== '' && (!/^\\d+$/.test(raw) || Number(raw) > 720)) return;
+                        void services.actions.importReview.setImportedBreakMinutes(
+                          batch.id, item.id, raw === '' ? null : Number(raw),
+                        );
+                      }}
+                    />
+                  </label>
                 ) : null}
 
                 <div className="review-choice-list">
