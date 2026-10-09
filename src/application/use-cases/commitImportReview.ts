@@ -36,6 +36,15 @@ export class CommitImportReview implements CommitImportReviewAction {
     );
     if (incomplete.length) throw new Error('Import contains incomplete schedule times.');
 
+    // A non-empty but unreadable break crop is classified INCOMPLETE, not
+    // silently dropped. Editing minutes revokes prior approval in both repos.
+    const unresolvedRest = includedItems.some(item =>
+      item.resolution === 'NEW' && item.imported.enabled !== false &&
+      item.recognitionState === 'INCOMPLETE' &&
+      item.imported.breakMinutes == null,
+    );
+    if (unresolvedRest) throw new Error('Import contains unreviewed break minutes.');
+
     const entries = [];
     for (const item of includedItems) {
       if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
