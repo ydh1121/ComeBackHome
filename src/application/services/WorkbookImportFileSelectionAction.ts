@@ -136,7 +136,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       start: string | null;
       end: string | null;
       confidence: number;
-      recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
+      recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
     }>();
     let duplicateCandidate = false;
 
@@ -147,7 +147,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       end: string | null;
       confidence: number;
       enabled?: boolean;
-      recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
+      recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
     }) => {
       const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
       if (!detected) return;
@@ -176,6 +176,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         WORK: 4,
         INCOMPLETE: 3,
         UNREADABLE: 2,
+        OFF_CANDIDATE: 2,
         OFF: 1,
       } as const;
       const existingPriority = statePriority[existing.recognitionState];

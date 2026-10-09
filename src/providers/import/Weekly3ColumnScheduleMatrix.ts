@@ -318,7 +318,9 @@ export function interpretWeekly3Column(
   const personNames=matrix.rows.map(row=>{
     const raw=String(byId.get('weekly-person::'+row.index)?.text??'')
       .normalize('NFKC').replace(/\s+/g,'');
-    return /^[가-힣]{2,5}$/.test(raw)&&known.has(raw)?raw:null;
+    // Preserve every visible employee row. DB identity is always subject
+    // to explicit mapping; never silently discard unknown OCR person names.
+    return /^[가-힣]{2,5}$/.test(raw)?raw:'인식불가 직원 '+(row.index+1);
   });
   const blocked=matrix.days.some(day=>!dates.dates[day.index]?.date);
   let reviewCount=0,offReviewCount=0,unreadableCount=0,breakReviewCount=0;
@@ -362,7 +364,7 @@ export function interpretWeekly3Column(
     // Color-only blank detection never produces a committed OFF row.
     if(threeEmpty){offReviewCount++;review.push({
       sourcePersonName:sourceName,date,start:null,end:null,sourceRow:row.index+1,
-      confidence:.1,recognitionState:'UNREADABLE',enabled:true,
+      confidence:.1,recognitionState:'OFF_CANDIDATE',enabled:true,
     });reviewCount++;continue;}
     const valid=start!=null&&end!=null;
     const breakHasContent=pixels.break!=='EMPTY'||!!fields.break?.text.trim();
@@ -386,11 +388,11 @@ export function interpretWeekly3Column(
         recognitionState:valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
   }
-  const detectedPeople=personNames.filter((x):x is string=>!!x)
+  const detectedPeople=personNames
     .filter((x,i,all)=>all.indexOf(x)===i)
-    .map(name=>({sourceName:name,confidence:.9}));
-  const blockedReason=blocked?'WEEKLY_DATE_REVIEW_REQUIRED':
-    detectedPeople.length!==matrix.rows.length?'WEEKLY_PERSON_DB_MATCH_REVIEW_REQUIRED':null;
+    .map(name=>({sourceName:name,confidence:known.has(name)?0.9:0.2}));
+  // Unmatched names remain in review, not fabricated DB people.
+  const blockedReason=blocked?'WEEKLY_DATE_REVIEW_REQUIRED':null;
   const parsed=blockedReason?null:{
     detectedPeople,scheduleCandidates:schedule,reviewCandidates:review,
     structure:{

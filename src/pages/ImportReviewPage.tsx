@@ -91,6 +91,8 @@ export function ImportReviewPage() {
                   <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()}>
                     {item.recognitionState === 'OFF'
                       ? '휴무로 인식'
+                      : item.recognitionState === 'OFF_CANDIDATE'
+                        ? '휴무 후보 — 세 칸 모두 비어 있지만 직접 확인 전까지 확정되지 않음'
                       : item.recognitionState === 'UNREADABLE'
                         ? weekly3ColumnReview && item.imported.start == null && item.imported.end == null
                           ? '빈칸·휴무 후보 — 근무인지 휴무인지 직접 확인 필요'
@@ -101,7 +103,8 @@ export function ImportReviewPage() {
                   </div>
                 ) : null}
 
-                {weekly3ColumnReview && item.recognitionState === 'UNREADABLE' ? (
+                {weekly3ColumnReview && (item.recognitionState === 'UNREADABLE' ||
+                  item.recognitionState === 'OFF_CANDIDATE') ? (
                   <button
                     type="button"
                     className="review-choice import-toggle"
@@ -119,7 +122,7 @@ export function ImportReviewPage() {
                 ) : null}
 
                 {item.imported.enabled !== false && !importedComplete ? (
-                  <div className="review-time-editor" data-state={item.recognitionState === 'UNREADABLE' ? 'UNREADABLE_TIME' : 'INCOMPLETE_TIME'}>
+                  <div className="review-time-editor" data-state={item.recognitionState === 'UNREADABLE' || item.recognitionState === 'OFF_CANDIDATE' ? 'UNREADABLE_TIME' : 'INCOMPLETE_TIME'}>
                     <TimeRangeWheelPicker
                       start={item.imported.start}
                       end={item.imported.end}
