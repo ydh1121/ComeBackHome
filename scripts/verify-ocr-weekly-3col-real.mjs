@@ -232,6 +232,29 @@ try{
                   arch==='PADDLE'?pMs:tMs+pMs),
               };
             }
+            // Generic crop-to-text-to-parser failure trace for *every*
+            // generated layout. Holdout samples remain excluded from tuning.
+            const paddleTrace=truth.flatMap(cell=>
+              (['start','end','break']).flatMap(field=>{
+                const expected=cell[field];
+                if(expected==null)return [];
+                const id='weekly::'+cell.row+'::'+cell.day+'::'+field;
+                const source=pMap.get(id);
+                const raw=source?.text?.trim()??'';
+                const parsed=field==='break'?raw:parseScheduleImageClock(raw);
+                if(parsed===expected)return [];
+                const region=shared.find(r=>r.id===id);
+                const pix=physical?.rows[cell.row]?.cells.find(
+                  x=>x.dayIndex===cell.day&&x.field===field);
+                return [{
+                  id,field,expected,raw,parsed,confidence:source?.confidence??null,
+                  crop:region?{x:region.x,y:region.y,width:region.width,height:region.height}:null,
+                  occupancy:pix?.visual.occupancy??null,
+                  imgWidth:detection.raster.width,imgHeight:detection.raster.height,
+                  stage:raw!==expected?'OCR_OR_TEXT_NORMALIZATION':'PARSER',
+                }];
+              })
+            );
             const debug=spec.family==='C'?null:{
               titleTokens:titleLayout.tokens.filter(x=>x.y<90).map(x=>({
                 text:String(x.text).slice(0,26),x:Math.round(x.x),y:Math.round(x.y),
@@ -248,7 +271,7 @@ try{
                 Math.round(x.bounds.x)),
             };
             comparisons.push({
-              debug,
+              paddleTrace,debug,
               id:spec.id,family:spec.family,degraded:spec.degraded,
               physical:!!physical,rows:physical?.rows.length??0,
               physicalCells:physical?.physicalCellCount??0,
