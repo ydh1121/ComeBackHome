@@ -59,7 +59,8 @@ try{
           {PaddleWeeklyRegionalTextExtractor},
           {parseScheduleImageClock},
           {MockStateStore,MOCK_FIXTURE},
-          {MockPersonRepository,MockScheduleRepository,MockImportRepository},
+          {MockPersonRepository,MockScheduleRepository},
+          {BrowserImportRepository},
           {WorkbookImportFileSelectionAction},
           {CommitImportReview},
         ]=await Promise.all([
@@ -71,6 +72,7 @@ try{
           import('/src/providers/import/StructuredTableImageScheduleRecognizer.ts'),
           import('/src/mocks/state.ts'),
           import('/src/mocks/repositories.ts'),
+          import('/src/providers/browser/BrowserImportRepository.ts'),
           import('/src/application/services/WorkbookImportFileSelectionAction.ts'),
           import('/src/application/use-cases/commitImportReview.ts'),
         ]);
@@ -333,7 +335,7 @@ try{
                 data.importBatches=[];
                 data.committedImportBatchIds=[];
               });
-              const imports=new MockImportRepository(state),
+              const imports=new BrowserImportRepository(),
                 peopleRepo=new MockPersonRepository(state),
                 schedules=new MockScheduleRepository(state);
               const selection=new WorkbookImportFileSelectionAction(
@@ -351,6 +353,21 @@ try{
               catch(error){blocked=String(error).includes('unreviewed');}
               if(!blocked||state.read().schedules.length)
                 throw Error('Weekly E2E skipped required user approvals');
+              // Actual production browser-review repository must revoke a
+              // prior decision if a user corrects even an OCR rest duration.
+              const editable=initial.reviewItems.find(x=>
+                x.recognitionState==='WORK'&&x.imported.breakMinutes===30);
+              if(!editable)throw Error('Missing editable OCR break evidence');
+              await imports.setResolution(batchId,editable.id,'NEW');
+              await imports.setImportedBreakMinutes(batchId,editable.id,45);
+              const afterEdit=await imports.getBatch(batchId);
+              const corrected=afterEdit.reviewItems.find(x=>x.id===editable.id);
+              if(corrected?.resolution!==null||corrected.imported.breakMinutes!==45)
+                throw Error('Break correction failed to revoke browser approval');
+              await imports.setImportedBreakMinutes(batchId,editable.id,30);
+              const restored=await imports.getBatch(batchId);
+              if(restored.reviewItems.find(x=>x.id===editable.id)?.resolution!==null)
+                throw Error('Restoring original break silently reapproved imported schedule');
               let approvedOff=0,approvedWork=0;
               for(const item of initial.reviewItems){
                 const expected=truth.find(x=>x.person===
