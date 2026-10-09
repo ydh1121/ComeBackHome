@@ -436,26 +436,25 @@ export function interpretWeekly3Column(
     // Color-only blank detection never produces a committed OFF row.
     if(threeEmpty){offReviewCount++;review.push({
       sourcePersonName:sourceName,date,start:null,end:null,sourceRow:row.index+1,
-      confidence:.1,recognitionState:'OFF_CANDIDATE',enabled:true,
+      confidence:.1,recognitionState:'OFF_CANDIDATE',enabled:true,breakMinutes:null,
     });reviewCount++;continue;}
     const valid=start!=null&&end!=null;
     const breakHasContent=pixels.break!=='EMPTY'||!!fields.break?.text.trim();
     // A correctly recognized break does NOT make start/end incomplete.
-    // Preserve break evidence for explicit review; schedule storage only
-    // accepts start/end and must never subtract unverified break minutes.
+    // Persist normalized minute evidence only after explicit weekly review.\n    // No ETA adjustment or subtraction from end is allowed.
     if(breakHasContent){
       breakReviewCount++;
       breakEvidence.push({rowIndex:row.index,dayIndex:day.index,
         minutes:breakMinutes,verifiedByUser:false});
     }
     if(valid&&(!breakHasContent||breakMinutes!=null)){
-      schedule.push({sourcePersonName:sourceName,date,start,end,
+      schedule.push({sourcePersonName:sourceName,date,start,end,breakMinutes,
         sourceRow:row.index+1,
         confidence:Math.min(fields.start?.confidence??0,fields.end?.confidence??0)});
     }else{
       if(!valid)unreadableCount++;
       reviewCount++;
-      review.push({sourcePersonName:sourceName,date,start,end,
+      review.push({sourcePersonName:sourceName,date,start,end,breakMinutes,
         sourceRow:row.index+1,confidence:.2,
         recognitionState:valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
