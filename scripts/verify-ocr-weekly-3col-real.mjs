@@ -56,7 +56,7 @@ try{
           {SAME_ORIGIN_TESSERACT_ASSETS},
           {buildWeekly3ColumnPhysicalMatrix,weekly3ColumnProbeRegions,
             resolveWeekly3ColumnDates,interpretWeekly3Column},
-          {createPaddleDetectedRegionRecognizer},
+          {PaddleWeeklyRegionalTextExtractor},
           {parseScheduleImageClock},
           {MockStateStore,MOCK_FIXTURE},
           {MockPersonRepository,MockScheduleRepository,MockImportRepository},
@@ -67,7 +67,7 @@ try{
           import('/src/providers/import/TesseractScheduleImageTextExtractor.ts'),
           import('/src/providers/import/ocrRuntimeConfig.ts'),
           import('/src/providers/import/Weekly3ColumnScheduleMatrix.ts'),
-          import('/tools/ocr-eval/paddle-onnx-browser-entry.js'),
+          import('/src/providers/import/PaddleWeeklyRegionalTextExtractor.ts'),
           import('/src/providers/import/StructuredTableImageScheduleRecognizer.ts'),
           import('/src/mocks/state.ts'),
           import('/src/mocks/repositories.ts'),
@@ -139,7 +139,17 @@ try{
             spec.degraded?.72:1));
           return {file:new File([blob],spec.id+'.png',{type:blob.type}),truth:shifts};
         };
-        const paddle=await createPaddleDetectedRegionRecognizer();
+        // This *is* the app's real image-upload Paddle extractor, not an
+        // independent test-only ONNX runner. Same-origin staged product assets.
+        const productPaddle=new PaddleWeeklyRegionalTextExtractor();
+        const paddle={
+          get metadata(){return productPaddle.metadata;},
+          async recognizeRegions(file,regions){
+            const results=await productPaddle.extractRegions(file,regions);
+            return {results,inferenceMs:0};
+          },
+          async release(){await productPaddle.dispose();},
+        };
         const comparisons=[],generatedRasters=[];
         try{
           for(const spec of specs){
