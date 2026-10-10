@@ -73,7 +73,7 @@ for (const text of [
   "providerData: providerMode === 'api' ? 'worker-api' : 'disabled'",
   'new WorkbookImportFileSelectionAction',
   'new ReadExcelWorkbookParser',
-  'commitImportReview: new CommitImportReview(imports, schedules)',
+  'commitImportReview: new CommitImportReview(imports, schedules, people)',
 ]) {
   if (!composition.includes(text)) failures.push('hybrid composition missing ' + text);
 }
