@@ -124,6 +124,28 @@ export async function importApprovedWeekly(
   if ([...proposed.keys()].some(ref => !referencedNewPeople.has(ref)))
     reject('UNUSED_PENDING_PERSON');
   const newPeople = [...proposed.values()];
+  // A successful request can lose its HTTP response. For an import with
+  // new employees, their stable request-scoped IDs are a durable replay
+  // marker in the existing people table, without a schema migration.
+  // Reject a changed payload under the same request rather than silently
+  // editing already-approved schedules.
+  if (newPeople.some(person => existingIds.has(person.id))) {
+    if (newPeople.some(person => !existingIds.has(person.id)))
+      reject('PARTIAL_ATOMIC_IMPORT_STATE');
+    const repo = new D1ScheduleRepository(db);
+    for (const row of schedules) {
+      const saved = await repo.getByDate(row.personId, row.date);
+      if (!saved || saved.enabled !== row.enabled ||
+          saved.start !== row.start || saved.end !== row.end ||
+          (row.breakMinutes !== undefined &&
+           (saved.breakMinutes ?? null) !== (row.breakMinutes ?? null)))
+        reject('IMPORT_REQUEST_REPLAY_CONFLICT');
+    }
+    return {
+      createdPeople: Object.fromEntries([...proposed].map(([ref, person]) => [ref, person.id])),
+      schedules,
+    };
+  }
   await new D1ScheduleRepository(db).upsertApprovedWithPeople(newPeople, schedules);
   return {
     createdPeople: Object.fromEntries([...proposed].map(([ref, person]) => [ref, person.id])),
