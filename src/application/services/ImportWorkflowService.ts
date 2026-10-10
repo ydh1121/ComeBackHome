@@ -50,6 +50,10 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     await this.imports.setDetectedPersonIgnored(batchId, detectedPersonId, ignored);
   }
 
+  setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: string): Promise<void> {
+    return this.imports.setImportedDate(batchId, reviewItemId, date);
+  }
+
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {
     return this.imports.setResolution(batchId, reviewItemId, resolution);
   }
