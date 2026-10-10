@@ -118,6 +118,12 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     const firstShift=rows.nth(0);
     const timeSelectors=firstShift.locator('.review-time-editor');
     assert((await timeSelectors.count())===1,label+' weekly time editor missing');
+    await firstShift.locator('input[aria-label="쉬는시간 분 단위 수정"]').fill('45');
+    assert(await page.getByRole('button',{name:'저장',exact:true}).isDisabled(),
+      label+' editing approved break minutes must invalidate prior approval');
+    await firstShift.locator('.review-choice-list button').last().click();
+    assert(await page.getByRole('button',{name:'저장',exact:true}).isEnabled(),
+      label+' corrected break must be explicitly reapproved');
     const beforeSave=await json('/api/people');
     assert(!beforeSave.body?.people?.some(x=>x.name===secondName),
       label+' review-before-submit MUST remain D1-write-free');
@@ -131,7 +137,7 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     const newOff=await json('/api/people/'+newPerson.id+'/schedules/'+fixture.dates[1]);
     assert(oldSchedule.body?.schedule?.start==='09:30' &&
       oldSchedule.body?.schedule?.end==='23:30' &&
-      oldSchedule.body?.schedule?.breakMinutes===30,
+      oldSchedule.body?.schedule?.breakMinutes===45,
       label+' numeric time D1 readback mismatch');
     assert(newSchedule.body?.schedule?.start==='14:00',
       label+' pending new person D1 shift missing');
