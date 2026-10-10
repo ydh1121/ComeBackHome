@@ -29,6 +29,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
   async accept(files: ImportInputFile[]): Promise<string> {
     if (!files.length) throw new Error('No import files were selected.');
+    if (files.some(input => input.kind === 'WORKBOOK' && !/\.xlsx$/i.test(input.file.name))) {
+      throw new Error('엑셀 가져오기는 .xlsx 파일만 지원합니다. .xls 파일은 .xlsx로 저장해 주세요.');
+    }
 
     const batch = await this.imports.createBatch();
     const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
