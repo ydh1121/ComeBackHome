@@ -122,6 +122,12 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     assert(await page.getByRole('button',{name:'저장',exact:true}).isDisabled(),
       label+' editing approved break minutes must invalidate prior approval');
     await firstShift.locator('.review-choice-list button').last().click();
+    // Store mutation emits a version signal, then useImportWorkflow asynchronously
+    // reloads the draft; do not evaluate button state in the same event tick.
+    await page.waitForFunction(() => {
+      const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
+      return save instanceof HTMLButtonElement && save.disabled === false;
+    },null,{timeout:12_000}).catch(()=>undefined);
     const saveEnabled=await page.getByRole('button',{name:'저장',exact:true}).isEnabled();
     if(!saveEnabled) {
       const reviewDetails=await page.evaluate(()=>{
