@@ -80,8 +80,14 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     await page.getByRole('button',{name:'인식 결과 보기'}).click();
     const peopleScreen=page.locator('[data-page="ImportPersonMatchPage"]');
     await peopleScreen.waitFor();
-    const firstRow=peopleScreen.locator('.mapping-row').filter({hasText:firstName});
-    const secondRow=peopleScreen.locator('.mapping-row').filter({hasText:secondName});
+    // Option labels contain all existing employees; filter on the row's
+    // own bold source name instead of matching descendant option text.
+    const personRows=peopleScreen.locator('.mapping-row');
+    const firstRow=personRows.nth(0);
+    const secondRow=personRows.nth(1);
+    assert((await firstRow.locator('b').first().innerText())===firstName &&
+      (await secondRow.locator('b').first().innerText())===secondName,
+      label+' parsed source roster order mismatch');
     assert((await firstRow.locator('select').inputValue())===originalPersonId,
       label+' existing employee must auto-match');
     assert((await secondRow.locator('select').inputValue())==='',
