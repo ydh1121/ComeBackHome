@@ -14,6 +14,13 @@ import type {
   ImportReviewItem,
 } from '../../domain/models';
 
+// Object URLs stay in browser memory only. Never persist roster images
+// to localStorage, send them to backend or include them in CI artifacts.
+const privateImageUrls=new Map<string,string>();
+export function getPrivateImportImageUrl(batchId:string):string|null {
+  return privateImageUrls.get(batchId)??null;
+}
+
 function normalizeName(value: string): string {
   return value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, '');
 }
@@ -31,6 +38,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     if (!files.length) throw new Error('No import files were selected.');
 
     const batch = await this.imports.createBatch();
+    for(const url of privateImageUrls.values())URL.revokeObjectURL(url);
+    privateImageUrls.clear();
+    const firstImage=files.find(item=>item.kind==='IMAGE');
+    if(firstImage && typeof URL.createObjectURL==='function')
+      privateImageUrls.set(batch.id,URL.createObjectURL(firstImage.file));
     const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
       const supported = kind === 'WORKBOOK' || this.imageRecognizer != null;
       return {
@@ -136,7 +148,8 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     const candidateByKey = new Map<string, {
       detectedPersonId: string;
       personId: string | null;
-      date: string;
+      date: string | null;
+      dayIndex?: number;
       enabled: boolean;
       start: string | null;
       end: string | null;
@@ -148,7 +161,8 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
     const registerCandidate = (candidate: {
       sourcePersonName: string;
-      date: string;
+      date: string | null;
+      dayIndex?: number;
       start: string | null;
       end: string | null;
       breakMinutes?: number | null;
@@ -159,11 +173,14 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
       if (!detected) return;
 
-      const key = normalizeName(candidate.sourcePersonName) + '|' + candidate.date;
+      const key = normalizeName(candidate.sourcePersonName) + '|' +
+        (weeklyRequiresPerCellApproval && candidate.dayIndex!=null
+          ? 'day:'+candidate.dayIndex : candidate.date);
       const next = {
         detectedPersonId: detected.id,
         personId: detected.matchedPersonId,
         date: candidate.date,
+        ...(candidate.dayIndex!=null?{dayIndex:candidate.dayIndex}:{}),
         enabled: candidate.enabled ?? true,
         start: candidate.start,
         end: candidate.end,
@@ -229,7 +246,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     // matched DB person does not constitute approval of every WORK/OFF date.
     const reviewItems: ImportReviewItem[] = [];
     for (const candidate of candidateByKey.values()) {
-      const existing = candidate.personId
+      const existing = candidate.personId && candidate.date
         ? await this.schedules.getByDate(candidate.personId, candidate.date)
         : null;
       const exactDuplicate = Boolean(
@@ -253,6 +270,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         detectedPersonId: candidate.detectedPersonId,
         personId: candidate.personId,
         date: candidate.date,
+        ...(candidate.dayIndex!=null?{dayIndex:candidate.dayIndex}:{}),
         ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end,
           breakMinutes: existing.breakMinutes ?? null } } : {}),
         imported: {
@@ -276,6 +294,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       detectedPeople: [...detectedByName.values()],
       structure: {
         ...first.structure,
+        // A weekly image never commits itself, including when every
+        // recognized calendar glyph is consistent.
+        ...(weeklyRequiresPerCellApproval && first.structure.weeklyReview
+          ? {weeklyReview:{...first.structure.weeklyReview,confirmed:false}}
+          : {}),
         needsReview:
           first.structure.needsReview ||
           parsedResults.length > 1 ||
