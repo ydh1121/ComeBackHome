@@ -13,6 +13,9 @@ export interface ApprovedImportSchedule {
   breakMinutes?: number | null;
   decision: 'NEW';
   approved: true;
+  recognitionState?: 'OFF_CANDIDATE';
+  offApproved?: boolean;
+  breakReviewRequired?: boolean;
 }
 export interface ApprovedWeeklyImport {
   requestId: EntityId;
