@@ -186,6 +186,9 @@ try {
   expect(incompleteBlocked, 'incomplete NEW schedule must remain blocked');
 
   await imports.setImportedTime('phase5q-batch', 'phase5q-review-2', 'end', '19:00');
+  expect((await imports.getBatch('phase5q-batch'))?.reviewItems[1]?.resolution === null,
+    'time edit must revoke approval for ordinary XLSX too');
+  await imports.setResolution('phase5q-batch', 'phase5q-review-2', 'NEW');
   await commit.execute('phase5q-batch');
 
   const first = await schedules.getByDate('mock-person-1', '2099-02-01');
