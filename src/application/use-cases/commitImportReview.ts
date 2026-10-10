@@ -1,10 +1,11 @@
 import type { CommitImportReviewAction } from '../contracts/actions';
-import type { ImportRepository, ScheduleRepository } from '../contracts/repositories';
+import type { ImportRepository, PersonRepository, ScheduleRepository } from '../contracts/repositories';
 
 export class CommitImportReview implements CommitImportReviewAction {
   constructor(
     private readonly imports: ImportRepository,
     private readonly schedules: ScheduleRepository,
+    private readonly people?: PersonRepository,
   ) {}
 
   async execute(batchId: string): Promise<void> {
@@ -38,7 +39,16 @@ export class CommitImportReview implements CommitImportReviewAction {
 
     if(includedItems.some(item=>item.date==null))
       throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
-    const unresolved = includedItems.filter((item) => item.personId == null);
+    const pendingById=new Map(batch.detectedPeople
+      .filter(person=>!person.ignored&&person.pendingCreateName)
+      .map(person=>[person.id,person]));
+    const unresolved = includedItems.filter(item=>
+      item.personId==null&&!pendingById.has(item.detectedPersonId));
+    if([...pendingById.values()].some(person=>
+      !/^[가-힣]{2,5}$/.test(person.pendingCreateName??'')))
+      throw new Error('INVALID_PENDING_PERSON_NAME');
+    if(pendingById.size&&!this.people)
+      throw new Error('PENDING_PERSON_CREATION_UNAVAILABLE');
     if (unresolved.length) throw new Error('Import contains unresolved people.');
 
     const unreviewed = includedItems.filter((item) => item.resolution == null);
@@ -61,11 +71,42 @@ export class CommitImportReview implements CommitImportReviewAction {
     );
     if (unresolvedRest) throw new Error('Import contains unreviewed break minutes.');
 
+    // Check duplicate proposed owners and calendar days BEFORE the first
+    // database write, including when people are not yet created.
+    const prewriteKeys=new Set<string>();
+    for(const item of includedItems){
+      if(item.resolution!=='NEW')continue;
+      const key=(item.personId??'pending:'+item.detectedPersonId)+'|'+item.date;
+      if(prewriteKeys.has(key))throw new Error('DUPLICATE_IMPORT_PERSON_DATE');
+      prewriteKeys.add(key);
+    }
+    const pendingCreated=new Map<string,string>();
+    const pendingToCreate=[...pendingById.values()].filter(person=>
+      includedItems.some(item=>item.detectedPersonId===person.id&&item.resolution==='NEW'));
+    if(pendingToCreate.length){
+      if(!this.people)throw new Error('PENDING_PERSON_CREATION_UNAVAILABLE');
+      const known=await this.people.list();
+      const names=new Set(known.map(p=>
+        p.name.normalize('NFKC').replace(/\s+/g,'').toLowerCase()));
+      for(const person of pendingToCreate){
+        const name=person.pendingCreateName!;
+        const key=name.normalize('NFKC').replace(/\s+/g,'').toLowerCase();
+        if(names.has(key))throw new Error('NEW_PERSON_NAME_ALREADY_EXISTS');
+        names.add(key);
+      }
+      // Reaching this point requires final user-approved review; no person
+      // creation occurs at OCR, name matching or date selection time.
+      for(const person of pendingToCreate){
+        const created=await this.people.create({name:person.pendingCreateName!,relation:''});
+        pendingCreated.set(person.id,created.id);
+        await this.imports.setDetectedPersonMatch(batchId,person.id,created.id);
+      }
+    }
     const entries = [];
     for (const item of includedItems) {
       if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
-      const personId = item.personId;
-      if (!personId) continue;
+      const personId=item.personId??pendingCreated.get(item.detectedPersonId);
+      if(!personId)throw new Error('Import contains unresolved people.');
       const date=item.date;
       if(!date)throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
       const current = await this.schedules.getByDate(personId, date);
