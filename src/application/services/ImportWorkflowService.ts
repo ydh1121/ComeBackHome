@@ -47,6 +47,10 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     await this.imports.setDetectedPersonMatch(batchId, detectedPersonId, next);
   }
 
+  setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,name:string):Promise<void> {
+    return this.imports.setPendingNewPerson(batchId,detectedPersonId,name);
+  }
+
   async setPersonMatch(
     batchId: EntityId,
     detectedPersonId: EntityId,
