@@ -7,7 +7,7 @@ export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<
 export interface ImportMatchActions {
   addManualPerson(batchId: EntityId, personId: EntityId): Promise<void>;
   cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>;
-  setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
+  setPendingNewPerson(batchId: EntityId, detectedPersonId: EntityId, proposedName: string): Promise<void>; setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
   setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
 }
 export interface ImportReviewActions {
