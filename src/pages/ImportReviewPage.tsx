@@ -53,7 +53,8 @@ export function ImportReviewPage() {
       (weekly3ColumnReview || !exactDuplicate(item)),
   );
   const allReviewed = visibleReviewItems.every((item) =>
-    item.personId != null &&
+    (item.personId != null ||
+      batch.detectedPeople.some(person => person.id === item.detectedPersonId && person.pendingCreate)) &&
     (
       item.resolution === 'SKIP' ||
       (item.resolution === 'NEW' && importedTimeComplete(item))
@@ -95,7 +96,9 @@ export function ImportReviewPage() {
                     </label>
                   ) : <div className="review-date">{formatDateLabel(item.date)} 일정</div>}
                   <div className={'review-person' + (item.personId ? '' : ' unresolved')}>
-                    {person?.name ?? '사람 연결 필요'}
+                    {person?.name ?? (batch.detectedPeople.find(candidate =>
+                      candidate.id === item.detectedPersonId)?.pendingCreate
+                      ? '신규 직원 · 승인 후 생성' : '사람 연결 필요')}
                   </div>
                 </div>
 
@@ -185,7 +188,9 @@ export function ImportReviewPage() {
                     type="button"
                     className={'review-choice import-toggle' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
-                    disabled={!item.personId || !importedComplete}
+                    disabled={!(item.personId || batch.detectedPeople.some(
+                      person => person.id === item.detectedPersonId && person.pendingCreate
+                    )) || !importedComplete}
                     onClick={() => services.actions.importReview.setResolution(
                       batch.id,
                       item.id,
