@@ -53,3 +53,13 @@ export interface PresenceRepository {
   get(personId: EntityId): Promise<PresenceState | null>;
   record(input: { eventId: string; personId: EntityId; type: 'LEFT_WORK' | 'ARRIVED_HOME'; acceptedAt: string; workDate: ISODate }): Promise<{ state: PresenceState; duplicate: boolean }>;
 }
+
+export interface ApprovedWorkbookImportReceipt {
+  requestId: string;
+  applied: boolean;
+  people: Array<{ ref: string; personId: string; created: boolean }>;
+  schedules: Array<{ personRef: string; date: ISODate; enabled: boolean }>;
+}
+export interface ApprovedWorkbookImportGateway {
+  commit(payload: unknown): Promise<ApprovedWorkbookImportReceipt>;
+}
