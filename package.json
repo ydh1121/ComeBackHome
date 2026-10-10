@@ -67,7 +67,7 @@
     "cf:worker:preview": "npm run build && wrangler preview --config wrangler.jsonc",
     "cf:worker:deploy": "npm run build && wrangler deploy --config wrangler.jsonc",
     "verify:staging-mutation-gate": "node scripts/verify-staging-mutation-gate.mjs",
-    "prebuild": "npm run prepare:ocr-assets && node scripts/generate-build-revision.mjs",
+    "prebuild": "npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs",
     "verify:completion": "node scripts/verify-product-completion-gate.mjs",
     "verify:production-bundle": "node scripts/verify-production-bundle.mjs",
     "verify:ocr-structure-first": "node scripts/verify-schedule-table-structure-first.mjs",
@@ -79,7 +79,10 @@
     "verify:ocr-region-order": "node scripts/verify-ocr-region-reading-order.mjs",
     "verify:push-runtime-key": "node scripts/verify-push-runtime-key-parity.mjs",
     "verify:vapid-pair": "node scripts/verify-vapid-pair-cryptography.mjs",
-    "verify:push-workerd-crypto": "node scripts/verify-push-workerd-crypto.mjs"
+    "verify:push-workerd-crypto": "node scripts/verify-push-workerd-crypto.mjs",
+    "prepare:weekly-paddle-assets": "node scripts/prepare-weekly-paddle-assets.mjs",
+    "verify:ocr-built-assets": "node scripts/verify-ocr-built-assets.mjs",
+    "verify:ocr-production-http": "node scripts/verify-ocr-production-http.mjs"
   },
   "dependencies": {
     "react": "19.3.0",
