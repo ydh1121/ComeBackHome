@@ -1,4 +1,5 @@
 import { BUILD_COMMIT_SHA } from './build-revision';
+import { commitApprovedWorkbookImport, ApprovedWorkbookImportConflict } from './approved-workbook-import';
 import type { Coordinate, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
 import type { PlaceSearchResult, TransitSearchResult } from '../src/application/contracts/providers';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
@@ -629,6 +630,19 @@ export async function handleApiRequest(
         notificationSettings,
         productTimezone: 'Asia/Seoul',
       });
+    }
+
+    if (segments.length === 3 && segments[1] === 'workbooks' &&
+        segments[2] === 'approved-import' && request.method === 'PUT') {
+      try {
+        const receipt = await commitApprovedWorkbookImport(env.DB, await readObject(request));
+        return json({ receipt });
+      } catch (error) {
+        if (error instanceof ApprovedWorkbookImportConflict) {
+          return json({ error: error.message, reason: 'IMPORT_CONFLICT' }, 409);
+        }
+        throw error;
+      }
     }
 
     if (
