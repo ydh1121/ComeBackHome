@@ -2,19 +2,18 @@ name: Apply ComeBackHome D1 Migrations
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - activation/runtime-phase1
-      - main
-    paths:
-      - ".github/workflows/apply-comebackhome-d1-migrations.yml"
-      - "db/migrations/**"
+    inputs:
+      confirmation:
+        description: "Type APPLY_REMOTE_COMEBACKHOME_D1 (separate user approval is still mandatory)"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   migrate:
+    if: github.event_name == 'workflow_dispatch' && inputs.confirmation == 'APPLY_REMOTE_COMEBACKHOME_D1'
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -68,20 +67,13 @@ jobs:
             .filter(Boolean)
             .sort();
 
-          const expectedMigrations = [
-            '0001_initial.sql',
-            '0002_notification_planner_state.sql',
-            '0003_presence_notification_settings.sql',
-            '0004_saved_commute_routes.sql',
-            '0005_presence_state.sql',
-            '0006_saved_route_destination_access.sql',
-            '0007_multi_access_route_sets.sql',
-          ];
-
-          for (const migration of expectedMigrations) {
-            if (!migrations.includes(migration)) {
-              throw new Error('Missing applied migration: ' + migration);
-            }
+          const expectedMigrations = fs.readdirSync('db/migrations')
+            .filter((name) => /^\\d{4}_.+\\.sql$/.test(name))
+            .sort();
+          if (!expectedMigrations.length) throw new Error('No repository migration SQL files found');
+          if (expectedMigrations.length !== migrations.length ||
+              expectedMigrations.some((name, index) => migrations[index] !== name)) {
+            throw new Error('Remote migration ledger differs from repository SQL migration names');
           }
 
           const requiredTables = [
@@ -111,7 +103,7 @@ jobs:
             JSON.stringify({
               databaseName: 'come-back-home-db',
               remote: true,
-              appliedMigrations: expectedMigrations,
+              appliedMigrations: migrations,
               verifiedTables: requiredTables,
               migrationCount: migrations.length,
               tableCount: tables.length,
@@ -119,11 +111,10 @@ jobs:
           );
           NODE
 
-      - name: Commit migration evidence
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add runtime-evidence/cloudflare-d1-migrations.json
-          git diff --cached --quiet || git commit -m "chore: record remote D1 migrations"
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "HEAD:$GITHUB_REF_NAME"
+      - name: Upload migration evidence without modifying source history
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-d1-migration-ledger
+          path: runtime-evidence/cloudflare-d1-migrations.json
+          retention-days: 7
+          if-no-files-found: error
