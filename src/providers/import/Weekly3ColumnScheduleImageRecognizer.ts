@@ -102,6 +102,30 @@ export class Weekly3ColumnScheduleImageRecognizer implements ImageScheduleRecogn
   }
 
   async parse(file: File, onProgress?: ImportProgressReporter): Promise<ParsedImport> {
-    return (await this.evaluate(file, onProgress)).parsed;
+    try {
+      return (await this.evaluate(file, onProgress)).parsed;
+    } catch (error) {
+      // A readable image with an unsupported grid still has a safe product
+      // path: manual weekly entry. Actual decoder/OCR runtime failures remain
+      // technical errors and are not mislabeled as successful recognition.
+      if (!(error instanceof Error) ||
+          error.message !== 'WEEKLY_3COL_UNSUPPORTED_LAYOUT_REVIEW_REQUIRED') {
+        throw error;
+      }
+      return {
+        detectedPeople:[],scheduleCandidates:[],reviewCandidates:[],
+        structure:{
+          sheet:'weekly 7 day x start/end/break physical matrix',
+          headerRow:0,personColumn:'manual person selection',
+          dateColumn:'manual weekly date confirmation',
+          shiftColumn:'manual start/end/break entry',needsReview:true,
+          weeklyReview:{
+            status:'MANUAL_RECOVERY_REQUIRED',startDate:null,confirmed:false,
+            reason:'표 구조를 자동으로 복원하지 못했습니다. 날짜와 사람을 직접 확인해 주세요.',
+          },
+        },
+        confidence:0,
+      };
+    }
   }
 }
