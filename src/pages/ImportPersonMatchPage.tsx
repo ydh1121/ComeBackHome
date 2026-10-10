@@ -12,6 +12,7 @@ export function ImportPersonMatchPage() {
   const workflow = useImportWorkflow(batchId);
   const [creatingDetectedId, setCreatingDetectedId] = useState<string | null>(null);
   const [manualPersonId, setManualPersonId] = useState('');
+  const [proposedNames,setProposedNames]=useState<Record<string,string>>({});
 
   if (workflow.status === 'loading') {
     return <section className="import-page"><div className="import-message">사람 연결 정보를 불러오는 중</div></section>;
@@ -22,8 +23,10 @@ export function ImportPersonMatchPage() {
 
   const batch = workflow.batch;
   const allResolved = batch.detectedPeople.length > 0 &&
-    batch.detectedPeople.every((detected) => detected.ignored === true || detected.matchedPersonId != null);
-  const includedCount = batch.detectedPeople.filter((detected) => detected.ignored !== true && detected.matchedPersonId != null).length;
+    batch.detectedPeople.every((detected) => detected.ignored === true || detected.matchedPersonId != null ||
+      !!detected.pendingCreateName);
+  const includedCount = batch.detectedPeople.filter((detected) => detected.ignored !== true &&
+      (detected.matchedPersonId != null || !!detected.pendingCreateName)).length;
 
   return (
     <section className="import-page" data-route={'/import/' + batchId + '/people'} data-page="ImportPersonMatchPage" data-state="MATCH_REQUIRED">
@@ -51,12 +54,28 @@ export function ImportPersonMatchPage() {
 
       <div className="mapping-list">
         {batch.detectedPeople.map((detected) => {
-          const value = detected.ignored === true ? '__ignore__' : detected.matchedPersonId ?? '';
+          const value=detected.ignored===true?'__ignore__'
+            :detected.pendingCreateName?'__create__':detected.matchedPersonId??'';
+          const proposal=proposedNames[detected.id]??(
+            detected.pendingCreateName??(
+              detected.sourceName.startsWith('인식불가 직원 ')?'':detected.sourceName));
           return (
             <div className="mapping-row" key={detected.id}>
               <div>
                 <b>{detected.sourceName}</b>
                 <div className="row-sub">인식 신뢰도 {Math.round(detected.confidence * 100)}%</div>
+                {batch.structure.weeklyReview && !detected.matchedPersonId ? (
+                  <label className="row-sub">신규 직원 이름 확인
+                    <input type="text" maxLength={5}
+                      aria-label={detected.sourceName+' 신규 직원 이름'}
+                      value={proposal}
+                      onChange={event=>setProposedNames(prev=>({...prev,
+                        [detected.id]:event.target.value}))}/>
+                  </label>
+                ):null}
+                {detected.pendingCreateName ? <div className="row-sub">
+                  신규 직원 “{detected.pendingCreateName}” — 최종 저장 시 생성 예정
+                </div> : null}
               </div>
               <select
                 className="mapping-native-select"
@@ -70,20 +89,9 @@ export function ImportPersonMatchPage() {
                     return;
                   }
                   if (next === '__create__') {
-                    setCreatingDetectedId(detected.id);
-                    try {
-                      const person = await services.actions.people.create({
-                        name: detected.sourceName,
-                        relation: '',
-                      });
-                      await services.actions.importMatch.setPersonMatch(
-                        batch.id,
-                        detected.id,
-                        person.id,
-                      );
-                    } finally {
-                      setCreatingDetectedId(null);
-                    }
+                    await services.actions.importMatch.setPendingNewPerson(
+                      batch.id,detected.id,proposal,
+                    );
                     return;
                   }
                   await services.actions.importMatch.setPersonMatch(
@@ -97,8 +105,8 @@ export function ImportPersonMatchPage() {
                 {workflow.people.map((person) => (
                   <option value={person.id} key={person.id}>{person.name}{person.relation ? ' · ' + person.relation : ''}</option>
                 ))}
-                {!detected.sourceName.startsWith('인식불가 직원 ') ? (
-                  <option value="__create__">“{detected.sourceName}” 새 사람으로 등록</option>
+                {/^[가-힣]{2,5}$/.test(proposal) ? (
+                  <option value="__create__">“{proposal}” 신규 직원으로 최종 승인 시 등록</option>
                 ) : null}
                 <option value="__ignore__">가져오지 않음</option>
               </select>
