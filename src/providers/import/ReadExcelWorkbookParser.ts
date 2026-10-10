@@ -3,6 +3,7 @@ import type {
   ParsedImport,
   ParsedImportPerson,
   ParsedScheduleCandidate,
+  ParsedScheduleReviewCandidate,
   WorkbookParser,
 } from '../../application/contracts/providers';
 import type { ImportStructure } from '../../domain/models';
@@ -173,10 +174,178 @@ function rowHasContent(row: Cell[]): boolean {
   return row.some((value) => value != null && String(value).trim() !== '');
 }
 
+
+// Native-cell weekly workbook support. Decorative rows are not employee data;
+// no raster/OCR or style-dependent OFF inference is involved.
+const WEEKLY_REVIEW_STRUCTURE = 'weekly 7 day x start/end/break physical matrix';
+const WEEKLY_FIELDS = [
+  ['출근', '출근시간', '시작', '시작시간'],
+  ['퇴근', '퇴근시간', '종료', '종료시간'],
+  ['쉬는시간', '휴게시간', '휴식시간', '휴게', '쉬는 시간'],
+] as const;
+
+function parseWeeklyClock(value: Cell): string | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 1 && value < 24) {
+    const minutes = Math.round(value * 60);
+    if (Math.abs(minutes / 60 - value) > 0.0001) return null;
+    return String(Math.floor(minutes / 60)).padStart(2, '0') + ':' +
+      String(minutes % 60).padStart(2, '0');
+  }
+  const raw = String(value ?? '').normalize('NFKC').trim();
+  const decimal = /^(\d{1,2})(?:\.(0|5))?$/.exec(raw);
+  if (decimal && Number(decimal[1]) < 24) {
+    return String(Number(decimal[1])).padStart(2, '0') + ':' +
+      (decimal[2] === '5' ? '30' : '00');
+  }
+  return formatTime(value);
+}
+
+function parseBreakMinutes(value: Cell): number | null {
+  if (value == null || String(value).trim() === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const minutes = Math.round(value * 60);
+    return value >= 0 && minutes <= 720 && Math.abs(value * 60 - minutes) < 0.001
+      ? minutes : null;
+  }
+  const raw = String(value).normalize('NFKC').trim();
+  const hours = /^(\d{1,2})(?:\.(0|5))?$/.exec(raw);
+  if (hours) {
+    const minutes = Number(hours[1]) * 60 + (hours[2] === '5' ? 30 : 0);
+    return minutes <= 720 ? minutes : null;
+  }
+  const asMinutes = /^(\d{1,3})\s*분$/.exec(raw);
+  if (asMinutes) return Number(asMinutes[1]) <= 720 ? Number(asMinutes[1]) : null;
+  const asClock = /^(\d{1,2}):([0-5]\d)$/.exec(raw);
+  if (asClock) {
+    const minutes = Number(asClock[1]) * 60 + Number(asClock[2]);
+    return minutes <= 720 ? minutes : null;
+  }
+  return null;
+}
+
+function parseWeeklySheet(sheet: WorkbookSheetData): {
+  structure: ImportStructure;
+  people: ParsedImportPerson[];
+  candidates: ParsedScheduleCandidate[];
+  reviewCandidates: ParsedScheduleReviewCandidate[];
+  confidence: number;
+  usableRows: number;
+} | null {
+  const rows = sheet.data;
+  let headerRow = -1;
+  let firstStart = -1;
+  // Identify seven repeated, adjacent START/END/BREAK triplets, not a fixed row.
+  for (let r = 0; r < Math.min(rows.length, 16) && headerRow === -1; r += 1) {
+    for (let c = 1; c + 20 < (rows[r]?.length ?? 0); c += 1) {
+      if ([0, 1, 2, 3, 4, 5, 6].every(day =>
+        WEEKLY_FIELDS.every((aliases, field) => {
+          const normalized = normalizeHeader(rows[r]?.[c + day * 3 + field]);
+          return aliases.some(alias => normalized === normalizeHeader(alias));
+        })
+      )) {
+        headerRow = r;
+        firstStart = c;
+        break;
+      }
+    }
+  }
+  if (headerRow < 0) return null;
+
+  const dates: string[] = [];
+  for (let day = 0; day < 7; day += 1) {
+    const startColumn = firstStart + day * 3;
+    const found = new Set<string>();
+    for (let r = 0; r < headerRow; r += 1) {
+      const date = formatDate(rows[r]?.[startColumn]);
+      if (date) found.add(date);
+    }
+    if (found.size !== 1) {
+      throw new Error('주간 엑셀 날짜가 누락되었거나 충돌합니다. 날짜 머리글을 확인해 주세요.');
+    }
+    dates.push([...found][0]);
+  }
+  // Repeated or nonconsecutive dates must never be silently associated with people.
+  for (let day = 1; day < 7; day += 1) {
+    const preceding = Date.parse(dates[day - 1] + 'T00:00:00Z');
+    if (new Date(preceding + 86400000).toISOString().slice(0, 10) !== dates[day]) {
+      throw new Error('주간 엑셀 날짜가 연속된 7일이 아닙니다. 날짜 머리글을 확인해 주세요.');
+    }
+  }
+
+  const personColumn = firstStart - 1;
+  const people = new Map<string, ParsedImportPerson>();
+  const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
+  let uncertain = 0;
+  let populated = 0;
+  for (let r = headerRow + 1; r < rows.length; r += 1) {
+    const row = rows[r] ?? [];
+    const nameValue = row[personColumn];
+    if (typeof nameValue !== 'string') continue;
+    const name = nameValue.normalize('NFKC').trim();
+    // Do not import summary, holiday, or notes rows as employees.
+    if (!name || name.length > 25 ||
+        /^(?:특이사항|비고|공지|합계|총계|소계|메모|휴무자|실습|공휴일)/.test(name) ||
+        !/^[\p{L}][\p{L}\p{M}\s·-]*$/u.test(name)) continue;
+    const key = normalizeName(name);
+    if (people.has(key)) {
+      throw new Error('주간 엑셀에 직원명이 중복되어 있습니다. 직원 행을 확인해 주세요.');
+    }
+    people.set(key, { sourceName: name, confidence: 1 });
+    for (let day = 0; day < 7; day += 1) {
+      const col = firstStart + day * 3;
+      const rawStart = row[col];
+      const rawEnd = row[col + 1];
+      const rawBreak = row[col + 2];
+      const hasValue = (cell: Cell) => cell != null && String(cell).trim() !== '';
+      const anyValue = [rawStart, rawEnd, rawBreak].some(hasValue);
+      const start = parseWeeklyClock(rawStart);
+      const end = parseWeeklyClock(rawEnd);
+      const breakMinutes = parseBreakMinutes(rawBreak);
+      const badBreak = hasValue(rawBreak) && breakMinutes === null;
+      const recognitionState =
+        !anyValue ? 'OFF_CANDIDATE' :
+        start && end && !badBreak ? 'WORK' :
+        start || end ? 'INCOMPLETE' : 'UNREADABLE';
+      if (recognitionState !== 'WORK') uncertain += 1;
+      else populated += 1;
+      reviewCandidates.push({
+        sourcePersonName: name,
+        date: dates[day],
+        start,
+        end,
+        breakMinutes: badBreak ? null : breakMinutes,
+        sourceRow: r + 1,
+        confidence: recognitionState === 'WORK' ? 1 : 0.4,
+        recognitionState,
+        enabled: true,
+      });
+    }
+  }
+  if (!people.size) {
+    throw new Error('주간 엑셀의 직원 행을 확인할 수 없습니다.');
+  }
+  return {
+    structure: {
+      sheet: WEEKLY_REVIEW_STRUCTURE,
+      headerRow: headerRow + 1,
+      personColumn: columnLetter(personColumn),
+      dateColumn: columnLetter(firstStart),
+      shiftColumn: columnLetter(firstStart) + ':' + columnLetter(firstStart + 20),
+      needsReview: true,
+    },
+    people: [...people.values()],
+    candidates: [],
+    reviewCandidates,
+    confidence: populated / Math.max(1, populated + uncertain),
+    usableRows: people.size,
+  };
+}
+
 function parseSheet(sheet: WorkbookSheetData): {
   structure: ImportStructure;
   people: ParsedImportPerson[];
   candidates: ParsedScheduleCandidate[];
+  reviewCandidates?: ParsedScheduleReviewCandidate[];
   confidence: number;
   usableRows: number;
 } | null {
@@ -249,7 +418,7 @@ function parseSheet(sheet: WorkbookSheetData): {
 
 export function parseWorkbookSheets(sheets: WorkbookSheetData[]): ParsedImport {
   const parsed = sheets
-    .map(parseSheet)
+    .map(sheet => parseWeeklySheet(sheet) ?? parseSheet(sheet))
     .filter((value): value is NonNullable<ReturnType<typeof parseSheet>> => value !== null);
 
   if (!parsed.length) {
@@ -258,6 +427,8 @@ export function parseWorkbookSheets(sheets: WorkbookSheetData[]): ParsedImport {
 
   const people = new Map<string, ParsedImportPerson>();
   const scheduleCandidates: ParsedScheduleCandidate[] = [];
+  const reviewCandidates: ParsedScheduleReviewCandidate[] = [];
+  const weeklyKeys = new Set<string>();
   let weightedConfidence = 0;
   let totalRows = 0;
 
@@ -268,6 +439,14 @@ export function parseWorkbookSheets(sheets: WorkbookSheetData[]): ParsedImport {
       if (!existing || person.confidence > existing.confidence) people.set(key, person);
     }
     scheduleCandidates.push(...sheet.candidates);
+    for (const candidate of sheet.reviewCandidates ?? []) {
+      const key = normalizeName(candidate.sourcePersonName) + '|' + candidate.date;
+      if (weeklyKeys.has(key)) {
+        throw new Error('주간 엑셀에 동일 직원·날짜 일정이 중복되어 있습니다.');
+      }
+      weeklyKeys.add(key);
+      reviewCandidates.push(candidate);
+    }
     weightedConfidence += sheet.confidence * Math.max(1, sheet.usableRows);
     totalRows += Math.max(1, sheet.usableRows);
   }
@@ -284,6 +463,7 @@ export function parseWorkbookSheets(sheets: WorkbookSheetData[]): ParsedImport {
   return {
     detectedPeople: [...people.values()],
     scheduleCandidates,
+    ...(reviewCandidates.length ? { reviewCandidates } : {}),
     structure: {
       ...first.structure,
       needsReview: first.structure.needsReview || parsed.length > 1 || confidence < 0.95,
