@@ -183,6 +183,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ocr-clean-production-runtime:
+    name: PRODUCT_REQUIRED_GATE / clean production OCR assets / no CI pre-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source with pinned vendor model only
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Clean generated OCR/ORT assets and node_modules
+        run: rm -rf public/ocr public/ort dist node_modules
+
+      - name: Install pinned dependencies without any OCR model download
+        run: npm ci --no-audit --no-fund
+
+      - name: Build clean production bundle with mandatory Paddle prebuild
+        run: npm run build
+        env:
+          VITE_CBH_RUNTIME: api
+          VITE_CBH_PROVIDER_RUNTIME: api
+
+      - name: Verify required model/dictionary/integrity/ORT dist assets and SHA
+        run: npm run verify:ocr-built-assets
+
+      - name: Reject HTML fallback and verify JSON MIME, model/ORT hashes over local HTTP
+        run: npm run verify:ocr-production-http
+
   phase5g-local:
     name: PRODUCT_REQUIRED_GATE / full product + shared safety local integration
     runs-on: ubuntu-latest
