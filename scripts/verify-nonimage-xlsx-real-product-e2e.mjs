@@ -16,7 +16,7 @@ const persist=await mkdtemp(join(tmpdir(),'cbh-nonimage-xlsx-e2e-'));
 let worker;
 const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
 const run=(cmd,args)=>new Promise((resolveDone,reject)=>{
-  const child=spawn(cmd,args,{cwd:root,env:{...process.env,CI:'1'},stdio:['ignore','pipe','pipe']});
+  const child=spawn(cmd,args,{cwd:root,env:{...process.env,CI:'1',VITE_CBH_RUNTIME:'api',VITE_CBH_PROVIDER_RUNTIME:'mock'},stdio:['ignore','pipe','pipe']});
   let output='';
   child.stdout.on('data',d=>{output+=d.toString()});
   child.stderr.on('data',d=>{output+=d.toString()});
