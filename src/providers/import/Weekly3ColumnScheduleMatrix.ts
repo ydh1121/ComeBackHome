@@ -616,7 +616,7 @@ export function interpretWeekly3Column(
     }
     const confidentlyDated=date!=null&&!dates.dates[day.index]?.reviewRequired;
     if(valid&&(!breakHasContent||breakMinutes!=null)&&confidentlyDated){
-      schedule.push({sourcePersonName:sourceName,date:date!,start,end,breakMinutes,
+      schedule.push({sourcePersonName:sourceName,date:date!,dayIndex:day.index,start,end,breakMinutes,
         sourceRow:row.index+1,
         confidence:Math.min(fields.start?.confidence??0,fields.end?.confidence??0)});
     }else{
