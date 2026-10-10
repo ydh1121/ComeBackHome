@@ -23,7 +23,7 @@ export interface ImportStructure { sheet: string; headerRow: number; personColum
   weeklyReview?: { status: 'AUTO_RECOGNIZED' | 'PARTIAL_REVIEW_REQUIRED' | 'MANUAL_RECOVERY_REQUIRED'; startDate: ISODate | null; confirmed: boolean; reason?: string };
 }
 export type ImportRecognitionState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
-export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate | null; dayIndex?: number; existing?: Pick<ScheduleEntry,'enabled'|'start'|'end'|'breakMinutes'>; imported: { enabled: boolean; start: string | null; end: string | null; breakMinutes?: number | null }; recognitionState?: ImportRecognitionState; resolution: ImportResolution | null; }
+export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate | null; dayIndex?: number; existing?: Pick<ScheduleEntry,'enabled'|'start'|'end'|'breakMinutes'>; imported: { enabled: boolean; start: string | null; end: string | null; breakMinutes?: number | null }; recognitionState?: ImportRecognitionState; breakReviewRequired?: boolean; resolution: ImportResolution | null; }
 export interface ImportBatch {
   id: EntityId;
   files: ImportFileRecord[];
