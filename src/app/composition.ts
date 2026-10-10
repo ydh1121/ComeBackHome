@@ -188,7 +188,7 @@ export async function createHybridApiApplicationServices(
     repositories,
     queries,
     actions: {
-      commitImportReview: new CommitImportReview(imports, schedules),
+      commitImportReview: new CommitImportReview(imports, schedules, people),
       transitAccess: new TransitAccessService(commute, () => changes.emit()),
       notifications: new NotificationService(
         notifications,
