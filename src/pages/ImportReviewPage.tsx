@@ -56,7 +56,7 @@ export function ImportReviewPage() {
     (item.personId != null ||
       batch.detectedPeople.some(person => person.id === item.detectedPersonId && person.pendingCreate)) &&
     (
-      item.resolution === 'SKIP' ||
+      item.resolution === 'SKIP' || item.resolution === 'KEEP' ||
       (item.resolution === 'NEW' && importedTimeComplete(item))
     )
   );
@@ -83,7 +83,8 @@ export function ImportReviewPage() {
             const person = workflow.people.find((candidate) => candidate.id === item.personId);
             const importedComplete = importedTimeComplete(item);
             return (
-              <div className="import-review-item" key={item.id}>
+              <div className="import-review-item" key={item.id} data-review-id={item.id}
+                data-person-id={item.detectedPersonId} data-work-date={item.date}>
                 <div className="import-review-head">
                   {weekly3ColumnReview ? (
                     <label className="review-date">
@@ -177,6 +178,14 @@ export function ImportReviewPage() {
                 ) : null}
 
                 <div className="review-choice-list">
+                  <button type="button"
+                    className={'review-choice import-toggle' + (item.resolution === 'SKIP' ? ' selected' : '')}
+                    aria-pressed={item.resolution === 'SKIP'}
+                    onClick={() => services.actions.importReview.setResolution(
+                      batch.id,item.id,item.resolution === 'SKIP' ? 'KEEP' : 'SKIP'
+                    )}>
+                    가져오지 않음
+                  </button>
                   {item.existing && !exactDuplicate(item) ? (
                     <div className="review-existing-note">
                       {item.existing.enabled === false
