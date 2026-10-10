@@ -165,14 +165,32 @@ export class MockImportRepository implements ImportRepository {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
-      if (person) person.matchedPersonId = personId;
+      const changed = Boolean(person && (person.matchedPersonId !== personId || person.pendingCreate));
+      if (person) { person.matchedPersonId = personId; person.pendingCreate = false; person.ignored = false; }
       for (const item of batch?.reviewItems ?? []) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
+        if (changed) item.resolution = null;
         if (personId && item.resolution == null &&
             batch?.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
           item.resolution = 'NEW';
         }
+      }
+    });
+  }
+  async setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void> {
+    this.store.mutate(state => {
+      const batch = state.importBatches.find(b => b.id === batchId);
+      const detected = batch?.detectedPeople.find(p => p.id === detectedPersonId);
+      if (!detected || !batch) throw new Error('Detected person not found.');
+      detected.pendingCreate = pending;
+      detected.matchedPersonId = null;
+      detected.ignored = false;
+      for (const item of batch.reviewItems) {
+        if (item.detectedPersonId !== detectedPersonId) continue;
+        item.personId = null;
+        item.existing = undefined;
+        item.resolution = null;
       }
     });
   }
@@ -185,8 +203,8 @@ export class MockImportRepository implements ImportRepository {
       if (ignored) person.matchedPersonId = null;
       for (const item of batch.reviewItems) {
         if (item.detectedPersonId !== detectedPersonId) continue;
-        if (ignored) {
-          item.personId = null;
+        if (ignored || changed) {
+          if (ignored) item.personId = null;
           item.resolution = null;
         }
       }
@@ -249,9 +267,7 @@ export class MockImportRepository implements ImportRepository {
       if (!item || item.imported[field] === value) return;
       item.imported[field] = value;
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
-      if (batch?.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = null;
-      }
+      item.resolution = null;
     });
   }
   async markCommitted(batchId: EntityId): Promise<void> {
