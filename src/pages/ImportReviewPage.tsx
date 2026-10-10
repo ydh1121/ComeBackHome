@@ -168,7 +168,7 @@ export function ImportReviewPage() {
                       placeholder="확인 필요"
                       onChange={(event) => {
                         const raw = event.currentTarget.value;
-                        if (raw !== '' && (!/^\\d+$/.test(raw) || Number(raw) > 720)) return;
+                        if (raw !== '' && (!/^\d+$/.test(raw) || Number(raw) > 720)) return;
                         void services.actions.importReview.setImportedBreakMinutes(
                           batch.id, item.id, raw === '' ? null : Number(raw),
                         );
