@@ -84,7 +84,16 @@ export function ImportReviewPage() {
             return (
               <div className="import-review-item" key={item.id}>
                 <div className="import-review-head">
-                  <div className="review-date">{formatDateLabel(item.date)} 일정</div>
+                  {weekly3ColumnReview ? (
+                    <label className="review-date">
+                      근무 날짜
+                      <input type="date" aria-label="근무 날짜 수정"
+                        value={item.date}
+                        onChange={(event)=>void services.actions.importReview.setImportedDate(
+                          batch.id,item.id,event.currentTarget.value)}
+                      />
+                    </label>
+                  ) : <div className="review-date">{formatDateLabel(item.date)} 일정</div>}
                   <div className={'review-person' + (item.personId ? '' : ' unresolved')}>
                     {person?.name ?? '사람 연결 필요'}
                   </div>
