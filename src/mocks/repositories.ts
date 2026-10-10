@@ -199,8 +199,9 @@ export class MockImportRepository implements ImportRepository {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (!person || !batch) return;
+      const changed = person.ignored !== ignored;
       person.ignored = ignored;
-      if (ignored) person.matchedPersonId = null;
+      if (ignored) { person.matchedPersonId = null; person.pendingCreate = false; }
       for (const item of batch.reviewItems) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         if (ignored || changed) {
