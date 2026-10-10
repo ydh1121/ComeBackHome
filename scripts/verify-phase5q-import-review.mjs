@@ -19,7 +19,9 @@ for (const text of [
   'exactDuplicate',
   "item.resolution === 'NEW' ? 'SKIP' : 'NEW'",
   "disabled={!allReviewed || saveState === 'saving'}",
-  "disabled={!item.personId || !importedComplete}",
+  "batch.detectedPeople.some(",
+  "person.pendingCreate",
+  "|| !importedComplete",
   'services.actions.importReview.setImportedTime',
   'TimeRangeWheelPicker',
 ]) {
@@ -29,7 +31,9 @@ expect(!reviewSource.includes('batch.reviewItems[0]'), 'review UI must not colla
 expect(!reviewSource.includes('type="time"'), 'import review must not use native time inputs on iPhone');
 expect(matchSource.includes('const allResolved'), 'person match completion gate missing');
 expect(matchSource.includes('<option value="">연결 안 됨</option>'), 'unmatched person label must be explicit');
-expect(matchSource.includes('새 사람으로 등록'), 'detected person create option missing');
+expect(matchSource.includes('승인 후 새 사람 등록'), 'pending new person label missing');
+expect(matchSource.includes('setPendingPersonCreate'), 'pending person draft action missing');
+expect(!matchSource.includes('services.actions.people.create'), 'person write before approval is prohibited');
 expect(matchSource.includes('가져오지 않음'), 'detected person ignore option missing');
 expect(matchSource.includes('disabled={!allResolved || includedCount === 0}'), 'person match next CTA must block unresolved/empty imports');
 expect(commitSource.includes("Import contains unresolved people."), 'unresolved person commit guard missing');
