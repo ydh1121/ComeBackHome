@@ -71,7 +71,7 @@ export function ImportPersonMatchPage() {
                   } finally {
                     setChangingDetectedId(null);
                   }
-                }
+                }}
               >
                 <option value="">연결 안 됨</option>
                 {workflow.people.map((person) => (
