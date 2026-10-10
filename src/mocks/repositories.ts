@@ -161,6 +161,63 @@ export class MockImportRepository implements ImportRepository {
       batch.committed = false;
     });
   }
+  async addManualPerson(batchId:EntityId,personId:EntityId,name:string):Promise<void> {
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(batch?.structure.weeklyReview?.status!=='MANUAL_RECOVERY_REQUIRED')
+      throw new Error('MANUAL_RECOVERY_NOT_ACTIVE');
+    if(batch.detectedPeople.some(p=>p.matchedPersonId===personId))
+      throw new Error('MANUAL_PERSON_ALREADY_INCLUDED');
+    const id=crypto.randomUUID();
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      if(!target)return;
+      target.detectedPeople.push({id,sourceName:name,matchedPersonId:personId,confidence:0,ignored:false});
+      for(let dayIndex=0;dayIndex<7;dayIndex++)target.reviewItems.push({
+        id:crypto.randomUUID(),detectedPersonId:id,personId,date:null,dayIndex,
+        imported:{enabled:true,start:null,end:null,breakMinutes:null},
+        recognitionState:'UNREADABLE',resolution:null,
+      });
+    });
+  }
+  async setWeeklyStartDate(batchId:EntityId,startDate:ISODate):Promise<void> {
+    const before=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!before?.structure.weeklyReview)throw new Error('WEEKLY_DATE_REVIEW_NOT_ACTIVE');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate))
+      throw new Error('INVALID_WEEK_START_DATE');
+    const start=new Date(startDate+'T00:00:00Z');
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==startDate||
+       start.getUTCDay()!==1)throw new Error('WEEK_START_MUST_BE_MONDAY');
+    if(before.reviewItems.some(item=>item.dayIndex==null||item.dayIndex<0||item.dayIndex>6))
+      throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+    this.store.mutate(state=>{
+      const batch=state.importBatches.find(b=>b.id===batchId);
+      if(!batch?.structure.weeklyReview)return;
+      for(const item of batch.reviewItems){
+        item.date=new Date(start.getTime()+item.dayIndex!*86400000).toISOString().slice(0,10);
+        item.existing=undefined;
+        item.resolution=null;
+      }
+      batch.structure.weeklyReview.startDate=startDate;
+      batch.structure.weeklyReview.confirmed=false;
+    });
+  }
+  async confirmWeeklyDates(batchId:EntityId):Promise<void> {
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!batch?.structure.weeklyReview?.startDate)throw new Error('WEEKLY_START_DATE_REQUIRED');
+    const start=new Date(batch.structure.weeklyReview.startDate+'T00:00:00Z');
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==
+       batch.structure.weeklyReview.startDate||start.getUTCDay()!==1)
+      throw new Error('WEEKLY_START_DATE_INVALID');
+    if(batch.reviewItems.some(item=>item.dayIndex==null||
+       item.date!==new Date(start.getTime()+item.dayIndex*86400000).toISOString().slice(0,10)))
+      throw new Error('WEEKLY_DATE_CONFLICT');
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      if(!target?.structure.weeklyReview)return;
+      target.structure.weeklyReview.confirmed=true;
+      target.reviewItems.forEach(item=>{item.resolution=null;});
+    });
+  }
   async setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void> {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
