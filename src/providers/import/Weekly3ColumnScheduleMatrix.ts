@@ -588,7 +588,7 @@ export function interpretWeekly3Column(
   for(const row of matrix.rows)for(const day of matrix.days){
     const sourceName=personNames[row.index];
     const date=dates.dates[day.index]?.date;
-    if(!sourceName||!date)continue;
+    if(!sourceName)continue;
     const fields=Object.fromEntries(FIELDS.map(field=>[
       field,byId.get('weekly::'+row.index+'::'+day.index+'::'+field),
     ])) as Record<WeeklyField,ImageTextProbeResult|undefined>;
@@ -602,7 +602,7 @@ export function interpretWeekly3Column(
       !String(fields[f]?.text??'').trim());
     // Color-only blank detection never produces a committed OFF row.
     if(threeEmpty){offReviewCount++;review.push({
-      sourcePersonName:sourceName,date,start:null,end:null,sourceRow:row.index+1,
+      sourcePersonName:sourceName,date:date??null,dayIndex:day.index,start:null,end:null,sourceRow:row.index+1,
       confidence:.1,recognitionState:'OFF_CANDIDATE',enabled:true,breakMinutes:null,
     });reviewCount++;continue;}
     const valid=start!=null&&end!=null;
@@ -614,24 +614,30 @@ export function interpretWeekly3Column(
       breakEvidence.push({rowIndex:row.index,dayIndex:day.index,
         minutes:breakMinutes,verifiedByUser:false});
     }
-    if(valid&&(!breakHasContent||breakMinutes!=null)){
-      schedule.push({sourcePersonName:sourceName,date,start,end,breakMinutes,
+    const confidentlyDated=date!=null&&!dates.dates[day.index]?.reviewRequired;
+    if(valid&&(!breakHasContent||breakMinutes!=null)&&confidentlyDated){
+      schedule.push({sourcePersonName:sourceName,date:date!,start,end,breakMinutes,
         sourceRow:row.index+1,
         confidence:Math.min(fields.start?.confidence??0,fields.end?.confidence??0)});
     }else{
       if(!valid)unreadableCount++;
       reviewCount++;
-      review.push({sourcePersonName:sourceName,date,start,end,breakMinutes,
-        sourceRow:row.index+1,confidence:.2,
-        recognitionState:valid?'INCOMPLETE':'UNREADABLE',enabled:true});
+      review.push({sourcePersonName:sourceName,date:date??null,dayIndex:day.index,
+        start,end,breakMinutes,sourceRow:row.index+1,confidence:.2,
+        recognitionState:valid&&(!breakHasContent||breakMinutes!=null)
+          ?'WORK':valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
   }
   const detectedPeople=personNames
     .filter((x,i,all)=>all.indexOf(x)===i)
     .map(name=>({sourceName:name,confidence:known.has(name)?0.9:0.2}));
   // Unmatched names remain in review, not fabricated DB people.
+  // Date evidence is a review state, not grounds for discarding real OCR
+  // names and cell values. No candidate can reach a schedule write until
+  // the user explicitly confirms the seven calendar dates.
   const blockedReason=blocked?'WEEKLY_DATE_REVIEW_REQUIRED':null;
-  const parsed=blockedReason?null:{
+  const requiresDateReview=dates.dates.some(d=>d.reviewRequired||!d.date);
+  const parsed:ParsedImport={
     detectedPeople,scheduleCandidates:schedule,reviewCandidates:review,
     structure:{
       sheet:'weekly 7 day x start/end/break physical matrix',
@@ -640,6 +646,12 @@ export function interpretWeekly3Column(
       dateColumn:'observed OCR plus review-required calendar continuity',
       shiftColumn:'start/end/break; rest never silently subtracted; OFF never auto confirmed',
       needsReview:true,
+      weeklyReview:{
+        status:requiresDateReview?'PARTIAL_REVIEW_REQUIRED':'AUTO_RECOGNIZED',
+        startDate:dates.dates[0]?.date??null,
+        confirmed:false,
+        ...(blockedReason?{reason:blockedReason}:{}),
+      },
     },
     confidence:Math.min(.5,matrix.headerSource==='OBSERVED_LABELS'?.5:.2),
   };
