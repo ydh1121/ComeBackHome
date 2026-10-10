@@ -68,7 +68,7 @@ jobs:
             .sort();
 
           const expectedMigrations = fs.readdirSync('db/migrations')
-            .filter((name) => /^\\d{4}_.+\\.sql$/.test(name))
+            .filter((name) => /^\d{4}_.+\.sql$/.test(name))
             .sort();
           if (!expectedMigrations.length) throw new Error('No repository migration SQL files found');
           if (expectedMigrations.length !== migrations.length ||
