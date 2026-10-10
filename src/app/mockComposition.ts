@@ -72,7 +72,7 @@ export function createMockApplicationServices(): ApplicationServices {
     repositories,
     queries,
     actions: {
-      commitImportReview: new CommitImportReview(repositories.imports, repositories.schedules),
+      commitImportReview: new CommitImportReview(repositories.imports, repositories.schedules, repositories.people),
       transitAccess: new TransitAccessService(repositories.commute, () => store.mutate(() => undefined)),
       notifications: new NotificationService(
         repositories.notifications,
