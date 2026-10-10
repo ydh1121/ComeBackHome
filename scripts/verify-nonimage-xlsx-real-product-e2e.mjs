@@ -119,6 +119,10 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     const timeSelectors=firstShift.locator('.review-time-editor');
     assert((await timeSelectors.count())===1,label+' weekly time editor missing');
     await firstShift.locator('input[aria-label="쉬는시간 분 단위 수정"]').fill('45');
+    await page.waitForFunction(() => {
+      const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
+      return save instanceof HTMLButtonElement && save.disabled === true;
+    },null,{timeout:12_000});
     assert(await page.getByRole('button',{name:'저장',exact:true}).isDisabled(),
       label+' editing approved break minutes must invalidate prior approval');
     await firstShift.locator('.review-choice-list button').last().click();
