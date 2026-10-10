@@ -505,7 +505,11 @@ try{
                 }
                 if(url.pathname==='/api/schedules/import'&&method==='PUT'){
                   const body=JSON.parse(init.body);
-                  const rows=body.schedules;
+                  const reviewed=body.reviewedImport;
+                  if(!reviewed||reviewed.confirmed!==true||
+                     reviewed.newPeople.length!==0)
+                    throw Error('Expected explicitly approved reviewed schedule import');
+                  const rows=reviewed.schedules;
                   if(!Array.isArray(rows)||rows.length!==14||
                      new Set(rows.map(x=>x.personId)).size!==2)
                     throw Error('Expected two-person atomic import payload');
@@ -521,7 +525,7 @@ try{
                   for(const [key,value] of pending)apiStored.set(key,value);
                   fetchTrace.writes+=rows.length;
                   fetchTrace.atomicBatches++;
-                  return respond({schedules:rows});
+                  return respond({schedules:rows,createdPeople:{}});
                 }
                 const match=/^[/]api[/]people[/]([^/]+)[/]schedules(?:[/]([^/]+))?$/.exec(url.pathname);
                 if(match){
