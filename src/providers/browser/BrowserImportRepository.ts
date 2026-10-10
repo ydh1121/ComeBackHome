@@ -130,7 +130,7 @@ export class BrowserImportRepository implements ImportRepository {
     const batch=this.requireBatch(batchId);
     const weekly=batch.structure.weeklyReview;
     if(!weekly)throw new Error('WEEKLY_DATE_REVIEW_NOT_ACTIVE');
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(startDate))
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate))
       throw new Error('INVALID_WEEK_START_DATE');
     const date=new Date(startDate+'T00:00:00Z');
     if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==startDate||
