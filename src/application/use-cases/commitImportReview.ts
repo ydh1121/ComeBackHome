@@ -56,7 +56,7 @@ export class CommitImportReview implements CommitImportReviewAction {
     // silently dropped. Editing minutes revokes prior approval in both repos.
     const unresolvedRest = includedItems.some(item =>
       item.resolution === 'NEW' && item.imported.enabled !== false &&
-      item.recognitionState === 'INCOMPLETE' &&
+      item.breakReviewRequired === true &&
       item.imported.breakMinutes == null,
     );
     if (unresolvedRest) throw new Error('Import contains unreviewed break minutes.');
