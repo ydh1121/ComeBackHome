@@ -1,4 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { createECDH, randomBytes } from 'node:crypto';
+import webPush from 'web-push';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
 
@@ -11,15 +14,17 @@ const source = await readFile(
 );
 
 for (const text of [
-  "import webPush from 'web-push'",
+  "import { buildPushPayload } from '@block65/webcrypto-web-push'",
   'class WebPushDeliveryGateway',
+  'buildWorkerEncryptedPushPayload',
+  'return await buildPushPayload',
+  'response = await fetch(url.toString()',
   'vapidDetails:',
   'TTL: this.config.ttlSeconds',
   "statusCode === 404 || statusCode === 410",
   "statusCode === 429",
-  "new PushDeliveryError(message, 'terminal-subscription')",
-  "new PushDeliveryError(message, 'transient')",
-  "new PushDeliveryError(message, 'permanent')",
+  'new PushDeliveryError(message, kind, statusCode)',
+  'export function classifyPushProviderFailure',
 ]) {
   expect(source.includes(text), 'web push gateway missing ' + text);
 }
@@ -91,15 +96,124 @@ try {
       failures.push('expected push failure for ' + String(statusCode));
     } catch (error) {
       expect(error?.kind === expectedKind, 'status ' + String(statusCode) + ' classified as ' + String(error?.kind));
+      const diagnosed = module.classifyPushProviderFailure(error);
+      const expectedReason = statusCode === 400 ? 'PUSH_PROVIDER_BAD_REQUEST'
+        : statusCode === 401 || statusCode === 403 ? 'PUSH_PROVIDER_AUTH_REJECTED'
+        : statusCode === 429 ? 'PUSH_PROVIDER_RATE_LIMITED'
+        : statusCode === 503 ? 'PUSH_PROVIDER_UNAVAILABLE'
+        : statusCode === 404 || statusCode === 410 ? 'PUSH_PROVIDER_REJECTED'
+        : 'PUSH_TRANSPORT_ERROR';
+      expect(diagnosed.reason === expectedReason,
+        'status ' + String(statusCode) + ' public reason incorrect');
+      expect(diagnosed.upstreamStatus === statusCode,
+        'status ' + String(statusCode) + ' must retain only sanitized HTTP status');
+      expect(!JSON.stringify(diagnosed).includes(subscription.endpoint),
+        'public error must never include subscription endpoint');
     }
   };
 
   await expectKind(410, 'terminal-subscription');
   await expectKind(404, 'terminal-subscription');
+  await expectKind(401, 'permanent');
+  await expectKind(403, 'permanent');
   await expectKind(429, 'transient');
   await expectKind(503, 'transient');
   await expectKind(null, 'transient');
   await expectKind(400, 'permanent');
+
+  const unknownRuntimeFailure = module.classifyPushProviderFailure(new Error('secret runtime path'));
+  expect(unknownRuntimeFailure.reason === 'PUSH_TRANSPORT_ERROR' &&
+    unknownRuntimeFailure.upstreamStatus === null,
+    'runtime errors must not be mislabeled as upstream provider refusal');
+  expect(!JSON.stringify(unknownRuntimeFailure).includes('secret runtime path'),
+    'raw runtime exception must not leak to client');
+
+  // Exercise the PRODUCTION default sender, not only an injected mock.
+  // A valid ephemeral P-256 client public key forces real aes128gcm encryption
+  // and VAPID signing. Fetch interception guarantees ZERO external sends.
+  const receiver=createECDH('prime256v1');
+  receiver.generateKeys();
+  const validKeys=webPush.generateVAPIDKeys();
+  const actualSubscription={
+    ...subscription,
+    endpoint:'https://web.push.apple.com/Q/example-test-only',
+    keys:{
+      p256dh:receiver.getPublicKey().toString('base64url'),
+      auth:randomBytes(16).toString('base64url'),
+    },
+  };
+  const nativeGateway=new module.WebPushDeliveryGateway({
+    subject:'mailto:test@example.invalid',
+    publicKey:validKeys.publicKey,
+    privateKey:validKeys.privateKey,
+    ttlSeconds:300,
+  });
+  const fetchOriginal=globalThis.fetch;
+  const outbound=[];
+  try {
+    globalThis.fetch=async (url, init) => {
+      outbound.push({
+        url:String(url),method:init.method,
+        authorization:init.headers.get('Authorization'),
+        encoding:init.headers.get('Content-Encoding'),
+        ttl:init.headers.get('TTL'),
+        bodyBytes:init.body?.byteLength??0,
+        contentLength:init.headers.get('Content-Length'),
+      });
+      return new Response(null,{status:201});
+    };
+    await nativeGateway.send(actualSubscription,payload);
+    assert.equal(outbound.length,1,'default sender must use native fetch');
+    assert.equal(outbound[0].url,actualSubscription.endpoint);
+    assert.equal(outbound[0].method,'POST');
+    assert.equal(outbound[0].encoding,'aes128gcm','iPhone requires RFC8291 aes128gcm');
+    assert.equal(outbound[0].ttl,'300');
+    assert.ok(outbound[0].authorization?.startsWith('vapid '));
+    assert.ok(outbound[0].bodyBytes>40,'payload must be encrypted');
+    assert.equal(outbound[0].contentLength,null,
+      'native fetch must set Content-Length itself');
+    globalThis.fetch=async () => new Response(null,{status:403});
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.kind==='permanent' && error.providerStatus===403);
+    globalThis.fetch=async () => { throw new TypeError('mock transport failure'); };
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.kind==='transient' && error.providerStatus===null);
+  } finally {
+    globalThis.fetch=fetchOriginal;
+  }
+  console.log(JSON.stringify({
+    nativeFetchEncryptedSend:true,
+    vapidSigned:true,
+    upstreamStatusPropagated:true,
+    transportFailureClassified:true,
+    actualPushSends:0,
+  }));
+
+  // Isolate actual default-sender failure stage without a network request.
+  const stageCases = [
+    {
+      name:'invalid subscription', keys:{p256dh:'wrong',auth:'wrong'},
+      status:'PUSH_SUBSCRIPTION_KEY_INVALID',
+    },
+  ];
+  for (const item of stageCases) {
+    const malformed={...actualSubscription,keys:item.keys};
+    await assert.rejects(nativeGateway.send(malformed,payload),error =>
+      module.classifyPushProviderFailure(error).reason===item.status);
+  }
+  const mockedOriginal=globalThis.fetch;
+  try {
+    globalThis.fetch=async () => { throw new TypeError('Synthetic fetch failed'); };
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.failureStage==='FETCH' &&
+      module.classifyPushProviderFailure(error).reason==='PUSH_NETWORK_CONNECT_FAILED');
+    globalThis.fetch=async () => new Response(null,{status:403});
+    await assert.rejects(nativeGateway.send(actualSubscription,payload),error =>
+      error?.failureStage==='PROVIDER' &&
+      module.classifyPushProviderFailure(error).reason==='PUSH_PROVIDER_AUTH_REJECTED');
+  } finally {
+    globalThis.fetch=mockedOriginal;
+  }
 
   let invalidSubjectBlocked = false;
   try {

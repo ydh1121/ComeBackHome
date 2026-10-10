@@ -44,6 +44,7 @@ try{
   assert.equal(body.vapidKeyPairValid,true);
   assert.equal(body.pushDeliveryReady,false);
   assert.equal(body.activeSubscriptionCount,0);
+  assert.equal(body.validSubscriptionKeyShapeCount,0);
   assert.equal(body.scheduledNotificationReady,false);
   assert.ok(body.scheduledMissing.includes('KAKAO_REST_API_KEY'));
   assert.equal(JSON.stringify(body).includes(env.VAPID_PRIVATE_KEY),false,
@@ -59,6 +60,96 @@ try{
   assert.equal(response.status,404,'Test push must independently reach subscription check');
   body=await response.json();
   assert.equal(body.reason,'SUBSCRIPTION_NOT_REGISTERED');
+
+  // Exercise the real API route with an in-memory D1 read and a deterministic
+  // fake transport. No external push is sent, no production D1 is modified.
+  const gatewayModule=await vite.ssrLoadModule('/worker/push/WebPushDeliveryGateway.ts');
+  const contracts=await vite.ssrLoadModule('/worker/contracts.ts');
+  const originalSend=gatewayModule.WebPushDeliveryGateway.prototype.send;
+  const diagnosticEndpoint='https://push.example.invalid/registered';
+  dbSubscriptions.push({
+    id:'diagnostic',endpoint:diagnosticEndpoint,p256dh:'sensitive-public-key',
+    auth:'sensitive-auth',expiration_time:null,active:1,
+    created_at:'2026-10-09T00:00:00Z',updated_at:'2026-10-09T00:00:00Z',
+  });
+  try {
+    for (const [httpStatus,kind,expectedReason] of [
+      [403,'permanent','PUSH_PROVIDER_AUTH_REJECTED'],
+      [400,'permanent','PUSH_PROVIDER_BAD_REQUEST'],
+      [429,'transient','PUSH_PROVIDER_RATE_LIMITED'],
+      [503,'transient','PUSH_PROVIDER_UNAVAILABLE'],
+    ]) {
+      gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
+        throw new contracts.PushDeliveryError('secret delivery error',kind,httpStatus);
+      };
+      const actual=await api.handleApiRequest(
+        new Request('https://come-back-home.pages.dev/api/notifications/test',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({endpoint:diagnosticEndpoint}),
+        }),env,null);
+      assert.equal(actual.status,502);
+      const payload=await actual.json();
+      assert.equal(payload.reason,expectedReason);
+      assert.equal(payload.upstreamStatus,httpStatus);
+      const serialized=JSON.stringify(payload);
+      assert.ok(!serialized.includes('secret delivery error'));
+      assert.ok(!serialized.includes(diagnosticEndpoint));
+      assert.ok(!serialized.includes('sensitive-auth'));
+      assert.ok(!serialized.includes(env.VAPID_PRIVATE_KEY));
+    }
+    for (const [stage,expectedReason] of [
+      ['SUBSCRIPTION','PUSH_SUBSCRIPTION_KEY_INVALID'],
+      ['PREPARE','PUSH_REQUEST_PREPARATION_FAILED'],
+      ['HEADERS','PUSH_REQUEST_HEADERS_FAILED'],
+      ['FETCH','PUSH_NETWORK_CONNECT_FAILED'],
+    ]) {
+      gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
+        throw new contracts.PushDeliveryError('secret stage exception','transient',null,stage);
+      };
+      const result=await api.handleApiRequest(
+        new Request('https://come-back-home.pages.dev/api/notifications/test',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({endpoint:diagnosticEndpoint}),
+        }),env,null);
+      assert.equal(result.status,502);
+      const response=await result.json();
+      assert.equal(response.reason,expectedReason);
+      assert.equal(response.upstreamStatus,null);
+      assert.ok(!JSON.stringify(response).includes('secret stage exception'));
+    }
+    gatewayModule.WebPushDeliveryGateway.prototype.send=async () => {
+      throw new Error('internal crypto or transport exception with private data');
+    };
+    const runtime=await api.handleApiRequest(
+      new Request('https://come-back-home.pages.dev/api/notifications/test',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({endpoint:diagnosticEndpoint}),
+      }),env,null);
+    assert.equal(runtime.status,502);
+    const runtimeResult=await runtime.json();
+    assert.equal(runtimeResult.reason,'PUSH_TRANSPORT_ERROR');
+    assert.equal(runtimeResult.upstreamStatus,null);
+    assert.ok(!JSON.stringify(runtimeResult).includes('internal crypto'));
+  } finally {
+    gatewayModule.WebPushDeliveryGateway.prototype.send=originalSend;
+    dbSubscriptions.length=0;
+  }
+
+  const syntheticKey={
+    id:'synthetic-valid',endpoint:'https://push.example.invalid/format-check-only',
+    p256dh:env.VAPID_PUBLIC_KEY,auth:Buffer.alloc(16).toString('base64url'),
+    expiration_time:null,active:1,
+    created_at:'2026-10-09T00:00:00Z',updated_at:'2026-10-09T00:00:00Z',
+  };
+  dbSubscriptions.push(syntheticKey);
+  let telemetry=await api.handleApiRequest(
+    new Request('https://come-back-home.pages.dev/api/notifications/readiness'),env,null);
+  assert.equal((await telemetry.json()).validSubscriptionKeyShapeCount,1);
+  syntheticKey.auth='invalid';
+  telemetry=await api.handleApiRequest(
+    new Request('https://come-back-home.pages.dev/api/notifications/readiness'),env,null);
+  assert.equal((await telemetry.json()).validSubscriptionKeyShapeCount,0);
+  dbSubscriptions.length=0;
 
   const state={permission:'default',subscription:null};
   const repo={
@@ -114,6 +205,52 @@ try{
   assert.equal(errors.categorizePushError(new errors.PushClientError('NO_PERMISSION')),
     'NO_PERMISSION');
   assert.equal(errors.PUSH_FAILURE_MESSAGES.PUSH_PROVIDER_REJECTED.includes('거부'),true);
+  for (const reason of ['PUSH_PROVIDER_BAD_REQUEST','PUSH_PROVIDER_AUTH_REJECTED',
+      'PUSH_PROVIDER_RATE_LIMITED','PUSH_PROVIDER_UNAVAILABLE','PUSH_TRANSPORT_ERROR']) {
+    const clientError = Object.assign(new Error('Test push delivery failed'), {
+      status: 502,
+      reason,
+    });
+    assert.equal(errors.categorizePushError(clientError),reason,
+      'Specific server reason must override generic HTTP 502');
+    assert.ok(errors.PUSH_FAILURE_MESSAGES[reason]?.length > 16,
+      'Every new server failure must have a Korean UI explanation');
+  }
+  // iOS Home Screen apps need the permission API invoked synchronously from
+  // the click handler. Prove the request happens BEFORE any awaited work.
+  const gestureEvents=[];
+  const localState={permission:'default',subscription:null};
+  const gesturePermission={
+    getPermissionSnapshot(){gestureEvents.push('snapshot');return 'default';},
+    async getPermission(){throw Error('Delayed permission query lost user activation');},
+    requestPermissionFromUserGesture(){
+      gestureEvents.push('requestPermission:called-synchronously');
+      return Promise.resolve('granted');
+    },
+  };
+  const gestureRepo={
+    async setPermission(value){localState.permission=value;},
+    async setSubscription(value){localState.subscription=value;},
+  };
+  const gestureBrowser={
+    async getCurrent(){return null;},
+    async subscribe(){gestureEvents.push('subscribe');return current;},
+    async unsubscribe(){},
+  };
+  const gestureService=new serviceModule.NotificationService(
+    gestureRepo,gesturePermission,gestureBrowser,{async sendTestNotification(){}},
+  );
+  const pending=gestureService.connectPushFromUserGesture();
+  assert.deepEqual(gestureEvents,
+    ['snapshot','requestPermission:called-synchronously'],
+    'Notification.requestPermission must be started in original user gesture');
+  await pending;
+  assert.equal(localState.permission,'subscribed');
+  assert.equal(localState.subscription?.endpoint,current.endpoint);
+  console.log(JSON.stringify({
+    result:'PASS',userGesturePermissionCalledBeforeAwait:true,
+    noProductionPushSent:true,liveKakaoRouteCalls:0,
+  }));
   console.log(JSON.stringify({
     result:'PASS',testEndpointWithoutKakao:'HTTP_404_SUBSCRIPTION_NOT_REGISTERED',
     providerCalls:0,actualPushSends:0,readonlyReadiness:true,vapidConfigured:true,
