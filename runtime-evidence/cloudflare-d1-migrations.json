@@ -24,6 +24,6 @@
     "saved_commute_route_destinations",
     "presence_state"
   ],
-  "migrationCount": 7,
+  "migrationCount": 8,
   "tableCount": 19
 }
