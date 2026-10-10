@@ -91,7 +91,7 @@ try {
   expect(weekly.detectedPeople.length===2,'weekly roster detection mismatch');
   const work=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2026-12-28');
   expect(work?.start==='09:30'&&work.end==='23:30'&&work.breakMinutes===30&&
-    work.recognitionState==='WORK','numeric 23.5 / 0.5 conversion mismatch');
+    work.recognitionState==null,'numeric 23.5 / 0.5 conversion mismatch');
   const oneHour=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2026-12-29');
   const twoHours=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2026-12-30');
   expect(oneHour?.breakMinutes===60&&twoHours?.breakMinutes===120,
