@@ -11,6 +11,7 @@ export function ImportPersonMatchPage() {
   const services = useApplicationServices();
   const workflow = useImportWorkflow(batchId);
   const [creatingDetectedId, setCreatingDetectedId] = useState<string | null>(null);
+  const [manualPersonId, setManualPersonId] = useState('');
 
   if (workflow.status === 'loading') {
     return <section className="import-page"><div className="import-message">사람 연결 정보를 불러오는 중</div></section>;
@@ -28,6 +29,25 @@ export function ImportPersonMatchPage() {
     <section className="import-page" data-route={'/import/' + batchId + '/people'} data-page="ImportPersonMatchPage" data-state="MATCH_REQUIRED">
       <BackButton fallbackTo="/import" />
       <h1 className="page-title">사람 연결</h1>
+      {batch.structure.weeklyReview?.status==='MANUAL_RECOVERY_REQUIRED' ? (
+        <div className="mapping-row" data-state="MANUAL_RECOVERY_REQUIRED">
+          <p>표를 자동으로 읽지 못했습니다. 기존 등록 직원 중 근무표에 있는 사람을 선택해 주간 일정 7칸을 만드세요.</p>
+          <select className="mapping-native-select"
+            aria-label="수동 등록할 직원" value={manualPersonId}
+            onChange={event=>setManualPersonId(event.target.value)}>
+            <option value="">직원 선택</option>
+            {workflow.people.filter(person=>!batch.detectedPeople.some(
+              item=>item.matchedPersonId===person.id)).map(person=>
+              <option key={person.id} value={person.id}>{person.name}</option>)}
+          </select>
+          <button className="review-choice import-toggle" type="button"
+            disabled={!manualPersonId}
+            onClick={async()=>{
+              await services.actions.importMatch.addManualPerson(batch.id,manualPersonId);
+              setManualPersonId('');
+            }}>직원 주간 일정 추가</button>
+        </div>
+      ) : null}
 
       <div className="mapping-list">
         {batch.detectedPeople.map((detected) => {
