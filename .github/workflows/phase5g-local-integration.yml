@@ -183,6 +183,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  nonimage-xlsx-product-e2e:
+    name: NONIMAGE_XLSX_PRODUCT_E2E / native binary + Chromium WebKit + isolated D1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Actual product XLSX import E2E (no remote resources)
+        run: node scripts/verify-nonimage-xlsx-real-product-e2e.mjs
+
   ocr-clean-production-runtime:
     name: PRODUCT_REQUIRED_GATE / clean production OCR assets / no CI pre-staging
     runs-on: ubuntu-latest
