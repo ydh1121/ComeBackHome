@@ -106,6 +106,88 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async addManualPerson(batchId:EntityId,personId:EntityId,name:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    if(batch.structure.weeklyReview?.status!=='MANUAL_RECOVERY_REQUIRED')
+      throw new Error('MANUAL_RECOVERY_NOT_ACTIVE');
+    if(batch.detectedPeople.some(person=>person.matchedPersonId===personId))
+      throw new Error('MANUAL_PERSON_ALREADY_INCLUDED');
+    const id=crypto.randomUUID();
+    batch.detectedPeople.push({
+      id,sourceName:name,matchedPersonId:personId,confidence:0,ignored:false,
+    });
+    for(let dayIndex=0;dayIndex<7;dayIndex++){
+      batch.reviewItems.push({
+        id:crypto.randomUUID(),detectedPersonId:id,personId,
+        date:null,dayIndex,imported:{enabled:true,start:null,end:null,breakMinutes:null},
+        recognitionState:'UNREADABLE',resolution:null,
+      });
+    }
+    this.persist();
+  }
+
+  async setWeeklyStartDate(batchId:EntityId,startDate:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const weekly=batch.structure.weeklyReview;
+    if(!weekly)throw new Error('WEEKLY_DATE_REVIEW_NOT_ACTIVE');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate))
+      throw new Error('INVALID_WEEK_START_DATE');
+    const date=new Date(startDate+'T00:00:00Z');
+    if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==startDate||
+       date.getUTCDay()!==1)throw new Error('WEEK_START_MUST_BE_MONDAY');
+    const monday=date.getTime();
+    for(const item of batch.reviewItems){
+      if(item.dayIndex==null||item.dayIndex<0||item.dayIndex>6)
+        throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+      item.date=new Date(monday+item.dayIndex*86400000).toISOString().slice(0,10);
+      // Previously loaded schedule and previous approval never survive
+      // changing the calendar origin.
+      item.existing=undefined;
+      item.resolution=null;
+    }
+    weekly.startDate=startDate;
+    weekly.confirmed=false;
+    this.persist();
+  }
+
+  async confirmWeeklyDates(batchId:EntityId):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const weekly=batch.structure.weeklyReview;
+    if(!weekly?.startDate)throw new Error('WEEKLY_START_DATE_REQUIRED');
+    const monday=new Date(weekly.startDate+'T00:00:00Z');
+    if(!Number.isFinite(monday.getTime())||monday.toISOString().slice(0,10)!==
+        weekly.startDate||monday.getUTCDay()!==1)
+      throw new Error('WEEKLY_START_DATE_INVALID');
+    for(const item of batch.reviewItems){
+      if(item.dayIndex==null||item.dayIndex<0||item.dayIndex>6)
+        throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+      const expected=new Date(monday.getTime()+item.dayIndex*86400000)
+        .toISOString().slice(0,10);
+      if(item.date!==expected)throw new Error('WEEKLY_DATE_CONFLICT');
+      item.resolution=null;
+    }
+    weekly.confirmed=true;
+    this.persist();
+  }
+
+  async setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,proposedName:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    if(!batch.structure.weeklyReview)throw new Error('NEW_PERSON_REVIEW_NOT_ACTIVE');
+    const name=proposedName.normalize('NFKC').trim();
+    if(!/^[가-힣]{2,5}$/.test(name))throw new Error('INVALID_NEW_PERSON_NAME');
+    const detected=batch.detectedPeople.find(p=>p.id===detectedPersonId);
+    if(!detected)throw new Error('Detected person was not found.');
+    detected.pendingCreateName=name;
+    detected.matchedPersonId=null;
+    detected.ignored=false;
+    for(const item of batch.reviewItems){
+      if(item.detectedPersonId!==detectedPersonId)continue;
+      item.personId=null;
+      item.resolution=null;
+    }
+    this.persist();
+  }
+
   async setDetectedPersonMatch(
     batchId: EntityId,
     detectedPersonId: EntityId,
@@ -115,6 +197,7 @@ export class BrowserImportRepository implements ImportRepository {
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
     person.matchedPersonId = personId;
+    person.pendingCreateName = undefined;
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       item.personId = personId;
@@ -135,7 +218,7 @@ export class BrowserImportRepository implements ImportRepository {
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
     person.ignored = ignored;
-    if (ignored) person.matchedPersonId = null;
+    if (ignored) { person.matchedPersonId = null; person.pendingCreateName=undefined; }
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       if (ignored) {

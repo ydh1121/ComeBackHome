@@ -48,6 +48,31 @@ export class D1ScheduleRepository implements ScheduleRepository {
   }
 
   async upsertMany(entries: ScheduleEntry[]): Promise<void> {
+    await batchOrThrow(this.db, this.scheduleStatements(entries));
+  }
+
+  /** D1.batch is one transaction: new people and every shift are all-or-none. */
+  async upsertApprovedWithPeople(
+    people: Array<{ id: string; name: string }>,
+    entries: ScheduleEntry[],
+  ): Promise<void> {
+    const now = utcNow();
+    const personStatements: D1PreparedStatementLike[] = people.map(person =>
+      this.db.prepare(`INSERT INTO people (id, name, relation, created_at, updated_at)
+        SELECT ?1, ?2, '', ?3, ?3
+        WHERE NOT EXISTS (
+          SELECT 1 FROM people WHERE
+            lower(replace(name, ' ', '')) = lower(replace(?2, ' ', ''))
+            AND id <> ?1
+        )
+        ON CONFLICT(id) DO NOTHING`).bind(person.id, person.name, now),
+    );
+    await batchOrThrow(this.db, [
+      ...personStatements, ...this.scheduleStatements(entries),
+    ]);
+  }
+
+  private scheduleStatements(entries: ScheduleEntry[]): D1PreparedStatementLike[] {
     const now = utcNow();
     for (const entry of entries) {
       const minutes = entry.breakMinutes;
@@ -81,6 +106,6 @@ export class D1ScheduleRepository implements ScheduleRepository {
       entry.breakMinutes === undefined ? 0 : 1,
     ));
 
-    await batchOrThrow(this.db, statements);
+    return statements;
   }
 }

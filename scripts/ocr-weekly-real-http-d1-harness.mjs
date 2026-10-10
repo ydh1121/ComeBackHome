@@ -120,6 +120,126 @@ export async function startWeeklyRealHttpD1(){
         }
         return result.sort((a,b)=>(a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
       },
+      async atomicReviewedChecks(){
+        const request=(input)=>json('/api/schedules/import',{
+          method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({reviewedImport:input}),
+        });
+        const dates=(monday)=>Array.from({length:7},(_,i)=>
+          new Date(Date.parse(monday+'T00:00:00Z')+86400000*i)
+            .toISOString().slice(0,10));
+        const newPerson=(name)=>({ref:crypto.randomUUID(),name});
+        const make=(weekStart,newPeople,existingIds=[])=>{
+          const requestId=crypto.randomUUID();
+          const rows=[];
+          for(const [index,person] of [...newPeople.map(p=>({pendingPersonRef:p.ref})),
+            ...existingIds.map(id=>({personId:id}))].entries()){
+            for(const [dayIndex,date] of dates(weekStart).entries())
+              rows.push({...person,id:crypto.randomUUID(),date,dayIndex,
+                enabled:dayIndex!==6,start:dayIndex===6?'00:00':'09:30',
+                end:dayIndex===6?'00:00':'23:30',
+                breakMinutes:dayIndex===6?null:30,decision:'NEW',approved:true,
+                ...(dayIndex===6?{recognitionState:'OFF_CANDIDATE',offApproved:true}:{}),
+              });
+          }
+          return {requestId,weekStart,confirmed:true,newPeople,schedules:rows};
+        };
+        const snapshot=async()=>{
+          const peopleResponse=await json('/api/people');
+          if(!peopleResponse.ok)throw Error('ATOMIC_TEST_PEOPLE_READ_FAILED');
+          const people=peopleResponse.body.people;
+          const schedules=[];
+          for(const person of people){
+            const r=await json('/api/people/'+encodeURIComponent(person.id)+'/schedules');
+            if(!r.ok)throw Error('ATOMIC_TEST_SCHEDULE_READ_FAILED');
+            schedules.push(...r.body.schedules);
+          }
+          people.sort((a,b)=>a.id.localeCompare(b.id));
+          schedules.sort((a,b)=>(a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
+          return {people,schedules};
+        };
+        const countStable=async(before,kind,change)=>{
+          const failed=await request(change);
+          if(failed.ok||failed.status!==400)throw Error('ATOMIC_'+kind+'_ACCEPTED');
+          const after=await snapshot();
+          if(JSON.stringify(after)!==JSON.stringify(before))
+            throw Error('ATOMIC_'+kind+'_PARTIALLY_COMMITTED');
+          return kind;
+        };
+        const outcomes=[];
+        const start='2099-02-02';
+        const first=make(start,[newPerson('홍테스트')]);
+        const before=await snapshot();
+        // Unapproved and invalid weekly inputs cannot change any table.
+        outcomes.push(await countStable(before,'WEEK_NOT_CONFIRMED',{...first,confirmed:false}));
+        outcomes.push(await countStable(before,'UNAPPROVED_CELL',{
+          ...first,schedules:first.schedules.map((row,i)=>i?row:{...row,approved:false}),
+        }));
+        outcomes.push(await countStable(before,'OFF_CANDIDATE',{
+          ...first,schedules:first.schedules.map((row,i)=>i===6?{...row,offApproved:false}:row),
+        }));
+        outcomes.push(await countStable(before,'INVALID_CLOCK',{
+          ...first,schedules:first.schedules.map((row,i)=>i===2?{...row,start:'99:99'}:row),
+        }));
+        outcomes.push(await countStable(before,'INVALID_BREAK',{
+          ...first,schedules:first.schedules.map((row,i)=>i===3?{...row,breakMinutes:900}:row),
+        }));
+        outcomes.push(await countStable(before,'MISSING_OWNER',{
+          ...first,schedules:first.schedules.map((row,i)=>i===2?
+            {...row,pendingPersonRef:'not-found'}:row),
+        }));
+        outcomes.push(await countStable(before,'DUPLICATE_DAY',{
+          ...first,schedules:[...first.schedules,first.schedules[0]],
+        }));
+        outcomes.push(await countStable(before,'UNKNOWN_EXISTING',{
+          ...first,schedules:first.schedules.map((row,i)=>i===4?
+            {...row,pendingPersonRef:undefined,personId:'missing-owner'}:row),
+        }));
+        // Conflict on the fifth SQL statement, *after* new person INSERT and
+        // three valid schedules. D1.batch must rollback the entire transaction.
+        const midFailure=make(start,[newPerson('황테스트')]);
+        midFailure.schedules[3].id=before.schedules[0].id;
+        outcomes.push(await countStable(before,'SCHEDULE_SQL_ROLLBACK',midFailure));
+        // Existing-name collision forces a failed person insert before schedules.
+        const duplicateName=make(start,[newPerson(before.people[0].name)]);
+        outcomes.push(await countStable(before,'PERSON_INSERT_REJECT',duplicateName));
+        const passed=await request(first);
+        if(!passed.ok||Object.keys(passed.body?.createdPeople??{}).length!==1)
+          throw Error('ATOMIC_SINGLE_PERSON_COMMIT_FAILED');
+        const afterFirst=await snapshot();
+        if(afterFirst.people.length!==before.people.length+1||
+           afterFirst.schedules.length!==before.schedules.length+7)
+          throw Error('ATOMIC_SINGLE_PERSON_COUNT_MISMATCH');
+        // Simulate a lost response: retry the identical browser request ID
+        // and same content, receiving the same server-generated employee id.
+        const repeat=await request(first);
+        if(!repeat.ok||JSON.stringify(repeat.body?.createdPeople)!==
+           JSON.stringify(passed.body.createdPeople))
+          throw Error('ATOMIC_RETRY_PERSON_ID_DRIFT');
+        const afterRepeat=await snapshot();
+        if(JSON.stringify(afterRepeat.people)!==JSON.stringify(afterFirst.people)||
+           afterRepeat.schedules.length!==afterFirst.schedules.length)
+          throw Error('ATOMIC_REPLAY_DUPLICATE_RECORDS');
+        const second=make('2099-02-09',[
+          newPerson('한테스트'),newPerson('문테스트'),
+        ]);
+        const multi=await request(second);
+        if(!multi.ok)throw Error('ATOMIC_MULTIPLE_NEW_PEOPLE_FAILED');
+        const mixed=make('2099-02-16',[
+          newPerson('박테스트'),
+        ],[people[0].id]);
+        const mixedResponse=await request(mixed);
+        if(!mixedResponse.ok)throw Error('ATOMIC_MIXED_EXISTING_NEW_FAILED');
+        const final=await snapshot();
+        if(final.people.length!==before.people.length+4 ||
+           final.schedules.length!==before.schedules.length+7+14+14)
+          throw Error('ATOMIC_MIXED_FINAL_COUNT_MISMATCH');
+        return {singleNewRows:7,multipleNewRows:14,mixedRows:14,
+          negativeCases:outcomes,rollback:true,
+          sameRequestReplayNoDuplicate:true,productionD1Writes:0,
+          beforePeople:before.people.length,afterPeople:final.people.length,
+          beforeSchedules:before.schedules.length,afterSchedules:final.schedules.length};
+      },
       async negativeChecks(){
         console.info('CBH_REAL_HTTP_D1_TRACE: NEGATIVE_GATES_BEGIN');
         const baseline=await this.snapshot();

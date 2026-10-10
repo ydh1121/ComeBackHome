@@ -180,6 +180,65 @@ export function buildWeekly3ColumnPhysicalMatrix(
   };
 }
 
+/**
+ * Reconcile only OCR-observed, physically owned repeated start/end labels.
+ * If Tesseract missed the header row, Paddle's real cell crops can expose it
+ * as a false employee row. Require start AND end across >=3 independent days,
+ * then move the entire prefix ending at the observed label row into headers.
+ * Never use the filename, expected employee count, or calendar date.
+ */
+export function reconcileWeekly3ColumnObservedHeader(
+  matrix: WeeklyPhysicalMatrix,
+  regional: ImageTextProbeResult[],
+): {matrix:WeeklyPhysicalMatrix;regional:ImageTextProbeResult[];shiftedRows:number} {
+  const evidence=new Map<number,Map<number,Set<WeeklyField>>>();
+  for(const probe of regional) {
+    if(probe.purpose!=='cell'||probe.confidence<.65)continue;
+    const match=/^weekly::(\d+)::([0-6])::(start|end|break)$/.exec(probe.id);
+    if(!match)continue;
+    const row=Number(match[1]),day=Number(match[2]),field=match[3] as WeeklyField;
+    if(!matrix.rows[row])continue;
+    const label=classifyScheduleShiftLabel(probe.text);
+    if(label!==(field==='break'?'rest':field))continue;
+    const byDay=evidence.get(row)??new Map<number,Set<WeeklyField>>();
+    const found=byDay.get(day)??new Set<WeeklyField>();
+    found.add(field);byDay.set(day,found);evidence.set(row,byDay);
+  }
+  const labelRows=[...evidence.entries()]
+    .filter(([index,byDay])=>index<Math.min(5,matrix.rows.length-1)&&
+      [...byDay.values()].filter(fields=>fields.has('start')&&fields.has('end')).length>=3)
+    .map(([index])=>index);
+  if(!labelRows.length)return {matrix,regional,shiftedRows:0};
+  const shiftedRows=Math.max(...labelRows)+1;
+  const rows=matrix.rows.slice(shiftedRows).map((row,index)=>({
+    ...row,index,
+    cells:row.cells.map(cell=>({
+      ...cell,rowIndex:index,
+      id:'weekly::'+index+'::'+cell.dayIndex+'::'+cell.field,
+    })),
+  }));
+  const aligned:WeeklyPhysicalMatrix={
+    ...matrix,headerSource:'OBSERVED_LABELS',
+    headerBands:[
+      ...matrix.headerBands,
+      ...matrix.rows.slice(0,shiftedRows).map(row=>row.bounds),
+    ],
+    rows,physicalCellCount:rows.length*DAY_COUNT*SUBCOLS,
+  };
+  const kept:ImageTextProbeResult[]=[];
+  for(const probe of regional) {
+    const match=/^weekly::(\d+)::([0-6])::(start|end|break)$/.exec(probe.id);
+    const person=/^weekly-person::(\d+)$/.exec(probe.id);
+    const old=match?Number(match[1]):person?Number(person[1]):null;
+    if(old==null){kept.push(probe);continue;}
+    if(old<shiftedRows)continue;
+    kept.push({...probe,id:match
+      ? 'weekly::'+(old-shiftedRows)+'::'+match[2]+'::'+match[3]
+      : 'weekly-person::'+(old-shiftedRows)});
+  }
+  return {matrix:aligned,regional:kept,shiftedRows};
+}
+
 function dayLabel(value: string): number | null {
   const text=String(value??'').normalize('NFKC').replace(/\s+/g,'');
   const match=/^(?:0?([1-9]|[12][0-9]|3[01]))(?:일|日)?$/.exec(text);
@@ -207,6 +266,7 @@ function fullDateDigits(value:string):string|null {
 function resolvePhysicalFullDateEvidence(
   matrix:WeeklyPhysicalMatrix,
   header:ImageTextLayout,
+  probes:ImageTextProbeResult[],
 ):WeeklyDateResolution|null {
   const unresolved=():WeeklyDateResolution=>({
     dates:matrix.days.map(day=>({
@@ -236,6 +296,21 @@ function resolvePhysicalFullDateEvidence(
     }
     const set=byDay.get(owners[0].index)??new Set<string>();
     set.add(format(date));byDay.set(owners[0].index,set);
+  }
+  // A full YYYY-MM-DD in a dedicated crop can supply direct calendar evidence.
+  // Physical ownership is from observed pixel columns, never the filename.
+  for(const probe of probes.filter(p=>p.purpose==='date'&&p.confidence>=.75)){
+    const owned=/^date::grid-cell::weekly::([0-6])(?:::header::\d+)?$/.exec(probe.id);
+    if(!owned)continue;
+    const digits=fullDateDigits(probe.text);
+    if(!digits)continue;
+    const y=Number(digits.slice(0,4)),m=Number(digits.slice(4,6)),
+      d=Number(digits.slice(6,8));
+    let date:Date;
+    try{date=utc(y,m,d);}catch{ownedInvalidCalendar=true;continue;}
+    const index=Number(owned[1]);
+    const set=byDay.get(index)??new Set<string>();
+    set.add(format(date));byDay.set(index,set);
   }
   if(ownedInvalidCalendar)return unresolved();
   if(byDay.size===0)return null;
@@ -287,7 +362,7 @@ export function resolveWeekly3ColumnDates(
   // Real current-workplace sheets can have weekday/date/note/shift-label
   // header rows and no separate YYYY년 M월 title. Prefer physically-owned
   // OCR-observed full dates before the legacy title/day-glyph fallback.
-  const physicalFullDates=resolvePhysicalFullDateEvidence(matrix,header);
+  const physicalFullDates=resolvePhysicalFullDateEvidence(matrix,header,probes);
   if(physicalFullDates)return physicalFullDates;
 
   const firstHeaderY=matrix.headerBands[0]?.y??0;
@@ -340,7 +415,7 @@ export function resolveWeekly3ColumnDates(
     // established BEFORE text recognition. OCR token bounding boxes are
     // synthetic estimates (especially in degraded WebKit), so they must
     // not reassign the recognized date to a neighboring weekday.
-    const owned=/^date::grid-cell::weekly::([0-6])$/.exec(probe.id);
+    const owned=/^date::grid-cell::weekly::([0-6])(?:::header::\d+)?$/.exec(probe.id);
     if(owned){
       const index=Number(owned[1]);
       if(!matrix.days[index])continue;
@@ -433,11 +508,16 @@ export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageText
   // Real 4-header-row sheets may put weekday glyphs there instead. Do not
   // assume this crop is the full-date row: resolveWeekly3ColumnDates first
   // consumes physically-owned broad-header full-date evidence.
-  const dateRegions: ImageTextProbeRegion[]=matrix.days.map(day=>({
-    id:'date::grid-cell::weekly::'+day.index,purpose:'date',
-    x:day.bounds.x,y:headerY,
-    width:day.bounds.width,height:matrix.headerBands[0].height,
-  }));
+  // Weekday, full-date, holiday-note and field-label headers can be separate
+  // physical bands. Probe every observed band, with no guessed date position.
+  const dateRegions:ImageTextProbeRegion[]=matrix.headerBands.flatMap((band,index)=>
+    matrix.days.map(day=>({
+      id:'date::grid-cell::weekly::'+day.index+
+        (index?'::header::'+index:''),
+      purpose:'date' as const,
+      x:day.bounds.x,y:band.y,
+      width:day.bounds.width,height:band.height,
+    })));
   const nameRegions:ImageTextProbeRegion[]=matrix.rows.map(row=>({
     id:'weekly-person::'+row.index,purpose:'person',...row.nameBounds,
   }));
@@ -508,7 +588,7 @@ export function interpretWeekly3Column(
   for(const row of matrix.rows)for(const day of matrix.days){
     const sourceName=personNames[row.index];
     const date=dates.dates[day.index]?.date;
-    if(!sourceName||!date)continue;
+    if(!sourceName)continue;
     const fields=Object.fromEntries(FIELDS.map(field=>[
       field,byId.get('weekly::'+row.index+'::'+day.index+'::'+field),
     ])) as Record<WeeklyField,ImageTextProbeResult|undefined>;
@@ -522,7 +602,7 @@ export function interpretWeekly3Column(
       !String(fields[f]?.text??'').trim());
     // Color-only blank detection never produces a committed OFF row.
     if(threeEmpty){offReviewCount++;review.push({
-      sourcePersonName:sourceName,date,start:null,end:null,sourceRow:row.index+1,
+      sourcePersonName:sourceName,date:date??null,dayIndex:day.index,start:null,end:null,sourceRow:row.index+1,
       confidence:.1,recognitionState:'OFF_CANDIDATE',enabled:true,breakMinutes:null,
     });reviewCount++;continue;}
     const valid=start!=null&&end!=null;
@@ -534,24 +614,35 @@ export function interpretWeekly3Column(
       breakEvidence.push({rowIndex:row.index,dayIndex:day.index,
         minutes:breakMinutes,verifiedByUser:false});
     }
-    if(valid&&(!breakHasContent||breakMinutes!=null)){
-      schedule.push({sourcePersonName:sourceName,date,start,end,breakMinutes,
+    const confidentlyDated=date!=null&&!dates.dates[day.index]?.reviewRequired;
+    if(valid&&(!breakHasContent||breakMinutes!=null)&&confidentlyDated){
+      schedule.push({sourcePersonName:sourceName,date:date!,dayIndex:day.index,start,end,breakMinutes,
         sourceRow:row.index+1,
         confidence:Math.min(fields.start?.confidence??0,fields.end?.confidence??0)});
     }else{
       if(!valid)unreadableCount++;
       reviewCount++;
-      review.push({sourcePersonName:sourceName,date,start,end,breakMinutes,
-        sourceRow:row.index+1,confidence:.2,
-        recognitionState:valid?'INCOMPLETE':'UNREADABLE',enabled:true});
+      review.push({sourcePersonName:sourceName,date:date??null,dayIndex:day.index,
+        start,end,breakMinutes,sourceRow:row.index+1,confidence:.2,
+        ...(breakHasContent&&breakMinutes==null?{breakReviewRequired:true}:{}),
+        recognitionState:valid&&(!breakHasContent||breakMinutes!=null)
+          ?'WORK':valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
   }
   const detectedPeople=personNames
     .filter((x,i,all)=>all.indexOf(x)===i)
     .map(name=>({sourceName:name,confidence:known.has(name)?0.9:0.2}));
   // Unmatched names remain in review, not fabricated DB people.
+  // Date evidence is a review state, not grounds for discarding real OCR
+  // names and cell values. No candidate can reach a schedule write until
+  // the user explicitly confirms the seven calendar dates.
   const blockedReason=blocked?'WEEKLY_DATE_REVIEW_REQUIRED':null;
-  const parsed=blockedReason?null:{
+  const requiresDateReview=dates.dates.some(d=>d.reviewRequired||!d.date);
+  const requiresCellReview=unreadableCount>0||offReviewCount>0||
+    personNames.some(name=>name.startsWith('인식불가 직원 '))||
+    review.some(item=>item.recognitionState==='INCOMPLETE'||
+      item.breakReviewRequired===true);
+  const parsed:ParsedImport={
     detectedPeople,scheduleCandidates:schedule,reviewCandidates:review,
     structure:{
       sheet:'weekly 7 day x start/end/break physical matrix',
@@ -560,6 +651,13 @@ export function interpretWeekly3Column(
       dateColumn:'observed OCR plus review-required calendar continuity',
       shiftColumn:'start/end/break; rest never silently subtracted; OFF never auto confirmed',
       needsReview:true,
+      weeklyReview:{
+        status:requiresDateReview||requiresCellReview
+          ?'PARTIAL_REVIEW_REQUIRED':'AUTO_RECOGNIZED',
+        startDate:dates.dates[0]?.date??null,
+        confirmed:false,
+        ...(blockedReason?{reason:blockedReason}:{}),
+      },
     },
     confidence:Math.min(.5,matrix.headerSource==='OBSERVED_LABELS'?.5:.2),
   };

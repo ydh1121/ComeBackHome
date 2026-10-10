@@ -174,13 +174,18 @@ try {
   assert.equal(fourMatrix.headerBands[0].y,0,
     'Verified real-layout shape starts its first header band at y=0');
   assert.equal(fourMatrix.rows.length,1);
-  const legacyDateRegions=weekly3ColumnProbeRegions(fourMatrix)
+  const allDateRegions=weekly3ColumnProbeRegions(fourMatrix)
     .filter(x=>x.purpose==='date');
-  assert.equal(legacyDateRegions.length,7);
-  assert.ok(legacyDateRegions.every(x=>
-    x.y===fourMatrix.headerBands[0].y &&
-    x.height===fourMatrix.headerBands[0].height),
-  'Legacy dedicated date probe remains first-band and may read weekday glyphs');
+  assert.equal(allDateRegions.length,7*fourMatrix.headerBands.length);
+  for(const [index,band] of fourMatrix.headerBands.entries()){
+    const owned=allDateRegions.filter(x=>index
+      ? x.id.endsWith('::header::'+index)
+      : /^date::grid-cell::weekly::[0-6]$/.test(x.id));
+    assert.equal(owned.length,7);
+    assert.ok(owned.every(x=>x.y===band.y&&x.height===band.height));
+  }
+  const legacyDateRegions=allDateRegions.filter(x=>
+    /^date::grid-cell::weekly::[0-6]$/.test(x.id));
 
   const fullDateToken=(dayIndex,text)=>{
     const day=fourMatrix.days[dayIndex];
@@ -256,6 +261,40 @@ try {
     [0,'2026-07-20'],[1,'2026-07-21'],
   ]),weekdayProbeNoise);
   assert.deepEqual(physicalEvidenceFirst.dates.map(x=>x.date),expectedJulyWeek);
+  // Recoverability contract: no recognized year/month/day is NOT a
+  // technical failure when a physical weekly grid and person rows exist.
+  // These are synthetic UNIT probes, never included in OCR accuracy.
+  const noDateRecognizer=new Weekly3ColumnScheduleImageRecognizer(
+    detector,{async extract(){return {width,height,tokens:[]}}},
+    {async extract(){return {width,height,tokens:[]}},
+     async extractRegions(_file,regions){return regions.map(region=>({
+       id:region.id,purpose:region.purpose,
+       text:region.id==='weekly-person::0'?'김가은':'',
+       tokens:[],confidence:region.id==='weekly-person::0'?1:0,
+     }));}},[],
+  );
+  const zeroDateParsed=await noDateRecognizer.parse(
+    new File(['generated'],'no-date.png',{type:'image/png'}));
+  assert.equal(zeroDateParsed.structure.weeklyReview?.status,'PARTIAL_REVIEW_REQUIRED');
+  assert.equal(zeroDateParsed.structure.weeklyReview?.startDate,null);
+  assert.equal(zeroDateParsed.structure.weeklyReview?.confirmed,false);
+  assert.equal(zeroDateParsed.reviewCandidates?.length,7);
+  assert.ok(zeroDateParsed.reviewCandidates?.every(x=>x.date===null&&
+    Number.isInteger(x.dayIndex)&&x.enabled===true));
+  // An unrecognized grid enters existing import review in manual mode,
+  // with no invented employee/date/shift data.
+  const unsupportedRecognizer=new Weekly3ColumnScheduleImageRecognizer(
+    {async detect(){return {raster,structure:{...structure,columnBands:[]},
+      preprocessingMs:0,structureDetectionMs:0}}},
+    header,regional,[],
+  );
+  const manual=await unsupportedRecognizer.parse(
+    new File(['generated'],'unrecognized-grid.png',{type:'image/png'}));
+  assert.equal(manual.structure.weeklyReview?.status,'MANUAL_RECOVERY_REQUIRED');
+  assert.equal(manual.detectedPeople.length,0);
+  assert.equal(manual.scheduleCandidates.length,0);
+  assert.equal(manual.reviewCandidates.length,0);
+  console.log('WEEKLY_RECOVERABLE_ZERO_DATES_AND_UNSUPPORTED_GRID_UNIT_PASS');
   console.log('WEEKLY_FULL_DATE_PHYSICAL_EVIDENCE_REGRESSION_PASS');
   console.log('WEEKLY_TITLE_FALLBACK_AND_CONFLICT_REVIEW_UNIT_PASS');
   console.log('WEEKLY_ADAPTER_UNIT_DATE_INDEPENDENCE_AND_MANUAL_OFF_REVIEW_PASS');

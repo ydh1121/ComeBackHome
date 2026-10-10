@@ -1,6 +1,6 @@
 import type { EntityId, ISODate } from '../domain/common';
 import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, PresenceState, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../domain/models';
-import type { CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, PresenceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
+import type { ApprovedWeeklyImport, ApprovedImportReceipt, CommuteRepository, ImportRepository, NotificationRepository, PersonRepository, PlaceRepository, PresenceRepository, ScheduleRepository, TodayRepository } from '../application/contracts/repositories';
 import type { MockStateStore } from './state';
 function clone<T>(value: T): T { return structuredClone(value); }
 
@@ -23,6 +23,57 @@ export class MockScheduleRepository implements ScheduleRepository {
       else state.schedules.push(clone(entry));
     });
   }
+  async importApprovedWeekly(input: ApprovedWeeklyImport): Promise<ApprovedImportReceipt> {
+    const snapshot = this.store.read();
+    if (!input.confirmed || !input.weekStart) throw new Error('WEEKLY_DATES_NOT_CONFIRMED');
+    const monday=new Date(input.weekStart+'T00:00:00Z');
+    if (!Number.isFinite(monday.getTime()) || monday.getUTCDay()!==1 ||
+        monday.toISOString().slice(0,10)!==input.weekStart)
+      throw new Error('INVALID_WEEKLY_START_DATE');
+    const existing = new Set(snapshot.people.map(p=>p.id));
+    const pending = new Map(input.newPeople.map(person=>[person.ref,{
+      id:'mock-atomic-'+input.requestId+'-'+person.ref,name:person.name,relation:'',
+    }]));
+    if(pending.size!==input.newPeople.length)
+      throw new Error('DUPLICATE_NEW_PERSON_REF');
+    for(const person of pending.values()){
+      if(snapshot.people.some(p=>p.name===person.name&&p.id!==person.id))
+        throw new Error('NEW_PERSON_NAME_ALREADY_EXISTS');
+    }
+    const candidate = clone(snapshot.schedules);
+    const rows: ScheduleEntry[]=[];
+    const unique = new Set<string>();
+    for(const row of input.schedules){
+      if(row.approved!==true||row.decision!=='NEW')
+        throw new Error('UNAPPROVED_IMPORT_SCHEDULE');
+      const personId=row.personId??pending.get(row.pendingPersonRef??'')?.id;
+      if(!personId || (!existing.has(personId)&&![...pending.values()].some(p=>p.id===personId)))
+        throw new Error('Import references unknown person.');
+      const date=new Date(monday.getTime()+row.dayIndex*86400000).toISOString().slice(0,10);
+      if(row.date!==date)throw new Error('UNCONFIRMED_WEEKLY_DAY');
+      if(![row.start,row.end].every(x=>/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x)))
+        throw new Error('Import schedule clock is invalid.');
+      if(row.recognitionState==='OFF_CANDIDATE'&&!row.enabled&&!row.offApproved)
+        throw new Error('UNAPPROVED_OFF_CANDIDATE');
+      const key=personId+'|'+date;
+      if(unique.has(key))throw new Error('Duplicate person/date in import batch.');
+      unique.add(key);
+      const entry={id:row.id,personId,date,enabled:row.enabled,start:row.start,
+        end:row.end,...(row.breakMinutes!==undefined?{breakMinutes:row.breakMinutes}:{})};
+      rows.push(entry);
+      const index=candidate.findIndex(x=>x.personId===personId&&x.date===date);
+      if(index>=0)candidate[index]={...candidate[index],...entry,id:candidate[index].id};
+      else candidate.push(entry);
+    }
+    const mapping=Object.fromEntries([...pending].map(([ref,person])=>[ref,person.id]));
+    this.store.mutate(state=>{
+      for(const person of pending.values())
+        if(!state.people.some(p=>p.id===person.id))state.people.push(person);
+      state.schedules=candidate;
+    });
+    return {createdPeople:mapping,schedules:rows};
+  }
+
   async upsertMany(entries: ScheduleEntry[]): Promise<void> {
     const draft = clone(this.store.read().schedules);
     for (const entry of entries) {
@@ -161,11 +212,86 @@ export class MockImportRepository implements ImportRepository {
       batch.committed = false;
     });
   }
+  async addManualPerson(batchId:EntityId,personId:EntityId,name:string):Promise<void> {
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(batch?.structure.weeklyReview?.status!=='MANUAL_RECOVERY_REQUIRED')
+      throw new Error('MANUAL_RECOVERY_NOT_ACTIVE');
+    if(batch.detectedPeople.some(p=>p.matchedPersonId===personId))
+      throw new Error('MANUAL_PERSON_ALREADY_INCLUDED');
+    const id=crypto.randomUUID();
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      if(!target)return;
+      target.detectedPeople.push({id,sourceName:name,matchedPersonId:personId,confidence:0,ignored:false});
+      for(let dayIndex=0;dayIndex<7;dayIndex++)target.reviewItems.push({
+        id:crypto.randomUUID(),detectedPersonId:id,personId,date:null,dayIndex,
+        imported:{enabled:true,start:null,end:null,breakMinutes:null},
+        recognitionState:'UNREADABLE',resolution:null,
+      });
+    });
+  }
+  async setWeeklyStartDate(batchId:EntityId,startDate:ISODate):Promise<void> {
+    const before=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!before?.structure.weeklyReview)throw new Error('WEEKLY_DATE_REVIEW_NOT_ACTIVE');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate))
+      throw new Error('INVALID_WEEK_START_DATE');
+    const start=new Date(startDate+'T00:00:00Z');
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==startDate||
+       start.getUTCDay()!==1)throw new Error('WEEK_START_MUST_BE_MONDAY');
+    if(before.reviewItems.some(item=>item.dayIndex==null||item.dayIndex<0||item.dayIndex>6))
+      throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+    this.store.mutate(state=>{
+      const batch=state.importBatches.find(b=>b.id===batchId);
+      if(!batch?.structure.weeklyReview)return;
+      for(const item of batch.reviewItems){
+        item.date=new Date(start.getTime()+item.dayIndex!*86400000).toISOString().slice(0,10);
+        item.existing=undefined;
+        item.resolution=null;
+      }
+      batch.structure.weeklyReview.startDate=startDate;
+      batch.structure.weeklyReview.confirmed=false;
+    });
+  }
+  async confirmWeeklyDates(batchId:EntityId):Promise<void> {
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!batch?.structure.weeklyReview?.startDate)throw new Error('WEEKLY_START_DATE_REQUIRED');
+    const start=new Date(batch.structure.weeklyReview.startDate+'T00:00:00Z');
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==
+       batch.structure.weeklyReview.startDate||start.getUTCDay()!==1)
+      throw new Error('WEEKLY_START_DATE_INVALID');
+    if(batch.reviewItems.some(item=>item.dayIndex==null||
+       item.date!==new Date(start.getTime()+item.dayIndex*86400000).toISOString().slice(0,10)))
+      throw new Error('WEEKLY_DATE_CONFLICT');
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      if(!target?.structure.weeklyReview)return;
+      target.structure.weeklyReview.confirmed=true;
+      target.reviewItems.forEach(item=>{item.resolution=null;});
+    });
+  }
+  async setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,proposedName:string):Promise<void> {
+    const name=proposedName.normalize('NFKC').trim();
+    if(!/^[가-힣]{2,5}$/.test(name))throw new Error('INVALID_NEW_PERSON_NAME');
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!batch?.structure.weeklyReview)throw new Error('NEW_PERSON_REVIEW_NOT_ACTIVE');
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      const person=target?.detectedPeople.find(p=>p.id===detectedPersonId);
+      if(!person||!target)return;
+      person.pendingCreateName=name;
+      person.matchedPersonId=null;
+      person.ignored=false;
+      for(const item of target.reviewItems)if(item.detectedPersonId===detectedPersonId){
+        item.personId=null;
+        item.resolution=null;
+      }
+    });
+  }
   async setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void> {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
-      if (person) person.matchedPersonId = personId;
+      if (person) { person.matchedPersonId = personId; person.pendingCreateName=undefined; }
       for (const item of batch?.reviewItems ?? []) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
@@ -182,7 +308,7 @@ export class MockImportRepository implements ImportRepository {
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (!person || !batch) return;
       person.ignored = ignored;
-      if (ignored) person.matchedPersonId = null;
+      if (ignored) { person.matchedPersonId = null; person.pendingCreateName=undefined; }
       for (const item of batch.reviewItems) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         if (ignored) {

@@ -130,10 +130,11 @@ for (const token of [
   '엑셀 파일 가져오기',
 ]) expect(importPage.includes(token), 'import entry missing: ' + token);
 for (const token of [
-  '새 사람으로 등록',
+  '신규 직원으로 최종 승인 시 등록',
   '가져오지 않음',
-  'services.actions.people.create',
+  'setPendingNewPerson',
 ]) expect(importPeople.includes(token), 'multi-person import review missing: ' + token);
+expect(!importPeople.includes('services.actions.people.create'), 'immediate employee DB creation violates final import approval gate');
 expect(importCommit.includes('await this.schedules.upsertMany(entries)'), 'import final commit is not atomic multi-person batch');
 expect(importCommit.includes('ignoredDetectedIds'), 'ignored roster people are not excluded from import commit');
 

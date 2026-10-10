@@ -5,6 +5,8 @@ import type {
   PersonRepository,
   PlaceRepository,
   ScheduleRepository,
+  ApprovedWeeklyImport,
+  ApprovedImportReceipt,
 } from '../../application/contracts/repositories';
 import type { EntityId, ISODate } from '../../domain/common';
 import type {
@@ -67,6 +69,10 @@ export class HttpScheduleRepository implements ScheduleRepository {
       '/people/' + encodeURIComponent(entry.personId) + '/schedules/' + encodeURIComponent(entry.date),
       entry,
     );
+  }
+
+  async importApprovedWeekly(importData: ApprovedWeeklyImport): Promise<ApprovedImportReceipt> {
+    return this.client.put<ApprovedImportReceipt>('/schedules/import', { reviewedImport: importData });
   }
 
   async upsertMany(entries: ScheduleEntry[]): Promise<void> {

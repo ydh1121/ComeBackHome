@@ -19,7 +19,7 @@ for (const text of [
   'exactDuplicate',
   "item.resolution === 'NEW' ? 'SKIP' : 'NEW'",
   "disabled={!allReviewed || saveState === 'saving'}",
-  "disabled={!item.personId || !importedComplete}",
+  "disabled={(!item.personId&&!pendingPersons.has(item.detectedPersonId)) || !importedComplete}",
   'services.actions.importReview.setImportedTime',
   'TimeRangeWheelPicker',
 ]) {
@@ -29,7 +29,7 @@ expect(!reviewSource.includes('batch.reviewItems[0]'), 'review UI must not colla
 expect(!reviewSource.includes('type="time"'), 'import review must not use native time inputs on iPhone');
 expect(matchSource.includes('const allResolved'), 'person match completion gate missing');
 expect(matchSource.includes('<option value="">연결 안 됨</option>'), 'unmatched person label must be explicit');
-expect(matchSource.includes('새 사람으로 등록'), 'detected person create option missing');
+expect(matchSource.includes('신규 직원으로 최종 승인 시 등록'), 'detected person create option missing');
 expect(matchSource.includes('가져오지 않음'), 'detected person ignore option missing');
 expect(matchSource.includes('disabled={!allResolved || includedCount === 0}'), 'person match next CTA must block unresolved/empty imports');
 expect(commitSource.includes("Import contains unresolved people."), 'unresolved person commit guard missing');
@@ -324,6 +324,133 @@ try {
     expect(work?.id === 'weekly-existing-identical',
       'approved identical weekly OCR row must retain existing schedule identity');
   }
+  // Generalized recovery safety: date glyphs may be entirely absent.
+  // Synthetic review-contract fixture only, not an OCR accuracy result.
+  const recoverState=new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  recoverState.mutate(st=>{
+    st.importBatches=[];
+    st.schedules=st.schedules.filter(row=>!row.date.startsWith('2026-12-') &&
+      !row.date.startsWith('2027-01-'));
+  });
+  const recoverImports=new reposModule.MockImportRepository(recoverState);
+  const recoverPeople=new reposModule.MockPersonRepository(recoverState);
+  const recoverSchedules=new reposModule.MockScheduleRepository(recoverState);
+  const recoverSelection=new selectionModule.WorkbookImportFileSelectionAction(
+    recoverImports,recoverPeople,recoverSchedules,
+    {async parse(){throw Error('Workbook excluded from weekly fixture');}},
+    {async parse(){return {
+      detectedPeople:[{sourceName:'여자친구',confidence:.2}],
+      scheduleCandidates:[],
+      reviewCandidates:[
+        {sourcePersonName:'여자친구',date:null,dayIndex:0,
+          start:'09:30',end:'23:30',breakMinutes:null,
+          breakReviewRequired:true,sourceRow:0,confidence:.3,
+          recognitionState:'INCOMPLETE',enabled:true},
+        {sourcePersonName:'여자친구',date:null,dayIndex:6,
+          start:null,end:null,sourceRow:0,confidence:0,
+          recognitionState:'OFF_CANDIDATE',enabled:true},
+      ],
+      structure:{sheet:'weekly 7 day x start/end/break physical matrix',
+        headerRow:0,personColumn:'observed',dateColumn:'not observed',
+        shiftColumn:'observed',needsReview:true,
+        weeklyReview:{status:'PARTIAL_REVIEW_REQUIRED',
+          startDate:null,confirmed:false}},
+      confidence:.2,
+    };}},
+  );
+  const recoverId=await recoverSelection.accept([{
+    kind:'IMAGE',file:{name:'synthetic-loss-of-date.png'},
+  }]);
+  const recoverBatch=await recoverImports.getBatch(recoverId);
+  expect(recoverBatch?.reviewItems.length===2 &&
+    recoverBatch.reviewItems.every(item=>item.date===null&&item.resolution===null),
+    'zero date glyphs must preserve original recognized shift evidence');
+  const recoverCommit=new commitModule.CommitImportReview(recoverImports,recoverSchedules);
+  let blockedWithoutWeek=false;
+  try{await recoverCommit.execute(recoverId)}
+  catch(e){blockedWithoutWeek=String(e).includes('WEEKLY_DATES_NOT_CONFIRMED');}
+  expect(blockedWithoutWeek,'zero-date schedule must not write without explicit week');
+  let rejectedNonMonday=false;
+  try{await recoverImports.setWeeklyStartDate(recoverId,'2026-12-29')}
+  catch(e){rejectedNonMonday=String(e).includes('MONDAY');}
+  expect(rejectedNonMonday,'week start must be a Monday');
+  await recoverImports.setWeeklyStartDate(recoverId,'2026-12-28');
+  const preview=await recoverImports.getBatch(recoverId);
+  expect(preview.reviewItems.find(x=>x.dayIndex===6)?.date==='2027-01-03',
+    'year-crossing week must retain seven continuous dates');
+  let blockedBeforeConfirmation=false;
+  try{await recoverCommit.execute(recoverId)}
+  catch(e){blockedBeforeConfirmation=String(e).includes('WEEKLY_DATES_NOT_CONFIRMED');}
+  expect(blockedBeforeConfirmation,'selecting date is not user confirmation');
+  await recoverImports.confirmWeeklyDates(recoverId);
+  const recovered=await recoverImports.getBatch(recoverId);
+  for(const row of recovered.reviewItems){
+    await recoverImports.setDetectedPersonMatch(recoverId,row.detectedPersonId,'mock-person-1');
+    if(row.dayIndex===0){
+      await recoverImports.setImportedBreakMinutes(recoverId,row.id,30);
+    }else{
+      await recoverImports.setImportedEnabled(recoverId,row.id,false);
+    }
+    await recoverImports.setResolution(recoverId,row.id,'NEW');
+  }
+  expect(await recoverSchedules.getByDate('mock-person-1','2026-12-28')===null,
+    'manual review not committed before explicit final approval');
+  await recoverCommit.execute(recoverId);
+  const recoveryWork=await recoverSchedules.getByDate('mock-person-1','2026-12-28');
+  const recoveryOff=await recoverSchedules.getByDate('mock-person-1','2027-01-03');
+  expect(recoveryWork?.start==='09:30'&&recoveryWork?.end==='23:30'&&
+    recoveryWork?.breakMinutes===30,'reviewed shift minutes must survive date recovery');
+  expect(recoveryOff?.enabled===false,'OFF_CANDIDATE requires explicit toggle and approval');
+  // Deferred new employee: selecting a proposed name must not write to
+  // People or Schedules until the user explicitly approves final import.
+  const newStore=new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  newStore.mutate(st=>{st.importBatches=[];});
+  const newImports=new reposModule.MockImportRepository(newStore);
+  const newPeople=new reposModule.MockPersonRepository(newStore);
+  const newSchedules=new reposModule.MockScheduleRepository(newStore);
+  const beforePeople=(await newPeople.list()).length;
+  const newSelection=new selectionModule.WorkbookImportFileSelectionAction(
+    newImports,newPeople,newSchedules,
+    {async parse(){throw Error('Only image fixture');}},
+    {async parse(){return {
+      detectedPeople:[{sourceName:'인식불가 직원 1',confidence:0}],
+      scheduleCandidates:[],
+      reviewCandidates:[{sourcePersonName:'인식불가 직원 1',date:null,dayIndex:0,
+        start:'09:30',end:'23:30',breakMinutes:null,sourceRow:1,
+        confidence:.3,recognitionState:'WORK',enabled:true}],
+      structure:{sheet:'weekly 7 day x start/end/break physical matrix',
+        headerRow:0,personColumn:'left',dateColumn:'pending',
+        shiftColumn:'start/end/break',needsReview:true,
+        weeklyReview:{status:'PARTIAL_REVIEW_REQUIRED',startDate:null,confirmed:false}},
+      confidence:.3,
+    };}},
+  );
+  const newId=await newSelection.accept([{
+    kind:'IMAGE',file:{name:'synthetic-new-employee.png'},
+  }]);
+  const newBatch=await newImports.getBatch(newId);
+  const detected=newBatch?.detectedPeople[0];
+  if(!detected)throw Error('New employee candidate lost');
+  await newImports.setPendingNewPerson(newId,detected.id,'신입직원');
+  expect((await newPeople.list()).length===beforePeople,
+    'setting new person candidate must not write DB before final approval');
+  await newImports.setWeeklyStartDate(newId,'2026-12-28');
+  await newImports.confirmWeeklyDates(newId);
+  const newReview=(await newImports.getBatch(newId))?.reviewItems[0];
+  if(!newReview)throw Error('New person review item missing');
+  await newImports.setResolution(newId,newReview.id,'NEW');
+  expect((await newPeople.list()).length===beforePeople &&
+    await newSchedules.getByDate('mock-person-1','2026-12-28')===null,
+    'preapproval new person schedule must not mutate People or Schedule DB');
+  await new commitModule.CommitImportReview(
+    newImports,newSchedules,newPeople).execute(newId);
+  const created=(await newPeople.list()).filter(p=>p.name==='신입직원');
+  expect(created.length===1,'explicit final approval must create exactly one new person');
+  expect(created.length===1 &&
+    (await newSchedules.getByDate(created[0].id,'2026-12-28'))?.start==='09:30',
+    'newly approved owner must receive only its reviewed shift');
+  console.log('WEEKLY_DEFERRED_NEW_EMPLOYEE_PREAPPROVAL_WRITES_ZERO_PASS');
+  console.log('WEEKLY_ZERO_DATE_RECOVERY_AND_YEAR_BOUNDARY_APPROVAL_PASS');
 } finally {
   await vite.close();
 }

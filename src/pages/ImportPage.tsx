@@ -88,7 +88,13 @@ export function ImportPage() {
               <b>{file.name}</b>
               {file.status === 'PARSING' ? (
                 <div className="progress"><i style={{ width: Math.max(0, Math.min(100, file.progress)) + '%' }} /></div>
-              ) : <div className="small">{statusLabel(file.status)}</div>}
+              ) : <div className="small">{file.status==='READY' && batch?.structure.weeklyReview
+                ? batch.structure.weeklyReview.status==='MANUAL_RECOVERY_REQUIRED'
+                  ? '수동 복구 필요'
+                  : batch.structure.weeklyReview.status==='PARTIAL_REVIEW_REQUIRED'
+                    ? '일부 인식 · 검토 필요'
+                    : '자동 인식 · 최종 검토 필요'
+                : statusLabel(file.status)}</div>}
               {file.status === 'ERROR' && file.message ? (
                 <div className="import-file-diagnostic">{file.message}</div>
               ) : null}

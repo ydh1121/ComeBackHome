@@ -8,6 +8,7 @@ import { D1PersonRepository } from './repositories/D1PersonRepository';
 import { D1PlaceRepository } from './repositories/D1PlaceRepository';
 import { D1PresenceRepository } from './repositories/D1PresenceRepository';
 import { D1ScheduleRepository } from './repositories/D1ScheduleRepository';
+import { importApprovedWeekly } from './approved-weekly-import';
 import { D1SubscriptionStore } from './repositories/D1SubscriptionStore';
 import type { WorkerEnv } from './runtime-types';
 import type { ProviderSourceBundle } from './providers/contracts';
@@ -640,6 +641,10 @@ export async function handleApiRequest(
       // Multi-employee import MUST be a single D1.batch write.
       // Calling the per-person routes in sequence loses all-or-none safety.
       const body = await readObject(request);
+      if (Object.prototype.hasOwnProperty.call(body, 'reviewedImport')) {
+        const receipt = await importApprovedWeekly(env.DB, body.reviewedImport);
+        return json(receipt);
+      }
       const raw = Array.isArray(body.schedules) ? body.schedules : null;
       if (!raw || raw.length < 1 || raw.length > 700) {
         throw new Error('Import schedules must contain 1–700 rows.');

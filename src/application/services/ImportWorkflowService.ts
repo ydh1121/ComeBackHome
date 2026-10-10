@@ -18,6 +18,20 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     private readonly people: PersonRepository,
   ) {}
 
+  async addManualPerson(batchId:EntityId,personId:EntityId):Promise<void> {
+    const person=await this.people.get(personId);
+    if(!person)throw new Error('MANUAL_PERSON_NOT_FOUND');
+    return this.imports.addManualPerson(batchId,person.id,person.name);
+  }
+
+  setWeeklyStartDate(batchId:EntityId,startDate:string):Promise<void> {
+    return this.imports.setWeeklyStartDate(batchId,startDate);
+  }
+
+  confirmWeeklyDates(batchId:EntityId):Promise<void> {
+    return this.imports.confirmWeeklyDates(batchId);
+  }
+
   async cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void> {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
@@ -31,6 +45,10 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     const next = options[(index + 1 + options.length) % options.length] ?? null;
     await this.imports.setDetectedPersonIgnored(batchId, detectedPersonId, false);
     await this.imports.setDetectedPersonMatch(batchId, detectedPersonId, next);
+  }
+
+  setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,name:string):Promise<void> {
+    return this.imports.setPendingNewPerson(batchId,detectedPersonId,name);
   }
 
   async setPersonMatch(

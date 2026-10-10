@@ -6,6 +6,7 @@ import { formatDateLabel } from '../features/schedule/date-format';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
 import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
+import { getPrivateImportImageUrl } from '../application/services/WorkbookImportFileSelectionAction';
 import './import-page.css';
 
 export function ImportReviewPage() {
@@ -14,6 +15,7 @@ export function ImportReviewPage() {
   const services = useApplicationServices();
   const workflow = useImportWorkflow(batchId);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
+  const [dateError, setDateError] = useState<string | null>(null);
 
   if (workflow.status === 'loading') {
     return <section className="import-page"><div className="import-message">일정을 불러오는 중</div></section>;
@@ -25,13 +27,25 @@ export function ImportReviewPage() {
   const batch = workflow.batch;
   const weekly3ColumnReview = batch.structure.sheet ===
     'weekly 7 day x start/end/break physical matrix';
+  const weeklyReview = batch.structure.weeklyReview;
+  const privateImageUrl = getPrivateImportImageUrl(batch.id);
+  const weekStart = weeklyReview?.startDate??'';
+  const validatedWeekStart = /^\d{4}-\d{2}-\d{2}$/.test(weekStart)
+    ? Date.parse(weekStart+'T00:00:00Z') : NaN;
+  const weekPreview = Number.isFinite(validatedWeekStart)
+    ? Array.from({length:7},(_,i)=>
+        new Date(validatedWeekStart+i*86400000).toISOString().slice(0,10))
+    : [];
+  const pendingPersons=new Map(batch.detectedPeople
+    .filter(person=>person.pendingCreateName)
+    .map(person=>[person.id,person.pendingCreateName!] as const));
   const ignoredDetectedIds = new Set(
     batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
   );
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
     item.imported.enabled === false ||
     (item.imported.start != null && item.imported.end != null &&
-     (!weekly3ColumnReview || item.recognitionState !== 'INCOMPLETE' ||
+     (!weekly3ColumnReview || !item.breakReviewRequired ||
       item.imported.breakMinutes != null));
   const exactDuplicate = (item: (typeof batch.reviewItems)[number]) =>
     item.existing != null &&
@@ -52,8 +66,11 @@ export function ImportReviewPage() {
       !ignoredDetectedIds.has(item.detectedPersonId) &&
       (weekly3ColumnReview || !exactDuplicate(item)),
   );
-  const allReviewed = visibleReviewItems.every((item) =>
-    item.personId != null &&
+  const allReviewed = visibleReviewItems.length>0 &&
+    (!weeklyReview || weeklyReview.confirmed===true) &&
+    visibleReviewItems.every((item) =>
+    item.date != null && (item.personId != null ||
+      pendingPersons.has(item.detectedPersonId)) &&
     (
       item.resolution === 'SKIP' ||
       (item.resolution === 'NEW' && importedTimeComplete(item))
@@ -75,6 +92,54 @@ export function ImportReviewPage() {
     <section className="import-page" data-route={'/import/' + batchId + '/review'} data-page="ImportReviewPage" data-state="REVIEW_REQUIRED CONFLICT_RESOLUTION">
       <BackButton fallbackTo={'/import/' + encodeURIComponent(batch.id) + '/structure'} />
       <h1 className="page-title">일정 확인</h1>
+      {weeklyReview ? (
+        <section className="import-review-dates" data-state={weeklyReview.confirmed
+          ? 'WEEK_DATES_CONFIRMED':'WEEK_DATES_REVIEW_REQUIRED'}>
+          <h2>주간 날짜 확인</h2>
+          <p>{weeklyReview.status==='MANUAL_RECOVERY_REQUIRED'
+            ? '표 구조를 자동 인식하지 못했습니다. 이미지와 비교하여 직접 입력해 주세요.'
+            : weeklyReview.status==='PARTIAL_REVIEW_REQUIRED'
+              ? '일부 날짜를 읽지 못했습니다. 시작일을 확인해 주세요.'
+              : '날짜를 인식했습니다. 원본과 일치하는지 확인해 주세요.'}</p>
+          <label>월요일 시작일
+            <input type="date" aria-label="주간 시작일" value={weekStart}
+              onChange={async event=>{
+                try{
+                  setDateError(null);
+                  await services.actions.importReview.setWeeklyStartDate(batch.id,event.target.value);
+                }catch(error){
+                  setDateError(error instanceof Error?error.message:'주간 시작일을 확인해 주세요.');
+                }
+              }} />
+          </label>
+          {weekPreview.length ? (
+            <ol className="import-week-preview">
+              {weekPreview.map((date,i)=><li key={date}>{['월','화','수','목','금','토','일'][i]} {date}</li>)}
+            </ol>
+          ) : <p>날짜 미확정 — 저장할 수 없습니다.</p>}
+          {dateError ? <p role="alert">{dateError}</p> : null}
+          <button type="button" className="review-choice import-toggle"
+            disabled={!weekPreview.length||weeklyReview.confirmed}
+            onClick={async()=>{
+              try{
+                setDateError(null);
+                await services.actions.importReview.confirmWeeklyDates(batch.id);
+              }catch(error){
+                setDateError(error instanceof Error?error.message:'날짜 확정에 실패했습니다.');
+              }
+            }}>
+            {weeklyReview.confirmed?'주간 날짜 확인 완료':'7일 날짜 확인 및 확정'}
+          </button>
+          {!weeklyReview.confirmed ? <p role="status">날짜 승인 전에는 DB에 저장되지 않습니다.</p> : null}
+        </section>
+      ) : null}
+      {privateImageUrl ? (
+        <details className="import-original-preview">
+          <summary>원본 근무표와 대조</summary>
+          <img src={privateImageUrl} alt="가져온 근무표 원본" style={{maxWidth:'100%',height:'auto'}} />
+          <p>이 사진은 브라우저 메모리에서만 표시됩니다. 새로고침 후에는 다시 표시되지 않을 수 있습니다.</p>
+        </details>
+      ) : null}
 
       {visibleReviewItems.length ? (
         <div className="import-review-list">
@@ -84,9 +149,11 @@ export function ImportReviewPage() {
             return (
               <div className="import-review-item" key={item.id}>
                 <div className="import-review-head">
-                  <div className="review-date">{formatDateLabel(item.date)} 일정</div>
+                  <div className="review-date">{item.date ? formatDateLabel(item.date) : '날짜 확인 필요'} 일정</div>
                   <div className={'review-person' + (item.personId ? '' : ' unresolved')}>
-                    {person?.name ?? '사람 연결 필요'}
+                    {person?.name ?? (pendingPersons.get(item.detectedPersonId)
+                      ? pendingPersons.get(item.detectedPersonId)+' (신규 등록 예정)'
+                      : '사람 연결 필요')}
                   </div>
                 </div>
 
@@ -176,7 +243,7 @@ export function ImportReviewPage() {
                     type="button"
                     className={'review-choice import-toggle' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
-                    disabled={!item.personId || !importedComplete}
+                    disabled={(!item.personId&&!pendingPersons.has(item.detectedPersonId)) || !importedComplete}
                     onClick={() => services.actions.importReview.setResolution(
                       batch.id,
                       item.id,
