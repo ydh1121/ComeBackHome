@@ -624,6 +624,7 @@ export function interpretWeekly3Column(
       reviewCount++;
       review.push({sourcePersonName:sourceName,date:date??null,dayIndex:day.index,
         start,end,breakMinutes,sourceRow:row.index+1,confidence:.2,
+        ...(breakHasContent&&breakMinutes==null?{breakReviewRequired:true}:{}),
         recognitionState:valid&&(!breakHasContent||breakMinutes!=null)
           ?'WORK':valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
