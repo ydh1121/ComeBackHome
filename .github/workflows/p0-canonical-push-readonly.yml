@@ -1,0 +1,63 @@
+name: P0 Canonical Push Read-only Check
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/p0-canonical-push-readonly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check only public canonical configuration endpoints
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const base='https://come-back-home.pages.dev';
+          const checks=[
+            ['/api/health','health'],
+            ['/api/notifications/readiness','pushReadiness'],
+            ['/api/notifications/client-key','publicKey'],
+          ];
+          let errors=0;
+          for(const [path,label] of checks){
+            try {
+              const response=await fetch(base+path,{
+                method:'GET',headers:{'Accept':'application/json','Cache-Control':'no-store'},
+                signal:AbortSignal.timeout(12000),
+              });
+              const json=await response.json().catch(()=>null);
+              const info={label,httpStatus:response.status,contentType:response.headers.get('content-type')};
+              if(label==='health'){
+                info.ready=response.ok && json?.ok===true;
+                info.deployedCommitPrefix=typeof json?.commitSha==='string' ? json.commitSha.slice(0,12) : null;
+                info.matchesMergedPushFix=typeof json?.commitSha==='string' && json.commitSha.startsWith('bae0c68bb046');
+              }else if(label==='publicKey'){
+                info.configured=json?.configured===true;
+                info.source=json?.source??'UNKNOWN';
+                info.hasKey=typeof json?.publicKey==='string'&&json.publicKey.length>0;
+              }else{
+                info.pushTransportConfigured=json?.pushTransportConfigured===true;
+                info.vapidKeyPairValid=json?.vapidKeyPairValid===true;
+                info.pushDeliveryReady=json?.pushDeliveryReady===true;
+                info.activeSubscriptionCount=Number.isInteger(json?.activeSubscriptionCount)?json.activeSubscriptionCount:null;
+                info.validSubscriptionKeyShapeCount=Number.isInteger(json?.validSubscriptionKeyShapeCount)?json.validSubscriptionKeyShapeCount:null;
+                info.scheduledNotificationReady=json?.scheduledNotificationReady===true;
+                info.pushMissing=Array.isArray(json?.pushMissing)?json.pushMissing:[];
+                info.scheduledMissing=Array.isArray(json?.scheduledMissing)?json.scheduledMissing:[];
+              }
+              // Never print private VAPID keys, subscription endpoints or user data.
+              console.log(JSON.stringify(info));
+              if(!response.ok || !json || (label==='publicKey'&&!info.configured) || (label==='health' && !info.matchesMergedPushFix)) errors++;
+            }catch(error){
+              console.log(JSON.stringify({label,reachable:false,kind:error?.name??'UNKNOWN'}));
+              errors++;
+            }
+          }
+          if(errors)process.exitCode=1;
+          NODE
