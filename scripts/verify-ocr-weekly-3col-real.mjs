@@ -411,9 +411,13 @@ try{
                 throw Error('Weekly E2E review count or unreviewed default failed');
               let blocked=false;
               try{await new CommitImportReview(imports,schedules).execute(batchId)}
-              catch(error){blocked=String(error).includes('unreviewed');}
+              catch(error){blocked=String(error).includes('WEEKLY_DATES_NOT_CONFIRMED');}
               if(!blocked||state.read().schedules.length)
                 throw Error('Weekly E2E skipped required user approvals');
+              // Simulated explicit user date approval; fixture truth does NOT
+              // get injected into OCR or parser output.
+              await imports.setWeeklyStartDate(batchId,truth[0].date);
+              await imports.confirmWeeklyDates(batchId);
               // Actual production browser-review repository must revoke a
               // prior decision if a user corrects even an OCR rest duration.
               const editable=initial.reviewItems.find(x=>
@@ -561,9 +565,12 @@ try{
                   throw Error('Actual product composition lost people or review-required days');
                 let blockedBeforeReview=false;
                 try{await app.actions.commitImportReview.execute(actualBatchId)}
-                catch(e){blockedBeforeReview=String(e).includes('unreviewed');}
+                catch(e){blockedBeforeReview=String(e).includes('WEEKLY_DATES_NOT_CONFIRMED');}
                 if(!blockedBeforeReview||apiStored.size)
                   throw Error('Actual product composition bypassed manual approval');
+                // User-confirmed week, independent of engine's OCR output.
+                await app.actions.importReview.setWeeklyStartDate(actualBatchId,truth[0].date);
+                await app.actions.importReview.confirmWeeklyDates(actualBatchId);
                 let approvedOff=0,approvedWork=0;
                 for(const item of initialBatch.reviewItems){
                   const recognized=initialBatch.detectedPeople.find(
@@ -644,9 +651,11 @@ try{
                   throw Error('REAL_D1_EMPLOYEE_MATCH_UNSAFE');
                 let unapprovedBlocked=false;
                 try{await app.actions.commitImportReview.execute(batchId)}
-                catch(e){unapprovedBlocked=String(e).includes('unreviewed');}
+                catch(e){unapprovedBlocked=String(e).includes('WEEKLY_DATES_NOT_CONFIRMED');}
                 if(!unapprovedBlocked||atomicRequests)
                   throw Error('REAL_D1_UNAPPROVED_SAVE_ALLOWED');
+                await app.actions.importReview.setWeeklyStartDate(batchId,truth[0].date);
+                await app.actions.importReview.confirmWeeklyDates(batchId);
                 let work=0,off=0;
                 for(const item of batch.reviewItems){
                   const owner=batch.detectedPeople.find(p=>p.id===item.detectedPersonId);
