@@ -43,7 +43,8 @@ import {
   HttpScheduleRepository,
 } from '../providers/http/HttpRepositories';
 import { ReadExcelWorkbookParser } from '../providers/import/ReadExcelWorkbookParser';
-import { StructureFirstScheduleImageRecognizer } from '../providers/import/StructureFirstScheduleImageRecognizer';
+import { Weekly3ColumnScheduleImageRecognizer } from '../providers/import/Weekly3ColumnScheduleImageRecognizer';
+import { PaddleWeeklyRegionalTextExtractor } from '../providers/import/PaddleWeeklyRegionalTextExtractor';
 import { BrowserScheduleTableStructureDetector } from '../providers/import/ScheduleTableStructureDetector';
 import {
   BrowserScheduleOcrPreprocessor,
@@ -161,9 +162,13 @@ export async function createHybridApiApplicationServices(
     new BrowserScheduleOcrPreprocessor(),
     { useStructureFirstMode: true },
   );
-  const imageRecognizer = new StructureFirstScheduleImageRecognizer(
+  // Actual image-upload composition: only current-workplace WEEKLY_7D_3COL.
+  // Unsupported image geometry fails closed into an actionable import error;
+  // XLSX remains handled independently by ReadExcelWorkbookParser.
+  const imageRecognizer = new Weekly3ColumnScheduleImageRecognizer(
     new BrowserScheduleTableStructureDetector(),
     imageTextExtractor,
+    new PaddleWeeklyRegionalTextExtractor(),
     async () => (await people.list()).map((person) => person.name),
   );
   const importFileSelection = new WorkbookImportFileSelectionAction(

@@ -118,7 +118,10 @@ export class BrowserImportRepository implements ImportRepository {
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       item.personId = personId;
-      if (personId && item.resolution == null) item.resolution = 'NEW';
+      if (personId && item.resolution == null &&
+          batch.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
+        item.resolution = 'NEW';
+      }
     }
     this.persist();
   }
@@ -153,15 +156,51 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setImportedEnabled(
+    batchId: EntityId,
+    reviewItemId: EntityId,
+    enabled: boolean,
+  ): Promise<void> {
+    const item = this.requireReviewItem(batchId, reviewItemId);
+    item.imported.enabled = enabled;
+    if (!enabled) {
+      item.imported.start = null;
+      item.imported.end = null;
+      item.imported.breakMinutes = null;
+    }
+    // Switching work/off reopens explicit approval, never silently persists.
+    item.resolution = null;
+    this.persist();
+  }
+
+  async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
+    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
+      throw new Error('INVALID_BREAK_MINUTES');
+    }
+    const item = this.requireReviewItem(batchId, reviewItemId);
+    if (item.imported.breakMinutes === minutes) return;
+    item.imported.breakMinutes = minutes;
+    item.resolution = null;
+    this.persist();
+  }
+
   async setImportedTime(
     batchId: EntityId,
     reviewItemId: EntityId,
     field: 'start' | 'end',
     value: string | null,
   ): Promise<void> {
+    const batch = this.requireBatch(batchId);
     const item = this.requireReviewItem(batchId, reviewItemId);
-    item.imported[field] = value;
-    this.persist();
+    if (item.imported[field] !== value) {
+      item.imported[field] = value;
+      // Weekly image OCR requires fresh approval after *any* time edit.
+      // Existing workbook review semantics are left unchanged.
+      if (batch.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
+        item.resolution = null;
+      }
+      this.persist();
+    }
   }
 
   async markCommitted(batchId: EntityId): Promise<void> {

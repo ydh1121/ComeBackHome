@@ -29,9 +29,20 @@ expect(
   compositionSource.includes('TesseractScheduleImageTextExtractor'),
   'production composition must activate the local-first OCR extractor',
 );
+// Tesseract still provides actual header/geometry OCR; physical shift-region
+// inference is now the approved Korean Paddle weekly 7x3 adapter. Keep all
+// independent Tesseract worker, same-origin and bbox regression checks below.
 expect(
-  compositionSource.includes('StructureFirstScheduleImageRecognizer'),
-  'production composition must connect OCR to the structure-first schedule image recognizer',
+  compositionSource.includes('new Weekly3ColumnScheduleImageRecognizer'),
+  'production composition must use the supported weekly 7x3 schedule recognizer',
+);
+expect(
+  compositionSource.includes('new PaddleWeeklyRegionalTextExtractor'),
+  'production weekly shift regions must use Paddle ONNX rather than legacy full-image OCR',
+);
+expect(
+  !compositionSource.includes('new StructureFirstScheduleImageRecognizer'),
+  'deprecated general OCR must not silently replace the weekly product path',
 );
 expect(
   compositionSource.includes('BrowserScheduleTableStructureDetector'),

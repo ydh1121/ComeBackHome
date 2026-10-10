@@ -23,12 +23,16 @@ export function ImportReviewPage() {
   }
 
   const batch = workflow.batch;
+  const weekly3ColumnReview = batch.structure.sheet ===
+    'weekly 7 day x start/end/break physical matrix';
   const ignoredDetectedIds = new Set(
     batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
   );
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
     item.imported.enabled === false ||
-    (item.imported.start != null && item.imported.end != null);
+    (item.imported.start != null && item.imported.end != null &&
+     (!weekly3ColumnReview || item.recognitionState !== 'INCOMPLETE' ||
+      item.imported.breakMinutes != null));
   const exactDuplicate = (item: (typeof batch.reviewItems)[number]) =>
     item.existing != null &&
     (
@@ -39,13 +43,14 @@ export function ImportReviewPage() {
         item.imported.start != null &&
         item.imported.end != null &&
         item.existing.start === item.imported.start &&
-        item.existing.end === item.imported.end
+        item.existing.end === item.imported.end &&
+        (!weekly3ColumnReview || (item.existing.breakMinutes ?? null) === (item.imported.breakMinutes ?? null))
       )
     );
   const visibleReviewItems = batch.reviewItems.filter(
     (item) =>
       !ignoredDetectedIds.has(item.detectedPersonId) &&
-      !exactDuplicate(item),
+      (weekly3ColumnReview || !exactDuplicate(item)),
   );
   const allReviewed = visibleReviewItems.every((item) =>
     item.personId != null &&
@@ -89,16 +94,38 @@ export function ImportReviewPage() {
                   <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()}>
                     {item.recognitionState === 'OFF'
                       ? '휴무로 인식'
+                      : item.recognitionState === 'OFF_CANDIDATE'
+                        ? '휴무 후보 — 세 칸 모두 비어 있지만 직접 확인 전까지 확정되지 않음'
                       : item.recognitionState === 'UNREADABLE'
-                        ? '인식 불확실 — 이미지에 내용은 있으나 시간을 읽지 못함'
+                        ? weekly3ColumnReview && item.imported.start == null && item.imported.end == null
+                          ? '빈칸·휴무 후보 — 근무인지 휴무인지 직접 확인 필요'
+                          : '인식 불확실 — 이미지에 내용은 있으나 시간을 읽지 못함'
                         : item.recognitionState === 'INCOMPLETE'
                           ? '근무시간 일부만 인식'
                           : '근무로 인식'}
                   </div>
                 ) : null}
 
-                {item.imported.enabled !== false && !importedComplete ? (
-                  <div className="review-time-editor" data-state={item.recognitionState === 'UNREADABLE' ? 'UNREADABLE_TIME' : 'INCOMPLETE_TIME'}>
+                {weekly3ColumnReview && (item.recognitionState === 'UNREADABLE' ||
+                  item.recognitionState === 'OFF_CANDIDATE') ? (
+                  <button
+                    type="button"
+                    className="review-choice import-toggle"
+                    aria-pressed={item.imported.enabled === false}
+                    onClick={() => services.actions.importReview.setImportedEnabled(
+                      batch.id,
+                      item.id,
+                      item.imported.enabled !== false ? false : true,
+                    )}
+                  >
+                    {item.imported.enabled === false
+                      ? '근무시간 입력으로 변경'
+                      : '휴무로 변경 (본인이 확인 후 선택)'}
+                  </button>
+                ) : null}
+
+                {item.imported.enabled !== false && (weekly3ColumnReview || !importedComplete) ? (
+                  <div className="review-time-editor" data-state={item.recognitionState === 'UNREADABLE' || item.recognitionState === 'OFF_CANDIDATE' ? 'UNREADABLE_TIME' : 'INCOMPLETE_TIME'}>
                     <TimeRangeWheelPicker
                       start={item.imported.start}
                       end={item.imported.end}
@@ -112,6 +139,29 @@ export function ImportReviewPage() {
                       }
                     />
                   </div>
+                ) : null}
+
+                {weekly3ColumnReview && item.imported.enabled !== false ? (
+                  <label className="review-break-editor" data-field="breakMinutes">
+                    쉬는시간 (분)
+                    <input
+                      type="number"
+                      min={0}
+                      max={720}
+                      step={1}
+                      inputMode="numeric"
+                      aria-label="쉬는시간 분 단위 수정"
+                      value={item.imported.breakMinutes ?? ''}
+                      placeholder="확인 필요"
+                      onChange={(event) => {
+                        const raw = event.currentTarget.value;
+                        if (raw !== '' && (!/^\\d+$/.test(raw) || Number(raw) > 720)) return;
+                        void services.actions.importReview.setImportedBreakMinutes(
+                          batch.id, item.id, raw === '' ? null : Number(raw),
+                        );
+                      }}
+                    />
+                  </label>
                 ) : null}
 
                 <div className="review-choice-list">

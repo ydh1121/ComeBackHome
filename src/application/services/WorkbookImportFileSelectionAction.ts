@@ -104,6 +104,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       availablePeople.map((person) => [normalizeName(person.name), person]),
     );
 
+    const weeklyRequiresPerCellApproval = parsedResults.some(
+      (parsed) => parsed.structure.sheet === 'weekly 7 day x start/end/break physical matrix',
+    );
     const detectedByName = new Map<string, DetectedImportPerson>();
     for (const parsed of parsedResults) {
       for (const person of parsed.detectedPeople) {
@@ -116,7 +119,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
             sourceName: person.sourceName,
             matchedPersonId: matched?.id ?? null,
             confidence: person.confidence,
-            ignored: matched ? false : true,
+            // Unlike legacy imports, a weekly OCR row with no DB match
+            // must stay visible and block continuation until manually mapped.
+            ignored: weeklyRequiresPerCellApproval ? false : !matched,
           });
         } else {
           existing.confidence = Math.max(existing.confidence, person.confidence);
@@ -135,8 +140,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       enabled: boolean;
       start: string | null;
       end: string | null;
+      breakMinutes?: number | null;
       confidence: number;
-      recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
+      recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
     }>();
     let duplicateCandidate = false;
 
@@ -145,9 +151,10 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       date: string;
       start: string | null;
       end: string | null;
+      breakMinutes?: number | null;
       confidence: number;
       enabled?: boolean;
-      recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
+      recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
     }) => {
       const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
       if (!detected) return;
@@ -160,6 +167,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         enabled: candidate.enabled ?? true,
         start: candidate.start,
         end: candidate.end,
+        ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         confidence: candidate.confidence,
         recognitionState:
           candidate.recognitionState ??
@@ -176,6 +184,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         WORK: 4,
         INCOMPLETE: 3,
         UNREADABLE: 2,
+        OFF_CANDIDATE: 2,
         OFF: 1,
       } as const;
       const existingPriority = statePriority[existing.recognitionState];
@@ -216,6 +225,8 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       }
     }
 
+    // The store-specific weekly OCR is review-first. Even a successfully
+    // matched DB person does not constitute approval of every WORK/OFF date.
     const reviewItems: ImportReviewItem[] = [];
     for (const candidate of candidateByKey.values()) {
       const existing = candidate.personId
@@ -231,7 +242,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
             candidate.start != null &&
             candidate.end != null &&
             existing.start === candidate.start &&
-            existing.end === candidate.end
+            existing.end === candidate.end &&
+            (!weeklyRequiresPerCellApproval ||
+             (existing.breakMinutes ?? null) === (candidate.breakMinutes ?? null))
           )
         )
       );
@@ -240,14 +253,19 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         detectedPersonId: candidate.detectedPersonId,
         personId: candidate.personId,
         date: candidate.date,
-        ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end } } : {}),
+        ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end,
+          breakMinutes: existing.breakMinutes ?? null } } : {}),
         imported: {
           enabled: candidate.enabled,
           start: candidate.start,
           end: candidate.end,
+          ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         },
         recognitionState: candidate.recognitionState,
-        resolution: exactDuplicate ? 'SKIP' : candidate.personId ? 'NEW' : null,
+        // Weekly OCR requires an explicit decision even when a generated
+        // OCR candidate happens to equal the already-stored schedule.
+        resolution: weeklyRequiresPerCellApproval ? null :
+          exactDuplicate ? 'SKIP' : candidate.personId ? 'NEW' : null,
       });
     }
 

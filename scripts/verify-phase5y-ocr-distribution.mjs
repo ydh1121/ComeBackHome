@@ -202,8 +202,10 @@ try {
     'Production composition must include the local OCR extractor',
   );
   assert(
-    source.includes('StructureFirstScheduleImageRecognizer'),
-    'Production composition must include the structure-first image schedule recognizer',
+    source.includes('new Weekly3ColumnScheduleImageRecognizer') &&
+      source.includes('new PaddleWeeklyRegionalTextExtractor') &&
+      !source.includes('new StructureFirstScheduleImageRecognizer'),
+    'Production composition must select weekly Paddle recognition, preserving Tesseract only for header OCR',
   );
   assert(
     source.includes('BrowserScheduleTableStructureDetector'),

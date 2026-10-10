@@ -45,6 +45,8 @@ interface OcrBlock {
 
 interface OcrPage {
   blocks?: OcrBlock[] | null;
+  text?: string;
+  confidence?: number;
 }
 
 export interface ScheduleOcrWorker {
@@ -397,7 +399,9 @@ function personLabelCandidate(
   // Auxiliary labels in this schedule family use materially smaller text than
   // employee names. Do not promote those rows into people merely because OCR
   // returned Korean text with high confidence.
-  if (regionHeight > 0 && typicalHeight / regionHeight < 0.38) return null;
+  // Label cells may have generous line height and padding. Reject truly
+  // tiny auxiliary captions, not normal-sized Korean names in tall rows.
+  if (regionHeight > 0 && typicalHeight / regionHeight < 0.22) return null;
 
   const text = usable.map((item) => item.text.replace(/\s+/g, '')).join('');
   const confidence = usable.reduce((sum, item) => sum + item.confidence, 0) / usable.length;
@@ -651,7 +655,10 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
 
         await worker.setParameters({
           tessedit_pageseg_mode: String(
-            region.purpose === 'person' ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
+            region.purpose === 'date' && region.id.startsWith('date::grid-cell::')
+              ? PSM.SINGLE_WORD :
+              region.purpose === 'person' || region.purpose === 'date'
+                ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
           ),
           tessedit_char_whitelist:
             region.purpose === 'person'
@@ -660,14 +667,144 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
           preserve_interword_spaces: '1',
         });
 
+        let dateCrop: Blob | null = null;
+        if (region.purpose === 'date' && region.id.startsWith('date::grid-cell::')) {
+          // Decode the actual raster and isolate each structurally verified
+          // header cell. Border strokes at ROI edges degrade small-digit OCR.
+          const bitmap = await createImageBitmap(raster.image);
+          try {
+            const insetX = Math.max(2, Math.round(rectangle.width * 0.09));
+            const insetY = Math.max(2, Math.round(rectangle.height * 0.09));
+            const sw = Math.max(1, rectangle.width - insetX * 2);
+            const sh = Math.max(1, rectangle.height - insetY * 2);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(64, sw * 2);
+            canvas.height = Math.max(36, sh * 2);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Date OCR raster canvas is unavailable.');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap, rectangle.left + insetX, rectangle.top + insetY,
+              sw, sh, 0, 0, canvas.width, canvas.height);
+            dateCrop = await canvasToBlob(canvas);
+          } finally {
+            bitmap.close();
+          }
+        }
         const response = await worker.recognize(
-          raster.image,
-          { rotateAuto: false, rectangle },
+          dateCrop ?? raster.image,
+          dateCrop ? { rotateAuto: false } : { rotateAuto: false, rectangle },
           { text: true, blocks: true },
         );
-        const words = flattenWords(response.data);
+        let words = flattenWords(response.data);
+        if (region.purpose === 'person' && !personLabelCandidate(words, rectangle.height)) {
+          // A complete row crop can include dark table borders that obscure
+          // compact Hangul names. Retry only unreadable people with the
+          // actually observed label pixels: no roster, fixture label or
+          // expected answer is supplied to OCR.
+          const bitmap = await createImageBitmap(raster.image);
+          let personCrop: Blob;
+          let scaledHeight = rectangle.height;
+          try {
+            const insetX = Math.max(3, Math.round(rectangle.width * 0.06));
+            const insetY = Math.max(3, Math.round(rectangle.height * 0.08));
+            const sw = Math.max(1, rectangle.width - 2 * insetX);
+            const sh = Math.max(1, rectangle.height - 2 * insetY);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(72, sw * 2);
+            canvas.height = Math.max(48, sh * 2);
+            scaledHeight = canvas.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Person OCR crop canvas is unavailable.');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap,
+              rectangle.left + insetX, rectangle.top + insetY,
+              sw, sh, 0, 0, canvas.width, canvas.height);
+            personCrop = await canvasToBlob(canvas);
+          } finally {
+            bitmap.close();
+          }
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_WORD),
+            tessedit_char_whitelist: '',
+            preserve_interword_spaces: '1',
+          });
+          const retry = await worker.recognize(
+            personCrop, { rotateAuto: false }, { text: true, blocks: true });
+          const actualWords = flattenWords(retry.data);
+          if (personLabelCandidate(actualWords, scaledHeight)) {
+            words = actualWords;
+          }
+        }
+        let semanticDateWords: OcrWord[] = [];
+        if (region.purpose === 'date' && dateCrop &&
+            !words.some((word) => /^(?:[1-9]|[12][0-9]|3[01])$/.test(
+              String(word.text ?? '').trim()))) {
+          // OCR of small Korean date labels may be "1일" instead of "1".
+          // A second full-character recognition pass is evidence-based:
+          // never guess a day without actual recognized glyphs.
+          await worker.setParameters({
+            tessedit_pageseg_mode: String(PSM.SINGLE_WORD),
+            tessedit_char_whitelist: '',
+            preserve_interword_spaces: '1',
+          });
+          const semantic = await worker.recognize(
+            dateCrop, { rotateAuto: false }, { text: true, blocks: true });
+          const text = flattenWords(semantic.data)
+            .map((word) => String(word.text ?? '')).join('')
+            .normalize('NFKC').replace(/\s+/g, '');
+          const match = /^0?([1-9]|[12][0-9]|3[01])(?:일|日)?$/.exec(text);
+          if (match) {
+            semanticDateWords = [{
+              text: String(Number(match[1])),
+              confidence: Math.max(1, ...flattenWords(semantic.data)
+                .map((word) => Number(word.confidence) || 0)),
+              bbox: { x0: 0, y0: 0, x1: rectangle.width, y1: rectangle.height },
+            }];
+          }
+        }
 
-        if (region.purpose === 'person') {
+        if (region.purpose === 'date') {
+          // Read real OCR bounding boxes. Equal-width synthetic token slots
+          // would turn legitimate sparse date headers into invented geometry.
+          const scaleX = raster.sourceWidth / raster.rasterWidth;
+          const recognizedWords = words.some((word) =>
+            /^(?:[1-9]|[12][0-9]|3[01])$/.test(String(word.text ?? '').trim()))
+            ? words : semanticDateWords.length ? semanticDateWords : (
+            dateCrop && /^([1-9]|[12][0-9]|3[01])$/.test(
+              String(response.data.text ?? '').normalize('NFKC').trim()
+            ) ? [{
+              text: String(response.data.text).trim(),
+              confidence: Number(response.data.confidence) || 0,
+              bbox: { x0: 0, y0: 0, x1: dateCrop.size > 0 ? region.width : 0, y1: region.height },
+            }] : []
+          );
+          const tokens = recognizedWords.map((word) => ({
+            text: String(word.text ?? '').normalize('NFKC').trim(),
+            x: region.id.startsWith('date::grid-cell::')
+              ? region.x + region.width * 0.2
+              : Math.min(word.bbox.x0, word.bbox.x1) * scaleX,
+            y: region.y + region.height * 0.15,
+            width: region.id.startsWith('date::grid-cell::')
+              ? Math.max(1, region.width * 0.6)
+              : Math.max(1, Math.abs(word.bbox.x1 - word.bbox.x0) * scaleX),
+            height: Math.max(1, region.height * 0.7),
+            confidence: normalizeConfidence(word.confidence),
+          })).filter((token) =>
+            /^(?:[1-9]|[12][0-9]|3[01])$/.test(token.text) &&
+            token.confidence >= this.minimumConfidence &&
+            token.x >= region.x && token.x + token.width <= region.x + region.width
+          ).sort((left, right) => left.x - right.x);
+          results.push({
+            id: region.id, purpose: region.purpose,
+            text: tokens.map((token) => token.text).join(' '),
+            tokens,
+            confidence: tokens.length
+              ? tokens.reduce((sum, token) => sum + token.confidence, 0) / tokens.length
+              : 0,
+          });
+        } else if (region.purpose === 'person') {
           const candidate = personLabelCandidate(words, rectangle.height);
           const token = candidate
             ? regionToken(
@@ -699,13 +836,22 @@ export class TesseractScheduleImageTextExtractor implements RegionalImageTextExt
               text: String(word.text ?? '').normalize('NFKC').trim(),
               confidence: normalizeConfidence(word.confidence),
               x0: Math.min(word.bbox.x0, word.bbox.x1),
+              y0: Math.min(word.bbox.y0, word.bbox.y1),
+              height: Math.abs(word.bbox.y1 - word.bbox.y0),
             }))
             .filter((item) =>
               item.text.length > 0 &&
               numericCellShape(item.text) &&
               item.confidence >= this.minimumConfidence
             )
-            .sort((left, right) => left.x0 - right.x0);
+            // A cell can have start/end stacked vertically OR placed side
+            // by side. Preserve Tesseract's actual reading order based on
+            // baselines, rather than sorting all clock tokens by x alone.
+            .sort((left, right) => {
+              const sameLine = Math.abs(left.y0 - right.y0) <=
+                Math.max(4, Math.min(left.height, right.height) * 0.45);
+              return sameLine ? left.x0 - right.x0 : left.y0 - right.y0;
+            });
 
           const tokens = usable.map((item, itemIndex) => {
             const slotWidth = region.width / Math.max(1, usable.length);

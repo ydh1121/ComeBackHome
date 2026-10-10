@@ -169,7 +169,10 @@ export class MockImportRepository implements ImportRepository {
       for (const item of batch?.reviewItems ?? []) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
-        if (personId && item.resolution == null) item.resolution = 'NEW';
+        if (personId && item.resolution == null &&
+            batch?.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
+          item.resolution = 'NEW';
+        }
       }
     });
   }
@@ -196,10 +199,40 @@ export class MockImportRepository implements ImportRepository {
       if (item) item.resolution = resolution;
     });
   }
+  async setImportedEnabled(batchId: EntityId, reviewItemId: EntityId, enabled: boolean): Promise<void> {
+    this.store.mutate((state) => {
+      const item = state.importBatches.find((batch) => batch.id === batchId)
+        ?.reviewItems.find((candidate) => candidate.id === reviewItemId);
+      if (!item) return;
+      item.imported.enabled = enabled;
+      if (!enabled) {
+        item.imported.start = null;
+        item.imported.end = null;
+        item.imported.breakMinutes = null;
+      }
+      item.resolution = null;
+    });
+  }
+  async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
+    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
+      throw new Error('INVALID_BREAK_MINUTES');
+    }
+    this.store.mutate((state) => {
+      const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
+      if (!item || item.imported.breakMinutes === minutes) return;
+      item.imported.breakMinutes = minutes;
+      item.resolution = null;
+    });
+  }
   async setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void> {
     this.store.mutate((state) => {
       const item = state.importBatches.find((batch) => batch.id === batchId)?.reviewItems.find((candidate) => candidate.id === reviewItemId);
-      if (item) item.imported[field] = value;
+      if (!item || item.imported[field] === value) return;
+      item.imported[field] = value;
+      const batch = state.importBatches.find((candidate) => candidate.id === batchId);
+      if (batch?.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
+        item.resolution = null;
+      }
     });
   }
   async markCommitted(batchId: EntityId): Promise<void> {

@@ -56,6 +56,15 @@ function asBoolean(value: unknown, name: string): boolean {
   return value;
 }
 
+function optionalScheduleBreakMinutes(object: JsonObject): number | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(object, 'breakMinutes')) return undefined;
+  const value = object.breakMinutes;
+  if (value === null) return null;
+  if (typeof value !== 'number' || !Number.isInteger(value) ||
+      value < 0 || value > 720) throw new Error('INVALID_BREAK_MINUTES');
+  return value;
+}
+
 function asPlaceKind(value: string): PlaceKind {
   if (value !== 'origin' && value !== 'destination') throw new Error('Invalid place kind.');
   return value;
@@ -622,6 +631,50 @@ export async function handleApiRequest(
       });
     }
 
+    if (
+      segments.length === 3 &&
+      segments[1] === 'schedules' &&
+      segments[2] === 'import' &&
+      request.method === 'PUT'
+    ) {
+      // Multi-employee import MUST be a single D1.batch write.
+      // Calling the per-person routes in sequence loses all-or-none safety.
+      const body = await readObject(request);
+      const raw = Array.isArray(body.schedules) ? body.schedules : null;
+      if (!raw || raw.length < 1 || raw.length > 700) {
+        throw new Error('Import schedules must contain 1–700 rows.');
+      }
+      const knownIds = new Set(
+        (await new D1PersonRepository(env.DB).list()).map(person => person.id),
+      );
+      const unique = new Set<string>();
+      const entries = raw.map(item => {
+        if (!isObject(item)) throw new Error('Each imported schedule must be an object.');
+        const personId = asString(item.personId, 'schedule.personId');
+        const date = asString(item.date, 'schedule.date');
+        const id = asString(item.id, 'schedule.id');
+        const start = asString(item.start, 'schedule.start');
+        const end = asString(item.end, 'schedule.end');
+        if (!knownIds.has(personId)) throw new Error('Import references unknown person.');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Import date is invalid.');
+        if (![start,end].every(clock => /^([01]\d|2[0-3]):[0-5]\d$/.test(clock))) {
+          throw new Error('Import schedule clock is invalid.');
+        }
+        const key = personId+'|'+date;
+        if (unique.has(key)) throw new Error('Duplicate person/date in import batch.');
+        unique.add(key);
+        const enabled = asBoolean(item.enabled, 'schedule.enabled');
+        const breakMinutes = optionalScheduleBreakMinutes(item);
+        return {
+          id,personId,date,enabled,start,end,
+          ...(breakMinutes !== undefined ? { breakMinutes } : {}),
+        };
+      });
+      const schedules = new D1ScheduleRepository(env.DB);
+      await schedules.upsertMany(entries);
+      return json({ schedules: entries });
+    }
+
     if (segments.length === 2 && segments[1] === 'people') {
       const people = new D1PersonRepository(env.DB);
       if (request.method === 'GET') return json({ people: await people.list() });
@@ -678,6 +731,8 @@ export async function handleApiRequest(
               enabled: asBoolean(value.enabled, 'schedule.enabled'),
               start: asString(value.start, 'schedule.start'),
               end: asString(value.end, 'schedule.end'),
+              ...(optionalScheduleBreakMinutes(value) !== undefined
+                ? { breakMinutes: optionalScheduleBreakMinutes(value) } : {}),
             };
           });
           await schedules.upsertMany(entries);
@@ -701,6 +756,8 @@ export async function handleApiRequest(
               enabled: asBoolean(body.enabled, 'enabled'),
               start: asString(body.start, 'start'),
               end: asString(body.end, 'end'),
+              ...(optionalScheduleBreakMinutes(body) !== undefined
+                ? { breakMinutes: optionalScheduleBreakMinutes(body) } : {}),
             };
             await schedules.upsert(entry);
             return json({ schedule: entry });

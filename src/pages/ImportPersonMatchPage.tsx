@@ -77,7 +77,9 @@ export function ImportPersonMatchPage() {
                 {workflow.people.map((person) => (
                   <option value={person.id} key={person.id}>{person.name}{person.relation ? ' · ' + person.relation : ''}</option>
                 ))}
-                <option value="__create__">“{detected.sourceName}” 새 사람으로 등록</option>
+                {!detected.sourceName.startsWith('인식불가 직원 ') ? (
+                  <option value="__create__">“{detected.sourceName}” 새 사람으로 등록</option>
+                ) : null}
                 <option value="__ignore__">가져오지 않음</option>
               </select>
             </div>

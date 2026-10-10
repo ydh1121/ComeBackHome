@@ -115,7 +115,9 @@ try {
   assert(runtimeConfig.includes(manifest.publicPaths.langPath), 'OCR runtime lang path differs from manifest');
   assert(gitignore.split(/\r?\n/).includes('public/ocr/'), 'Generated OCR runtime tree must remain gitignored');
   assert(composition.includes('TesseractScheduleImageTextExtractor'), 'Production OCR extractor must be active in application composition');
-  assert(composition.includes('StructureFirstScheduleImageRecognizer'), 'Production structure-first image schedule recognizer must be active');
+  assert(composition.includes('new Weekly3ColumnScheduleImageRecognizer'), 'Current workplace weekly 7x3 image recognizer must be active');
+  assert(composition.includes('new PaddleWeeklyRegionalTextExtractor'), 'Weekly image region OCR must use the production Paddle adapter');
+  assert(!composition.includes('new StructureFirstScheduleImageRecognizer'), 'Old generic OCR may not remain selected for weekly product upload');
   assert(composition.includes('BrowserScheduleTableStructureDetector'), 'Production pixel table structure detector must be active');
   assert(
     packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets && node scripts/generate-build-revision.mjs',

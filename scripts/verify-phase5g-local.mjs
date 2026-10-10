@@ -398,6 +398,84 @@ try {
   assert(appResponse.ok, 'Workers Static Assets root request failed');
   assert(appHtml.includes('id="root"'), 'Workers Static Assets did not serve the built React shell');
 
+  // Product OCR stores cross-person reviews in ONE real Worker HTTP/D1 batch.
+  // This is an independent fast regression, not a replacement for the
+  // browser IMAGE->Paddle->review end-to-end acceptance.
+  const second = await requestJson('/api/people', {
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:'phase5g-second-employee',relation:'synthetic'}),
+  });
+  const secondId=second?.person?.id;
+  assert(typeof secondId==='string'&&secondId!==personId,
+    'Atomic OCR import second local employee must be independently persisted');
+  const atomicEntries=Array.from({length:14},(_,index)=>{
+    const owner=index<7?personId:secondId;
+    const day=String(1+(index%7)).padStart(2,'0');
+    const off=index===2||index===9;
+    return {
+      id:'phase5g-atomic-roster-'+index,personId:owner,
+      date:'2099-02-'+day,enabled:!off,
+      start:off?'00:00':'09:00',
+      end:off?'00:00':'18:00',
+      breakMinutes:off?null:30,
+    };
+  });
+  await services.repositories.schedules.upsertMany(atomicEntries);
+  const getAtomic=async()=>{
+    const result=[];
+    for(const owner of [personId,secondId]){
+      const rows=await services.repositories.schedules.list(owner);
+      result.push(...rows.filter(row=>row.date.startsWith('2099-02')));
+    }
+    return result.sort((a,b)=>(a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
+  };
+  const firstAtomic=await getAtomic();
+  assert(firstAtomic.length===14,'Atomic HTTP->D1 must persist 14 rows');
+  assert(firstAtomic.filter(row=>row.enabled===true&&row.breakMinutes===30).length===12,
+    'Atomic HTTP->D1 must preserve 12 WORK 30-minute breaks');
+  assert(firstAtomic.filter(row=>row.enabled===false&&row.breakMinutes===null).length===2,
+    'Atomic HTTP->D1 must preserve 2 reviewed OFF null breaks');
+  await services.repositories.schedules.upsertMany(firstAtomic);
+  assert(JSON.stringify(await getAtomic())===JSON.stringify(firstAtomic),
+    'Atomic repeat save must preserve original IDs, values and row count');
+
+  const postAtomic=async(rows)=>{
+    const response=await originalFetch(origin+'/api/schedules/import',{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({schedules:rows}),
+    });
+    return {status:response.status,body:await response.json().catch(()=>null)};
+  };
+  const candidate=(owner,date,id='negative-'+date)=>({
+    id,personId:owner,date,enabled:true,start:'09:00',end:'18:00',breakMinutes:30,
+  });
+  const valid=candidate(personId,'2099-03-01');
+  const failureCases=[
+    {name:'UNKNOWN_PERSON',rows:[valid,candidate('unknown-person','2099-03-02')]},
+    {name:'INVALID_DATE',rows:[valid,candidate(secondId,'99-xx-00')]},
+    {name:'INVALID_CLOCK',rows:[valid,{...candidate(secondId,'2099-03-02'),start:'99:77'}]},
+    {name:'DUPLICATE_DAY',rows:[valid,{...valid,id:'duplicate-date'}]},
+    {name:'BREAK_RANGE',rows:[valid,{...candidate(secondId,'2099-03-02'),breakMinutes:900}]},
+    {name:'SQL_BATCH_ROLLBACK',rows:[valid,candidate(secondId,'2099-03-02',firstAtomic[0].id)]},
+  ];
+  for(const check of failureCases){
+    const outcome=await postAtomic(check.rows);
+    assert(outcome.status===400,check.name+' must fail HTTP validation/transaction');
+    const after=await getAtomic();
+    assert(JSON.stringify(after)===JSON.stringify(firstAtomic),
+      check.name+' must not mutate approved schedules');
+    const stray=await services.repositories.schedules.getByDate(personId,'2099-03-01');
+    assert(stray===null,check.name+' left a partial D1 batch write');
+  }
+  const readOne=await services.repositories.schedules.getByDate(personId,'2099-02-01');
+  assert(readOne?.id===firstAtomic.find(row=>row.personId===personId&&row.date==='2099-02-01')?.id,
+    'Atomic import must preserve single-person GET');
+  console.log('CBH_REAL_HTTP_D1_ATOMIC_PRODUCT_GATE='+JSON.stringify({
+    storage:'ACTUAL_WRANGLER_HTTP_API_AND_ISOLATED_D1',people:2,rows:14,
+    work30Min:12,approvedOffNull:2,repeatedRows:14,
+    negativeControls:failureCases.map(x=>x.name),remoteWrites:0,
+  }));
+
   console.log(JSON.stringify({
     phase: '5G',
     result: 'PASS',

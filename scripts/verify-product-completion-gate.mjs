@@ -178,6 +178,7 @@ const expectedMigrations = [
   '0005_presence_state.sql',
   '0006_saved_route_destination_access.sql',
   '0007_multi_access_route_sets.sql',
+  '0008_weekly_ocr_break_minutes.sql',
 ];
 expect(
   JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),

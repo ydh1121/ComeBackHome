@@ -54,6 +54,25 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     return this.imports.setResolution(batchId, reviewItemId, resolution);
   }
 
+  setImportedBreakMinutes(
+    batchId: EntityId,
+    reviewItemId: EntityId,
+    minutes: number | null,
+  ): Promise<void> {
+    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
+      throw new Error('INVALID_BREAK_MINUTES');
+    }
+    return this.imports.setImportedBreakMinutes(batchId, reviewItemId, minutes);
+  }
+
+  setImportedEnabled(
+    batchId: EntityId,
+    reviewItemId: EntityId,
+    enabled: boolean,
+  ): Promise<void> {
+    return this.imports.setImportedEnabled(batchId, reviewItemId, enabled);
+  }
+
   setImportedTime(
     batchId: EntityId,
     reviewItemId: EntityId,

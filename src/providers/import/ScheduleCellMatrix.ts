@@ -1,6 +1,7 @@
 import type { ImageTextLayout, ImageTextToken } from '../../application/contracts/providers';
 import {
   analyzeScheduleCellVisualEvidence,
+  pixelSupportedColumnBounds,
   type ScheduleCellVisualEvidence,
   type SchedulePixelBounds,
   type ScheduleTableStructureDetection,
@@ -30,6 +31,7 @@ export interface ScheduleMatrixPersonRow {
   labelBounds: SchedulePixelBounds;
   preliminaryName: string | null;
   preliminaryConfidence: number;
+  labelVisual?: ScheduleCellVisualEvidence;
 }
 
 export interface ScheduleMatrixCell {
@@ -39,6 +41,8 @@ export interface ScheduleMatrixCell {
   personLabelBounds: SchedulePixelBounds;
   bounds: SchedulePixelBounds;
   visual: ScheduleCellVisualEvidence;
+  /** OCR saw body content even when local pixel occupancy is borderline empty. */
+  initialTextEvidence?: boolean;
 }
 
 export interface ScheduleCellMatrix {
@@ -105,6 +109,30 @@ function parseCalendarContext(tokens: BoxToken[]): { year: number | null; month:
     const monthOnly = /^(1[0-2]|0?[1-9])월$/.exec(raw);
     if (monthOnly && month == null) month = Number(monthOnly[1]);
   }
+  // Tesseract frequently splits "2026년 10월" into separate word tokens.
+  // Recover month ONLY from adjacent year-and-month tokens on the same
+  // text baseline. Never guess it from the current date or a body cell.
+  if (month == null) {
+    const ordered = [...tokens].sort((a, b) => a.cy - b.cy || a.x - b.x);
+    for (const yearToken of ordered) {
+      const yearMatch = /(20\d{2})/.exec(yearToken.text.normalize('NFKC'));
+      if (!yearMatch) continue;
+      const height = Math.max(8, yearToken.height);
+      const siblings = ordered.filter((token) =>
+        Math.abs(token.cy - yearToken.cy) <= height * 0.75 &&
+        token.x >= yearToken.x &&
+        token.x <= yearToken.right + Math.max(140, yearToken.width * 2)
+      ).sort((a, b) => a.x - b.x);
+      const joined = siblings.map((token) => token.text.normalize('NFKC')).join('')
+        .replace(/[\s_.-]/g, '');
+      const match = /(20\d{2})년?(1[0-2]|0?[1-9])월?/.exec(joined);
+      if (match) {
+        year = Number(match[1]);
+        month = Number(match[2]);
+        break;
+      }
+    }
+  }
   return { year, month };
 }
 
@@ -158,13 +186,39 @@ function buildDateColumns(
   const headerZoneBottom = firstRows.length
     ? Math.max(...firstRows.map((band) => band.bounds.y + band.bounds.height))
     : detection.structure.tableBounds.y + detection.structure.tableBounds.height * 0.25;
-  const anchors = tokens
+  // OCR commonly separates Hangul day suffixes and individual digits.
+  // Select the upper, horizontally repeated date-token row instead of
+  // assuming that a pixel-derived rowBand always contains the header.
+  // Bare numbers are permitted only when at least two DISTINCT dates
+  // share a near-horizontal header baseline.
+  const rawDateEvidence = tokens
+    .map((token) => ({ token, date: parseDateEvidence(token.text, context, true) }))
+    .filter((item): item is { token: BoxToken; date: string } => item.date != null)
+    .filter((item) => item.token.cy <= detection.raster.height * 0.5)
+    .sort((a, b) => a.token.cy - b.token.cy);
+  const headerGroups: Array<Array<{ token: BoxToken; date: string }>> = [];
+  for (const evidence of rawDateEvidence) {
+    const group = headerGroups.find((items) =>
+      Math.abs(items[0].token.cy - evidence.token.cy) <=
+      Math.max(8, Math.min(items[0].token.height, evidence.token.height) * 0.8)
+    );
+    if (group) group.push(evidence);
+    else headerGroups.push([evidence]);
+  }
+  const groupWithDates = headerGroups
+    .filter((group) => new Set(group.map((item) => item.date)).size >= 2)
+    .sort((left, right) => {
+      const distinction = new Set(right.map((item) => item.date)).size -
+        new Set(left.map((item) => item.date)).size;
+      return distinction || left[0].token.cy - right[0].token.cy;
+    })[0];
+  const anchors = (groupWithDates ?? tokens
     .map((token) => ({
       token,
       date: parseDateEvidence(token.text, context,
         token.cy >= detection.structure.tableBounds.y && token.cy <= headerZoneBottom),
     }))
-    .filter((item): item is { token: BoxToken; date: string } => item.date != null)
+    .filter((item): item is { token: BoxToken; date: string } => item.date != null))
     .sort((left, right) => left.token.cx - right.token.cx);
 
   const deduped = anchors.filter((item, index, all) =>
@@ -178,6 +232,16 @@ function buildDateColumns(
   if (!typicalGap) return [];
 
   const vertical = detection.structure.evidence.verticalLinePositions;
+  // Anchor values still come only from recognized OCR text. Physical pixel
+  // column boundaries fix the width of sparse recognized date anchors without
+  // inventing a date for an unreadable intervening column.
+  const physical = pixelSupportedColumnBounds(detection);
+  const matched = deduped.map(({ token }) => physical.find((band) =>
+    token.cx >= band.x && token.cx < band.x + band.width
+  ));
+  const usePhysical = matched.length >= 2 &&
+    matched.every((band) => band != null) &&
+    new Set(matched.map((band) => band?.x)).size === matched.length;
   return deduped.map((item, index) => {
     const previous = deduped[index - 1];
     const next = deduped[index + 1];
@@ -200,7 +264,7 @@ function buildDateColumns(
     return {
       index,
       date: item.date,
-      bounds: {
+      bounds: usePhysical && matched[index] ? matched[index]! : {
         x: Math.max(0, Math.min(left, right - 1)),
         y: 0,
         width: Math.max(1, right - left),
@@ -424,6 +488,7 @@ export function buildScheduleCellMatrix(
       labelBounds,
       preliminaryName,
       preliminaryConfidence,
+      labelVisual,
     });
 
     for (const item of provisionalCells) {
@@ -434,6 +499,11 @@ export function buildScheduleCellMatrix(
         personLabelBounds: labelBounds,
         bounds: item.bounds,
         visual: item.visual,
+        initialTextEvidence: tokens.some((token) =>
+          tokenInside(token, item.bounds) &&
+          token.confidence >= 0.25 &&
+          /[가-힣0-9]/.test(token.normalized)
+        ),
       });
     }
   }

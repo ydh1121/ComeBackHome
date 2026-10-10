@@ -4,7 +4,7 @@ export interface Address { road: string; lot?: string; detail?: string; }
 export interface Coordinate { x: number; y: number; }
 export type PlaceKind = 'origin' | 'destination';
 export interface Place { id: EntityId; personId: EntityId; kind: PlaceKind; label: string; address: Address; coordinate?: Coordinate; providerPlaceId?: string; }
-export interface ScheduleEntry { id: EntityId; personId: EntityId; date: ISODate; enabled: boolean; start: string; end: string; }
+export interface ScheduleEntry { id: EntityId; personId: EntityId; date: ISODate; enabled: boolean; start: string; end: string; breakMinutes?: number | null; }
 export type TransitMode = 'BUS' | 'SUBWAY';
 export type CommuteLegMode = 'WALK' | 'BUS' | 'SUBWAY' | 'TRANSFER';
 export type CommuteStepType = 'WALKING' | 'BUS' | 'SUBWAY' | 'TRANSFER';
@@ -20,8 +20,8 @@ export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
 export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; message?: string; }
 export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; ignored?: boolean; }
 export interface ImportStructure { sheet: string; headerRow: number; personColumn: string; dateColumn: string; shiftColumn: string; needsReview: boolean; }
-export type ImportRecognitionState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'UNREADABLE';
-export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'enabled'|'start'|'end'>; imported: { enabled: boolean; start: string | null; end: string | null }; recognitionState?: ImportRecognitionState; resolution: ImportResolution | null; }
+export type ImportRecognitionState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
+export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'enabled'|'start'|'end'|'breakMinutes'>; imported: { enabled: boolean; start: string | null; end: string | null; breakMinutes?: number | null }; recognitionState?: ImportRecognitionState; resolution: ImportResolution | null; }
 export interface ImportBatch {
   id: EntityId;
   files: ImportFileRecord[];

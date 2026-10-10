@@ -12,6 +12,8 @@ export interface ImportMatchActions {
 export interface ImportReviewActions {
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
+  setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>;
+  setImportedEnabled(batchId: EntityId, reviewItemId: EntityId, enabled: boolean): Promise<void>;
 }
 export type TransitAccessFilter = 'all' | Lowercase<TransitMode>;
 export interface TransitAccessActions {
