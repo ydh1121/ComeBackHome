@@ -236,7 +236,7 @@ export async function commitApprovedWorkbookImport(db: D1DatabaseLike, input: un
       assertion('EXISTS (SELECT 1 FROM people WHERE id = ?3)',[person.personId!]);
     } else {
       // Both this check and the insert trigger reject duplicate employee creation.
-      assertion('NOT EXISTS (SELECT 1 FROM people WHERE lower(replace(trim(name),\\' \\' ,\\'\\')) = lower(replace(trim(?3),\\' \\' ,\\'\\')))',[person.name!]);
+      assertion("NOT EXISTS (SELECT 1 FROM people WHERE lower(replace(trim(name),' ','')) = lower(replace(trim(?3),' ','')))",[person.name!]);
       statements.push(db.prepare(
         'INSERT INTO people (id,name,relation,created_at,updated_at) VALUES (?1,?2,?3,?4,?4)',
       ).bind(personIds.get(person.ref)!,person.name!,'',now));
