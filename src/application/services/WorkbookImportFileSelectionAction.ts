@@ -156,6 +156,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       breakMinutes?: number | null;
       confidence: number;
       recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
+      breakReviewRequired?: boolean;
     }>();
     let duplicateCandidate = false;
 
@@ -169,6 +170,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       confidence: number;
       enabled?: boolean;
       recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
+      breakReviewRequired?: boolean;
     }) => {
       const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
       if (!detected) return;
@@ -186,6 +188,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         end: candidate.end,
         ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         confidence: candidate.confidence,
+        ...(candidate.breakReviewRequired?{breakReviewRequired:true}:{}),
         recognitionState:
           candidate.recognitionState ??
           (candidate.start && candidate.end ? 'WORK' : 'INCOMPLETE'),
@@ -280,6 +283,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
           ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         },
         recognitionState: candidate.recognitionState,
+        ...(candidate.breakReviewRequired?{breakReviewRequired:true}:{}),
         // Weekly OCR requires an explicit decision even when a generated
         // OCR candidate happens to equal the already-stored schedule.
         resolution: weeklyRequiresPerCellApproval ? null :
