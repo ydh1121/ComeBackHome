@@ -41,7 +41,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     for(const url of privateImageUrls.values())URL.revokeObjectURL(url);
     privateImageUrls.clear();
     const firstImage=files.find(item=>item.kind==='IMAGE');
-    if(firstImage && typeof URL.createObjectURL==='function')
+    if(firstImage && firstImage.file instanceof Blob && typeof URL.createObjectURL==='function')
       privateImageUrls.set(batch.id,URL.createObjectURL(firstImage.file));
     const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
       const supported = kind === 'WORKBOOK' || this.imageRecognizer != null;
