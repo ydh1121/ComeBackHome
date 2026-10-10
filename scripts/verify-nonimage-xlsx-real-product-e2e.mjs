@@ -122,8 +122,20 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     assert(await page.getByRole('button',{name:'저장',exact:true}).isDisabled(),
       label+' editing approved break minutes must invalidate prior approval');
     await firstShift.locator('.review-choice-list button').last().click();
-    assert(await page.getByRole('button',{name:'저장',exact:true}).isEnabled(),
-      label+' corrected break must be explicitly reapproved');
+    const saveEnabled=await page.getByRole('button',{name:'저장',exact:true}).isEnabled();
+    if(!saveEnabled) {
+      const reviewDetails=await page.evaluate(()=>{
+        const batch=JSON.parse(localStorage.getItem('cbh:import-batches:v2')||'{}').batches?.[0];
+        return {
+          people:batch?.detectedPeople?.map(p=>({name:p.sourceName,pending:p.pendingCreate,id:p.matchedPersonId,ignored:p.ignored})),
+          rows:batch?.reviewItems?.map((x,i)=>({i,date:x.date,resolution:x.resolution,
+            enabled:x.imported.enabled,start:x.imported.start,end:x.imported.end,
+            breakMinutes:x.imported.breakMinutes,recognitionState:x.recognitionState,
+            personId:x.personId})),
+        };
+      });
+      throw Error(label+' corrected break must be explicitly reapproved: '+JSON.stringify(reviewDetails));
+    }
     const beforeSave=await json('/api/people');
     assert(!beforeSave.body?.people?.some(x=>x.name===secondName),
       label+' review-before-submit MUST remain D1-write-free');
