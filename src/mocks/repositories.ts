@@ -218,11 +218,29 @@ export class MockImportRepository implements ImportRepository {
       target.reviewItems.forEach(item=>{item.resolution=null;});
     });
   }
+  async setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,proposedName:string):Promise<void> {
+    const name=proposedName.normalize('NFKC').trim();
+    if(!/^[가-힣]{2,5}$/.test(name))throw new Error('INVALID_NEW_PERSON_NAME');
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!batch?.structure.weeklyReview)throw new Error('NEW_PERSON_REVIEW_NOT_ACTIVE');
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      const person=target?.detectedPeople.find(p=>p.id===detectedPersonId);
+      if(!person||!target)return;
+      person.pendingCreateName=name;
+      person.matchedPersonId=null;
+      person.ignored=false;
+      for(const item of target.reviewItems)if(item.detectedPersonId===detectedPersonId){
+        item.personId=null;
+        item.resolution=null;
+      }
+    });
+  }
   async setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void> {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
-      if (person) person.matchedPersonId = personId;
+      if (person) { person.matchedPersonId = personId; person.pendingCreateName=undefined; }
       for (const item of batch?.reviewItems ?? []) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
@@ -239,7 +257,7 @@ export class MockImportRepository implements ImportRepository {
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (!person || !batch) return;
       person.ignored = ignored;
-      if (ignored) person.matchedPersonId = null;
+      if (ignored) { person.matchedPersonId = null; person.pendingCreateName=undefined; }
       for (const item of batch.reviewItems) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         if (ignored) {
