@@ -45,6 +45,18 @@ export class CommitImportReview implements CommitImportReviewAction {
     );
     if (unresolvedRest) throw new Error('Import contains unreviewed break minutes.');
 
+    // A workbook can contain multiple detected names mapped to one employee.
+    // Abort before D1 writes if review edits or matching produce duplicate keys.
+    const uniqueImportedDays=new Set<string>();
+    for(const item of includedItems){
+      if(item.resolution==='KEEP'||item.resolution==='SKIP')continue;
+      const key=item.personId+'|'+item.date;
+      if(uniqueImportedDays.has(key)){
+        throw new Error('Import contains duplicate person/date.');
+      }
+      uniqueImportedDays.add(key);
+    }
+
     const entries = [];
     for (const item of includedItems) {
       if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
