@@ -5,11 +5,14 @@ export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'
 export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
 export interface ImportMatchActions {
+  addManualPerson(batchId: EntityId, personId: EntityId): Promise<void>;
   cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>;
   setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
   setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
 }
 export interface ImportReviewActions {
+  setWeeklyStartDate(batchId: EntityId, startDate: ISODate): Promise<void>;
+  confirmWeeklyDates(batchId: EntityId): Promise<void>;
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
   setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>;
