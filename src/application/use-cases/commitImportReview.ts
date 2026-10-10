@@ -80,6 +80,20 @@ export class CommitImportReview implements CommitImportReviewAction {
       if(prewriteKeys.has(key))throw new Error('DUPLICATE_IMPORT_PERSON_DATE');
       prewriteKeys.add(key);
     }
+    // Validate every approved imported value before any write, including
+    // proposed new-person creation. A malformed clock/break cannot be
+    // silently normalized by the repository or API.
+    const validClock=(value:string|null)=>
+      typeof value==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+    for(const item of includedItems){
+      if(item.resolution!=='NEW')continue;
+      if(item.imported.enabled!==false &&
+         (!validClock(item.imported.start)||!validClock(item.imported.end)))
+        throw new Error('INVALID_APPROVED_IMPORT_TIME');
+      const rest=item.imported.breakMinutes;
+      if(rest!=null&&(!Number.isInteger(rest)||rest<0||rest>720))
+        throw new Error('INVALID_APPROVED_BREAK_MINUTES');
+    }
     const pendingCreated=new Map<string,string>();
     const pendingToCreate=[...pendingById.values()].filter(person=>
       includedItems.some(item=>item.detectedPersonId===person.id&&item.resolution==='NEW'));
