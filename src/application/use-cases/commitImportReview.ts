@@ -1,5 +1,5 @@
 import type { CommitImportReviewAction } from '../contracts/actions';
-import type { ImportRepository, PersonRepository, ScheduleRepository } from '../contracts/repositories';
+import type { ApprovedImportSchedule, ImportRepository, PersonRepository, ScheduleRepository } from '../contracts/repositories';
 
 export class CommitImportReview implements CommitImportReviewAction {
   constructor(
@@ -94,6 +94,60 @@ export class CommitImportReview implements CommitImportReviewAction {
       if(rest!=null&&(!Number.isInteger(rest)||rest<0||rest>720))
         throw new Error('INVALID_APPROVED_BREAK_MINUTES');
     }
+    // Weekly reviewed imports must cross the API as one approved snapshot.
+    // The server rechecks calendar, owners, clocks, duplicate keys and OFF
+    // approvals, then commits people + shifts inside ONE D1.batch.
+    if (weekly) {
+      if (!this.schedules.importApprovedWeekly)
+        throw new Error('ATOMIC_WEEKLY_IMPORT_UNAVAILABLE');
+      const importRows: ApprovedImportSchedule[] = [];
+      for (const item of includedItems) {
+        if (item.resolution !== 'NEW') continue;
+        if (!item.date || item.dayIndex == null)
+          throw new Error('UNCONFIRMED_WEEKLY_DAY');
+        const pending = pendingById.get(item.detectedPersonId);
+        if (Boolean(pending) === Boolean(item.personId))
+          throw new Error('IMPORT_PERSON_REFERENCE_AMBIGUOUS');
+        importRows.push({
+          id: item.existing ? item.id : item.id,
+          ...(pending
+            ? { pendingPersonRef: pending.id }
+            : { personId: item.personId! }),
+          date: item.date,
+          dayIndex: item.dayIndex,
+          enabled: item.imported.enabled !== false,
+          start: item.imported.enabled === false ? '00:00' : item.imported.start!,
+          end: item.imported.enabled === false ? '00:00' : item.imported.end!,
+          ...(item.imported.breakMinutes !== undefined
+            ? { breakMinutes: item.imported.enabled === false ? null : item.imported.breakMinutes }
+            : {}),
+          decision: 'NEW',
+          approved: true,
+          ...(item.breakReviewRequired ? { breakReviewRequired: true } : {}),
+          ...(item.recognitionState === 'OFF_CANDIDATE'
+            ? { recognitionState: 'OFF_CANDIDATE', offApproved: item.imported.enabled === false }
+            : {}),
+        });
+      }
+      if (importRows.length) {
+        const newPeople = [...pendingById.values()]
+          .filter(person => importRows.some(item => item.pendingPersonRef === person.id))
+          .map(person => ({ ref: person.id, name: person.pendingCreateName! }));
+        const receipt = await this.schedules.importApprovedWeekly({
+          requestId: batch.id,
+          weekStart: weekly.startDate!,
+          confirmed: true,
+          newPeople,
+          schedules: importRows,
+        });
+        if (receipt.schedules.length !== importRows.length ||
+            newPeople.some(person => !receipt.createdPeople[person.ref]))
+          throw new Error('ATOMIC_WEEKLY_IMPORT_RECEIPT_INCOMPLETE');
+      }
+      await this.imports.markCommitted(batchId);
+      return;
+    }
+
     const pendingCreated=new Map<string,string>();
     const pendingToCreate=[...pendingById.values()].filter(person=>
       includedItems.some(item=>item.detectedPersonId===person.id&&item.resolution==='NEW'));
