@@ -11,6 +11,21 @@ export class CommitImportReview implements CommitImportReviewAction {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
 
+    const weekly=batch.structure.weeklyReview;
+    if(weekly){
+      if(!weekly.confirmed||!weekly.startDate)
+        throw new Error('WEEKLY_DATES_NOT_CONFIRMED');
+      const start=new Date(weekly.startDate+'T00:00:00Z');
+      if(!Number.isFinite(start.getTime())||start.getUTCDay()!==1||
+         start.toISOString().slice(0,10)!==weekly.startDate)
+        throw new Error('INVALID_WEEKLY_START_DATE');
+      for(const item of batch.reviewItems){
+        if(item.dayIndex==null||item.dayIndex<0||item.dayIndex>6||
+           item.date!==new Date(start.getTime()+item.dayIndex*86400000)
+             .toISOString().slice(0,10))
+          throw new Error('UNCONFIRMED_WEEKLY_DAY');
+      }
+    }
     const ignoredDetectedIds = new Set(
       batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
     );
@@ -18,10 +33,11 @@ export class CommitImportReview implements CommitImportReviewAction {
       (item) => !ignoredDetectedIds.has(item.detectedPersonId),
     );
     if (!includedItems.length) {
-      await this.imports.markCommitted(batchId);
-      return;
+      throw new Error('IMPORT_HAS_NO_APPROVED_ITEMS');
     }
 
+    if(includedItems.some(item=>item.date==null))
+      throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
     const unresolved = includedItems.filter((item) => item.personId == null);
     if (unresolved.length) throw new Error('Import contains unresolved people.');
 
@@ -50,7 +66,9 @@ export class CommitImportReview implements CommitImportReviewAction {
       if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
       const personId = item.personId;
       if (!personId) continue;
-      const current = await this.schedules.getByDate(personId, item.date);
+      const date=item.date;
+      if(!date)throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
+      const current = await this.schedules.getByDate(personId, date);
       const enabled = item.imported.enabled !== false;
       const start = item.imported.start ?? current?.start ?? '00:00';
       const end = item.imported.end ?? current?.end ?? '00:00';
@@ -60,7 +78,7 @@ export class CommitImportReview implements CommitImportReviewAction {
       entries.push({
         id: current?.id ?? crypto.randomUUID(),
         personId,
-        date: item.date,
+        date,
         enabled,
         start,
         end,
@@ -70,6 +88,12 @@ export class CommitImportReview implements CommitImportReviewAction {
             ? { breakMinutes: enabled ? current.breakMinutes : null }
             : {}),
       });
+    }
+    const uniqueness=new Set<string>();
+    for(const entry of entries){
+      const key=entry.personId+'|'+entry.date;
+      if(uniqueness.has(key))throw new Error('DUPLICATE_IMPORT_PERSON_DATE');
+      uniqueness.add(key);
     }
     if (entries.length) {
       await this.schedules.upsertMany(entries);
