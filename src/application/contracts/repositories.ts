@@ -1,7 +1,38 @@
 import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, PresenceState, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../../domain/models';
 import type { EntityId, ISODate } from '../../domain/common';
 export interface PersonRepository { list(): Promise<Person[]>; get(id: EntityId): Promise<Person | null>; create(input: Omit<Person,'id'>): Promise<Person>; update(id: EntityId, patch: Partial<Omit<Person,'id'>>): Promise<Person>; }
-export interface ScheduleRepository { list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; upsertMany(entries: ScheduleEntry[]): Promise<void>; }
+export interface ApprovedImportSchedule {
+  id: EntityId;
+  personId?: EntityId;
+  pendingPersonRef?: string;
+  date: ISODate;
+  dayIndex: number;
+  enabled: boolean;
+  start: string;
+  end: string;
+  breakMinutes?: number | null;
+  decision: 'NEW';
+  approved: true;
+}
+export interface ApprovedWeeklyImport {
+  requestId: EntityId;
+  weekStart: ISODate;
+  confirmed: true;
+  newPeople: Array<{ ref: string; name: string }>;
+  schedules: ApprovedImportSchedule[];
+}
+export interface ApprovedImportReceipt {
+  createdPeople: Record<string, EntityId>;
+  schedules: ScheduleEntry[];
+}
+export interface ScheduleRepository {
+  list(personId: EntityId): Promise<ScheduleEntry[]>;
+  getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>;
+  upsert(entry: ScheduleEntry): Promise<void>;
+  upsertMany(entries: ScheduleEntry[]): Promise<void>;
+  /** Optional only for legacy mock/workbook compatibility; required for weekly pending people. */
+  importApprovedWeekly?(importData: ApprovedWeeklyImport): Promise<ApprovedImportReceipt>;
+}
 export interface PlaceRepository { get(personId: EntityId, kind: PlaceKind): Promise<Place | null>; save(place: Place): Promise<void>; }
 export type RouteSearchSource = 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE';
 export type RouteProviderErrorCategory = 'NONE' | 'AUTH' | 'HTTP' | 'NO_RESULT' | 'INVALID_COORDINATE' | 'QUOTA' | 'UNKNOWN';
