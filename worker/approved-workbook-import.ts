@@ -132,8 +132,13 @@ function normalize(value: unknown): Normalized {
     if (!enabled && !item.explicitOff && item.resolution === 'NEW') {
       throw new Error('IMPORT_OFF_NOT_APPROVED');
     }
-    const start = enabled ? clock(item.start) : null;
-    const end = enabled ? clock(item.end) : null;
+    // SKIP/KEEP can contain incomplete or empty source cells: they are
+    // explicitly reviewed but never persisted. NEW work must be complete.
+    const start = enabled && item.start != null ? clock(item.start) : null;
+    const end = enabled && item.end != null ? clock(item.end) : null;
+    if (item.resolution === 'NEW' && enabled && (!start || !end)) {
+      throw new Error('IMPORT_INCOMPLETE_SCHEDULE');
+    }
     if (!enabled && (item.start != null || item.end != null || item.breakMinutes != null)) {
       throw new Error('INVALID_OFF_PAYLOAD');
     }
