@@ -277,6 +277,18 @@ try {
     weeklyBlank.recognitionState === 'OFF_CANDIDATE',
     'blank must stay a review-only OFF_CANDIDATE, never auto-confirmed OFF');
   if (weeklyBlank && weeklyWork && weeklyFalseOff) {
+    await weeklyImports.setImportedDate(weeklyId,weeklyWork.id,'2099-04-08');
+    let afterDateChange=await weeklyImports.getBatch(weeklyId);
+    expect(afterDateChange?.reviewItems.find(item=>item.id===weeklyWork.id)?.date==='2099-04-08',
+      'weekly review date edit must persist in draft');
+    let duplicateDateBlocked=false;
+    try{await weeklyImports.setImportedDate(weeklyId,weeklyWork.id,'2099-04-06');}
+    catch(error){duplicateDateBlocked=String(error).includes('DUPLICATE_PERSON_IMPORT_DATE');}
+    expect(duplicateDateBlocked,'same-person duplicate reviewed date must be rejected');
+    await weeklyImports.setImportedDate(weeklyId,weeklyWork.id,'2099-04-05');
+    afterDateChange=await weeklyImports.getBatch(weeklyId);
+    expect(afterDateChange?.reviewItems.find(item=>item.id===weeklyWork.id)?.resolution===null,
+      'changing a weekly date must reopen explicit approval');
     const weeklyCommit = new commitModule.CommitImportReview(weeklyImports, weeklySchedules);
     await weeklyImports.setDetectedPersonMatch(weeklyId, weeklyBlank.detectedPersonId, 'mock-person-1');
     const afterMatch = await weeklyImports.getBatch(weeklyId);
