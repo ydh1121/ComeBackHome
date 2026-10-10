@@ -1,0 +1,78 @@
+name: TEMP / vendor pinned weekly Paddle OCR runtime
+
+on:
+  push:
+    branches: [fix/canonical-ocr-runtime-assets]
+    paths:
+      - ".github/workflows/temporary-vendor-weekly-paddle.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  vendor-official-weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch ONLY official public pinned Korean model (no user data)
+        run: |
+          python -m pip install "huggingface_hub>=0.35,<2" "PyYAML>=6,<7"
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          import hashlib, json, pathlib, shutil, yaml
+          repo='PaddlePaddle/korean_PP-OCRv5_mobile_rec_onnx'
+          onnx=pathlib.Path(hf_hub_download(repo_id=repo,filename='inference.onnx'))
+          yaml_path=pathlib.Path(hf_hub_download(repo_id=repo,filename='inference.yml'))
+          model_hash=hashlib.sha256(onnx.read_bytes()).hexdigest()
+          assert model_hash=='92f0b7785e64fc9090106a241cf4c1eb97472824558272751b88a2a4476d3a08',model_hash
+          cfg=yaml.safe_load(yaml_path.read_text())
+          assert cfg['Global']['model_name']=='korean_PP-OCRv5_mobile_rec'
+          assert cfg['PostProcess']['name']=='CTCLabelDecode'
+          alphabet=cfg['PostProcess']['character_dict']
+          assert len(alphabet)==11945 and '강' in alphabet and '0' in alphabet and ' ' not in alphabet
+          alphabet=[*alphabet,' ']
+          dictionary=json.dumps(alphabet,ensure_ascii=False)
+          dict_hash=hashlib.sha256(dictionary.encode('utf-8')).hexdigest()
+          assert len(alphabet)==11946
+          assert dict_hash=='8aa03fad51cd719c83590dfc4d7e3edea6f2a01f07a08fc476250f42322bb403',dict_hash
+          dest=pathlib.Path('vendor/ocr/weekly')
+          dest.mkdir(parents=True,exist_ok=True)
+          shutil.copyfile(onnx,dest/'inference.onnx')
+          (dest/'dict.json').write_text(dictionary,encoding='utf-8')
+          print('WEEKLY_MODEL_SHA256='+model_hash)
+          print('WEEKLY_DICTIONARY_SHA256='+dict_hash)
+          print('WEEKLY_NO_USER_DATA=TRUE')
+          PY
+          cat > vendor/ocr/weekly/README.md <<'EOF'
+          # Pinned weekly Korean Paddle OCR model
+
+          Source: https://huggingface.co/PaddlePaddle/korean_PP-OCRv5_mobile_rec_onnx
+          Model: korean_PP-OCRv5_mobile_rec / inference.onnx
+          Model SHA-256: 92f0b7785e64fc9090106a241cf4c1eb97472824558272751b88a2a4476d3a08
+          Dictionary generation: official upstream inference.yml -> PostProcess.character_dict, preserve order, append one trailing CTC space token, json.dumps(ensure_ascii=False).
+          Dictionary: exactly 11946 characters; SHA-256: 8aa03fad51cd719c83590dfc4d7e3edea6f2a01f07a08fc476250f42322bb403.
+          License: Apache-2.0 (official Hugging Face model repository metadata; see LICENSE).
+          App inference: onnxruntime-web@1.23.2, copied from installed dependency at each production build. Do not vendor ORT binaries.
+          Contains only upstream public model and official character dictionary. No private user images, crops, ground truth or data.
+          EOF
+          if [ -f /usr/share/common-licenses/Apache-2.0 ]; then
+            cp /usr/share/common-licenses/Apache-2.0 vendor/ocr/weekly/LICENSE
+          else
+            curl -fsSL --retry 3 https://www.apache.org/licenses/LICENSE-2.0 -o vendor/ocr/weekly/LICENSE
+          fi
+          test -s vendor/ocr/weekly/LICENSE
+      - name: Commit only pinned public model, dict, provenance and license
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor/ocr/weekly/inference.onnx vendor/ocr/weekly/dict.json vendor/ocr/weekly/README.md vendor/ocr/weekly/LICENSE
+          git diff --cached --name-only
+          test "$(git diff --cached --name-only | wc -l)" -eq 4
+          git commit -m "build(ocr): vendor approved official Korean ONNX and dictionary"
+          git push origin "HEAD:fix/canonical-ocr-runtime-assets"
