@@ -196,6 +196,83 @@ function utc(y:number,m:number,d:number):Date {
   return date;
 }
 
+function fullDateDigits(value:string):string|null {
+  const text=String(value??'').normalize('NFKC').replace(/\s+/g,'');
+  // Preserve OCR digits exactly. Only date separator loss is tolerated.
+  if(!/^20\d{2}(?:[-./]?\d{2}){2}$/.test(text))return null;
+  const digits=text.replace(/[-./]/g,'');
+  return /^\d{8}$/.test(digits)?digits:null;
+}
+
+function resolvePhysicalFullDateEvidence(
+  matrix:WeeklyPhysicalMatrix,
+  header:ImageTextLayout,
+):WeeklyDateResolution|null {
+  const unresolved=():WeeklyDateResolution=>({
+    dates:matrix.days.map(day=>({
+      dayIndex:day.index,date:null,observed:false,reviewRequired:true,
+    })),
+    yearMonthObserved:false,observedDayAnchors:0,
+    uniqueWeek:false,acceptedForAutomaticSave:false,
+  });
+  const byDay=new Map<number,Set<string>>();
+  let ownedInvalidCalendar=false;
+  for(const token of header.tokens){
+    const digits=fullDateDigits(token.text);
+    if(digits==null)continue;
+    const cx=token.x+token.width/2,cy=token.y+token.height/2;
+    if(!matrix.headerBands.some(row=>
+      cy>=row.y&&cy<row.y+row.height))continue;
+    const owners=matrix.days.filter(day=>
+      cx>=day.bounds.x&&cx<day.bounds.x+day.bounds.width);
+    if(owners.length!==1)continue;
+    const y=Number(digits.slice(0,4));
+    const m=Number(digits.slice(4,6));
+    const d=Number(digits.slice(6,8));
+    let date:Date;
+    try{date=utc(y,m,d);}catch{
+      ownedInvalidCalendar=true;
+      continue;
+    }
+    const set=byDay.get(owners[0].index)??new Set<string>();
+    set.add(format(date));byDay.set(owners[0].index,set);
+  }
+  if(ownedInvalidCalendar)return unresolved();
+  if(byDay.size===0)return null;
+  // Once physical full-date evidence is observed, never silently replace
+  // contradictory or under-supported evidence with weaker legacy inference.
+  if([...byDay.values()].some(values=>values.size!==1)||byDay.size<2)
+    return unresolved();
+  const anchors=[...byDay.entries()].map(([index,values])=>({
+    index,iso:[...values][0],
+  })).sort((a,b)=>a.index-b.index);
+  const weeklyStarts=new Set<string>();
+  for(const anchor of anchors){
+    const date=new Date(anchor.iso+'T00:00:00Z');
+    const monday=new Date(date.getTime()-anchor.index*86400000);
+    if(monday.getUTCDay()!==1)return unresolved();
+    weeklyStarts.add(format(monday));
+  }
+  if(weeklyStarts.size!==1)return unresolved();
+  const weeklyStart=[...weeklyStarts][0];
+  const start=Date.parse(weeklyStart+'T00:00:00Z');
+  if(!anchors.every(anchor=>
+    format(new Date(start+anchor.index*86400000))===anchor.iso))
+    return unresolved();
+  const dates=matrix.days.map(day=>{
+    const iso=format(new Date(start+day.index*86400000));
+    const observed=byDay.get(day.index)?.has(iso)??false;
+    return {
+      dayIndex:day.index,date:iso,observed,
+      reviewRequired:!observed,
+    };
+  });
+  return {
+    dates,yearMonthObserved:true,observedDayAnchors:anchors.length,
+    uniqueWeek:true,acceptedForAutomaticSave:false,
+  };
+}
+
 export function resolveWeekly3ColumnDates(
   matrix: WeeklyPhysicalMatrix,
   header: ImageTextLayout,
@@ -207,6 +284,12 @@ export function resolveWeekly3ColumnDates(
     })),yearMonthObserved:false,observedDayAnchors:0,
     uniqueWeek:false,acceptedForAutomaticSave:false,
   });
+  // Real current-workplace sheets can have weekday/date/note/shift-label
+  // header rows and no separate YYYY년 M월 title. Prefer physically-owned
+  // OCR-observed full dates before the legacy title/day-glyph fallback.
+  const physicalFullDates=resolvePhysicalFullDateEvidence(matrix,header);
+  if(physicalFullDates)return physicalFullDates;
+
   const firstHeaderY=matrix.headerBands[0]?.y??0;
   const topTokens=header.tokens.filter(token=>
     token.y+token.height/2<firstHeaderY);
@@ -346,6 +429,10 @@ export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageText
       matrix.days[0].bounds.x+matrix.days[0].bounds.width-nameColumn.x)),
     height:Math.max(1,headerY),
   };
+  // Legacy generated layouts place date glyphs in the first header band.
+  // Real 4-header-row sheets may put weekday glyphs there instead. Do not
+  // assume this crop is the full-date row: resolveWeekly3ColumnDates first
+  // consumes physically-owned broad-header full-date evidence.
   const dateRegions: ImageTextProbeRegion[]=matrix.days.map(day=>({
     id:'date::grid-cell::weekly::'+day.index,purpose:'date',
     x:day.bounds.x,y:headerY,

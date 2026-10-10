@@ -150,6 +150,113 @@ try {
   assert.equal(conflict.yearMonthObserved,false,
     'Contradictory calendar OCR must not be auto-resolved');
   assert.ok(conflict.dates.every(x=>x.date===null));
+  // Regression for the verified private-layout defect: four physical header
+  // rows (weekday / full date / note / shift labels) with no YYYY년 M월 title.
+  // No private image bytes or private roster values are used here.
+  const fourHeaderRows=[
+    {index:0,bounds:{x:10,y:0,width:1160,height:24},confidence:1},
+    {index:1,bounds:{x:10,y:24,width:1160,height:24},confidence:1},
+    {index:2,bounds:{x:10,y:48,width:1160,height:24},confidence:1},
+    {index:3,bounds:{x:10,y:72,width:1160,height:24},confidence:1},
+    {index:4,bounds:{x:10,y:96,width:1160,height:60},confidence:1},
+  ];
+  const shiftLabelTokens=[0,1,2].map(day=>{
+    const band=columns[1+day*3].bounds;
+    return {text:'출근',x:band.x+5,y:77,width:28,height:14,confidence:1};
+  });
+  const fourMatrix=buildWeekly3ColumnPhysicalMatrix({
+    raster,structure:{...structure,rowBands:fourHeaderRows,
+      tableBounds:{x:10,y:0,width:1160,height:156}},
+    preprocessingMs:1,structureDetectionMs:1,
+  },{width,height,tokens:shiftLabelTokens});
+  assert.ok(fourMatrix,'Four-header-row generated matrix must be detected');
+  assert.equal(fourMatrix.headerBands.length,4);
+  assert.equal(fourMatrix.headerBands[0].y,0,
+    'Verified real-layout shape starts its first header band at y=0');
+  assert.equal(fourMatrix.rows.length,1);
+  const legacyDateRegions=weekly3ColumnProbeRegions(fourMatrix)
+    .filter(x=>x.purpose==='date');
+  assert.equal(legacyDateRegions.length,7);
+  assert.ok(legacyDateRegions.every(x=>
+    x.y===fourMatrix.headerBands[0].y &&
+    x.height===fourMatrix.headerBands[0].height),
+  'Legacy dedicated date probe remains first-band and may read weekday glyphs');
+
+  const fullDateToken=(dayIndex,text)=>{
+    const day=fourMatrix.days[dayIndex];
+    return {text,x:day.bounds.x+20,y:28,width:90,height:14,confidence:.99};
+  };
+  const titleless=(pairs)=>({width,height,tokens:pairs.map(
+    ([index,text])=>fullDateToken(index,text))});
+  const expectedJulyWeek=Array.from({length:7},(_,i)=>
+    '2026-07-'+String(20+i).padStart(2,'0'));
+
+  // CASE B — perfect ISO tokens.
+  const perfectIso=resolveWeekly3ColumnDates(fourMatrix,titleless(
+    expectedJulyWeek.map((date,index)=>[index,date])),[]);
+  assert.deepEqual(perfectIso.dates.map(x=>x.date),expectedJulyWeek);
+  assert.equal(perfectIso.observedDayAnchors,7);
+  assert.ok(perfectIso.dates.every(x=>x.observed&&!x.reviewRequired));
+  assert.equal(perfectIso.acceptedForAutomaticSave,false);
+
+  // CASE C — separator-free YYYYMMDD.
+  const noSeparators=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'20260720'],[1,'20260721'],
+  ]),[]);
+  assert.deepEqual(noSeparators.dates.map(x=>x.date),expectedJulyWeek);
+  assert.equal(noSeparators.observedDayAnchors,2);
+  assert.deepEqual(noSeparators.dates.map(x=>x.observed),
+    [true,true,false,false,false,false,false]);
+  assert.ok(noSeparators.dates.slice(2).every(x=>x.reviewRequired));
+
+  // CASE D — partial separator loss.
+  const partialSeparators=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026-0720'],[1,'202607-21'],
+  ]),[]);
+  assert.deepEqual(partialSeparators.dates.map(x=>x.date),expectedJulyWeek);
+
+  // CASE E — two independent physically-owned anchors are sufficient.
+  const twoAnchors=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026.07.20'],[6,'2026/07/26'],
+  ]),[]);
+  assert.deepEqual(twoAnchors.dates.map(x=>x.date),expectedJulyWeek);
+  assert.equal(twoAnchors.observedDayAnchors,2);
+
+  // CASE F — one full-date anchor cannot infer an entire week.
+  const oneAnchor=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026-07-20'],
+  ]),[]);
+  assert.ok(oneAnchor.dates.every(x=>x.date===null));
+  assert.equal(oneAnchor.acceptedForAutomaticSave,false);
+
+  // CASE G — contradictory valid dates in the same physical day fail closed.
+  const contradictionFull=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026-07-20'],[0,'2026-07-27'],[1,'2026-07-21'],
+  ]),[]);
+  assert.ok(contradictionFull.dates.every(x=>x.date===null));
+
+  // CASE H — individually valid anchors from different weeks fail closed.
+  const inconsistentWeek=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026-07-20'],[1,'2026-07-28'],
+  ]),[]);
+  assert.ok(inconsistentWeek.dates.every(x=>x.date===null));
+
+  // CASE I — impossible calendar evidence is never corrected or accepted.
+  const invalidCalendar=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026-02-30'],[1,'2026-03-03'],
+  ]),[]);
+  assert.ok(invalidCalendar.dates.every(x=>x.date===null));
+
+  // Full-date evidence wins before the legacy first-band weekday probes.
+  const weekdayProbeNoise=legacyDateRegions.map((region,index)=>({
+    id:region.id,purpose:'date',text:['월','화','수','목','금','토','일'][index],
+    tokens:[],confidence:.99,
+  }));
+  const physicalEvidenceFirst=resolveWeekly3ColumnDates(fourMatrix,titleless([
+    [0,'2026-07-20'],[1,'2026-07-21'],
+  ]),weekdayProbeNoise);
+  assert.deepEqual(physicalEvidenceFirst.dates.map(x=>x.date),expectedJulyWeek);
+  console.log('WEEKLY_FULL_DATE_PHYSICAL_EVIDENCE_REGRESSION_PASS');
   console.log('WEEKLY_TITLE_FALLBACK_AND_CONFLICT_REVIEW_UNIT_PASS');
   console.log('WEEKLY_ADAPTER_UNIT_DATE_INDEPENDENCE_AND_MANUAL_OFF_REVIEW_PASS');
 }finally{await vite.close()}
