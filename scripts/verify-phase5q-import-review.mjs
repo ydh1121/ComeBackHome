@@ -401,6 +401,55 @@ try {
   expect(recoveryWork?.start==='09:30'&&recoveryWork?.end==='23:30'&&
     recoveryWork?.breakMinutes===30,'reviewed shift minutes must survive date recovery');
   expect(recoveryOff?.enabled===false,'OFF_CANDIDATE requires explicit toggle and approval');
+  // Deferred new employee: selecting a proposed name must not write to
+  // People or Schedules until the user explicitly approves final import.
+  const newStore=new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  newStore.mutate(st=>{st.importBatches=[];});
+  const newImports=new reposModule.MockImportRepository(newStore);
+  const newPeople=new reposModule.MockPersonRepository(newStore);
+  const newSchedules=new reposModule.MockScheduleRepository(newStore);
+  const beforePeople=(await newPeople.list()).length;
+  const newSelection=new selectionModule.WorkbookImportFileSelectionAction(
+    newImports,newPeople,newSchedules,
+    {async parse(){throw Error('Only image fixture');}},
+    {async parse(){return {
+      detectedPeople:[{sourceName:'인식불가 직원 1',confidence:0}],
+      scheduleCandidates:[],
+      reviewCandidates:[{sourcePersonName:'인식불가 직원 1',date:null,dayIndex:0,
+        start:'09:30',end:'23:30',breakMinutes:null,sourceRow:1,
+        confidence:.3,recognitionState:'WORK',enabled:true}],
+      structure:{sheet:'weekly 7 day x start/end/break physical matrix',
+        headerRow:0,personColumn:'left',dateColumn:'pending',
+        shiftColumn:'start/end/break',needsReview:true,
+        weeklyReview:{status:'PARTIAL_REVIEW_REQUIRED',startDate:null,confirmed:false}},
+      confidence:.3,
+    };}},
+  );
+  const newId=await newSelection.accept([{
+    kind:'IMAGE',file:{name:'synthetic-new-employee.png'},
+  }]);
+  const newBatch=await newImports.getBatch(newId);
+  const detected=newBatch?.detectedPeople[0];
+  if(!detected)throw Error('New employee candidate lost');
+  await newImports.setPendingNewPerson(newId,detected.id,'신입직원');
+  expect((await newPeople.list()).length===beforePeople,
+    'setting new person candidate must not write DB before final approval');
+  await newImports.setWeeklyStartDate(newId,'2026-12-28');
+  await newImports.confirmWeeklyDates(newId);
+  const newReview=(await newImports.getBatch(newId))?.reviewItems[0];
+  if(!newReview)throw Error('New person review item missing');
+  await newImports.setResolution(newId,newReview.id,'NEW');
+  expect((await newPeople.list()).length===beforePeople &&
+    await newSchedules.getByDate('mock-person-1','2026-12-28')===null,
+    'preapproval new person schedule must not mutate People or Schedule DB');
+  await new commitModule.CommitImportReview(
+    newImports,newSchedules,newPeople).execute(newId);
+  const created=(await newPeople.list()).filter(p=>p.name==='신입직원');
+  expect(created.length===1,'explicit final approval must create exactly one new person');
+  expect(created.length===1 &&
+    (await newSchedules.getByDate(created[0].id,'2026-12-28'))?.start==='09:30',
+    'newly approved owner must receive only its reviewed shift');
+  console.log('WEEKLY_DEFERRED_NEW_EMPLOYEE_PREAPPROVAL_WRITES_ZERO_PASS');
   console.log('WEEKLY_ZERO_DATE_RECOVERY_AND_YEAR_BOUNDARY_APPROVAL_PASS');
 } finally {
   await vite.close();
