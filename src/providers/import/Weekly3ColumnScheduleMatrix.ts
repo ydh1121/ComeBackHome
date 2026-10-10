@@ -638,6 +638,10 @@ export function interpretWeekly3Column(
   // the user explicitly confirms the seven calendar dates.
   const blockedReason=blocked?'WEEKLY_DATE_REVIEW_REQUIRED':null;
   const requiresDateReview=dates.dates.some(d=>d.reviewRequired||!d.date);
+  const requiresCellReview=unreadableCount>0||offReviewCount>0||
+    personNames.some(name=>name.startsWith('인식불가 직원 '))||
+    review.some(item=>item.recognitionState==='INCOMPLETE'||
+      item.breakReviewRequired===true);
   const parsed:ParsedImport={
     detectedPeople,scheduleCandidates:schedule,reviewCandidates:review,
     structure:{
@@ -648,7 +652,8 @@ export function interpretWeekly3Column(
       shiftColumn:'start/end/break; rest never silently subtracted; OFF never auto confirmed',
       needsReview:true,
       weeklyReview:{
-        status:requiresDateReview?'PARTIAL_REVIEW_REQUIRED':'AUTO_RECOGNIZED',
+        status:requiresDateReview||requiresCellReview
+          ?'PARTIAL_REVIEW_REQUIRED':'AUTO_RECOGNIZED',
         startDate:dates.dates[0]?.date??null,
         confirmed:false,
         ...(blockedReason?{reason:blockedReason}:{}),
