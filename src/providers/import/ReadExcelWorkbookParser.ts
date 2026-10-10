@@ -316,7 +316,7 @@ function parseWeeklySheet(sheet: WorkbookSheetData): {
         breakMinutes: badBreak ? null : breakMinutes,
         sourceRow: r + 1,
         confidence: recognitionState === 'WORK' ? 1 : 0.4,
-        recognitionState,
+        recognitionState: recognitionState === 'WORK' ? undefined : recognitionState,
         enabled: true,
       });
     }
