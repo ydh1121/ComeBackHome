@@ -19,7 +19,7 @@ for (const text of [
   'exactDuplicate',
   "item.resolution === 'NEW' ? 'SKIP' : 'NEW'",
   "disabled={!allReviewed || saveState === 'saving'}",
-  "disabled={!item.personId || !importedComplete}",
+  "disabled={(!item.personId&&!pendingPersons.has(item.detectedPersonId)) || !importedComplete}",
   'services.actions.importReview.setImportedTime',
   'TimeRangeWheelPicker',
 ]) {
