@@ -792,7 +792,16 @@ try{
       all.push({browser:browserName,pageErrors,result});
     }finally{await browser.close();}
   }
-  if(focusedRealHttpD1)negativeLocalD1=await realLocalHttpD1.negativeChecks();
+  if(focusedRealHttpD1){
+    negativeLocalD1=await realLocalHttpD1.negativeChecks();
+    const approvedAtomic=await realLocalHttpD1.atomicReviewedChecks();
+    if(approvedAtomic.negativeCases.length!==10 ||
+       approvedAtomic.rollback!==true ||
+       approvedAtomic.sameRequestReplayNoDuplicate!==true ||
+       approvedAtomic.productionD1Writes!==0)
+      throw Error('ATOMIC_REVIEWED_IMPORT_LOCAL_D1_FAILED');
+    console.log('CBH_ATOMIC_WEEKLY_REVIEW_LOCAL_D1_PASS='+JSON.stringify(approvedAtomic));
+  }
 }finally{
   try{await server.close()}
   finally{if(realLocalHttpD1)await realLocalHttpD1.close()}
