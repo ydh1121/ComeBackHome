@@ -18,6 +18,10 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     private readonly people: PersonRepository,
   ) {}
 
+  async setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void> {
+    return this.imports.setPendingPersonCreate(batchId, detectedPersonId, pending);
+  }
+
   async cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void> {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
