@@ -213,6 +213,25 @@ export class MockImportRepository implements ImportRepository {
       item.resolution = null;
     });
   }
+  async setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void> {
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+       new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) {
+      throw new Error('INVALID_IMPORT_DATE');
+    }
+    const batch=this.store.read().importBatches.find(candidate=>candidate.id===batchId);
+    const item=batch?.reviewItems.find(candidate=>candidate.id===reviewItemId);
+    if(!batch||!item)throw new Error('Review item not found.');
+    if(batch.reviewItems.some(other=>other.id!==item.id &&
+       other.detectedPersonId===item.detectedPersonId && other.date===date)) {
+      throw new Error('DUPLICATE_PERSON_IMPORT_DATE');
+    }
+    if(item.date===date)return;
+    this.store.mutate(state=>{
+      const review=state.importBatches.find(b=>b.id===batchId)?.reviewItems.find(i=>i.id===reviewItemId);
+      if(review){review.date=date;review.existing=undefined;review.resolution=null;}
+    });
+  }
+
   async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
     if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
       throw new Error('INVALID_BREAK_MINUTES');
