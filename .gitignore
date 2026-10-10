@@ -10,3 +10,4 @@ dist/
 
 # Generated local OCR runtime assets (Phase 5X; do not commit binaries)
 public/ocr/
+public/ort/
