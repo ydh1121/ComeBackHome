@@ -10,6 +10,7 @@ export interface ImportMatchActions {
   setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
 }
 export interface ImportReviewActions {
+  setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void>;
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
   setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>;
