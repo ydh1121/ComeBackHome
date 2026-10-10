@@ -32,6 +32,7 @@ import {
   HttpTransitRouteProvider,
 } from '../providers/http/HttpDataProviders';
 import { HttpJsonClient } from '../providers/http/HttpJsonClient';
+import { HttpApprovedWorkbookImportGateway } from '../providers/http/HttpApprovedWorkbookImportGateway';
 import { HttpNotificationTestGateway } from '../providers/http/HttpNotificationTestGateway';
 import { HttpPresenceAutomationGateway } from '../providers/http/HttpPresenceAutomationGateway';
 import { HttpPresenceRepository } from '../providers/http/HttpPresenceRepository';
@@ -188,7 +189,7 @@ export async function createHybridApiApplicationServices(
     repositories,
     queries,
     actions: {
-      commitImportReview: new CommitImportReview(imports, schedules),
+      commitImportReview: new CommitImportReview(imports, schedules, new HttpApprovedWorkbookImportGateway(client)),
       transitAccess: new TransitAccessService(commute, () => changes.emit()),
       notifications: new NotificationService(
         notifications,
