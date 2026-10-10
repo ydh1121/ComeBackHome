@@ -120,8 +120,9 @@ try {
   assert(!composition.includes('new StructureFirstScheduleImageRecognizer'), 'Old generic OCR may not remain selected for weekly product upload');
   assert(composition.includes('BrowserScheduleTableStructureDetector'), 'Production pixel table structure detector must be active');
   assert(
-    packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets && node scripts/generate-build-revision.mjs',
-    'Production build must stage same-origin OCR assets before Vite build',
+    packageJson.scripts?.prebuild ===
+      'npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs',
+    'Production prebuild must stage BOTH same-origin Tesseract and SHA-pinned Paddle assets before Vite build',
   );
   assert(
     packageJson.scripts?.build === 'tsc -b && vite build',

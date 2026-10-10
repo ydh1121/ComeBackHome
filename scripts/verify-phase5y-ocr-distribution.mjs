@@ -212,8 +212,9 @@ try {
     'Production composition must include the pixel table structure detector',
   );
   assert(
-    packageJson.scripts?.prebuild === 'npm run prepare:ocr-assets && node scripts/generate-build-revision.mjs',
-    'Production build must stage OCR assets',
+    packageJson.scripts?.prebuild ===
+      'npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs',
+    'Production build must stage both same-origin Tesseract and pinned weekly Paddle assets',
   );
   assert(
     packageJson.scripts?.build === 'tsc -b && vite build',
