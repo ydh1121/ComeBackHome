@@ -36,6 +36,9 @@ export function ImportReviewPage() {
     ? Array.from({length:7},(_,i)=>
         new Date(validatedWeekStart+i*86400000).toISOString().slice(0,10))
     : [];
+  const pendingPersons=new Map(batch.detectedPeople
+    .filter(person=>person.pendingCreateName)
+    .map(person=>[person.id,person.pendingCreateName!] as const));
   const ignoredDetectedIds = new Set(
     batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
   );
@@ -66,7 +69,8 @@ export function ImportReviewPage() {
   const allReviewed = visibleReviewItems.length>0 &&
     (!weeklyReview || weeklyReview.confirmed===true) &&
     visibleReviewItems.every((item) =>
-    item.date != null && item.personId != null &&
+    item.date != null && (item.personId != null ||
+      pendingPersons.has(item.detectedPersonId)) &&
     (
       item.resolution === 'SKIP' ||
       (item.resolution === 'NEW' && importedTimeComplete(item))
@@ -147,7 +151,9 @@ export function ImportReviewPage() {
                 <div className="import-review-head">
                   <div className="review-date">{item.date ? formatDateLabel(item.date) : '날짜 확인 필요'} 일정</div>
                   <div className={'review-person' + (item.personId ? '' : ' unresolved')}>
-                    {person?.name ?? '사람 연결 필요'}
+                    {person?.name ?? (pendingPersons.get(item.detectedPersonId)
+                      ? pendingPersons.get(item.detectedPersonId)+' (신규 등록 예정)'
+                      : '사람 연결 필요')}
                   </div>
                 </div>
 
@@ -237,7 +243,7 @@ export function ImportReviewPage() {
                     type="button"
                     className={'review-choice import-toggle' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
-                    disabled={!item.personId || !importedComplete}
+                    disabled={(!item.personId&&!pendingPersons.has(item.detectedPersonId)) || !importedComplete}
                     onClick={() => services.actions.importReview.setResolution(
                       batch.id,
                       item.id,
