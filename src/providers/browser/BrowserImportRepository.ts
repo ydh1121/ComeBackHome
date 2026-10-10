@@ -173,6 +173,24 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: string): Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const item=this.requireReviewItem(batchId,reviewItemId);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+       new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) {
+      throw new Error('INVALID_IMPORT_DATE');
+    }
+    if(batch.reviewItems.some(other=>other.id!==item.id &&
+       other.detectedPersonId===item.detectedPersonId && other.date===date)) {
+      throw new Error('DUPLICATE_PERSON_IMPORT_DATE');
+    }
+    if(item.date===date)return;
+    item.date=date;
+    item.existing=undefined;
+    item.resolution=null;
+    this.persist();
+  }
+
   async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
     if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
       throw new Error('INVALID_BREAK_MINUTES');
