@@ -40,7 +40,11 @@ export function ImportPage() {
     if (!files?.length) return;
     setImportError(null);
     try {
-      await services.actions.importFiles.accept(Array.from(files).map(classifyFile));
+      const selected = Array.from(files);
+      if (selected.some(file => !file.type.startsWith('image/') && !/\.xlsx$/i.test(file.name))) {
+        throw new Error('엑셀 가져오기는 .xlsx 형식만 지원합니다. .xls 파일은 .xlsx로 저장한 뒤 선택해 주세요.');
+      }
+      await services.actions.importFiles.accept(selected.map(classifyFile));
     } catch (error) {
       setImportError(error instanceof Error ? error.message : '근무표를 인식하지 못했습니다.');
     } finally {
@@ -73,7 +77,7 @@ export function ImportPage() {
         ref={workbookInputRef}
         className="import-file-input"
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx"
         multiple
         onChange={(event) => onFiles(event.target.files)}
       />
