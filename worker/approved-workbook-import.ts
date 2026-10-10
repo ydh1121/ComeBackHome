@@ -96,7 +96,7 @@ function normalize(value: unknown): Normalized {
   }
   const refs = new Set<string>();
   const newNames = new Set<string>();
-  const people: ImportPerson[] = body.people.map(raw => {
+  const people: ImportPerson[] = body.people.map((raw): ImportPerson => {
     const item = object(raw);
     const ref = string(item.ref, 'PERSON_REF');
     if (refs.has(ref)) throw new Error('DUPLICATE_PERSON_REF');
@@ -113,7 +113,7 @@ function normalize(value: unknown): Normalized {
     return { ref, kind: 'PENDING_NEW', name };
   }).sort((a,b) => a.ref.localeCompare(b.ref));
   const keys = new Set<string>();
-  const schedules: ImportShift[] = body.schedules.map(raw => {
+  const schedules: ImportShift[] = body.schedules.map((raw): ImportShift => {
     const item = object(raw);
     const personRef = string(item.personRef, 'PERSON_REF');
     if (!refs.has(personRef)) throw new Error('INVALID_PERSON_REF');
