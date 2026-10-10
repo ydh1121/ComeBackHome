@@ -174,13 +174,18 @@ try {
   assert.equal(fourMatrix.headerBands[0].y,0,
     'Verified real-layout shape starts its first header band at y=0');
   assert.equal(fourMatrix.rows.length,1);
-  const legacyDateRegions=weekly3ColumnProbeRegions(fourMatrix)
+  const allDateRegions=weekly3ColumnProbeRegions(fourMatrix)
     .filter(x=>x.purpose==='date');
-  assert.equal(legacyDateRegions.length,7);
-  assert.ok(legacyDateRegions.every(x=>
-    x.y===fourMatrix.headerBands[0].y &&
-    x.height===fourMatrix.headerBands[0].height),
-  'Legacy dedicated date probe remains first-band and may read weekday glyphs');
+  assert.equal(allDateRegions.length,7*fourMatrix.headerBands.length);
+  for(const [index,band] of fourMatrix.headerBands.entries()){
+    const owned=allDateRegions.filter(x=>index
+      ? x.id.endsWith('::header::'+index)
+      : /^date::grid-cell::weekly::[0-6]$/.test(x.id));
+    assert.equal(owned.length,7);
+    assert.ok(owned.every(x=>x.y===band.y&&x.height===band.height));
+  }
+  const legacyDateRegions=allDateRegions.filter(x=>
+    /^date::grid-cell::weekly::[0-6]$/.test(x.id));
 
   const fullDateToken=(dayIndex,text)=>{
     const day=fourMatrix.days[dayIndex];
