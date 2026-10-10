@@ -119,6 +119,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     const weeklyRequiresPerCellApproval = parsedResults.some(
       (parsed) => parsed.structure.sheet === 'weekly 7 day x start/end/break physical matrix',
     );
+    // Different weekly images may describe different calendar weeks. A single
+    // review batch has only one confirmed start date, so never silently merge
+    // candidates with the same person/dayIndex from multiple uploaded weeks.
+    if(weeklyRequiresPerCellApproval && parsedResults.length!==1)
+      throw new Error('주간 근무표는 한 번에 한 주씩 가져와 주세요. 다른 주의 일정을 합치지 않습니다.');
     const detectedByName = new Map<string, DetectedImportPerson>();
     for (const parsed of parsedResults) {
       for (const person of parsed.detectedPeople) {
