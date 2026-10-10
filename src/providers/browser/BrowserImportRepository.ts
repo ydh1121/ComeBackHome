@@ -170,6 +170,24 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,proposedName:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    if(!batch.structure.weeklyReview)throw new Error('NEW_PERSON_REVIEW_NOT_ACTIVE');
+    const name=proposedName.normalize('NFKC').trim();
+    if(!/^[가-힣]{2,5}$/.test(name))throw new Error('INVALID_NEW_PERSON_NAME');
+    const detected=batch.detectedPeople.find(p=>p.id===detectedPersonId);
+    if(!detected)throw new Error('Detected person was not found.');
+    detected.pendingCreateName=name;
+    detected.matchedPersonId=null;
+    detected.ignored=false;
+    for(const item of batch.reviewItems){
+      if(item.detectedPersonId!==detectedPersonId)continue;
+      item.personId=null;
+      item.resolution=null;
+    }
+    this.persist();
+  }
+
   async setDetectedPersonMatch(
     batchId: EntityId,
     detectedPersonId: EntityId,
@@ -179,6 +197,7 @@ export class BrowserImportRepository implements ImportRepository {
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
     person.matchedPersonId = personId;
+    person.pendingCreateName = undefined;
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       item.personId = personId;
@@ -199,7 +218,7 @@ export class BrowserImportRepository implements ImportRepository {
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
     person.ignored = ignored;
-    if (ignored) person.matchedPersonId = null;
+    if (ignored) { person.matchedPersonId = null; person.pendingCreateName=undefined; }
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       if (ignored) {
