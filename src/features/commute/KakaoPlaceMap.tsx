@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Coordinate } from '../../domain/models';
-import { loadKakaoClientKey, loadKakaoMapsSdk } from './KakaoTransitMap';
+import { loadKakaoClientKey, loadKakaoMapsSdk, resetKakaoMapsClientKeyCache } from './KakaoTransitMap';
 
 export interface KakaoPlaceMapPoint {
   id: string;
@@ -115,7 +115,7 @@ export function KakaoPlaceMap({ center, points, selectedId, onSelect }: Props) {
         <div className="kakao-map-error" role="status">
           <b>대화형 지도를 불러오지 못했습니다.</b>
           <span>아래 주소·장소 검색 결과에서는 계속 선택할 수 있습니다.</span>
-          <button type="button" onClick={() => setRetryNonce(n => n + 1)}>다시 시도</button>
+          <button type="button" onClick={() => { resetKakaoMapsClientKeyCache(); setRetryNonce(n => n + 1); }}>다시 시도</button>
         </div>
       ) : null}
     </section>
