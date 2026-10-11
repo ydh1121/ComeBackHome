@@ -145,7 +145,7 @@ async function browserPass(kind,label,serial){
     await page.waitForURL(/\/schedule$/);
     work=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
     assert(work?.enabled===true&&work.start==='11:00'&&work.end==='20:00'&&work.breakMinutes===60,
-      label+' OFF -> work restoration');
+      label+' OFF -> work restoration '+JSON.stringify(work));
     // Person selection must switch the current schedule source.
     await update(page,'/people');
     await page.locator('.person-row').filter({hasText:personB}).click();
