@@ -186,6 +186,30 @@ export class TransitSearchService implements TransitSearchActions {
     private readonly provider: TransitAccessSearchProvider,
   ) {}
 
+  async searchDetailed(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate) {
+    const place = await this.places.get(personId, kind);
+    if (!place?.coordinate || query.trim().length < 1) {
+      return { results: [], status: 'SUCCESS_EMPTY' as const };
+    }
+    const near = center ?? place.coordinate;
+    const response = this.provider.searchDetailed
+      ? await this.provider.searchDetailed(query.trim(), near)
+      : { results: await this.provider.search(query.trim(), near), status: 'SUCCESS_WITH_RESULTS' as const };
+    return { ...response, results: this.remember(response.results) };
+  }
+
+  async nearbyDetailed(personId: EntityId, kind: PlaceKind, center?: Coordinate) {
+    const place = await this.places.get(personId, kind);
+    if (!place?.coordinate) {
+      return { results: [], status: 'SUCCESS_EMPTY' as const };
+    }
+    const near = center ?? place.coordinate;
+    const response = this.provider.nearbyDetailed
+      ? await this.provider.nearbyDetailed(near)
+      : { results: await this.provider.nearby(near), status: 'SUCCESS_WITH_RESULTS' as const };
+    return { ...response, results: this.remember(response.results) };
+  }
+
   async search(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate) {
     const place = await this.places.get(personId, kind);
     if (!place?.coordinate || query.trim().length < 1) return [];
