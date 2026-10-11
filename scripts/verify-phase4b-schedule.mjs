@@ -43,7 +43,7 @@ if (!css.includes('.schedule-page .weekday-grid')) failures.push('weekday style 
 if (!css.includes('.schedule-page .range-picker-v13')) failures.push('range style missing');
 if (!bulk.includes('TimeRangeWheelPicker') || !day.includes('TimeRangeWheelPicker')) failures.push('schedule start/end must use shared wheel picker');
 if (bulk.includes('type="time"') || day.includes('type="time"')) failures.push('native schedule time inputs must be removed for iPhone parity');
-for (const text of ['time-wheel-scroll','scrollIntoView','minuteStep']) if (!timeWheel.includes(text)) failures.push('shared time wheel missing ' + text);
+for (const text of ['time-wheel-scroll','useLayoutEffect','scrollTop','minuteStep']) if (!timeWheel.includes(text)) failures.push('shared time wheel missing deterministic local centering: ' + text);
 
 for (const [name, source] of [['overview', overview], ['bulk', bulk], ['day', day]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
