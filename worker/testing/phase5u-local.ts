@@ -448,6 +448,69 @@ async function probePresenceOutboxAtomic(env: WorkerEnv): Promise<Response> {
   });
 }
 
+
+/** Phase G preflight: verify that a stale shift-end job is never claimed after OFF or schedule change. */
+async function probeShiftEndCurrentSchedule(env: WorkerEnv): Promise<Response> {
+  const people = new D1PersonRepository(env.DB);
+  const schedules = new D1ScheduleRepository(env.DB);
+  const jobs = new D1NotificationJobStore(env.DB);
+  const person = await people.create({ name: 'Shift validity synthetic employee', relation: 'test-only' });
+  const makeSchedule = (date: string, end: string, enabled = true) => ({
+    id: crypto.randomUUID(),
+    personId: person.id,
+    date, enabled,
+    start: enabled ? '09:00' : '',
+    end: enabled ? end : '',
+  });
+  const makeJob = (date: string, due: string) => ({
+    id: crypto.randomUUID(),
+    dedupeKey: 'shift-end:' + person.id + ':' + date,
+    personId: person.id,
+    type: 'shift-end',
+    scheduledFor: due,
+    nextAttemptAt: due,
+    payload: { title: 'Synthetic shift', body: 'shift-' + date, tag: 'shift-' + date, path: '/' },
+  });
+
+  const offDate = '2026-10-07';
+  const oldDate = '2026-10-08';
+  const oldDue = '2026-10-08T08:00:00.000Z';
+  const revisedDue = '2026-10-08T09:00:00.000Z';
+  await schedules.upsert(makeSchedule(offDate, '17:00'));
+  await jobs.enqueueOnce(makeJob(offDate, '2026-10-07T08:00:00.000Z'));
+  await schedules.upsert(makeSchedule(offDate, '', false));
+  const offClaims = await jobs.claimDue('2026-10-07T08:00:01.000Z', 100);
+  const offBlocked = !offClaims.some(job =>
+    job.dedupeKey === 'shift-end:' + person.id + ':' + offDate);
+
+  await schedules.upsert(makeSchedule(oldDate, '17:00'));
+  await jobs.enqueueOnce(makeJob(oldDate, oldDue));
+  await schedules.upsert(makeSchedule(oldDate, '18:00'));
+  const oldTimeClaims = await jobs.claimDue('2026-10-08T08:01:00.000Z', 100);
+  const changedTimeBlocked = !oldTimeClaims.some(job =>
+    job.dedupeKey === 'shift-end:' + person.id + ':' + oldDate);
+
+  const oldRow = await env.DB.prepare(
+    'SELECT id FROM notification_jobs WHERE dedupe_key = ?1',
+  ).bind('shift-end:' + person.id + ':' + oldDate).first<{id:string}>();
+  await jobs.enqueueOnce(makeJob(oldDate, revisedDue));
+  const newRow = await env.DB.prepare(
+    'SELECT id, scheduled_for FROM notification_jobs WHERE dedupe_key = ?1',
+  ).bind('shift-end:' + person.id + ':' + oldDate).first<{id:string;scheduled_for:string}>();
+  const newClaims = await jobs.claimDue('2026-10-08T09:00:01.000Z', 100);
+  const correctedClaimed = newClaims.some(job =>
+    job.dedupeKey === 'shift-end:' + person.id + ':' + oldDate && job.attempts === 1);
+  const identityAndTimePreserved = oldRow?.id === newRow?.id
+    && newRow?.scheduled_for === revisedDue;
+  return json({
+    syntheticOnly: true,
+    offBlocked,
+    changedTimeBlocked,
+    correctedClaimed,
+    identityAndTimePreserved,
+  });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -463,6 +526,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/cycle') {
       return cycle(request, env);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/shift-current-validity-probe') {
+      return probeShiftEndCurrentSchedule(env);
     }
 
     if (request.method === 'POST' && url.pathname === '/pending-reschedule-probe') {

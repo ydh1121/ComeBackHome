@@ -92,6 +92,22 @@ export class D1NotificationJobStore implements NotificationJobStore {
     const expiredBefore = new Date(
       Date.parse(nowIso) - PROCESSING_LEASE_MINUTES * 60_000,
     ).toISOString();
+    // For canonical shift-end work, validate the *current* schedule inside the
+    // same atomic UPDATE that claims the job. OFF/cancelled workdays and stale
+    // end times may not produce a new Push, even before planner rescheduling.
+    // Existing non-shift work and legacy isolated fixture jobs are unchanged.
+    const currentShift = `(
+      notification_jobs.job_type <> 'shift-end'
+      OR notification_jobs.dedupe_key NOT LIKE 'shift-end:%'
+      OR EXISTS (
+        SELECT 1 FROM schedules AS s
+        WHERE s.person_id = notification_jobs.person_id
+          AND s.schedule_date = substr(notification_jobs.dedupe_key, -10)
+          AND s.enabled = 1
+          AND strftime('%s', s.schedule_date || ' ' || s.end_time || ':00', '-9 hours')
+              = strftime('%s', notification_jobs.scheduled_for)
+      )
+    )`;
     const result = await this.db.prepare(
       `UPDATE notification_jobs
       SET status = 'processing',
@@ -104,11 +120,13 @@ export class D1NotificationJobStore implements NotificationJobStore {
                OR (status = 'processing' AND updated_at <= ?3))
           AND next_attempt_at <= ?1
           AND scheduled_for <= ?1
+          AND ${currentShift}
         ORDER BY scheduled_for ASC, id ASC
         LIMIT ?2
       )
       AND (status IN ('pending', 'retry')
            OR (status = 'processing' AND updated_at <= ?3))
+      AND ${currentShift}
       RETURNING
         id, dedupe_key, person_id, job_type, scheduled_for, next_attempt_at,
         status, attempts, payload_json, sent_at, last_error`,

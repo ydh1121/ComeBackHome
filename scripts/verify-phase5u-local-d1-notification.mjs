@@ -278,6 +278,13 @@ try {
   }
   console.log('PHASE_F_PRESENCE_ATOMICITY_PASS=' + JSON.stringify(presenceOutbox));
 
+  const validity = await postJson('/shift-current-validity-probe', {});
+  for (const field of ['offBlocked', 'changedTimeBlocked', 'correctedClaimed', 'identityAndTimePreserved']) {
+    assert(validity.syntheticOnly && validity[field] === true,
+      'Phase G shift schedule validity D1: ' + field);
+  }
+  console.log('PHASE_G_SHIFT_END_CURRENT_VALIDITY_PASS=' + JSON.stringify(validity));
+
   const rescheduled = await postJson('/pending-reschedule-probe', {});
   assert(rescheduled.syntheticOnly && rescheduled.originalIdStable,
     'schedule edit must preserve existing notification job identity');
