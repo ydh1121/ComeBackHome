@@ -130,6 +130,50 @@ try {
   expect(actualDeparture?.arrivalAt === '2026-10-06T14:50:00.000Z', 'LEFT_WORK must use the explicitly selected 40-minute route, not the first 25-minute provider route');
   expect(actualDeparture?.confidence === 'FALLBACK', 'route-only actual-departure ETA must remain FALLBACK');
 
+  // Early real departure must win over the later scheduled 22:00 clock.
+  presenceState = { personId:'person-1', workDate:'2026-10-06',
+    leftWorkAt:'2026-10-06T12:00:00.000Z' };
+  const early = await source.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
+  expect(early?.arrivalAt === '2026-10-06T12:40:00.000Z',
+    'early LEFT_WORK must not be held until planned shift end');
+
+  // Realtime arrival can influence a notification only if the discovered
+  // provider route used exactly this boarding stop and bus service.
+  let busLookupCount=0;
+  const originAccess = {id:'verified-bus-access',personId:'person-1',
+    placeKind:'origin',mode:'BUS',providerId:'verified-stop-001',
+    selected:true,name:'검증 출발 정류장',selectedBusRouteId:'verified-bus-route',
+    coordinate:{x:127.0002,y:37.5002}};
+  const matchedCommute={...commute,
+    async listAccessPoints(_personId,kind){return kind==='origin'?[originAccess]:[];}};
+  let providerLegMatch=true;
+  const matchedProviders={...providers,
+    kakao:{...providers.kakao,async publicTransitRoutes(){
+      return [{id:'route-preferred',totalMinutes:40,transferCount:1,walkMinutes:5,
+        accessMinutes:3,egressMinutes:4,
+        busLegs:[{stopNames:providerLegMatch?'검증 출발 정류장'.split('|'):['다른 정류장'],
+          routes:[{providerRouteId:'verified-bus-route',routeNo:'100',directionLabel:'검증방면'}]}],
+        steps:[{type:'BUS',label:'버스 이동'}]}]; }},
+    seoulBus:{...providers.seoulBus,async arrivals(){
+      busLookupCount++;return [{minutes:5,observedAt:'2026-10-06T12:00:00.000Z'}];}},
+  };
+  const matchedSource = new etaModule.ProviderNotificationEtaSource({
+    schedules,places,presence,commute:matchedCommute,providers:matchedProviders});
+  const matched=await matchedSource.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
+  expect(matched?.confidence==='LIVE' &&
+    matched.arrivalAt==='2026-10-06T12:42:00.000Z',
+    'verified route/stop realtime must update notification ETA without double counting');
+  expect(busLookupCount===1,'matched notification route should request one bus arrival');
+  providerLegMatch=false;
+  const unrelated=await matchedSource.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
+  expect(unrelated?.confidence==='FALLBACK' &&
+    unrelated.arrivalAt==='2026-10-06T12:40:00.000Z',
+    'unrelated stop realtime must not change scheduled notification ETA');
+  expect(busLookupCount===1,'unrelated stop must not issue extra live-arrival lookup');
+
+  presenceState = {personId:'person-1',workDate:'2026-10-06',
+    leftWorkAt:'2026-10-06T14:10:00.000Z'};
+
   presenceState = {
     ...presenceState,
     arrivedHomeAt: '2026-10-06T14:42:00.000Z',
