@@ -160,7 +160,7 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     assert(oldSchedule.body?.schedule?.start==='09:30' &&
       oldSchedule.body?.schedule?.end==='23:30' &&
       oldSchedule.body?.schedule?.breakMinutes===45,
-      label+' numeric time D1 readback mismatch');
+      label+' numeric time D1 readback mismatch '+JSON.stringify(oldSchedule.body?.schedule));
     assert(newSchedule.body?.schedule?.start==='14:00',
       label+' pending new person D1 shift missing');
     assert(newOff.body?.schedule?.enabled===false,
