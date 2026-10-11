@@ -234,6 +234,19 @@ try {
   assert(finalState.jobs?.length === 3, 'final D1 notification job count mismatch');
   assert(finalState.plannerState?.length === 1, 'final D1 planner state row count mismatch');
 
+  // Real SQLite/D1 lease recovery, without simulated/mock job store.
+  const lease = await postJson('/lease-probe', {});
+  assert(lease.syntheticOnly === true, 'D1 lease probe must be isolated synthetic only');
+  assert(lease.initialClaims === 1, 'new due job must be claimed once');
+  assert(lease.immediateClaims === 0, 'parallel second claim must not duplicate active processing lease');
+  assert(lease.withinLeaseClaims === 0, 'active processing job must not be reclaimed before 15-minute expiry');
+  assert(lease.reclaimedClaims === 1, 'abandoned processing job must be recovered after 15 minutes');
+  assert(lease.duplicateClaims === 0, 'immediate second recovery claim must not duplicate lease');
+  assert(lease.afterSentClaims === 0, 'already sent job must never be recovered');
+  assert(lease.status === 'sent' && lease.attempts === 2,
+    'reclaimed D1 job must preserve durable delivery status and two attempts');
+
+  console.log('CBH_NONIMAGE_PHASE_F_D1_PROCESSING_LEASE_PASS=' + JSON.stringify(lease));
   console.log(JSON.stringify({
     result: 'PASS',
     localD1: true,
