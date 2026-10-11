@@ -124,6 +124,9 @@ async function browserPass(engine,label,suffix){
   try{
     const a=await seed('A-'+suffix);
     const b=await seed('B-'+suffix);
+    await context.addInitScript(id=>{
+      try { localStorage.setItem('cbh:selected-person-id',id); } catch {}
+    },a.id);
     const open=async(path,reload=false)=>{
       if(reload||!page.url().startsWith(base)){
         await page.goto(base+path,{waitUntil:'domcontentloaded'});
