@@ -50,6 +50,11 @@ function toJob(row: NotificationJobRow): NotificationJob {
   };
 }
 
+// A Worker can be evicted after a due-job claim and before sending or
+// updating its status. Reclaim an abandoned processing lease after a
+// conservative timeout, without replaying a still-running delivery.
+const PROCESSING_LEASE_MINUTES = 15;
+
 export class D1NotificationJobStore implements NotificationJobStore {
   constructor(private readonly db: D1DatabaseLike) {}
 
@@ -74,7 +79,12 @@ export class D1NotificationJobStore implements NotificationJobStore {
   }
 
   async claimDue(nowIso: string, limit: number): Promise<NotificationJob[]> {
-    const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
+    if (!Number.isFinite(Date.parse(nowIso))) throw new Error('INVALID_NOTIFICATION_CLAIM_TIME');
+    const safeLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.min(Math.trunc(limit), 100)) : 20;
+    const expiredBefore = new Date(
+      Date.parse(nowIso) - PROCESSING_LEASE_MINUTES * 60_000,
+    ).toISOString();
     const result = await this.db.prepare(
       `UPDATE notification_jobs
       SET status = 'processing',
@@ -83,17 +93,19 @@ export class D1NotificationJobStore implements NotificationJobStore {
       WHERE id IN (
         SELECT id
         FROM notification_jobs
-        WHERE status IN ('pending', 'retry')
+        WHERE (status IN ('pending', 'retry')
+               OR (status = 'processing' AND updated_at <= ?3))
           AND next_attempt_at <= ?1
           AND scheduled_for <= ?1
         ORDER BY scheduled_for ASC, id ASC
         LIMIT ?2
       )
-      AND status IN ('pending', 'retry')
+      AND (status IN ('pending', 'retry')
+           OR (status = 'processing' AND updated_at <= ?3))
       RETURNING
         id, dedupe_key, person_id, job_type, scheduled_for, next_attempt_at,
         status, attempts, payload_json, sent_at, last_error`,
-    ).bind(nowIso, safeLimit).run<NotificationJobRow>();
+    ).bind(nowIso, safeLimit, expiredBefore).run<NotificationJobRow>();
 
     return (result.results ?? []).map(toJob);
   }
