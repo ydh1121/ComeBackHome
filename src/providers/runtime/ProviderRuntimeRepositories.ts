@@ -446,8 +446,17 @@ export class ProviderCommuteRepository implements CommuteRepository {
     return this.persisted.getPreferredRouteCandidateId(personId);
   }
 
-  setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void> {
-    return this.persisted.setPreferredRouteCandidateId(personId, routeCandidateId);
+  async setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void> {
+    // A caller can only persist one of the CURRENT person's discovered routes.
+    // Do not save a stale or foreign candidate after a saved-route switch.
+    const discovery = await this.inspectRouteCandidates(personId);
+    if (!discovery.candidates.some(route =>
+      route.personId === personId && route.id === routeCandidateId)) {
+      throw new Error('STALE_OR_FOREIGN_ROUTE_CANDIDATE');
+    }
+    await this.persisted.setPreferredRouteCandidateId(personId, routeCandidateId);
+    const stored = await this.persisted.getPreferredRouteCandidateId(personId);
+    if (stored !== routeCandidateId) throw new Error('PREFERRED_ROUTE_READBACK_MISMATCH');
   }
 }
 
