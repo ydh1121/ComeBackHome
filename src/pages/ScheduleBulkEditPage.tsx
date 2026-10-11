@@ -8,6 +8,7 @@ import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { BackButton } from '../shared/components/BackButton';
 import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
+import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import './schedule-page.css';
 
 const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
@@ -27,7 +28,7 @@ export function ScheduleBulkEditPage() {
   if (schedule.status === 'loading') return <section className="schedule-page"><div className="schedule-message">일정을 불러오는 중</div></section>;
   if (schedule.status === 'error') return <section className="schedule-page"><div className="schedule-message">일정을 불러오지 못했습니다.</div></section>;
 
-  return <BulkForm entries={schedule.entries} onApply={async (rule) => {
+  return <BulkForm key={schedule.personId ?? 'none'} personId={schedule.personId} entries={schedule.entries} onApply={async (rule) => {
     await services.actions.schedule.applyBulk(rule);
     navigate('/schedule');
   }} />;
@@ -35,10 +36,11 @@ export function ScheduleBulkEditPage() {
 
 interface BulkFormProps {
   entries: ScheduleEntry[];
-  onApply(rule: { from: string; to: string; weekdays: number[]; start: string; end: string }): Promise<void>;
+  personId: string | null;
+  onApply(rule: { from: string; to: string; weekdays: number[]; start: string; end: string; expectedPersonId?: string }): Promise<void>;
 }
 
-function BulkForm({ entries, onApply }: BulkFormProps) {
+function BulkForm({ entries, personId, onApply }: BulkFormProps) {
   const first = entries[0];
   const fallbackDate = first?.date ?? currentLocalIsoDate();
   const [from, setFrom] = useState(fallbackDate);
@@ -47,7 +49,11 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
   const [start, setStart] = useState(first?.start ?? '');
   const [end, setEnd] = useState(first?.end ?? '');
   const form = useFormRuntimeState();
-  const canApply = isIsoDate(from) && isIsoDate(to) && from <= to && Boolean(start) && Boolean(end);
+  const days = isIsoDate(from) && isIsoDate(to)
+    ? Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000) + 1 : 0;
+  const validClock = (value: string) => /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+  const canApply = Boolean(personId) && days >= 1 && days <= 366 &&
+    validClock(start) && validClock(end);
 
   const toggleWeekday = (day: number) => {
     setWeekdays((current) => current.includes(day)
@@ -86,7 +92,15 @@ function BulkForm({ entries, onApply }: BulkFormProps) {
           }}
         />
       </div>
-      <button type="button" className="cta" disabled={form.state === 'SAVING' || !canApply} onClick={() => form.save(() => onApply({ from, to, weekdays, start, end }))}>{form.state === 'SAVING' ? '적용 중' : form.state === 'SAVED' ? '적용됨' : '적용'}</button>
+      {form.error ? <p className="form-error" role="alert">{formErrorMessage(form.error)}</p> : null}
+      <button type="button" className="cta" disabled={form.state === 'SAVING' || !canApply} onClick={async () => {
+        try {
+          await form.save(() => onApply({ from, to, weekdays, start, end,
+            expectedPersonId: personId ?? undefined }));
+        } catch {
+          // Retain the range, selected weekdays, and times for explicit retry.
+        }
+      }}>{form.state === 'SAVING' ? '적용 중' : form.state === 'SAVED' ? '적용됨' : '적용'}</button>
     </section>
   );
 }
