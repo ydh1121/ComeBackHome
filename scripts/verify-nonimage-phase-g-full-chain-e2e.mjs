@@ -211,7 +211,7 @@ async function engineTest(engine, label) {
       { eventId: arrivalId, personId: id, type: 'ARRIVED_HOME' }, auth);
     assert(arrived.status === 202 && arrived.body?.event?.queued,
       label + ' arrival event did not queue');
-    const evidenceResponse = await fetch(base + '/__phase-g-state?personId=' + encodeURIComponent(id),
+    const evidenceResponse = await fetch(base + '/api/__phase-g-state?personId=' + encodeURIComponent(id),
       { headers: { 'x-phase-g-test-token': 'local-integration-only' } });
     assert(evidenceResponse.ok, label + ' local D1 readback blocked');
     const evidence = await evidenceResponse.json();

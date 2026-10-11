@@ -6,7 +6,7 @@ export default {
     const url = new URL(request.url);
     // Test-only readback: this module is selected solely by wrangler.local.jsonc.
     // It never exists in canonical Pages/server runtime.
-    if (url.pathname === '/__phase-g-state' && request.method === 'GET') {
+    if (url.pathname === '/api/__phase-g-state' && request.method === 'GET') {
       if (request.headers.get('x-phase-g-test-token') !== 'local-integration-only') {
         return new Response('Forbidden', { status: 403 });
       }
