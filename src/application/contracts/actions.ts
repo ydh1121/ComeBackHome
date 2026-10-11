@@ -43,6 +43,8 @@ export interface ScheduleDayInput {
   enabled: boolean;
   start: string;
   end: string;
+  breakMinutes?: number | null;
+  expectedPersonId?: EntityId;
 }
 export interface ScheduleBulkRule {
   from: ISODate;
@@ -50,6 +52,7 @@ export interface ScheduleBulkRule {
   weekdays: number[];
   start: string;
   end: string;
+  expectedPersonId?: EntityId;
 }
 export interface ScheduleActions {
   saveDay(date: ISODate, input: ScheduleDayInput): Promise<void>;
