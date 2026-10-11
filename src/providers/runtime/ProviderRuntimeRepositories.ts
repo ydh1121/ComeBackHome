@@ -436,8 +436,9 @@ export class ProviderCommuteRepository implements CommuteRepository {
       };
     }).sort(compareRoutes);
     diagnostics.dedupedCandidateCount = candidates.length;
-    diagnostics.status = candidates.length ? 'OK' :
-      quotaExceeded ? 'QUOTA_EXCEEDED' :
+    diagnostics.status = candidates.length
+      ? hadProviderError ? 'PARTIAL_PROVIDER_FAILURE' : 'OK'
+      : quotaExceeded ? 'QUOTA_EXCEEDED' :
       runtimeDisabled ? 'RUNTIME_DISABLED' : hadProviderError ? 'PROVIDER_ERROR' : 'NO_RESULT';
     return { candidates, diagnostics };
   }
