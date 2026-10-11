@@ -190,7 +190,7 @@ async function browserPass(kind,label,serial){
       throw Error('BULK_UI_SAVE_DID_NOT_NAVIGATE '+JSON.stringify({
         browser:label,route:page.url(),
         alerts:await page.locator('[role="alert"]').allTextContents(),
-        range:await page.locator('.range-direct-v13 input').allInputValues(),
+        range:await page.locator('.range-direct-v13 input').evaluateAll(inputs=>inputs.map(input=>input.value)),
         status:await page.locator('[data-page="ScheduleBulkEditPage"]').getAttribute('data-state'),
         selectedEmployee:b,
         before:await api('/people/'+b+'/schedules'),
