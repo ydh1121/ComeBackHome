@@ -73,7 +73,7 @@ function asPlaceKind(value: string): PlaceKind {
 
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : 'Unexpected API error.';
-  if (/DUPLICATE_PERSON_NAME|DUPLICATE_SCHEDULE_DATE|UNIQUE constraint failed/.test(message))
+  if (/DUPLICATE_PERSON_NAME/.test(message))
     return json({ error: message, reason: 'CONFLICT' }, 409);
   return json({ error: message }, 400);
 }
