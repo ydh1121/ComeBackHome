@@ -219,6 +219,18 @@ async function execute(engine,label,tag){
     assert(selectedAfterPan===4,label+' pan results must not remove saved access selections');
     await page.getByRole('button',{name:'주변 다시 검색'}).click();
     await page.getByText('새로운지도중심정류장').first().waitFor();
+    // The previous center deliberately responds AFTER the new center; it must
+    // not overwrite the current geographic candidate list.
+    slowFirst=true;
+    await page.evaluate(([x,y])=>window.__phaseDMoveMap(x,y),[center.x,center.y]);
+    await page.waitForTimeout(440);
+    await page.evaluate(([x,y])=>window.__phaseDMoveMap(x,y),[moved.x,moved.y]);
+    await page.getByText('새로운지도중심정류장').first().waitFor();
+    await page.waitForTimeout(1300);
+    assert(await page.locator('.transit-row').count()===1 &&
+      (await page.locator('.transit-row').first().innerText()).includes('새로운지도중심정류장'),
+      label+' stale earlier center request overwrote newer center');
+    slowFirst=false;
     await ui(page,a,'destination');
     await page.locator('.transit-row').first().waitFor();
     await clickSelect(page,stops[0].name);
