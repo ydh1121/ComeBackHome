@@ -83,7 +83,7 @@ async function mockMap(ctx){
       getPosition(){return this.position}
       setZIndex(i){this.node.style.zIndex=String(i)}
     }
-    window.kakao={maps:{Map:KMap,LatLng,Marker,CustomOverlay,
+    window.kakao={maps:{Map:KMap,LatLng,Marker,CustomOverlay:Overlay,
       event:{addListener(map,name,fn){(map.listeners[name]??=[]).push(fn)}},
       load(fn){fn()}}};
     window.__phaseDMoveMap=(x,y)=>{
