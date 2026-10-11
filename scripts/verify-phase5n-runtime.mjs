@@ -35,7 +35,13 @@ try {
   const mocks = await vite.ssrLoadModule('/src/mocks/repositories.ts');
   const stateModule = await vite.ssrLoadModule('/src/mocks/state.ts');
 
-  const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  const fixture = structuredClone(stateModule.MOCK_FIXTURE);
+  // Phase E realtime is eligible only for an actual geolocated boarding
+  // access point tied to the selected provider route. The generic mock's
+  // name-only bus has no coordinate and must NOT qualify as live evidence.
+  fixture.accessPoints.find(point => point.id === 'mock-access-bus').coordinate =
+    { x: 127.0001, y: 37.5001 };
+  const store = new stateModule.MockStateStore(fixture);
   const places = new mocks.MockPlaceRepository(store);
   const schedules = new mocks.MockScheduleRepository(store);
   const persistedCommute = new mocks.MockCommuteRepository(store);
