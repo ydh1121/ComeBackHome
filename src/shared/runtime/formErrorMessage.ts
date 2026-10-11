@@ -20,7 +20,7 @@ export function formErrorMessage(error: string | null): string | null {
     return '선택한 기간에 적용할 요일이 없습니다.';
   if (/SAVE_ALREADY_IN_PROGRESS/.test(error))
     return '현재 저장이 진행 중입니다.';
-  if (/fetch|network|HTTP|Unexpected API|failed|오류/i.test(error))
+  if (/fetch|network|HTTP|Unexpected API|failed|failure|outage|service unavailable|오류/i.test(error))
     return '저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요. 입력 내용은 유지됩니다.';
   return '저장하지 못했습니다: ' + error;
 }
