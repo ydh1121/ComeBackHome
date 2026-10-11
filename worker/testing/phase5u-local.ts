@@ -413,7 +413,7 @@ async function probePresenceOutboxAtomic(env: WorkerEnv): Promise<Response> {
 
   let crossPersonBlocked = false;
   let crossTypeBlocked = false;
-  try { await presence.record({ ...first, personId: 'another-fixture-person' }); }
+  try { await presence.record({ ...first, personId: 'another-person-for-collision-check' }); }
   catch (error) { crossPersonBlocked = error instanceof Error && error.message === 'PRESENCE_EVENT_ID_CONFLICT'; }
   try { await presence.record({ ...first, type: 'ARRIVED_HOME' }); }
   catch (error) { crossTypeBlocked = error instanceof Error && error.message === 'PRESENCE_EVENT_ID_CONFLICT'; }
