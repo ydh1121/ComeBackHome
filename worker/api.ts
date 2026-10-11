@@ -73,6 +73,8 @@ function asPlaceKind(value: string): PlaceKind {
 
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : 'Unexpected API error.';
+  if (/DUPLICATE_PERSON_NAME|DUPLICATE_SCHEDULE_DATE|UNIQUE constraint failed/.test(message))
+    return json({ error: message, reason: 'CONFLICT' }, 409);
   return json({ error: message }, 400);
 }
 
@@ -743,8 +745,8 @@ export async function handleApiRequest(
               personId,
               date: asString(value.date, 'schedule.date'),
               enabled: asBoolean(value.enabled, 'schedule.enabled'),
-              start: asString(value.start, 'schedule.start'),
-              end: asString(value.end, 'schedule.end'),
+              start: value.enabled === false ? '' : asString(value.start, 'schedule.start'),
+              end: value.enabled === false ? '' : asString(value.end, 'schedule.end'),
               ...(optionalScheduleBreakMinutes(value) !== undefined
                 ? { breakMinutes: optionalScheduleBreakMinutes(value) } : {}),
             };
@@ -768,8 +770,8 @@ export async function handleApiRequest(
               personId,
               date,
               enabled: asBoolean(body.enabled, 'enabled'),
-              start: asString(body.start, 'start'),
-              end: asString(body.end, 'end'),
+              start: body.enabled === false ? '' : asString(body.start, 'start'),
+              end: body.enabled === false ? '' : asString(body.end, 'end'),
               ...(optionalScheduleBreakMinutes(body) !== undefined
                 ? { breakMinutes: optionalScheduleBreakMinutes(body) } : {}),
             };
