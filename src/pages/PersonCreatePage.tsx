@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { BackButton } from '../shared/components/BackButton';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
+import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import './people-page.css';
 
 export function PersonCreatePage() {
@@ -14,8 +15,12 @@ export function PersonCreatePage() {
 
   const save = async () => {
     if (!name.trim() || form.state === 'SAVING') return;
-    const person = await form.save(() => services.actions.people.create({ name, relation }));
-    navigate('/people/' + encodeURIComponent(person.id), { replace: true });
+    try {
+      const person = await form.save(() => services.actions.people.create({ name, relation }));
+      navigate('/people/' + encodeURIComponent(person.id), { replace: true });
+    } catch {
+      // The form owns an actionable error and retains the user's input.
+    }
   };
 
   return (
@@ -34,6 +39,7 @@ export function PersonCreatePage() {
         </label>
       </div>
 
+      {form.error ? <p className="form-error" role="alert">{formErrorMessage(form.error)}</p> : null}
       <button type="button" className="cta" disabled={!name.trim() || form.state === 'SAVING'} onClick={save}>
         {form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}
       </button>

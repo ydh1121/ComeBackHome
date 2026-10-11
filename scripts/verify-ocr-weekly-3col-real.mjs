@@ -853,8 +853,10 @@ async function verifyEphemeralLocalD1(cases){
     const schedules=new D1ScheduleRepository(db);
     let persisted=0,enabled=0,disabled=0,committedCases=0;
     let repeatedSaveVerifiedRows=0,repeatedSaveVerifiedCases=0;
-    // Store each generated case, namespaced per browser and image: original names and
-    // source dates are not changed, but test-only person IDs do not collide.
+    // Generated raster cases reuse the same source staff names. Each image/browser
+    // case is a distinct synthetic fixture employee, so namespace only the D1
+    // person's name (and ID). OCR source names, dates, and expected rows remain
+    // unchanged. Respect the production duplicate-person-name invariant.
     for(const {browser,id,review} of cases){
       if(!review?._approvedBatch||!review?._expectedRows)
         throw Error('Missing approved actual OCR evidence for '+browser+'/'+id);
@@ -868,7 +870,7 @@ async function verifyEphemeralLocalD1(cases){
         person.matchedPersonId=updated;
         await db.prepare(
           'INSERT INTO people (id,name,relation,created_at,updated_at) VALUES (?1,?2,?3,?4,?4)',
-        ).bind(updated,person.sourceName,'synthetic',
+        ).bind(updated,'Fixture '+browser+' '+id+' '+person.sourceName,'synthetic',
           '2026-10-09T00:00:00.000Z').run();
       }
       for(const item of batch.reviewItems){

@@ -6,6 +6,7 @@ import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { BackButton } from '../shared/components/BackButton';
 import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
+import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import './schedule-page.css';
 
 function currentLocalIsoDate(): string {
@@ -28,30 +29,48 @@ export function ScheduleDayEditPage() {
   const [enabled, setEnabled] = useState(true);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [breakDraft, setBreakDraft] = useState('');
+  const [breakEdited, setBreakEdited] = useState(false);
+  const [hydratedKey, setHydratedKey] = useState('');
   const form = useFormRuntimeState();
 
+  // An edit screen is interactive only after the selected person's record
+  // has been loaded into controlled inputs. Without this gate a fast OFF
+  // toggle races the effect that hydrates enabled/start/end from D1.
+  const sourcePersonId = schedule.status === 'ready' ? schedule.personId : null;
+  const sourceKey = sourcePersonId + '|' + (creating ? 'new' : selectedDate) +
+    '|' + (creating ? '' : entry?.id ?? 'none');
   useEffect(() => {
-    if (!entry) {
-      if (creating) {
-        setEnabled(true);
-        setStart('');
-        setEnd('');
-      }
-      return;
-    }
-    setEnabled(entry.enabled);
-    setStart(entry.start);
-    setEnd(entry.end);
-  }, [entry?.id, creating]);
+    if (schedule.status !== 'ready') return;
+    setEnabled(entry?.enabled ?? true);
+    setStart(entry?.start ?? '');
+    setEnd(entry?.end ?? '');
+    setBreakDraft(entry?.breakMinutes == null ? '' : String(entry.breakMinutes));
+    setBreakEdited(false);
+    setHydratedKey(sourceKey);
+  }, [sourceKey, schedule.status]);
 
   if (schedule.status === 'loading') return <section className="schedule-page"><div className="schedule-message">일정을 불러오는 중</div></section>;
   if (schedule.status === 'error') return <section className="schedule-page"><div className="schedule-message">일정을 불러오지 못했습니다.</div></section>;
+  if (hydratedKey !== sourceKey) return <section className="schedule-page" data-state="HYDRATING"><div className="schedule-message">일정 입력값을 준비하는 중</div></section>;
 
-  const canSave = isIsoDate(selectedDate) && Boolean(start) && Boolean(end);
+  const validClock = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const validBreak = breakDraft === '' || (/^\d{1,3}$/.test(breakDraft) && Number(breakDraft) <= 720);
+  const canSave = isIsoDate(selectedDate) && (!enabled || (validClock(start) && validClock(end))) &&
+    validBreak && schedule.status === 'ready' && Boolean(schedule.personId);
   const save = async () => {
-    if (!canSave) return;
-    await form.save(() => services.actions.schedule.saveDay(selectedDate, { enabled, start, end }));
-    navigate('/schedule');
+    if (!canSave || form.state === 'SAVING') return;
+    try {
+      const expectedPersonId = schedule.status === 'ready' ? schedule.personId ?? undefined : undefined;
+      await form.save(() => services.actions.schedule.saveDay(selectedDate, {
+        enabled, start: enabled ? start : '', end: enabled ? end : '',
+        breakMinutes: enabled ? (breakEdited ? (breakDraft === '' ? null : Number(breakDraft)) : undefined) : null,
+        expectedPersonId,
+      }));
+      navigate('/schedule');
+    } catch {
+      // Keep the entered schedule for a subsequent explicit retry.
+    }
   };
 
   return (
@@ -84,7 +103,7 @@ export function ScheduleDayEditPage() {
       <button type="button" className="rule schedule-workday-rule" onClick={() => { setEnabled((value) => !value); form.markDirty(); }} aria-pressed={enabled}>
         <b>근무일</b><span className={'switch' + (enabled ? ' on' : '')} />
       </button>
-      <TimeRangeWheelPicker
+      {enabled ? <TimeRangeWheelPicker
         startLabel="출근"
         endLabel="퇴근"
         start={start || null}
@@ -94,7 +113,21 @@ export function ScheduleDayEditPage() {
           else setEnd(value);
           form.markDirty();
         }}
-      />
+      /> : <p className="schedule-message" data-state="OFF">휴무일 · 출퇴근시간을 입력하지 않습니다.</p>}
+      {enabled ? (
+        <label className="form-field">
+          <span className="form-label">쉬는시간 (분)</span>
+          <input className="input" type="number" inputMode="numeric" min="0" max="720"
+            aria-label="쉬는시간 분 단위 수정" placeholder="미설정"
+            value={breakDraft} onChange={event => {
+              setBreakDraft(event.currentTarget.value);
+              setBreakEdited(true);
+              form.markDirty();
+            }} />
+          <span className="form-hint">변경하지 않으면 기존 시간이 유지됩니다. 값을 비우면 삭제됩니다.</span>
+        </label>
+      ) : null}
+      {form.error ? <p className="form-error" role="alert">{formErrorMessage(form.error)}</p> : null}
       <button type="button" className="cta" disabled={form.state === 'SAVING' || !canSave} onClick={save}>{form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}</button>
     </section>
   );

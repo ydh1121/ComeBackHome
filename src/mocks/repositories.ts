@@ -165,14 +165,29 @@ export class MockImportRepository implements ImportRepository {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
-      if (person) person.matchedPersonId = personId;
+      const changed = Boolean(person && (person.matchedPersonId !== personId || person.pendingCreate));
+      if (person) { person.matchedPersonId = personId; person.pendingCreate = false; person.ignored = false; }
       for (const item of batch?.reviewItems ?? []) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
-        if (personId && item.resolution == null &&
-            batch?.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
-          item.resolution = 'NEW';
-        }
+        if (changed) { item.resolution = null; item.existing = undefined; }
+        // Matching a person never grants review approval; user must reapprove.
+      }
+    });
+  }
+  async setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void> {
+    this.store.mutate(state => {
+      const batch = state.importBatches.find(b => b.id === batchId);
+      const detected = batch?.detectedPeople.find(p => p.id === detectedPersonId);
+      if (!detected || !batch) throw new Error('Detected person not found.');
+      detected.pendingCreate = pending;
+      detected.matchedPersonId = null;
+      detected.ignored = false;
+      for (const item of batch.reviewItems) {
+        if (item.detectedPersonId !== detectedPersonId) continue;
+        item.personId = null;
+        item.existing = undefined;
+        item.resolution = null;
       }
     });
   }
@@ -181,12 +196,13 @@ export class MockImportRepository implements ImportRepository {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (!person || !batch) return;
+      const changed = person.ignored !== ignored;
       person.ignored = ignored;
-      if (ignored) person.matchedPersonId = null;
+      if (ignored) { person.matchedPersonId = null; person.pendingCreate = false; }
       for (const item of batch.reviewItems) {
         if (item.detectedPersonId !== detectedPersonId) continue;
-        if (ignored) {
-          item.personId = null;
+        if (ignored || changed) {
+          if (ignored) item.personId = null;
           item.resolution = null;
         }
       }
@@ -213,6 +229,25 @@ export class MockImportRepository implements ImportRepository {
       item.resolution = null;
     });
   }
+  async setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void> {
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+       new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) {
+      throw new Error('INVALID_IMPORT_DATE');
+    }
+    const batch=this.store.read().importBatches.find(candidate=>candidate.id===batchId);
+    const item=batch?.reviewItems.find(candidate=>candidate.id===reviewItemId);
+    if(!batch||!item)throw new Error('Review item not found.');
+    if(batch.reviewItems.some(other=>other.id!==item.id &&
+       other.detectedPersonId===item.detectedPersonId && other.date===date)) {
+      throw new Error('DUPLICATE_PERSON_IMPORT_DATE');
+    }
+    if(item.date===date)return;
+    this.store.mutate(state=>{
+      const review=state.importBatches.find(b=>b.id===batchId)?.reviewItems.find(i=>i.id===reviewItemId);
+      if(review){review.date=date;review.existing=undefined;review.resolution=null;}
+    });
+  }
+
   async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
     if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
       throw new Error('INVALID_BREAK_MINUTES');
@@ -230,9 +265,7 @@ export class MockImportRepository implements ImportRepository {
       if (!item || item.imported[field] === value) return;
       item.imported[field] = value;
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
-      if (batch?.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = null;
-      }
+      item.resolution = null;
     });
   }
   async markCommitted(batchId: EntityId): Promise<void> {

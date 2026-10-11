@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
 import { SAMPLE_IMPORT_WORKBOOK_BASE64 } from '../test/fixtures/import/sample-workbook-base64.mjs';
+import { makeWeeklyXlsx } from '../test/fixtures/import/anonymous-weekly-xlsx-builder.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
@@ -11,6 +12,7 @@ function workbookArrayBuffer() {
   const bytes = Buffer.from(SAMPLE_IMPORT_WORKBOOK_BASE64, 'base64');
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
+
 
 const vite = await createViteServer({
   root,
@@ -56,6 +58,77 @@ try {
   expect(combined.structure.shiftColumn === 'C', 'combined-shift column mapping mismatch');
   expect(combined.scheduleCandidates[1]?.start === '10:30', 'Korean AM start parsing mismatch');
   expect(combined.scheduleCandidates[1]?.end === '19:30', 'Korean PM end parsing mismatch');
+
+
+  // Independent anonymous 7x3 weekly matrix: seven consecutive days across a year
+  // boundary, merged-heading anchor layout, reordered staff and uncertain blanks.
+  const monday = Date.UTC(2026, 11, 28);
+  const dayDates = Array.from({length:7}, (_,i)=>
+    new Date(monday+i*86400000).toISOString().slice(0,10));
+  const weekdayRow = ['12월', ...Array.from({length:21},(_,i)=>
+    i%3===0 ? '요일'+(Math.floor(i/3)+1) : null)];
+  const dateRow = [null, ...Array.from({length:21},(_,i)=>
+    i%3===0 ? dayDates[Math.floor(i/3)] : null)];
+  const memoRow = [null, ...Array.from({length:21},(_,i)=>
+    i===6 ? '특이사항 예시' : null)];
+  const tripleRow = ['직원', ...Array.from({length:21},(_,i)=>
+    ['출근','퇴근','쉬는시간'][i%3])];
+  const firstStaff = ['테스트가', ...Array(21).fill(null)];
+  firstStaff.splice(1,3,9.5,23.5,0.5);
+  firstStaff.splice(4,3,12,21,1);
+  firstStaff.splice(7,3,10,20,2);
+  const secondStaff = ['테스트나', ...Array(21).fill(null)];
+  secondStaff.splice(1,3,14,23.5,'잘못된 휴게');
+  secondStaff.splice(7,3,9.5,null,null);
+  const weeklyFixture = [{
+    sheet:'2026-12-28_01-03',
+    data:[weekdayRow,dateRow,memoRow,tripleRow,firstStaff,secondStaff],
+  }];
+  const weekly = parserModule.parseWorkbookSheets(weeklyFixture);
+  expect(weekly.structure.needsReview===true,'weekly XLSX must require review');
+  expect(weekly.structure.headerRow===4 && weekly.structure.shiftColumn==='B:V',
+    'variable weekly 7x3 header mapping mismatch');
+  expect(weekly.scheduleCandidates.length===0 && weekly.reviewCandidates?.length===14,
+    'weekly XLSX must preserve every day as a review candidate');
+  expect(weekly.detectedPeople.length===2,'weekly roster detection mismatch');
+  const work=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2026-12-28');
+  expect(work?.start==='09:30'&&work.end==='23:30'&&work.breakMinutes===30&&
+    work.recognitionState==null,'numeric 23.5 / 0.5 conversion mismatch');
+  const oneHour=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2026-12-29');
+  const twoHours=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2026-12-30');
+  expect(oneHour?.breakMinutes===60&&twoHours?.breakMinutes===120,
+    'hour-based rest conversion mismatch');
+  const offCandidate=weekly.reviewCandidates?.find(x=>x.sourcePersonName==='테스트가'&&x.date==='2027-01-01');
+  expect(offCandidate?.recognitionState==='OFF_CANDIDATE'&&offCandidate.enabled===true,
+    'empty slots must never be committed as OFF automatically');
+  expect(weekly.reviewCandidates?.some(x=>x.recognitionState==='INCOMPLETE'&&x.breakMinutes===null),
+    'uncertain break/partial schedule should be preserved for review');
+  expect(weekly.reviewCandidates?.at(-1)?.date==='2027-01-03',
+    'weekly year-boundary date association mismatch');
+  let duplicateWeeklyRejected=false;
+  try{parserModule.parseWorkbookSheets([weeklyFixture[0],weeklyFixture[0]]);}
+  catch(error){duplicateWeeklyRejected=String(error).includes('중복');}
+  expect(duplicateWeeklyRejected,'weekly duplicate employee/date must fail closed');
+  const invalidDates=structuredClone(weeklyFixture[0]);
+  invalidDates.data[1][4]='2026-12-30';
+  let conflictRejected=false;
+  try{parserModule.parseWorkbookSheets([invalidDates]);}
+  catch(error){conflictRejected=String(error).includes('연속된 7일');}
+  expect(conflictRejected,'contradictory weekly header dates must fail closed');
+
+  const fromBinary=await parser.parse(makeWeeklyXlsx(weeklyFixture[0].data));
+  expect(fromBinary.structure.sheet==='weekly 7 day x start/end/break physical matrix',
+    'real synthetic XLSX binary should reach weekly matrix parser');
+  expect(fromBinary.reviewCandidates?.length===14 &&
+    fromBinary.scheduleCandidates.length===0,
+    'real synthetic XLSX binary should preserve 14 review-only cells');
+  const fromBinaryTime=fromBinary.reviewCandidates?.find(c=>
+    c.sourcePersonName==='테스트가'&&c.date==='2026-12-28');
+  expect(fromBinaryTime?.start==='09:30' && fromBinaryTime.end==='23:30' &&
+    fromBinaryTime.breakMinutes===30,'real XLSX numeric shifts/break mismatch');
+  console.log('NONIMAGE_WEEKLY_XLSX_REAL_BINARY_PASS');
+
+  console.log('NONIMAGE_WEEKLY_XLSX_SYNTHETIC_MATRIX_CASES_PASS');
 
   const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
   store.mutate((state) => {
@@ -114,10 +187,19 @@ try {
   if (detectedId) await imports.setDetectedPersonMatch(batchId, detectedId, 'mock-person-1');
   const rematched = await imports.getBatch(batchId);
   expect(rematched?.reviewItems.every((item) => item.personId === 'mock-person-1'), 'person rematch did not propagate to review items');
-  expect(rematched?.reviewItems.every((item) => item.resolution === 'NEW'), 'rematched import rows must default selected');
+  expect(rematched?.reviewItems.every((item) => item.resolution === null),
+    'changing employee match must revoke legacy XLSX approval too');
+  let rematchUnreviewedBlocked = false;
+  try { await commit.execute(batchId); } catch (error) {
+    rematchUnreviewedBlocked = error instanceof Error &&
+      error.message === 'Import contains unreviewed schedules.';
+  }
+  expect(rematchUnreviewedBlocked, 'rematched legacy XLSX must not save without explicit reapproval');
 
   const skippedId = rematched?.reviewItems[0]?.id;
   if (skippedId) await imports.setResolution(batchId, skippedId, 'SKIP');
+  const reviewedId = rematched?.reviewItems[1]?.id;
+  if (reviewedId) await imports.setResolution(batchId, reviewedId, 'NEW');
   await commit.execute(batchId);
   const firstSaved = await schedules.getByDate('mock-person-1', '2099-01-04');
   const secondSaved = await schedules.getByDate('mock-person-1', '2099-01-05');

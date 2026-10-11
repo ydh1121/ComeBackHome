@@ -5,7 +5,7 @@ import { sortSchedule } from './date-format';
 
 export type ScheduleLoadState =
   | { status: 'loading' }
-  | { status: 'ready'; entries: ScheduleEntry[] }
+  | { status: 'ready'; personId: string | null; entries: ScheduleEntry[] }
   | { status: 'error' };
 
 export function useSelectedSchedule(): ScheduleLoadState {
@@ -15,15 +15,16 @@ export function useSelectedSchedule(): ScheduleLoadState {
 
   useEffect(() => {
     let active = true;
+    setState({ status: 'loading' });
     const personId = services.actions.personSelection.getSelectedPersonId();
     if (!personId) {
-      setState({ status: 'ready', entries: [] });
+      setState({ status: 'ready', personId: null, entries: [] });
       return () => { active = false; };
     }
 
     services.queries.listSchedule(personId)
       .then((entries) => {
-        if (active) setState({ status: 'ready', entries: sortSchedule(entries) });
+        if (active) setState({ status: 'ready', personId, entries: sortSchedule(entries) });
       })
       .catch(() => {
         if (active) setState({ status: 'error' });
@@ -32,5 +33,11 @@ export function useSelectedSchedule(): ScheduleLoadState {
     return () => { active = false; };
   }, [services, version]);
 
+  // A selection change must not expose the previous employee's ready data
+  // while its asynchronous list request is being replaced.
+  if (state.status === 'ready' &&
+      state.personId !== services.actions.personSelection.getSelectedPersonId()) {
+    return { status: 'loading' };
+  }
   return state;
 }

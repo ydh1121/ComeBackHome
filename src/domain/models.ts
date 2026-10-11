@@ -18,7 +18,7 @@ export type ImportResolution = 'KEEP' | 'NEW' | 'SKIP';
 export type ImportFileKind = 'XLSX' | 'IMAGE';
 export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
 export interface ImportFileRecord { id: EntityId; name: string; kind: ImportFileKind; progress: number; status: ImportFileStatus; message?: string; }
-export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; ignored?: boolean; }
+export interface DetectedImportPerson { id: EntityId; sourceName: string; matchedPersonId: EntityId | null; confidence: number; ignored?: boolean; pendingCreate?: boolean; }
 export interface ImportStructure { sheet: string; headerRow: number; personColumn: string; dateColumn: string; shiftColumn: string; needsReview: boolean; }
 export type ImportRecognitionState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
 export interface ImportReviewItem { id: EntityId; detectedPersonId: EntityId; personId: EntityId | null; date: ISODate; existing?: Pick<ScheduleEntry,'enabled'|'start'|'end'|'breakMinutes'>; imported: { enabled: boolean; start: string | null; end: string | null; breakMinutes?: number | null }; recognitionState?: ImportRecognitionState; resolution: ImportResolution | null; }

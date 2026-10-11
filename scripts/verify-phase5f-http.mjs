@@ -73,7 +73,7 @@ for (const text of [
   "providerData: providerMode === 'api' ? 'worker-api' : 'disabled'",
   'new WorkbookImportFileSelectionAction',
   'new ReadExcelWorkbookParser',
-  'commitImportReview: new CommitImportReview(imports, schedules)',
+  'commitImportReview: new CommitImportReview(imports, schedules, new HttpApprovedWorkbookImportGateway(client))',
 ]) {
   if (!composition.includes(text)) failures.push('hybrid composition missing ' + text);
 }
@@ -85,6 +85,13 @@ for (const text of [
   'await schedules.upsertMany(entries)',
 ]) {
   if (!workerApi.includes(text)) failures.push('Atomic multi-person import API missing ' + text);
+}
+if (!workerApi.includes("segments[1] === 'workbooks'") ||
+    !workerApi.includes('commitApprovedWorkbookImport(env.DB')) {
+  failures.push('approved workbook single-transaction API route missing');
+}
+if (!composition.includes('new HttpApprovedWorkbookImportGateway(client)')) {
+  failures.push('approved workbook HTTP gateway missing');
 }
 if (httpRepositories.includes('class HybridCommuteRepository')) failures.push('obsolete hybrid commute adapter remains in production source');
 if (composition.includes('BrowserPushSubscriptionProvider')) failures.push('browser push adapter activated in hybrid composition');

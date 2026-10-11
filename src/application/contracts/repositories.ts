@@ -45,11 +45,21 @@ export interface CommuteRepository {
   getPreferredRouteCandidateId(personId: EntityId): Promise<EntityId | null>;
   setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void>;
 }
-export interface ImportRepository { getCurrentBatch(): Promise<ImportBatch | null>; getBatch(batchId: EntityId): Promise<ImportBatch | null>; createBatch(): Promise<ImportBatch>; replaceFiles(batchId: EntityId, files: ImportFileRecord[]): Promise<void>; replaceParsedResult(batchId: EntityId, result: Pick<ImportBatch,'detectedPeople'|'structure'|'reviewItems'>): Promise<void>; setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>; setDetectedPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>; setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>; setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>; setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>; setImportedEnabled(batchId: EntityId, reviewItemId: EntityId, enabled: boolean): Promise<void>; markCommitted(batchId: EntityId): Promise<void>; }
+export interface ImportRepository { getCurrentBatch(): Promise<ImportBatch | null>; getBatch(batchId: EntityId): Promise<ImportBatch | null>; createBatch(): Promise<ImportBatch>; replaceFiles(batchId: EntityId, files: ImportFileRecord[]): Promise<void>; replaceParsedResult(batchId: EntityId, result: Pick<ImportBatch,'detectedPeople'|'structure'|'reviewItems'>): Promise<void>; setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>; setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void>; setDetectedPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>; setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>; setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>; setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void>; setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>; setImportedEnabled(batchId: EntityId, reviewItemId: EntityId, enabled: boolean): Promise<void>; markCommitted(batchId: EntityId): Promise<void>; }
 export interface NotificationRepository { getSettings(): Promise<NotificationSettings>; setRules(rules: NotificationRules): Promise<void>; setPermission(permission: NotificationSettings['permission']): Promise<void>; setSubscription(subscription: WebPushSubscriptionRecord | null): Promise<void>; }
 export interface TodayRepository { get(personId: EntityId): Promise<TodaySnapshot | null>; }
 
 export interface PresenceRepository {
   get(personId: EntityId): Promise<PresenceState | null>;
   record(input: { eventId: string; personId: EntityId; type: 'LEFT_WORK' | 'ARRIVED_HOME'; acceptedAt: string; workDate: ISODate }): Promise<{ state: PresenceState; duplicate: boolean }>;
+}
+
+export interface ApprovedWorkbookImportReceipt {
+  requestId: string;
+  applied: boolean;
+  people: Array<{ ref: string; personId: string; created: boolean }>;
+  schedules: Array<{ personRef: string; date: ISODate; enabled: boolean }>;
+}
+export interface ApprovedWorkbookImportGateway {
+  commit(payload: unknown): Promise<ApprovedWorkbookImportReceipt>;
 }

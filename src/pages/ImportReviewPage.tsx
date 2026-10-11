@@ -53,9 +53,10 @@ export function ImportReviewPage() {
       (weekly3ColumnReview || !exactDuplicate(item)),
   );
   const allReviewed = visibleReviewItems.every((item) =>
-    item.personId != null &&
+    (item.personId != null ||
+      batch.detectedPeople.some(person => person.id === item.detectedPersonId && person.pendingCreate)) &&
     (
-      item.resolution === 'SKIP' ||
+      item.resolution === 'SKIP' || item.resolution === 'KEEP' ||
       (item.resolution === 'NEW' && importedTimeComplete(item))
     )
   );
@@ -82,11 +83,23 @@ export function ImportReviewPage() {
             const person = workflow.people.find((candidate) => candidate.id === item.personId);
             const importedComplete = importedTimeComplete(item);
             return (
-              <div className="import-review-item" key={item.id}>
+              <div className="import-review-item" key={item.id} data-review-id={item.id}
+                data-person-id={item.detectedPersonId} data-work-date={item.date}>
                 <div className="import-review-head">
-                  <div className="review-date">{formatDateLabel(item.date)} 일정</div>
+                  {weekly3ColumnReview ? (
+                    <label className="review-date">
+                      근무 날짜
+                      <input type="date" aria-label="근무 날짜 수정"
+                        value={item.date}
+                        onChange={(event)=>void services.actions.importReview.setImportedDate(
+                          batch.id,item.id,event.currentTarget.value)}
+                      />
+                    </label>
+                  ) : <div className="review-date">{formatDateLabel(item.date)} 일정</div>}
                   <div className={'review-person' + (item.personId ? '' : ' unresolved')}>
-                    {person?.name ?? '사람 연결 필요'}
+                    {person?.name ?? (batch.detectedPeople.find(candidate =>
+                      candidate.id === item.detectedPersonId)?.pendingCreate
+                      ? '신규 직원 · 승인 후 생성' : '사람 연결 필요')}
                   </div>
                 </div>
 
@@ -155,7 +168,7 @@ export function ImportReviewPage() {
                       placeholder="확인 필요"
                       onChange={(event) => {
                         const raw = event.currentTarget.value;
-                        if (raw !== '' && (!/^\\d+$/.test(raw) || Number(raw) > 720)) return;
+                        if (raw !== '' && (!/^\d+$/.test(raw) || Number(raw) > 720)) return;
                         void services.actions.importReview.setImportedBreakMinutes(
                           batch.id, item.id, raw === '' ? null : Number(raw),
                         );
@@ -165,6 +178,14 @@ export function ImportReviewPage() {
                 ) : null}
 
                 <div className="review-choice-list">
+                  <button type="button"
+                    className={'review-choice import-toggle' + (item.resolution === 'SKIP' ? ' selected' : '')}
+                    aria-pressed={item.resolution === 'SKIP'}
+                    onClick={() => services.actions.importReview.setResolution(
+                      batch.id,item.id,item.resolution === 'SKIP' ? 'KEEP' : 'SKIP'
+                    )}>
+                    가져오지 않음
+                  </button>
                   {item.existing && !exactDuplicate(item) ? (
                     <div className="review-existing-note">
                       {item.existing.enabled === false
@@ -176,7 +197,9 @@ export function ImportReviewPage() {
                     type="button"
                     className={'review-choice import-toggle' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
-                    disabled={!item.personId || !importedComplete}
+                    disabled={!(item.personId || batch.detectedPeople.some(
+                      person => person.id === item.detectedPersonId && person.pendingCreate
+                    )) || !importedComplete}
                     onClick={() => services.actions.importReview.setResolution(
                       batch.id,
                       item.id,

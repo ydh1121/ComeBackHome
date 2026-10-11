@@ -10,10 +10,13 @@
 .time-wheel-panel-head button{min-height:36px;border:0;background:transparent;color:#255cff;font-weight:800;padding:0 8px}
 .time-wheel-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .time-wheel-column{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 24px;align-items:center;height:176px;overflow:hidden;border-radius:13px;background:#f8fafc}
-.time-wheel-scroll{height:176px;overflow-y:auto;overscroll-behavior:contain;scroll-snap-type:y mandatory;padding:66px 0;scrollbar-width:none;z-index:2}
+.time-wheel-scroll{height:176px;overflow-y:auto;overscroll-behavior:contain;scroll-snap-type:none;padding:66px 0;scrollbar-width:none;z-index:2}
 .time-wheel-scroll::-webkit-scrollbar{display:none}
 .time-wheel-scroll button{display:block;width:100%;height:44px;border:0;background:transparent;color:#98a2b3;-webkit-text-fill-color:#98a2b3;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;scroll-snap-align:center}
 .time-wheel-scroll button.selected{color:#101828;-webkit-text-fill-color:#101828;font-size:20px;font-weight:900}
 .time-wheel-selection{position:absolute;left:8px;right:30px;top:66px;height:44px;border-radius:10px;background:#eef2f7;pointer-events:none;z-index:1}
 .time-wheel-unit{position:relative;z-index:3;color:#667085;font-size:12px;font-weight:800}
 @media(max-width:390px){.time-range-wheel-fields{gap:8px}.time-wheel-trigger{min-height:50px}}
+
+/* Buttons must remain stable during pointer clicks while the wheel scrolls. */
+.time-wheel-scroll:focus-within{scroll-snap-type:none}

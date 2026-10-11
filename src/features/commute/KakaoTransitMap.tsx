@@ -28,7 +28,7 @@ let sdkPromise: Promise<any> | null = null;
 let sdkPromiseKey = '';
 let clientConfigPromise: Promise<string | null> | null = null;
 
-async function loadKakaoClientKey(): Promise<string | null> {
+export async function loadKakaoClientKey(): Promise<string | null> {
   if (!clientConfigPromise) {
     clientConfigPromise = (async () => {
       const buildKey = String(import.meta.env.VITE_CBH_KAKAO_JAVASCRIPT_KEY ?? '').trim();
@@ -54,7 +54,9 @@ async function loadKakaoClientKey(): Promise<string | null> {
   return clientConfigPromise;
 }
 
-function loadKakaoMapsSdk(appKey: string): Promise<any> {
+export function resetKakaoMapsClientKeyCache(): void { clientConfigPromise = null; }
+
+export function loadKakaoMapsSdk(appKey: string): Promise<any> {
   if (window.kakao?.maps) {
     return new Promise((resolve) => window.kakao.maps.load(() => resolve(window.kakao)));
   }

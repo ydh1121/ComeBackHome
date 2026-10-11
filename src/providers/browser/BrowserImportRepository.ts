@@ -114,14 +114,34 @@ export class BrowserImportRepository implements ImportRepository {
     const batch = this.requireBatch(batchId);
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
+    const changed = person.matchedPersonId !== personId || person.pendingCreate === true;
     person.matchedPersonId = personId;
+    person.pendingCreate = false;
+    person.ignored = false;
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       item.personId = personId;
-      if (personId && item.resolution == null &&
-          batch.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = 'NEW';
-      }
+      if (changed) { item.resolution = null; item.existing = undefined; }
+        // Matching a person never grants review approval; user must reapprove.
+    }
+    this.persist();
+  }
+
+  async setPendingPersonCreate(
+    batchId: EntityId, detectedPersonId: EntityId, pending: boolean,
+  ): Promise<void> {
+    const batch = this.requireBatch(batchId);
+    const detected = batch.detectedPeople.find(person => person.id === detectedPersonId);
+    if (!detected) throw new Error('Detected person was not found.');
+    if (detected.pendingCreate === pending && detected.matchedPersonId === null && !detected.ignored) return;
+    detected.pendingCreate = pending;
+    detected.matchedPersonId = null;
+    detected.ignored = false;
+    for (const item of batch.reviewItems) {
+      if (item.detectedPersonId !== detectedPersonId) continue;
+      item.personId = null;
+      item.existing = undefined;
+      item.resolution = null;
     }
     this.persist();
   }
@@ -134,8 +154,9 @@ export class BrowserImportRepository implements ImportRepository {
     const batch = this.requireBatch(batchId);
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
+    const changed = person.ignored !== ignored;
     person.ignored = ignored;
-    if (ignored) person.matchedPersonId = null;
+    if (ignored) { person.matchedPersonId = null; person.pendingCreate = false; }
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       if (ignored) {
@@ -173,6 +194,24 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: string): Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const item=this.requireReviewItem(batchId,reviewItemId);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+       new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) {
+      throw new Error('INVALID_IMPORT_DATE');
+    }
+    if(batch.reviewItems.some(other=>other.id!==item.id &&
+       other.detectedPersonId===item.detectedPersonId && other.date===date)) {
+      throw new Error('DUPLICATE_PERSON_IMPORT_DATE');
+    }
+    if(item.date===date)return;
+    item.date=date;
+    item.existing=undefined;
+    item.resolution=null;
+    this.persist();
+  }
+
   async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
     if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
       throw new Error('INVALID_BREAK_MINUTES');
@@ -194,11 +233,8 @@ export class BrowserImportRepository implements ImportRepository {
     const item = this.requireReviewItem(batchId, reviewItemId);
     if (item.imported[field] !== value) {
       item.imported[field] = value;
-      // Weekly image OCR requires fresh approval after *any* time edit.
-      // Existing workbook review semantics are left unchanged.
-      if (batch.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = null;
-      }
+      // Review edits invalidate approval for ALL workbook formats.
+      item.resolution = null;
       this.persist();
     }
   }

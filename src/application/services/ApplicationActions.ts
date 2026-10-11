@@ -1,3 +1,4 @@
+import { isIsoDate } from '../../features/schedule/date-format';
 import { PushClientError, categorizePushError } from '../../features/notifications/pushErrors';
 import type { EntityId } from '../../domain/common';
 import type { NotificationRules, PlaceKind } from '../../domain/models';
@@ -22,7 +23,7 @@ export class PersonService implements PersonActions {
   ) {}
 
   async create(input: PersonInput) {
-    const name = input.name.trim();
+    const name = input.name.normalize('NFKC').trim().replace(/\s+/g, ' ');
     if (!name) throw new Error('Person name is required.');
     const person = await this.people.create({ name, relation: input.relation.trim() });
     this.selection.select(person.id);
@@ -33,7 +34,7 @@ export class PersonService implements PersonActions {
     const current = await this.people.get(personId);
     if (!current) throw new Error('Person was not found.');
     return this.people.update(personId, {
-      name: input.name.trim() || current.name,
+      name: input.name.normalize('NFKC').trim().replace(/\s+/g, ' ') || current.name,
       relation: input.relation.trim() || current.relation,
     });
   }
@@ -49,20 +50,26 @@ export class PersonSelectionService implements PersonSelectionActions {
   }
 }
 
+function validClock(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function validateScheduleInput(date: string, enabled: boolean, start: string, end: string, breakMinutes?: number | null): void {
+  if (!isIsoDate(date)) throw new Error('INVALID_SCHEDULE_DATE');
+  if (enabled && (!validClock(start) || !validClock(end))) throw new Error('INVALID_SCHEDULE_CLOCK');
+  if (breakMinutes != null && (!Number.isInteger(breakMinutes) || breakMinutes < 0 || breakMinutes > 720)) {
+    throw new Error('INVALID_BREAK_MINUTES');
+  }
+}
+
 function enumerateScheduleDates(from: string, to: string): string[] {
+  if (!isIsoDate(from) || !isIsoDate(to) || from > to) throw new Error('Schedule range is invalid.');
   const start = Date.parse(from + 'T00:00:00Z');
   const end = Date.parse(to + 'T00:00:00Z');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || !Number.isFinite(start) || !Number.isFinite(end) || start > end) {
-    throw new Error('Schedule range is invalid.');
-  }
-
-  const dayMs = 86_400_000;
-  const dayCount = Math.floor((end - start) / dayMs) + 1;
-  if (dayCount > 366) throw new Error('Schedule range is too large.');
-
-  return Array.from({ length: dayCount }, (_, index) =>
-    new Date(start + index * dayMs).toISOString().slice(0, 10),
-  );
+  const count = Math.round((end - start) / 86_400_000) + 1;
+  if (count > 366) throw new Error('Schedule range is too large.');
+  return Array.from({ length: count }, (_, i) =>
+    new Date(start + i * 86_400_000).toISOString().slice(0, 10));
 }
 
 export class ScheduleService implements ScheduleActions {
@@ -73,46 +80,44 @@ export class ScheduleService implements ScheduleActions {
 
   async saveDay(date: string, input: ScheduleDayInput): Promise<void> {
     const personId = this.selection.getSelectedPersonId();
-    if (!personId) throw new Error('Selected person is required.');
+    if (!personId || (input.expectedPersonId && input.expectedPersonId !== personId))
+      throw new Error('SELECTED_PERSON_CHANGED');
+    validateScheduleInput(date, input.enabled, input.start, input.end, input.breakMinutes);
     const current = await this.schedules.getByDate(personId, date);
+    if (this.selection.getSelectedPersonId() !== personId) throw new Error('SELECTED_PERSON_CHANGED');
     await this.schedules.upsert({
-      id: current?.id ?? crypto.randomUUID(),
-      personId,
-      date,
+      id: current?.id ?? crypto.randomUUID(), personId, date,
       enabled: input.enabled,
-      start: input.start,
-      end: input.end,
+      start: input.enabled ? input.start : '',
+      end: input.enabled ? input.end : '',
+      // undefined means preserve on work edits; explicit null clears it.
+      breakMinutes: input.enabled ? input.breakMinutes : null,
     });
   }
 
   async applyBulk(rule: ScheduleBulkRule): Promise<void> {
     const personId = this.selection.getSelectedPersonId();
-    if (!personId) throw new Error('Selected person is required.');
-
+    if (!personId || (rule.expectedPersonId && rule.expectedPersonId !== personId))
+      throw new Error('SELECTED_PERSON_CHANGED');
+    if (!validClock(rule.start) || !validClock(rule.end)) throw new Error('INVALID_SCHEDULE_CLOCK');
+    if (!rule.weekdays.every(day => Number.isInteger(day) && day >= 0 && day <= 6))
+      throw new Error('INVALID_SCHEDULE_WEEKDAYS');
+    const dates = enumerateScheduleDates(rule.from, rule.to);
+    const days = new Set(rule.weekdays);
+    const targetDates = dates.filter(date => days.size === 0 ||
+      days.has(new Date(date + 'T00:00:00Z').getUTCDay()));
+    if (!targetDates.length) throw new Error('NO_SCHEDULE_DATES_MATCH');
     const entries = await this.schedules.list(personId);
-    const byDate = new Map(entries.map((entry) => [entry.date, entry]));
-    const weekdays = new Set(rule.weekdays);
-    const targetDates = enumerateScheduleDates(rule.from, rule.to)
-      .filter((date) => weekdays.size === 0 || weekdays.has(new Date(date + 'T00:00:00Z').getUTCDay()));
-
-    const updated = targetDates.map((date) => {
+    if (this.selection.getSelectedPersonId() !== personId) throw new Error('SELECTED_PERSON_CHANGED');
+    const byDate = new Map(entries.map(entry => [entry.date, entry]));
+    const updated = targetDates.map(date => {
       const current = byDate.get(date);
-      const start = rule.start || current?.start || '';
-      const end = rule.end || current?.end || '';
-      if (!start || !end) {
-        throw new Error('Bulk schedule start and end times are required when creating dates.');
-      }
-
-      return {
-        id: current?.id ?? crypto.randomUUID(),
-        personId,
-        date,
-        enabled: true,
-        start,
-        end,
-      };
+      return { id: current?.id ?? crypto.randomUUID(), personId, date,
+        enabled: true, start: rule.start, end: rule.end,
+        breakMinutes: current?.enabled ? undefined : null };
     });
-
+    // HttpScheduleRepository sends the entire set in ONE request; the D1
+    // repository executes it in ONE batch, never per-day HTTP mutations.
     await this.schedules.upsertMany(updated);
   }
 }

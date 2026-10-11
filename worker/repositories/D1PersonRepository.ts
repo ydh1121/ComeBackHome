@@ -14,6 +14,15 @@ function toPerson(row: PersonRow): Person {
   return { id: row.id, name: row.name, relation: row.relation };
 }
 
+function normalizeName(name: string): string {
+  const result = name.normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!result || result.length > 100) throw new Error('INVALID_PERSON_NAME');
+  return result;
+}
+function duplicateKey(name: string): string {
+  return normalizeName(name).replace(/\s/g, '').toLocaleLowerCase();
+}
+
 export class D1PersonRepository implements PersonRepository {
   constructor(private readonly db: D1DatabaseLike) {}
 
@@ -32,7 +41,10 @@ export class D1PersonRepository implements PersonRepository {
   }
 
   async create(input: Omit<Person, 'id'>): Promise<Person> {
-    const person: Person = { id: crypto.randomUUID(), ...input };
+    const normalized = normalizeName(input.name);
+    if ((await this.list()).some(person => duplicateKey(person.name) === duplicateKey(normalized)))
+      throw new Error('DUPLICATE_PERSON_NAME');
+    const person: Person = { id: crypto.randomUUID(), name: normalized, relation: input.relation };
     const now = utcNow();
     await this.db.prepare(
       'INSERT INTO people (id, name, relation, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)',
@@ -44,9 +56,12 @@ export class D1PersonRepository implements PersonRepository {
     const current = await this.get(id);
     if (!current) throw new Error('Person was not found.');
 
+    const nextName = patch.name === undefined ? current.name : normalizeName(patch.name);
+    if ((await this.list()).some(person => person.id !== id && duplicateKey(person.name) === duplicateKey(nextName)))
+      throw new Error('DUPLICATE_PERSON_NAME');
     const updated: Person = {
       ...current,
-      ...(patch.name === undefined ? {} : { name: patch.name }),
+      ...(patch.name === undefined ? {} : { name: nextName }),
       ...(patch.relation === undefined ? {} : { relation: patch.relation }),
     };
 

@@ -102,8 +102,9 @@ export function ScheduleRangePicker({ entries, from, to, onChange }: Props) {
         </div> : null}
 
         {mode === 'direct' ? <div className="range-direct-v13">
-          <label><span>시작</span><input className="range-text-date" value={fromText} onChange={(e) => setFromText(e.target.value)} onBlur={commitText} placeholder="YYYY-MM-DD" /></label>
-          <label><span>종료</span><input className="range-text-date" value={toText} onChange={(e) => setToText(e.target.value)} onBlur={commitText} placeholder="YYYY-MM-DD" /></label>
+          <label><span>시작</span><input className="range-text-date" aria-label="기간 시작일" value={fromText} onChange={(e) => setFromText(e.target.value)} placeholder="YYYY-MM-DD" /></label>
+          <label><span>종료</span><input className="range-text-date" aria-label="기간 종료일" value={toText} onChange={(e) => setToText(e.target.value)} placeholder="YYYY-MM-DD" /></label>
+          <button type="button" className="range-direct-apply" disabled={!isIsoDate(fromText) || !isIsoDate(toText)} onClick={commitText}>기간 적용</button>
         </div> : null}
 
         {mode === 'calendar' ? <div className="range-calendar-wrap">

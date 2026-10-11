@@ -1,4 +1,5 @@
 import { BUILD_COMMIT_SHA } from './build-revision';
+import { commitApprovedWorkbookImport, ApprovedWorkbookImportConflict } from './approved-workbook-import';
 import type { Coordinate, PlaceKind, RoutePreference, SavedCommuteRoute, TransitAccessPoint, WebPushSubscriptionRecord } from '../src/domain/models';
 import type { PlaceSearchResult, TransitSearchResult } from '../src/application/contracts/providers';
 import { D1CommuteRepository } from './repositories/D1CommuteRepository';
@@ -72,6 +73,8 @@ function asPlaceKind(value: string): PlaceKind {
 
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : 'Unexpected API error.';
+  if (/DUPLICATE_PERSON_NAME/.test(message))
+    return json({ error: message, reason: 'CONFLICT' }, 409);
   return json({ error: message }, 400);
 }
 
@@ -631,6 +634,19 @@ export async function handleApiRequest(
       });
     }
 
+    if (segments.length === 3 && segments[1] === 'workbooks' &&
+        segments[2] === 'approved-import' && request.method === 'PUT') {
+      try {
+        const receipt = await commitApprovedWorkbookImport(env.DB, await readObject(request));
+        return json({ receipt });
+      } catch (error) {
+        if (error instanceof ApprovedWorkbookImportConflict) {
+          return json({ error: error.message, reason: 'IMPORT_CONFLICT' }, 409);
+        }
+        throw error;
+      }
+    }
+
     if (
       segments.length === 3 &&
       segments[1] === 'schedules' &&
@@ -653,17 +669,19 @@ export async function handleApiRequest(
         const personId = asString(item.personId, 'schedule.personId');
         const date = asString(item.date, 'schedule.date');
         const id = asString(item.id, 'schedule.id');
-        const start = asString(item.start, 'schedule.start');
-        const end = asString(item.end, 'schedule.end');
+        const enabled = asBoolean(item.enabled, 'schedule.enabled');
+        // A reviewed OFF has no work clocks. Repeat writes must accept its
+        // canonical blank storage representation rather than invent '00:00'.
+        const start = enabled ? asString(item.start, 'schedule.start') : '';
+        const end = enabled ? asString(item.end, 'schedule.end') : '';
         if (!knownIds.has(personId)) throw new Error('Import references unknown person.');
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Import date is invalid.');
-        if (![start,end].every(clock => /^([01]\d|2[0-3]):[0-5]\d$/.test(clock))) {
+        if (enabled && ![start,end].every(clock => /^([01]\d|2[0-3]):[0-5]\d$/.test(clock))) {
           throw new Error('Import schedule clock is invalid.');
         }
         const key = personId+'|'+date;
         if (unique.has(key)) throw new Error('Duplicate person/date in import batch.');
         unique.add(key);
-        const enabled = asBoolean(item.enabled, 'schedule.enabled');
         const breakMinutes = optionalScheduleBreakMinutes(item);
         return {
           id,personId,date,enabled,start,end,
@@ -729,8 +747,8 @@ export async function handleApiRequest(
               personId,
               date: asString(value.date, 'schedule.date'),
               enabled: asBoolean(value.enabled, 'schedule.enabled'),
-              start: asString(value.start, 'schedule.start'),
-              end: asString(value.end, 'schedule.end'),
+              start: value.enabled === false ? '' : asString(value.start, 'schedule.start'),
+              end: value.enabled === false ? '' : asString(value.end, 'schedule.end'),
               ...(optionalScheduleBreakMinutes(value) !== undefined
                 ? { breakMinutes: optionalScheduleBreakMinutes(value) } : {}),
             };
@@ -754,8 +772,8 @@ export async function handleApiRequest(
               personId,
               date,
               enabled: asBoolean(body.enabled, 'enabled'),
-              start: asString(body.start, 'start'),
-              end: asString(body.end, 'end'),
+              start: body.enabled === false ? '' : asString(body.start, 'start'),
+              end: body.enabled === false ? '' : asString(body.end, 'end'),
               ...(optionalScheduleBreakMinutes(body) !== undefined
                 ? { breakMinutes: optionalScheduleBreakMinutes(body) } : {}),
             };

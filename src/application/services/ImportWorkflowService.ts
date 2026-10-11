@@ -18,6 +18,10 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     private readonly people: PersonRepository,
   ) {}
 
+  async setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void> {
+    return this.imports.setPendingPersonCreate(batchId, detectedPersonId, pending);
+  }
+
   async cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void> {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
@@ -48,6 +52,10 @@ export class ImportWorkflowService implements ImportMatchActions, ImportReviewAc
     ignored: boolean,
   ): Promise<void> {
     await this.imports.setDetectedPersonIgnored(batchId, detectedPersonId, ignored);
+  }
+
+  setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: string): Promise<void> {
+    return this.imports.setImportedDate(batchId, reviewItemId, date);
   }
 
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void> {

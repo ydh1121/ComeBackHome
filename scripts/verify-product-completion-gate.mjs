@@ -130,11 +130,13 @@ for (const token of [
   '엑셀 파일 가져오기',
 ]) expect(importPage.includes(token), 'import entry missing: ' + token);
 for (const token of [
-  '새 사람으로 등록',
+  '승인 후 새 사람 등록',
   '가져오지 않음',
-  'services.actions.people.create',
+  'setPendingPersonCreate',
 ]) expect(importPeople.includes(token), 'multi-person import review missing: ' + token);
-expect(importCommit.includes('await this.schedules.upsertMany(entries)'), 'import final commit is not atomic multi-person batch');
+expect(!importPeople.includes('services.actions.people.create'), 'preapproval person DB write is forbidden');
+expect(importCommit.includes('this.approvedWorkbook.commit(payload)'), 'XLSX final approval must use atomic worker D1 transaction');
+expect(importCommit.includes('await this.schedules.upsertMany(entries)'), 'legacy image multi-person batch boundary must remain');
 expect(importCommit.includes('ignoredDetectedIds'), 'ignored roster people are not excluded from import commit');
 
 for (const token of [
@@ -179,6 +181,7 @@ const expectedMigrations = [
   '0006_saved_route_destination_access.sql',
   '0007_multi_access_route_sets.sql',
   '0008_weekly_ocr_break_minutes.sql',
+  '0009_approved_workbook_import_receipts.sql',
 ];
 expect(
   JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),

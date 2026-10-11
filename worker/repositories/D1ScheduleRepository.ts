@@ -48,8 +48,21 @@ export class D1ScheduleRepository implements ScheduleRepository {
   }
 
   async upsertMany(entries: ScheduleEntry[]): Promise<void> {
+    if (entries.length > 366) throw new Error('SCHEDULE_BULK_LIMIT');
+    const unique = new Set<string>();
     const now = utcNow();
     for (const entry of entries) {
+      const key = entry.personId + '|' + entry.date;
+      if (unique.has(key)) throw new Error('DUPLICATE_SCHEDULE_DATE');
+      unique.add(key);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date) ||
+          Number.isNaN(Date.parse(entry.date + 'T00:00:00Z')) ||
+          new Date(entry.date + 'T00:00:00Z').toISOString().slice(0,10) !== entry.date)
+        throw new Error('INVALID_SCHEDULE_DATE');
+      if (entry.enabled &&
+          (!/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.start) ||
+           !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.end)))
+        throw new Error('INVALID_SCHEDULE_CLOCK');
       const minutes = entry.breakMinutes;
       if (minutes != null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
         throw new Error('INVALID_BREAK_MINUTES');
@@ -74,8 +87,8 @@ export class D1ScheduleRepository implements ScheduleRepository {
       entry.personId,
       entry.date,
       asInteger(entry.enabled),
-      entry.start,
-      entry.end,
+      entry.enabled ? entry.start : '',
+      entry.enabled ? entry.end : '',
       entry.enabled === false ? null : (entry.breakMinutes ?? null),
       now,
       entry.breakMinutes === undefined ? 0 : 1,
