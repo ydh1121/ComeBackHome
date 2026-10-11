@@ -36,7 +36,12 @@ async function ready(){
   }
   throw Error('phase B worker health timed out '+worker.logs?.slice(-2000));
 }
-const update=async(page,route)=>{await page.goto(origin+route,{waitUntil:'domcontentloaded'});};
+// Allow route-owned same-origin reads to finish before destroying the page.
+// WebKit otherwise reports abandoned in-flight fetches as access-control errors.
+const update=async(page,route)=>{
+  if (page.url().startsWith(origin)) await page.waitForLoadState('networkidle',{timeout:12000});
+  await page.goto(origin+route,{waitUntil:'networkidle'});
+};
 async function enterPerson(page,name,relation){
   await update(page,'/people/new');
   await page.locator('.person-form input').nth(0).fill(name);
@@ -146,7 +151,8 @@ async function browserPass(kind,label,serial){
       label+' OFF must not require clock');
     await page.getByRole('button',{name:'저장',exact:true}).click();
     await page.waitForURL(/\/schedule$/);
-    await page.reload();
+    await page.waitForLoadState('networkidle',{timeout:12000});
+    await page.reload({waitUntil:'networkidle'});
     let off=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
     assert(off?.enabled===false&&off.start===''&&off.end===''&&off.breakMinutes===null,
       label+' existing work -> OFF persisted');
