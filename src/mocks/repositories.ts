@@ -171,10 +171,7 @@ export class MockImportRepository implements ImportRepository {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
         if (changed) { item.resolution = null; item.existing = undefined; }
-        if (personId && item.resolution == null &&
-            batch?.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
-          item.resolution = 'NEW';
-        }
+        // Matching a person never grants review approval; user must reapprove.
       }
     });
   }
