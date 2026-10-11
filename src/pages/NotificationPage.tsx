@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { categorizePushError, PUSH_FAILURE_MESSAGES, type PushFailureReason } from '../features/notifications/pushErrors';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { notificationPermissionView, useNotificationSettings } from '../features/notifications/useNotificationSettings';
@@ -14,6 +14,9 @@ export function NotificationPage() {
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testError, setTestError] = useState<PushFailureReason | null>(null);
   const [connectError, setConnectError] = useState<PushFailureReason | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
+  const [ruleSaving, setRuleSaving] = useState(false);
+  const ruleSaveLock = useRef(false);
 
   if (state.status === 'loading') {
     return <section className="notification-page" data-page="NotificationSetupPage" data-state="LOADING"><div className="notification-message">알림 설정을 불러오는 중</div></section>;
@@ -48,10 +51,22 @@ export function NotificationPage() {
   };
 
   const updateRule = async (key: 'shiftEnd' | 'etaChange' | 'leftWork' | 'homeArrival', value: boolean) => {
-    await services.actions.notifications.updateRules({
-      ...settings.rules,
-      [key]: value,
-    });
+    if (ruleSaveLock.current) return;
+    ruleSaveLock.current = true;
+    setRuleSaving(true);
+    setRuleError(null);
+    try {
+      await services.actions.notifications.updateRules({
+        ...settings.rules,
+        [key]: value,
+      });
+    } catch {
+      // The server remains authoritative; no optimistic toggle is shown.
+      setRuleError('알림 설정을 저장하지 못했습니다. 연결 상태를 확인하고 다시 눌러 주세요.');
+    } finally {
+      ruleSaveLock.current = false;
+      setRuleSaving(false);
+    }
   };
 
   const sendTest = async () => {
@@ -98,10 +113,12 @@ export function NotificationPage() {
         </div>
       ) : null}
 
-      <div className="settings-list">
+      {ruleError ? <div className="notification-test-status error" role="alert">{ruleError}</div> : null}
+      <div className="settings-list" aria-busy={ruleSaving}>
         <button
           type="button"
           className="rule"
+          disabled={ruleSaving}
           aria-pressed={settings.rules.shiftEnd}
           onClick={() => updateRule('shiftEnd', !settings.rules.shiftEnd)}
         >
