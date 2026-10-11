@@ -49,16 +49,26 @@ async function chooseClock(page,kind,hour,minute){
   const field=page.locator('.time-wheel-field').filter({hasText:kind});
   await field.locator('.time-wheel-trigger').click();
   const columns=page.locator('.time-wheel-column');
-  await columns.nth(0).getByRole('button',{name:hour,exact:true}).click();
-  await page.waitForFunction(({kind,hour})=>{
-    const target=[...document.querySelectorAll('.time-wheel-field')].find(x=>x.textContent?.includes(kind));
-    return target?.querySelector('.time-wheel-trigger')?.textContent?.startsWith(hour+':');
-  },{kind,hour},{timeout:12000});
+  const readTrigger=()=>field.locator('.time-wheel-trigger').innerText();
+  const chosenHour=columns.nth(0).getByRole('button',{name:hour,exact:true});
+  await chosenHour.click();
+  const afterHour=await readTrigger();
+  if (!afterHour.startsWith(hour+':')) {
+    await page.waitForTimeout(300);
+    const snapshot=await page.evaluate(()=>({
+      fields:[...document.querySelectorAll('.time-wheel-field')].map(x=>x.textContent),
+      wheel:document.querySelector('.time-range-wheel')?.getAttribute('data-active'),
+      source:document.querySelector('[data-page="ScheduleDayEditPage"]')?.getAttribute('data-state'),
+      activeHours:[...document.querySelectorAll('.time-wheel-column:first-child button.selected')].map(x=>x.textContent),
+    }));
+    throw Error('WHEEL_HOUR_NOT_REFLECTED '+JSON.stringify({kind,hour,minute,afterHour,snapshot}));
+  }
   await columns.nth(1).getByRole('button',{name:minute,exact:true}).click();
-  await page.waitForFunction(({kind,hour,minute})=>{
-    const target=[...document.querySelectorAll('.time-wheel-field')].find(x=>x.textContent?.includes(kind));
-    return target?.querySelector('.time-wheel-trigger')?.textContent===hour+':'+minute;
-  },{kind,hour,minute},{timeout:12000});
+  const afterMinute=await readTrigger();
+  if (afterMinute!==hour+':'+minute) {
+    await page.waitForTimeout(300);
+    throw Error('WHEEL_MINUTE_NOT_REFLECTED '+JSON.stringify({kind,hour,minute,afterMinute}));
+  }
   await page.getByRole('button',{name:'완료',exact:true}).click();
 }
 async function createDay(page,date,{off=false,start='09:30',end='18:30',breakMinutes}={}){
