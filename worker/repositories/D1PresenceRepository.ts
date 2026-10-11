@@ -53,11 +53,11 @@ export class D1PresenceRepository implements PresenceRepository {
     }
     const state = await this.get(input.personId);
     if (!state) throw new Error('Presence event exists without current state.');
-    const job = input.notificationJob
-      ? await this.db.prepare(
-        'SELECT id FROM notification_jobs WHERE dedupe_key = ?1 AND person_id = ?2 LIMIT 1',
-      ).bind(input.notificationJob.dedupeKey, input.personId).first<{ id: string }>()
-      : null;
+    const typeSlug = input.type === 'LEFT_WORK' ? 'left-work' : 'arrived-home';
+    const originalDedupeKey = 'presence:' + typeSlug + ':' + input.personId + ':' + input.eventId;
+    const job = await this.db.prepare(
+      'SELECT id FROM notification_jobs WHERE dedupe_key = ?1 AND person_id = ?2 LIMIT 1',
+    ).bind(originalDedupeKey, input.personId).first<{ id: string }>();
     return { state, duplicate: true, queued: Boolean(job), acceptedAt: receipt.accepted_at };
   }
 

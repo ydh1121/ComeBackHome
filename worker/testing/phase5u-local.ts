@@ -323,6 +323,131 @@ async function probePendingReschedule(env: WorkerEnv): Promise<Response> {
   });
 }
 
+
+/** Local D1 only: failure injection across receipt, state and outbox. */
+async function probePresenceOutboxAtomic(env: WorkerEnv): Promise<Response> {
+  const person = await new D1PersonRepository(env.DB).create({
+    name: 'Atomic presence outbox fixture',
+    relation: 'test-only',
+  });
+  const presence = new D1PresenceRepository(env.DB);
+  const jobs = new D1NotificationJobStore(env.DB);
+  const make = (suffix: string, type: 'LEFT_WORK' | 'ARRIVED_HOME' = 'LEFT_WORK', withJob = true) => {
+    const eventId = 'presence-atomic-outbox-' + suffix + '-' + person.id;
+    const acceptedAt = '2026-10-07T13:00:00.000Z';
+    const slug = type === 'LEFT_WORK' ? 'left-work' : 'arrived-home';
+    const job = {
+      id: crypto.randomUUID(),
+      dedupeKey: 'presence:' + slug + ':' + person.id + ':' + eventId,
+      personId: person.id,
+      type: 'presence-' + slug,
+      scheduledFor: acceptedAt,
+      nextAttemptAt: acceptedAt,
+      payload: { title: 'Fixture', body: suffix, tag: 'fixture-' + suffix, path: '/' },
+    };
+    return {
+      eventId, personId: person.id, type, acceptedAt, workDate: '2026-10-07',
+      ...(withJob ? { notificationJob: job } : {}),
+    };
+  };
+  const receipt = (eventId: string) => env.DB.prepare(
+    'SELECT event_id FROM presence_events WHERE event_id = ?1',
+  ).bind(eventId).first();
+  const outbox = (key: string) => env.DB.prepare(
+    'SELECT id FROM notification_jobs WHERE dedupe_key = ?1',
+  ).bind(key).first();
+
+  const failedInput = make('job-trigger');
+  await env.DB.prepare(
+    "CREATE TRIGGER cbh_phasef_abort_job BEFORE INSERT ON notification_jobs BEGIN SELECT RAISE(ABORT, 'synthetic notification job failure'); END",
+  ).run();
+  let jobInsertFailed = false;
+  try { await presence.record(failedInput); } catch { jobInsertFailed = true; }
+  finally { await env.DB.prepare('DROP TRIGGER IF EXISTS cbh_phasef_abort_job').run(); }
+  const jobFailureRolledBack = (await receipt(failedInput.eventId)) === null
+    && (await presence.get(person.id)) === null
+    && (await outbox(failedInput.notificationJob!.dedupeKey)) === null;
+
+  // UNIQUE violation on the outbox row must also roll back receipt and state.
+  const constraintInput = make('unique-constraint');
+  await jobs.enqueueOnce({ ...constraintInput.notificationJob!, id: crypto.randomUUID() });
+  let constraintFailed = false;
+  try { await presence.record(constraintInput); } catch { constraintFailed = true; }
+  const constraintRolledBack = (await receipt(constraintInput.eventId)) === null
+    && (await presence.get(person.id)) === null;
+
+  const first = make('accepted');
+  const accepted = await presence.record(first);
+  const replay = await presence.record({ ...first, acceptedAt: '2026-10-07T13:05:00.000Z' });
+  const activeCommitted = !accepted.duplicate && accepted.queued
+    && Boolean(await receipt(first.eventId))
+    && Boolean(await outbox(first.notificationJob!.dedupeKey));
+  const stableReplay = replay.duplicate && replay.queued
+    && replay.acceptedAt === first.acceptedAt;
+
+  const stateBefore = await presence.get(person.id);
+  const updateInput = make('state-update');
+  await env.DB.prepare(
+    "CREATE TRIGGER cbh_phasef_abort_state_update BEFORE UPDATE ON presence_state BEGIN SELECT RAISE(ABORT, 'synthetic state update failure'); END",
+  ).run();
+  let stateUpdateFailed = false;
+  try { await presence.record(updateInput); } catch { stateUpdateFailed = true; }
+  finally { await env.DB.prepare('DROP TRIGGER IF EXISTS cbh_phasef_abort_state_update').run(); }
+  const stateUpdateRolledBack = (await receipt(updateInput.eventId)) === null
+    && (await outbox(updateInput.notificationJob!.dedupeKey)) === null
+    && (await presence.get(person.id))?.leftWorkAt === stateBefore?.leftWorkAt;
+
+  const recovered = await presence.record(updateInput);
+  const recoveryAccepted = !recovered.duplicate && recovered.queued;
+  const racing = make('concurrent', 'ARRIVED_HOME');
+  const concurrent = await Promise.allSettled([presence.record(racing), presence.record(racing)]);
+  const raceEvents = await env.DB.prepare(
+    'SELECT event_id FROM presence_events WHERE event_id = ?1',
+  ).bind(racing.eventId).all();
+  const raceJobs = await env.DB.prepare(
+    'SELECT id FROM notification_jobs WHERE dedupe_key = ?1',
+  ).bind(racing.notificationJob!.dedupeKey).all();
+  const concurrentOnce = concurrent.some((entry) => entry.status === 'fulfilled')
+    && raceEvents.results.length === 1 && raceJobs.results.length === 1
+    && (await presence.record(racing)).duplicate;
+
+  let crossPersonBlocked = false;
+  let crossTypeBlocked = false;
+  try { await presence.record({ ...first, personId: 'another-fixture-person' }); }
+  catch (error) { crossPersonBlocked = error instanceof Error && error.message === 'PRESENCE_EVENT_ID_CONFLICT'; }
+  try { await presence.record({ ...first, type: 'ARRIVED_HOME' }); }
+  catch (error) { crossTypeBlocked = error instanceof Error && error.message === 'PRESENCE_EVENT_ID_CONFLICT'; }
+
+  const disabled = make('disabled', 'ARRIVED_HOME', false);
+  const disabledResult = await presence.record(disabled);
+  const disabledStateOnly = !disabledResult.queued && Boolean(await receipt(disabled.eventId))
+    && (await presence.get(person.id))?.arrivedHomeAt === disabled.acceptedAt;
+  // An old event without a job cannot be distinguished from one whose rule was
+  // disabled at ingestion. Never fabricate a retroactive notification.
+  const legacyReplay = await presence.record({
+    ...disabled, notificationJob: make('disabled', 'ARRIVED_HOME').notificationJob,
+  });
+  const legacyGapFailClosed = legacyReplay.duplicate && !legacyReplay.queued;
+
+  return json({
+    syntheticOnly: true,
+    jobInsertFailed,
+    jobFailureRolledBack,
+    constraintFailed,
+    constraintRolledBack,
+    activeCommitted,
+    stableReplay,
+    stateUpdateFailed,
+    stateUpdateRolledBack,
+    recoveryAccepted,
+    concurrentOnce,
+    crossPersonBlocked,
+    crossTypeBlocked,
+    disabledStateOnly,
+    legacyGapFailClosed,
+  });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -342,6 +467,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/pending-reschedule-probe') {
       return probePendingReschedule(env);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/presence-outbox-atomic-probe') {
+      return probePresenceOutboxAtomic(env);
     }
 
     if (request.method === 'POST' && url.pathname === '/presence-atomic-probe') {

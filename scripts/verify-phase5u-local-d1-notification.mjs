@@ -263,6 +263,21 @@ try {
     'D1 presence state changed during invalid replay');
   console.log('CBH_NONIMAGE_PHASE_F_PRESENCE_ATOMIC_D1_PASS=' + JSON.stringify(presence));
 
+  const presenceOutbox = await postJson('/presence-outbox-atomic-probe', {});
+  for (const check of [
+    'jobInsertFailed', 'jobFailureRolledBack',
+    'constraintFailed', 'constraintRolledBack',
+    'activeCommitted', 'stableReplay',
+    'stateUpdateFailed', 'stateUpdateRolledBack',
+    'recoveryAccepted', 'concurrentOnce',
+    'crossPersonBlocked', 'crossTypeBlocked',
+    'disabledStateOnly', 'legacyGapFailClosed',
+  ]) {
+    assert(presenceOutbox.syntheticOnly && presenceOutbox[check] === true,
+      'Atomic presence/outbox D1 failure case: ' + check);
+  }
+  console.log('PHASE_F_PRESENCE_ATOMICITY_PASS=' + JSON.stringify(presenceOutbox));
+
   const rescheduled = await postJson('/pending-reschedule-probe', {});
   assert(rescheduled.syntheticOnly && rescheduled.originalIdStable,
     'schedule edit must preserve existing notification job identity');
