@@ -8,7 +8,13 @@ export interface TransitBusLeg { stopNames: string[]; routes: BusRouteOption[]; 
 export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; accessMinutes?: number; egressMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
 export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearchResult[]>; }
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]>; }
+export type TransitLookupStatus = 'SUCCESS_WITH_RESULTS' | 'SUCCESS_EMPTY' |
+  'PARTIAL_PROVIDER_FAILURE' | 'PROVIDER_UNAVAILABLE' | 'AUTH_ERROR' |
+  'QUOTA_EXCEEDED' | 'INVALID_COORDINATE' | 'NETWORK_FAILURE';
+export interface TransitLookupResult { results: TransitSearchResult[]; status: TransitLookupStatus; }
 export interface TransitAccessSearchProvider {
+  searchDetailed?(query: string, near: Coordinate): Promise<TransitLookupResult>;
+  nearbyDetailed?(near: Coordinate): Promise<TransitLookupResult>;
   search(query: string, near: Coordinate): Promise<TransitSearchResult[]>;
   nearby(near: Coordinate): Promise<TransitSearchResult[]>;
   resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult>;
