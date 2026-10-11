@@ -37,9 +37,19 @@ export function TimeRangeWheelPicker({
 }: Props) {
   const [active, setActive] = useState<TimeKind | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Wheel hour/minute clicks may run before the parent has rendered the first
+  // choice, especially when coming back from OFF (empty clock).
+  const pendingClock = useRef<{ kind: TimeKind; value: string } | null>(null);
   const value = active === 'start' ? start : active === 'end' ? end : null;
   const fallbackHour = active === 'end' ? 18 : 9;
   const parsed = parseTime(value, fallbackHour);
+  useEffect(() => {
+    if (!active || pendingClock.current?.kind !== active) {
+      pendingClock.current = null;
+    } else if (pendingClock.current.value === value) {
+      pendingClock.current = null;
+    }
+  }, [active, value]);
 
   const minutes = useMemo(() => {
     const step = Math.max(1, Math.min(30, Math.round(minuteStep)));
@@ -60,9 +70,14 @@ export function TimeRangeWheelPicker({
 
   const setPart = (part: 'hour' | 'minute', next: number) => {
     if (!active) return;
-    const nextHour = part === 'hour' ? next : parsed.hour;
-    const nextMinute = part === 'minute' ? next : parsed.minute;
-    void onChange(active, formatTime(nextHour, nextMinute));
+    const latest = pendingClock.current?.kind === active
+      ? parseTime(pendingClock.current.value, fallbackHour)
+      : parsed;
+    const nextHour = part === 'hour' ? next : latest.hour;
+    const nextMinute = part === 'minute' ? next : latest.minute;
+    const updated = formatTime(nextHour, nextMinute);
+    pendingClock.current = { kind: active, value: updated };
+    void onChange(active, updated);
   };
 
   const trigger = (kind: TimeKind, label: string, current: string | null) => (
