@@ -6,7 +6,7 @@ export interface PlaceRepository { get(personId: EntityId, kind: PlaceKind): Pro
 export type RouteSearchSource = 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE';
 export type RouteProviderErrorCategory = 'NONE' | 'AUTH' | 'HTTP' | 'NO_RESULT' | 'INVALID_COORDINATE' | 'QUOTA' | 'UNKNOWN';
 export interface RouteSearchDiagnostics {
-  status: 'OK' | 'NO_RESULT' | 'PROVIDER_ERROR' | 'MISSING_PLACE' | 'INVALID_COORDINATE' | 'RUNTIME_DISABLED' | 'QUOTA_EXCEEDED';
+  status: 'OK' | 'PARTIAL_PROVIDER_FAILURE' | 'NO_RESULT' | 'PROVIDER_ERROR' | 'MISSING_PLACE' | 'INVALID_COORDINATE' | 'RUNTIME_DISABLED' | 'QUOTA_EXCEEDED';
   originPlaceCoordinatePresent: boolean;
   destinationPlaceCoordinatePresent: boolean;
   selectedOriginCount: number;
