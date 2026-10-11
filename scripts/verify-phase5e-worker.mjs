@@ -46,7 +46,7 @@ for (const [name, source, required] of [
   ['commute', commute, ['class D1CommuteRepository', 'transit_access_points', 'saved_commute_routes']],
   ['notification settings', notifications, ['class D1NotificationSettingsStore', 'notification_settings']],
   ['subscription', subscriptions, ['class D1SubscriptionStore', 'push_subscriptions', 'ON CONFLICT(endpoint)']],
-  ['jobs', jobs, ['class D1NotificationJobStore', 'ON CONFLICT(dedupe_key) DO NOTHING', "status = 'processing'", 'RETURNING']],
+  ['jobs', jobs, ['class D1NotificationJobStore', 'ON CONFLICT(dedupe_key) DO UPDATE SET', "WHERE notification_jobs.status = 'pending'", "status = 'processing'", 'RETURNING']],
 ]) {
   for (const text of required) if (!source.includes(text)) failures.push(name + ' adapter missing ' + text);
 }
