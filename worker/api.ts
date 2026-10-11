@@ -669,17 +669,19 @@ export async function handleApiRequest(
         const personId = asString(item.personId, 'schedule.personId');
         const date = asString(item.date, 'schedule.date');
         const id = asString(item.id, 'schedule.id');
-        const start = asString(item.start, 'schedule.start');
-        const end = asString(item.end, 'schedule.end');
+        const enabled = asBoolean(item.enabled, 'schedule.enabled');
+        // A reviewed OFF has no work clocks. Repeat writes must accept its
+        // canonical blank storage representation rather than invent '00:00'.
+        const start = enabled ? asString(item.start, 'schedule.start') : '';
+        const end = enabled ? asString(item.end, 'schedule.end') : '';
         if (!knownIds.has(personId)) throw new Error('Import references unknown person.');
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Import date is invalid.');
-        if (![start,end].every(clock => /^([01]\d|2[0-3]):[0-5]\d$/.test(clock))) {
+        if (enabled && ![start,end].every(clock => /^([01]\d|2[0-3]):[0-5]\d$/.test(clock))) {
           throw new Error('Import schedule clock is invalid.');
         }
         const key = personId+'|'+date;
         if (unique.has(key)) throw new Error('Duplicate person/date in import batch.');
         unique.add(key);
-        const enabled = asBoolean(item.enabled, 'schedule.enabled');
         const breakMinutes = optionalScheduleBreakMinutes(item);
         return {
           id,personId,date,enabled,start,end,
