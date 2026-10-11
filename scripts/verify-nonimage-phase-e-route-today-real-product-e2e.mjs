@@ -153,14 +153,14 @@ async function browserPass(engine,label,suffix){
     const previousQueries=stats.queries;
     await open('/');
     const today=page.locator('[data-page="TodayPage"]');
-    await today.locator('[data-selected-route-id="fixture-route-200"]').waitFor();
+    await page.locator('[data-page="TodayPage"][data-selected-route-id="fixture-route-200"]').waitFor();
     assert((await today.innerText()).includes('합성 대체 지하철'),
       label+' Today did not render actual D1-selected alternative');
     assert((await today.getAttribute('data-eta-status'))!=='UNKNOWN',
       label+' valid selected route should have ETA');
     assert(stats.queries>=previousQueries,label+' provider calls accounting invalid');
     await page.reload({waitUntil:'domcontentloaded'});
-    await today.locator('[data-selected-route-id="fixture-route-200"]').waitFor();
+    await page.locator('[data-page="TodayPage"][data-selected-route-id="fixture-route-200"]').waitFor();
 
     // Alter the preferred candidate and verify exact Today steps replace old.
     await open(uri(a.id)+'/commute');
@@ -171,7 +171,7 @@ async function browserPass(engine,label,suffix){
     assert((await api(uri(a.id)+'/commute?kind=origin')).body.preferredRouteCandidateId==='fixture-route-100',
       label+' changed preference not saved');
     await open('/');
-    await today.locator('[data-selected-route-id="fixture-route-100"]').waitFor();
+    await page.locator('[data-page="TodayPage"][data-selected-route-id="fixture-route-100"]').waitFor();
     assert((await today.innerText()).includes('합성 정류장 A') &&
       !(await today.innerText()).includes('합성 대체 지하철'),
       label+' Today steps differ from selected route');
