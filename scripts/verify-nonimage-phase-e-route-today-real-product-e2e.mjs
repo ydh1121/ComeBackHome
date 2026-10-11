@@ -217,7 +217,9 @@ async function browserPass(engine,label,suffix){
     assert(readback.preferredRouteCandidateId===null,
       label+' saved route configuration update must revoke stale preferred candidate');
     stats.forcedFail=true;
-    await open(uri(a.id)+'/commute');
+    // A full reload constructs a new runtime so a successful 60-second
+    // in-memory discovery cache cannot mask the synthetic quota denial.
+    await page.goto(base+uri(a.id)+'/commute',{waitUntil:'domcontentloaded'});
     await page.locator('[data-route-search-status="QUOTA_EXCEEDED"]').waitFor();
     assert((await page.getByText(/한도가 초과/).count())>0,
       label+' quota exceeded must not be rendered as an empty route set');
