@@ -114,11 +114,20 @@ async function testEngine(browserType,label,firstName,secondName,monday){
         await row.locator('.review-choice-list button').first().click();
       }
     }
+    // All asynchronous row approvals must settle BEFORE editing/re-approving.
+    // Otherwise the global Save may still be disabled by a different row and
+    // a quick second click may toggle the first shift NEW back to SKIP.
+    await page.waitForFunction(() => {
+      const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
+      return save instanceof HTMLButtonElement && save.disabled === false;
+    },null,{timeout:15_000});
     // Edit an approved shift -> approval must be revoked -> reapprove.
     const firstShift=rows.nth(0);
     const timeSelectors=firstShift.locator('.review-time-editor');
     assert((await timeSelectors.count())===1,label+' weekly time editor missing');
     await firstShift.locator('input[aria-label="쉬는시간 분 단위 수정"]').fill('45');
+    await firstShift.locator('.review-choice-list button').last()
+      .locator('xpath=self::*[@aria-pressed="false"]').waitFor();
     await page.waitForFunction(() => {
       const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
       return save instanceof HTMLButtonElement && save.disabled === true;
@@ -126,6 +135,7 @@ async function testEngine(browserType,label,firstName,secondName,monday){
     assert(await page.getByRole('button',{name:'저장',exact:true}).isDisabled(),
       label+' editing approved break minutes must invalidate prior approval');
     await firstShift.locator('.review-choice-list button').last().click();
+    await firstShift.locator('.review-choice-list button[aria-pressed="true"]').last().waitFor();
     // Store mutation emits a version signal, then useImportWorkflow asynchronously
     // reloads the draft; do not evaluate button state in the same event tick.
     await page.waitForFunction(() => {
