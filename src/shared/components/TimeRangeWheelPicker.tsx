@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './wheel-time-picker.css';
 
 type TimeKind = 'start' | 'end';
@@ -59,13 +59,16 @@ export function TimeRangeWheelPicker({
     return [...values].sort((left, right) => left - right);
   }, [minuteStep, value, parsed.minute]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active || !panelRef.current) return;
-    requestAnimationFrame(() => {
-      panelRef.current?.querySelectorAll<HTMLElement>('[data-wheel-selected="true"]').forEach((node) => {
-        node.scrollIntoView({ block: 'center', inline: 'nearest' });
-      });
-    });
+    for (const selected of panelRef.current.querySelectorAll<HTMLElement>('[data-wheel-selected="true"]')) {
+      const scroller = selected.closest<HTMLElement>('.time-wheel-scroll');
+      if (!scroller) continue;
+      const itemRect = selected.getBoundingClientRect();
+      const scrollRect = scroller.getBoundingClientRect();
+      scroller.scrollTop += itemRect.top - scrollRect.top -
+        (scroller.clientHeight - itemRect.height) / 2;
+    }
   }, [active]);
 
   const setPart = (part: 'hour' | 'minute', next: number) => {
