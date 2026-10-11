@@ -1,6 +1,7 @@
 import type { PresenceRepository } from '../../src/application/contracts/repositories';
 import type { PresenceState } from '../../src/domain/models';
 import type { D1DatabaseLike } from '../runtime-types';
+import { batchOrThrow } from './d1-helpers';
 
 interface PresenceStateRow {
   person_id: string;
@@ -40,26 +41,17 @@ export class D1PresenceRepository implements PresenceRepository {
     workDate: string;
   }): Promise<{ state: PresenceState; duplicate: boolean }> {
     const existingEvent = await this.db.prepare(
-      'SELECT event_id FROM presence_events WHERE event_id = ?1 LIMIT 1',
-    ).bind(input.eventId).first<{ event_id: string }>();
+      'SELECT event_id, person_id, event_type FROM presence_events WHERE event_id = ?1 LIMIT 1',
+    ).bind(input.eventId).first<{ event_id: string; person_id: string; event_type: string }>();
 
     if (existingEvent) {
+      if (existingEvent.person_id !== input.personId || existingEvent.event_type !== input.type) {
+        throw new Error('PRESENCE_EVENT_ID_CONFLICT');
+      }
       const state = await this.get(input.personId);
       if (!state) throw new Error('Presence event exists without current state.');
       return { state, duplicate: true };
     }
-
-    await this.db.prepare(
-      `INSERT INTO presence_events (
-        event_id, person_id, event_type, work_date, accepted_at, created_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
-    ).bind(
-      input.eventId,
-      input.personId,
-      input.type,
-      input.workDate,
-      input.acceptedAt,
-    ).run();
 
     const current = await this.get(input.personId);
     const sameWorkDate = current?.workDate === input.workDate;
@@ -74,22 +66,39 @@ export class D1PresenceRepository implements PresenceRepository {
         ? input.acceptedAt
         : null;
 
-    await this.db.prepare(
-      `INSERT INTO presence_state (
-        person_id, work_date, left_work_at, arrived_home_at, updated_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5)
-      ON CONFLICT(person_id) DO UPDATE SET
-        work_date = excluded.work_date,
-        left_work_at = excluded.left_work_at,
-        arrived_home_at = excluded.arrived_home_at,
-        updated_at = excluded.updated_at`,
-    ).bind(
-      input.personId,
-      input.workDate,
-      leftWorkAt,
-      arrivedHomeAt,
-      input.acceptedAt,
-    ).run();
+    // Both the event receipt and the materialized current presence state
+    // must commit together. Previously a failure between two .run() calls
+    // left an event that forever suppressed a legitimate retry.
+    try {
+      await batchOrThrow(this.db, [
+        this.db.prepare(
+          `INSERT INTO presence_events (
+            event_id, person_id, event_type, work_date, accepted_at, created_at
+          ) VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
+        ).bind(input.eventId, input.personId, input.type, input.workDate, input.acceptedAt),
+        this.db.prepare(
+          `INSERT INTO presence_state (
+            person_id, work_date, left_work_at, arrived_home_at, updated_at
+          ) VALUES (?1, ?2, ?3, ?4, ?5)
+          ON CONFLICT(person_id) DO UPDATE SET
+            work_date = excluded.work_date,
+            left_work_at = excluded.left_work_at,
+            arrived_home_at = excluded.arrived_home_at,
+            updated_at = excluded.updated_at`,
+        ).bind(input.personId, input.workDate, leftWorkAt, arrivedHomeAt, input.acceptedAt),
+      ]);
+    } catch (error) {
+      // A concurrent replay can lose the unique-event race. Only return
+      // duplicate when the durable receipt matches this person and type.
+      const concurrent = await this.db.prepare(
+        'SELECT person_id, event_type FROM presence_events WHERE event_id = ?1',
+      ).bind(input.eventId).first<{person_id:string;event_type:string}>();
+      if (concurrent?.person_id === input.personId && concurrent.event_type === input.type) {
+        const state = await this.get(input.personId);
+        if (state) return { state, duplicate: true };
+      }
+      throw error;
+    }
 
     const state = await this.get(input.personId);
     if (!state) throw new Error('Presence state was not stored.');
