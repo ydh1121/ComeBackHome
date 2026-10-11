@@ -54,8 +54,8 @@ export function ScheduleDayEditPage() {
   if (schedule.status === 'loading') return <section className="schedule-page"><div className="schedule-message">일정을 불러오는 중</div></section>;
   if (schedule.status === 'error') return <section className="schedule-page"><div className="schedule-message">일정을 불러오지 못했습니다.</div></section>;
 
-  const validClock = (value: string) => /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
-  const validBreak = breakDraft === '' || (/^\\d{1,3}$/.test(breakDraft) && Number(breakDraft) <= 720);
+  const validClock = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const validBreak = breakDraft === '' || (/^\d{1,3}$/.test(breakDraft) && Number(breakDraft) <= 720);
   const canSave = isIsoDate(selectedDate) && (!enabled || (validClock(start) && validClock(end))) &&
     validBreak && schedule.status === 'ready' && Boolean(schedule.personId);
   const save = async () => {
