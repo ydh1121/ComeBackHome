@@ -247,6 +247,20 @@ try {
     'reclaimed D1 job must preserve durable delivery status and two attempts');
 
   console.log('CBH_NONIMAGE_PHASE_F_D1_PROCESSING_LEASE_PASS=' + JSON.stringify(lease));
+
+  const presence = await postJson('/presence-atomic-probe', {});
+  assert(presence.syntheticOnly === true && presence.failed === true,
+    'D1 presence write-failure injection must execute');
+  assert(presence.receiptRolledBack === true && presence.stateRolledBack === true,
+    'event and current presence state MUST both roll back when state write fails');
+  assert(presence.firstAccepted === true && presence.replayIgnored === true,
+    'retried presence event must commit once after a failed transaction');
+  assert(presence.crossPersonIdCollisionBlocked === true,
+    'same event ID must never be claimed by another employee');
+  assert(presence.persistedLeftWorkAt === '2026-10-07T13:00:00.000Z',
+    'D1 presence state changed during invalid replay');
+  console.log('CBH_NONIMAGE_PHASE_F_PRESENCE_ATOMIC_D1_PASS=' + JSON.stringify(presence));
+
   console.log(JSON.stringify({
     result: 'PASS',
     localD1: true,
