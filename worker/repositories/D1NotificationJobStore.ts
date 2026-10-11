@@ -65,7 +65,14 @@ export class D1NotificationJobStore implements NotificationJobStore {
         id, dedupe_key, person_id, job_type, scheduled_for, next_attempt_at,
         status, attempts, payload_json, sent_at, last_error, created_at, updated_at
       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', 0, ?7, NULL, NULL, ?8, ?8)
-      ON CONFLICT(dedupe_key) DO NOTHING`,
+      ON CONFLICT(dedupe_key) DO UPDATE SET
+        scheduled_for = excluded.scheduled_for,
+        next_attempt_at = excluded.next_attempt_at,
+        payload_json = excluded.payload_json,
+        updated_at = excluded.updated_at
+      WHERE notification_jobs.status = 'pending'
+        AND (notification_jobs.scheduled_for <> excluded.scheduled_for
+             OR notification_jobs.payload_json <> excluded.payload_json)`,
     ).bind(
       job.id,
       job.dedupeKey,
