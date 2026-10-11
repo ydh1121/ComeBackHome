@@ -201,8 +201,8 @@ async function execute(engine,label,tag){
     assert(await page.locator('.transit-row').count()===4,label+' clear search returns nearby list');
     const pBefore=(await overview(a)).accessPoints;
     let failedWrite=0;
-    await page.route('**/api/people/'+a+'/commute/access/origin',async r=>{
-      if(r.request().method()==='PUT'){failedWrite++;return r.fulfill({status:503,
+    await page.route('**/api/commute/access/*',async r=>{
+      if(r.request().method()==='PATCH'){failedWrite++;return r.fulfill({status:503,
         contentType:'application/json',body:JSON.stringify({error:'Synthetic transit write outage'})})}
       return r.continue();
     });
@@ -211,7 +211,7 @@ async function execute(engine,label,tag){
     assert(failedWrite===1,label+' failure injection missed actual access D1 write');
     assert(JSON.stringify((await overview(a)).accessPoints)===JSON.stringify(pBefore),
       label+' failed access write changed persisted D1');
-    await page.unroute('**/api/people/'+a+'/commute/access/origin');
+    await page.unroute('**/api/commute/access/*');
     await clickSelect(page,stops[1].name);
     assert((await overview(a)).accessPoints.filter(x=>x.selected).length===4,
       label+' retry must succeed without duplicate');
