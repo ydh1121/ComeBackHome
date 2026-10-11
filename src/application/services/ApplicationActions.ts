@@ -51,7 +51,7 @@ export class PersonSelectionService implements PersonSelectionActions {
 }
 
 function validClock(value: string): boolean {
-  return /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function validateScheduleInput(date: string, enabled: boolean, start: string, end: string, breakMinutes?: number | null): void {
