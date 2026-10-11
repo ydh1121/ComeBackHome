@@ -236,6 +236,9 @@ export class HttpNotificationRepository implements NotificationRepository {
       leftWorkEnabled: rules.leftWork,
       homeArrivalEnabled: rules.homeArrival,
     });
+    // A successful server write must invalidate the settings view. Otherwise
+    // the next toggle is computed from stale rules and undoes the first one.
+    this.onLocalChange();
   }
 
   async setPermission(permission: NotificationSettings['permission']): Promise<void> {
