@@ -261,6 +261,15 @@ try {
     'D1 presence state changed during invalid replay');
   console.log('CBH_NONIMAGE_PHASE_F_PRESENCE_ATOMIC_D1_PASS=' + JSON.stringify(presence));
 
+  const rescheduled = await postJson('/pending-reschedule-probe', {});
+  assert(rescheduled.syntheticOnly && rescheduled.originalIdStable,
+    'schedule edit must preserve existing notification job identity');
+  assert(rescheduled.pendingTimeUpdated && rescheduled.pendingPayloadUpdated,
+    'editing a pending shift-end must update its durable delivery time and payload');
+  assert(rescheduled.retryNotReset && rescheduled.sentNotReset,
+    'planner reruns must not reset retry backoff or sent completion');
+  console.log('CBH_NONIMAGE_PHASE_F_PENDING_RESCHEDULE_D1_PASS=' + JSON.stringify(rescheduled));
+
   console.log(JSON.stringify({
     result: 'PASS',
     localD1: true,
