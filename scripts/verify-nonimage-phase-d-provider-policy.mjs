@@ -18,7 +18,7 @@ try{
   const out=join(dir,'api.mjs');
   await build({entryPoints:[resolve(root,'worker/api.ts')],bundle:true,
     platform:'node',format:'esm',target:'es2022',outfile:out,
-    packages:'external',logLevel:'silent'});
+    packages:'bundle',logLevel:'silent'});
   const {handleApiRequest}=await import(pathToFileURL(out).href);
   const invoke=async(path,runtime)=>{
     const response=await handleApiRequest(new Request('http://fixture.invalid/api/providers/'+path),env,runtime);
