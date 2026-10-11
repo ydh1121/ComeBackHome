@@ -159,8 +159,11 @@ async function browserPass(kind,label,serial){
     assert((await api('/people/'+a+'/schedules/2100-01-03')).body.schedule===null,
       label+' A must not receive B save');
     await update(page,'/schedule/edit');
-    await page.locator('input[type=date]').first().fill('2100-01-04');
-    await page.locator('input[type=date]').last().fill('2100-01-11');
+    await page.locator('.range-accordion').click();
+    await page.getByRole('button',{name:'직접 입력'}).click();
+    await page.locator('.range-direct-v13 input').first().fill('2100-01-04');
+    await page.locator('.range-direct-v13 input').last().fill('2100-01-11');
+    await page.locator('.range-accordion').click();
     await page.getByRole('button',{name:'화',exact:true}).click();
     await chooseClock(page,'출근','08','00');
     await chooseClock(page,'퇴근','17','00');
