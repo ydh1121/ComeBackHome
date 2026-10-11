@@ -186,7 +186,16 @@ async function browserPass(kind,label,serial){
     await chooseClock(page,'출근','08','00');
     await chooseClock(page,'퇴근','17','00');
     await page.getByRole('button',{name:'적용',exact:true}).click();
-    await page.waitForURL(/\/schedule$/);
+    await page.waitForURL(/\/schedule$/,{timeout:8000}).catch(async()=>{
+      throw Error('BULK_UI_SAVE_DID_NOT_NAVIGATE '+JSON.stringify({
+        browser:label,route:page.url(),
+        alerts:await page.locator('[role="alert"]').allTextContents(),
+        range:await page.locator('.range-direct-v13 input').allInputValues(),
+        status:await page.locator('[data-page="ScheduleBulkEditPage"]').getAttribute('data-state'),
+        selectedEmployee:b,
+        before:await api('/people/'+b+'/schedules'),
+      }));
+    });
     const bulk=(await api('/people/'+b+'/schedules')).body.schedules;
     assert(bulk.some(x=>x.date==='2100-01-05'&&x.start==='08:00')&&
       !bulk.some(x=>x.date==='2100-01-06'),label+' weekday range persisted only matching day');
