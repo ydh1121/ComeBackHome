@@ -51,7 +51,7 @@ function BulkForm({ entries, personId, onApply }: BulkFormProps) {
   const form = useFormRuntimeState();
   const days = isIsoDate(from) && isIsoDate(to)
     ? Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000) + 1 : 0;
-  const validClock = (value: string) => /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+  const validClock = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
   const canApply = Boolean(personId) && days >= 1 && days <= 366 &&
     validClock(start) && validClock(end);
 
