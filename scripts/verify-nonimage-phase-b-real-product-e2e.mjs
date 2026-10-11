@@ -39,8 +39,20 @@ async function ready(){
 // Allow route-owned same-origin reads to finish before destroying the page.
 // WebKit otherwise reports abandoned in-flight fetches as access-control errors.
 const update=async(page,route)=>{
-  if (page.url().startsWith(origin)) await page.waitForLoadState('networkidle',{timeout:12000});
-  await page.goto(origin+route,{waitUntil:'networkidle'});
+  if (!page.url().startsWith(origin)) {
+    await page.goto(origin+route,{waitUntil:'networkidle'});
+    return;
+  }
+  // Navigate within the real React Router document; force-reloading every
+  // screen discards in-flight background GETs and creates false WebKit errors.
+  await page.evaluate(nextRoute => {
+    window.history.pushState(null,'',nextRoute);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  },route);
+  await page.waitForFunction(nextRoute =>
+    location.pathname === nextRoute &&
+    document.querySelector('[data-route]')?.getAttribute('data-route') === nextRoute,
+    route,{timeout:15000});
 };
 async function enterPerson(page,name,relation){
   await update(page,'/people/new');
