@@ -202,6 +202,8 @@ jobs:
           npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
       - name: Notification settings retry and D1 reload Chromium WebKit
         run: node scripts/verify-nonimage-phase-f-notification-settings-product-e2e.mjs
+      - name: Real workerd encrypted Web Push and signed VAPID request (no outbound)
+        run: npm run verify:push-workerd-crypto
       - name: Abandoned outbox job recovery and notification scheduler real D1
         run: node scripts/verify-phase5u-local-d1-notification.mjs
 
