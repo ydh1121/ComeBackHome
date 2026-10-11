@@ -69,11 +69,11 @@ export class D1PresenceRepository implements PresenceRepository {
     workDate: string;
     notificationJob?: PresenceNotificationJobDraft;
   }): Promise<{ state: PresenceState; duplicate: boolean; queued: boolean; acceptedAt: string }> {
+    const existing = await this.findReceipt(input.eventId);
+    if (existing) return this.confirmedDuplicate(existing, input);
     if (input.notificationJob && input.notificationJob.personId !== input.personId) {
       throw new Error('PRESENCE_NOTIFICATION_PERSON_CONFLICT');
     }
-    const existing = await this.findReceipt(input.eventId);
-    if (existing) return this.confirmedDuplicate(existing, input);
 
     const current = await this.get(input.personId);
     const sameWorkDate = current?.workDate === input.workDate;
