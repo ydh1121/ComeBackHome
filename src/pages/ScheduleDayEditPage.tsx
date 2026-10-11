@@ -31,28 +31,28 @@ export function ScheduleDayEditPage() {
   const [end, setEnd] = useState('');
   const [breakDraft, setBreakDraft] = useState('');
   const [breakEdited, setBreakEdited] = useState(false);
+  const [hydratedKey, setHydratedKey] = useState('');
   const form = useFormRuntimeState();
 
+  // An edit screen is interactive only after the selected person's record
+  // has been loaded into controlled inputs. Without this gate a fast OFF
+  // toggle races the effect that hydrates enabled/start/end from D1.
+  const sourcePersonId = schedule.status === 'ready' ? schedule.personId : null;
+  const sourceKey = sourcePersonId + '|' + (creating ? 'new' : selectedDate) +
+    '|' + (creating ? '' : entry?.id ?? 'none');
   useEffect(() => {
-    if (!entry) {
-      if (creating) {
-        setEnabled(true);
-        setStart('');
-        setEnd('');
-        setBreakDraft('');
-        setBreakEdited(false);
-      }
-      return;
-    }
-    setEnabled(entry.enabled);
-    setStart(entry.start);
-    setEnd(entry.end);
-    setBreakDraft(entry.breakMinutes == null ? '' : String(entry.breakMinutes));
+    if (schedule.status !== 'ready') return;
+    setEnabled(entry?.enabled ?? true);
+    setStart(entry?.start ?? '');
+    setEnd(entry?.end ?? '');
+    setBreakDraft(entry?.breakMinutes == null ? '' : String(entry.breakMinutes));
     setBreakEdited(false);
-  }, [entry?.id, selectedDate, schedule.status === 'ready' ? schedule.personId : null, creating]);
+    setHydratedKey(sourceKey);
+  }, [sourceKey, schedule.status]);
 
   if (schedule.status === 'loading') return <section className="schedule-page"><div className="schedule-message">일정을 불러오는 중</div></section>;
   if (schedule.status === 'error') return <section className="schedule-page"><div className="schedule-message">일정을 불러오지 못했습니다.</div></section>;
+  if (hydratedKey !== sourceKey) return <section className="schedule-page" data-state="HYDRATING"><div className="schedule-message">일정 입력값을 준비하는 중</div></section>;
 
   const validClock = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
   const validBreak = breakDraft === '' || (/^\d{1,3}$/.test(breakDraft) && Number(breakDraft) <= 720);
