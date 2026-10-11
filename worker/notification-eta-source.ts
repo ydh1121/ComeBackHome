@@ -98,19 +98,19 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
     const actualDeparture = currentPresence?.leftWorkAt
       ? Date.parse(currentPresence.leftWorkAt)
       : Number.NaN;
+    // Scheduled notifications must share Today's actual-departure rule.
+    // An early LEFT_WORK is a real event, not a future scheduled departure.
     const departureMs = Number.isFinite(actualDeparture)
-      ? Math.max(shiftEndMs, actualDeparture)
+      ? actualDeparture
       : shiftEndMs;
 
-    const [originAccessPoints, savedRoutes] = await Promise.all([
-      this.dependencies.commute.listAccessPoints(personId, 'origin'),
-      this.dependencies.commute.listSavedRoutes(personId),
-    ]);
-    const activeSavedRoute =
-      savedRoutes.find((candidate) => candidate.active) ?? savedRoutes[0] ?? null;
-    const selectedAccess = activeSavedRoute?.originAccessPointId
-      ? originAccessPoints.find((point) => point.id === activeSavedRoute.originAccessPointId)
-      : originAccessPoints.find((point) => point.selected);
+    const originAccessPoints =
+      await this.dependencies.commute.listAccessPoints(personId, 'origin');
+    // Use only the verified access belonging to the ETA-selected provider
+    // route. The first configured/selected stop may be a different bus line.
+    const selectedAccess = route.realtimeOriginAccessPointId
+      ? originAccessPoints.find(point => point.id === route.realtimeOriginAccessPointId)
+      : undefined;
 
     let arrivals: Arrival[] = [];
     if (departureMs <= now.getTime()) {
