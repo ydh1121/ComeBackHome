@@ -54,6 +54,8 @@ export async function loadKakaoClientKey(): Promise<string | null> {
   return clientConfigPromise;
 }
 
+export function resetKakaoMapsClientKeyCache(): void { clientConfigPromise = null; }
+
 export function loadKakaoMapsSdk(appKey: string): Promise<any> {
   if (window.kakao?.maps) {
     return new Promise((resolve) => window.kakao.maps.load(() => resolve(window.kakao)));
