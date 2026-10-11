@@ -49,9 +49,18 @@ export interface ImportRepository { getCurrentBatch(): Promise<ImportBatch | nul
 export interface NotificationRepository { getSettings(): Promise<NotificationSettings>; setRules(rules: NotificationRules): Promise<void>; setPermission(permission: NotificationSettings['permission']): Promise<void>; setSubscription(subscription: WebPushSubscriptionRecord | null): Promise<void>; }
 export interface TodayRepository { get(personId: EntityId): Promise<TodaySnapshot | null>; }
 
+export interface PresenceNotificationJobDraft {
+  id: string;
+  dedupeKey: string;
+  personId: string;
+  type: string;
+  scheduledFor: string;
+  nextAttemptAt: string;
+  payload: { title: string; body: string; tag: string; path: string };
+}
 export interface PresenceRepository {
   get(personId: EntityId): Promise<PresenceState | null>;
-  record(input: { eventId: string; personId: EntityId; type: 'LEFT_WORK' | 'ARRIVED_HOME'; acceptedAt: string; workDate: ISODate }): Promise<{ state: PresenceState; duplicate: boolean }>;
+  record(input: { eventId: string; personId: EntityId; type: 'LEFT_WORK' | 'ARRIVED_HOME'; acceptedAt: string; workDate: ISODate; notificationJob?: PresenceNotificationJobDraft }): Promise<{ state: PresenceState; duplicate: boolean; queued?: boolean; acceptedAt?: string }>;
 }
 
 export interface ApprovedWorkbookImportReceipt {

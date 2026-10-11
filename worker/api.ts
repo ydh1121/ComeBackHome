@@ -639,7 +639,6 @@ export async function handleApiRequest(
       const type: PresenceEventType = rawType;
       const event = await enqueuePresenceEvent(
         {
-          jobs: new D1NotificationJobStore(env.DB),
           people: new D1PersonRepository(env.DB),
           schedules: new D1ScheduleRepository(env.DB),
           settings: new D1NotificationSettingsStore(env.DB),
