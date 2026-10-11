@@ -127,11 +127,14 @@ function providerErrorCategory(error: unknown): RouteProviderErrorCategory {
 type RouteTarget = {
   coordinate: { x: number; y: number };
   source: RouteSearchSource;
+  accessPointId?: EntityId;
 };
 type FoundRoute = {
   result: TransitRouteResult;
   originSource: RouteSearchSource;
   destinationSource: RouteSearchSource;
+  originAccessPointId?: EntityId;
+  destinationAccessPointId?: EntityId;
 };
 
 function accessPriority(origin: RouteSearchSource, destination: RouteSearchSource): number {
@@ -290,7 +293,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
 
     const toTargets = (points: TransitAccessPoint[], source: RouteSearchSource): RouteTarget[] =>
       points.filter((point) => validRouteCoordinate(point.coordinate))
-        .map((point) => ({ coordinate: point.coordinate!, source }));
+        .map((point) => ({ coordinate: point.coordinate!, source, accessPointId: point.id }));
     const originRouteTargets = toTargets(routeOrigin, 'ROUTE_ACCESS');
     const destinationRouteTargets = toTargets(routeDestination, 'ROUTE_ACCESS');
     const originSelectedTargets = toTargets(selectedOrigin, 'SELECTED_ACCESS');
@@ -336,6 +339,8 @@ export class ProviderCommuteRepository implements CommuteRepository {
             result,
             originSource: originTarget.source,
             destinationSource: destinationTarget.source,
+            ...(originTarget.accessPointId ? { originAccessPointId: originTarget.accessPointId } : {}),
+            ...(destinationTarget.accessPointId ? { destinationAccessPointId: destinationTarget.accessPointId } : {}),
           });
         }
       } catch (error) {
@@ -390,9 +395,32 @@ export class ProviderCommuteRepository implements CommuteRepository {
       const matchScore = accessPriority(item.originSource, item.destinationSource);
       const viaMatch = !viaPoints.length || viaPoints.every((point) => routeMatchesAccessPoint(item.result, point));
       const matchesPreference = matchScore >= 0.95 && viaMatch;
+      // Only arrivals demonstrably associated with this provider route may
+      // affect ETA. A route-linked access ID alone is not proof the provider
+      // used that bus service or boarding station.
+      const originAccess = item.originAccessPointId
+        ? originById.get(item.originAccessPointId) : undefined;
+      const hasVerifiedBusLeg = originAccess?.mode === 'BUS' &&
+        !!originAccess.selectedBusRouteId &&
+        (item.result.busLegs ?? []).some(leg =>
+          leg.routes.some(service => service.providerRouteId === originAccess.selectedBusRouteId) &&
+          leg.stopNames.some(name =>
+            normalizeTransitEvidence(name) === normalizeTransitEvidence(originAccess.name)
+          )
+        );
+      const hasVerifiedSubwayLeg = originAccess?.mode === 'SUBWAY' &&
+        (item.result.steps ?? []).some(step => step.type === 'SUBWAY' &&
+          normalizeTransitEvidence(step.label).includes(normalizeTransitEvidence(originAccess.name)) &&
+          normalizeTransitEvidence(originAccess.name).length > 0);
       return {
         id: item.result.id,
         personId,
+        originSearchSource: item.originSource,
+        destinationSearchSource: item.destinationSource,
+        ...(item.originAccessPointId ? { originAccessPointId: item.originAccessPointId } : {}),
+        ...(item.destinationAccessPointId ? { destinationAccessPointId: item.destinationAccessPointId } : {}),
+        ...((hasVerifiedBusLeg || hasVerifiedSubwayLeg) && originAccess
+          ? { realtimeOriginAccessPointId: originAccess.id } : {}),
         totalMinutes: item.result.totalMinutes,
         transferCount: item.result.transferCount,
         walkMinutes: item.result.walkMinutes ?? 0,
@@ -402,6 +430,9 @@ export class ProviderCommuteRepository implements CommuteRepository {
         ...(item.result.steps ? { steps: item.result.steps } : {}),
         ...(matchScore > 0 ? { preferenceMatchScore: matchScore } : {}),
         ...(matchesPreference ? { matchesPreference: true, policyLabels: ['선택 교통 반영'] } : {}),
+        ...(diagnostics.placeFallbackUsed && item.originSource === 'PLACE' &&
+            item.destinationSource === 'PLACE'
+            ? { policyLabels: ['저장 장소 기반 대체 경로 · 선택 교통 미반영'] } : {}),
       };
     }).sort(compareRoutes);
     diagnostics.dedupedCandidateCount = candidates.length;
@@ -433,12 +464,11 @@ export class ProviderTodayRepository implements TodayRepository {
   async get(personId: EntityId): Promise<TodaySnapshot | null> {
     const now = this.clock.now();
     const date = kstDate(now);
-    const [schedule, routes, preferredRouteCandidateId, originAccessPoints, savedRoutes, presence] = await Promise.all([
+    const [schedule, routes, preferredRouteCandidateId, originAccessPoints, presence] = await Promise.all([
       this.schedules.getByDate(personId, date),
       this.commute.listRouteCandidates(personId),
       this.commute.getPreferredRouteCandidateId(personId),
       this.commute.listAccessPoints(personId, 'origin'),
-      this.commute.listSavedRoutes(personId),
       this.presence.get(personId),
     ]);
 
@@ -467,7 +497,7 @@ export class ProviderTodayRepository implements TodayRepository {
         ...(shiftEnd ? { shiftEnd } : {}),
         ...(leftWorkAt ? { leftWorkAt } : {}),
         arrivedHomeAt,
-        ...(route ? { routeCandidateId: route.id } : {}),
+        ...(route ? { routeCandidateId: route.id, routeCandidate: route } : {}),
       };
     }
 
@@ -486,18 +516,16 @@ export class ProviderTodayRepository implements TodayRepository {
 
     const shiftEndTime = shiftEnd ? parseKstDateTime(date, shiftEnd) : null;
     const leftWorkTime = leftWorkAt ? Date.parse(leftWorkAt) : Number.NaN;
-    const baselineDepartureMs = shiftEndTime ?? now.getTime();
+    // An actual departure overrides the scheduled shift end, including early
+    // departures; do not postpone an actual commute until a future shift end.
     const departureMs = Number.isFinite(leftWorkTime)
-      ? Math.max(baselineDepartureMs, leftWorkTime)
-      : baselineDepartureMs;
-     const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
-    const activeOriginIds = activeSavedRoute
-      ? activeSavedRoute.originAccessPointIds ??
-        (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
-      : [];
-    const selectedAccess = activeOriginIds.length
-      ? originAccessPoints.find((point) => activeOriginIds.includes(point.id))
-      : originAccessPoints.find((point) => point.selected);
+      ? leftWorkTime
+      : shiftEndTime ?? now.getTime();
+    // Never borrow arrivals from the first active-route stop unless the exact
+    // candidate carries verified transit-leg evidence for that stop.
+    const selectedAccess = route.realtimeOriginAccessPointId
+      ? originAccessPoints.find(point => point.id === route.realtimeOriginAccessPointId)
+      : undefined;
     let arrivals: Arrival[] = [];
     if (departureMs <= now.getTime()) {
       try {
@@ -541,6 +569,7 @@ export class ProviderTodayRepository implements TodayRepository {
       ...(shiftEnd ? { shiftEnd } : {}),
       ...(leftWorkAt ? { leftWorkAt } : {}),
       routeCandidateId: route.id,
+      routeCandidate: route,
     };
   }
 }
