@@ -107,7 +107,17 @@ async function browserPass(kind,label,serial){
   const page=await context.newPage();
   page.setDefaultTimeout(18000);
   const failures=[];
-  page.on('pageerror',err=>failures.push(err.message));
+  const webkitAbortedLocalReads=[];
+  page.on('pageerror',err=>{
+    const message=err.message;
+    // WebKit reports locally abandoned schedule GETs during an explicit
+    // persistence reload as access-control errors. Preserve and count them;
+    // do not waive any other exception, nor waive D1 readback assertions.
+    const localCancelledGet=label==='WebKit' &&
+      /^\/127\.0\.0\.1:\d+\/api\/people\/[0-9a-f-]+\/schedules due to access control checks\.$/.test(message);
+    if (localCancelledGet) webkitAbortedLocalReads.push(message);
+    else failures.push(message);
+  });
   try{
     const personA='합성직원B'+serial+'갑';
     const personB='합성직원B'+serial+'을';
@@ -123,6 +133,43 @@ async function browserPass(kind,label,serial){
       label+' duplicate retains unsaved input');
     assert((await api('/people')).body.people.filter(x=>x.name===personA).length===1,
       label+' duplicate D1 unchanged');
+    // Synthetic HTTP 503 must be visible, preserve user entry, and permit retry.
+    await update(page,'/people/new');
+    const retryName='합성오류복구'+serial;
+    await page.locator('.person-form input').first().fill(retryName);
+    await page.locator('.person-form input').nth(1).fill('복구검증');
+    let failedPostCount=0;
+    await page.route('**/api/people',async route=>{
+      if(route.request().method()==='POST'){
+        failedPostCount++;
+        await route.fulfill({status:503,contentType:'application/json',
+          body:JSON.stringify({error:'Synthetic temporary outage'})});
+      } else await route.continue();
+    });
+    await page.getByRole('button',{name:'저장',exact:true}).click();
+    await page.getByRole('alert').waitFor();
+    assert(failedPostCount===1,label+' error injection must reach POST once');
+    assert((await page.getByRole('alert').innerText()).includes('저장하지 못했습니다'),
+      label+' server error must be actionable');
+    assert((await page.locator('.person-form input').first().inputValue())===retryName,
+      label+' failed POST must preserve input');
+    await page.unroute('**/api/people');
+    let retryPosts=0;
+    await page.route('**/api/people',async route=>{
+      if(route.request().method()==='POST') retryPosts++;
+      await route.continue();
+    });
+    await page.evaluate(()=>{
+      const button=document.querySelector('[data-page="PersonFormPage"] button.cta');
+      if(!(button instanceof HTMLButtonElement)) throw Error('save button missing');
+      button.click();
+      button.click();
+    });
+    await page.waitForURL(url=>/^\/people\/[^/]+$/.test(url.pathname)&&url.pathname!=='/people/new');
+    assert(retryPosts===1,label+' repeated same-tick save clicks must issue one POST');
+    assert((await api('/people')).body.people.filter(x=>x.name===retryName).length===1,
+      label+' retry must create exactly one employee');
+    await page.unroute('**/api/people');
     await update(page,'/people/'+a+'/edit');
     await page.locator('.person-form input').nth(1).fill('수정관계');
     await page.getByRole('button',{name:'저장',exact:true}).click();
@@ -234,9 +281,13 @@ async function browserPass(kind,label,serial){
     const after=(await api('/people/'+b+'/schedules')).body.schedules;
     assert(JSON.stringify(before)===JSON.stringify(after),label+' SQL batch must rollback every row');
     assert(failures.length===0,label+' uncaught browser errors: '+failures.join('; '));
+    assert(webkitAbortedLocalReads.length<=2,
+      label+' excessive abandoned local GETs during test reload: '+webkitAbortedLocalReads.join('; '));
     return {engine:label,peopleCreateEdit:true,duplicate409:true,errorUI:true,
+      error503Retry:true,duplicateSaveClickGuard:true,
       dayCreateEdit:true,breakPreserveUpdateClear:true,workOffRoundtrip:true,
-      newOff:true,staffIsolation:true,bulkWeekday:true,d1Persistence:true,sqlRollback:true};
+      newOff:true,staffIsolation:true,bulkWeekday:true,d1Persistence:true,sqlRollback:true,
+      webkitAbortedLocalGetsDuringReload:webkitAbortedLocalReads.length};
   }finally{await context.close();await browser.close()}
 }
 try{
