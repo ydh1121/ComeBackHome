@@ -5,7 +5,7 @@ import type { RepositoryBundle } from '../contracts/runtime';
 import type { RouteSearchDiagnostics } from '../contracts/repositories';
 import { rankRouteCandidates, selectNextShift, selectVisibleAccessPoints } from '../selectors';
 
-export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; routeDiagnostics?: RouteSearchDiagnostics; }
+export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; preferredRouteCandidateId: EntityId | null; routeDiagnostics?: RouteSearchDiagnostics; }
 export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; leftWorkAt: string | null; arrivedHomeAt: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
 export interface CommuteOverviewQueryResult extends PersonDetailQueryResult { preferredRouteCandidateId: EntityId | null; }
 
@@ -110,6 +110,6 @@ export class ComeBackHomeQueries {
     const ranked = rankRouteCandidates(routeDiscovery.candidates);
     const preferred = ranked.find((candidate) => candidate.id === preferredRouteCandidateId);
     const ordered = preferred ? [preferred, ...ranked.filter((candidate) => candidate.id !== preferred.id)] : ranked;
-    return { person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, routeCandidates: ordered, ...(routeDiscovery.diagnostics ? { routeDiagnostics: routeDiscovery.diagnostics } : {}) };
+    return { person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, preferredRouteCandidateId, routeCandidates: ordered, ...(routeDiscovery.diagnostics ? { routeDiagnostics: routeDiscovery.diagnostics } : {}) };
   }
 }
