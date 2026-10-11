@@ -200,6 +200,13 @@ export function CommuteRoutePage() {
           이전에 저장한 경로를 현재 찾을 수 없습니다. 아래 추천 경로는 계속 선택할 수 있습니다.
         </div>
       ) : null}
+      {routeDiagnostics?.status === 'PARTIAL_PROVIDER_FAILURE' ? (
+        <div className="search-inline-status" data-state="PARTIAL_PROVIDER_FAILURE" role="status">
+          일부 경로 조회가 실패했습니다. 아래는 성공적으로 조회된 경로만 표시합니다.
+          {routeDiagnostics.pairs.some(pair => pair.errorCategory === 'QUOTA')
+            ? ' 카카오 경로 조회 한도가 초과되어 추가 조회를 중단했습니다.' : null}
+        </div>
+      ) : null}
       <div className="route-policy-list">
         {visible.map((route) => {
           const selected = route.id === (draftRouteId ?? overview.preferredRouteCandidateId);
