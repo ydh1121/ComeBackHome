@@ -13,7 +13,7 @@ export interface TransitAccessPoint { id: EntityId; personId: EntityId; provider
 export interface BusRouteOption { providerRouteId: string; routeNo: string; directionLabel: string; terminalName?: string; routeType?: string; }
 export interface RoutePreference { id: EntityId; personId: EntityId; originPlaceKind: 'origin'; destinationPlaceKind: 'destination'; viaAccessPointIds: EntityId[]; preferredModes?: TransitMode[]; }
 export interface SavedCommuteRoute { id: EntityId; personId: EntityId; position: number; label: string; originAccessPointIds?: EntityId[]; destinationAccessPointIds?: EntityId[]; /** @deprecated compatibility field; use originAccessPointIds */ originAccessPointId?: EntityId; /** @deprecated compatibility field; use destinationAccessPointIds */ destinationAccessPointId?: EntityId; viaAccessPointIds: EntityId[]; active: boolean; }
-export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; accessMinutes?: number; egressMinutes?: number; fare?: number; policyLabels?: string[]; matchesPreference?: boolean; preferenceMatchScore?: number; steps?: CommuteStep[]; }
+export interface RouteCandidate { id: EntityId; personId: EntityId; totalMinutes: number; transferCount: number; walkMinutes: number; accessMinutes?: number; realtimeOriginAccessPointId?: EntityId; originAccessPointId?: EntityId; destinationAccessPointId?: EntityId; originSearchSource?: 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE'; destinationSearchSource?: 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE'; egressMinutes?: number; fare?: number; policyLabels?: string[]; matchesPreference?: boolean; preferenceMatchScore?: number; steps?: CommuteStep[]; }
 export type ImportResolution = 'KEEP' | 'NEW' | 'SKIP';
 export type ImportFileKind = 'XLSX' | 'IMAGE';
 export type ImportFileStatus = 'WAITING' | 'PARSING' | 'READY' | 'ERROR';
@@ -44,4 +44,4 @@ export interface PresenceState {
   arrivedHomeAt?: ISODateTime;
 }
 export interface EtaSnapshot { personId: EntityId; status: 'ACTUAL' | 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
-export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; shiftEnd?: string; leftWorkAt?: ISODateTime; arrivedHomeAt?: ISODateTime; routeCandidateId?: EntityId; }
+export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; routeCandidate?: RouteCandidate; shiftEnd?: string; leftWorkAt?: ISODateTime; arrivedHomeAt?: ISODateTime; routeCandidateId?: EntityId; }
