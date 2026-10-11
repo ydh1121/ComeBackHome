@@ -152,3 +152,12 @@
 .commute-page .transit-row-toggle .svg{height:19px;width:19px}
 
 .commute-page .transit-row-action{grid-template-columns:minmax(0,1fr) 44px}
+
+
+/* Phase C: dedicated place map, sharing the existing Kakao SDK and key. */
+.commute-page .kakao-place-map-shell{position:relative;height:252px;margin:12px 0 14px;overflow:hidden;border-radius:16px;background:#eef2f7;box-shadow:inset 0 0 0 1px rgba(16,24,40,.06)}
+.commute-page .kakao-place-map{width:100%;height:100%}
+.cbh-place-map-pin{display:grid;place-items:center;min-width:47px;min-height:38px;padding:0 9px;border:2px solid #fff;border-radius:999px;background:#3266ec;color:#fff;font-size:12px;font-weight:800;box-shadow:0 2px 12px rgba(25,45,80,.25);cursor:pointer}
+.cbh-place-map-pin.is-active{background:#102a7d;box-shadow:0 0 0 3px rgba(50,102,236,.25),0 3px 12px rgba(25,45,80,.3)}
+.cbh-place-map-pin:focus-visible{outline:3px solid #101828;outline-offset:3px}
+.commute-page .search-inline-status .text-btn{padding:3px 8px;margin-left:6px;color:var(--cbh-blue,#255cff);font-weight:800;border:0;background:transparent;min-height:36px}
