@@ -120,11 +120,33 @@ function placeToTransit(
   };
 }
 
+type TransitProviderFailure = 'AUTH_ERROR' | 'QUOTA_EXCEEDED' | 'NETWORK_FAILURE' | 'PROVIDER_UNAVAILABLE';
+function classifyTransitFailure(error: unknown): TransitProviderFailure {
+  const record = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+  const status = Number(record.status ?? record.httpStatus ?? 0);
+  const message = String(record.message ?? error ?? '');
+  if (status === 401 || status === 403 || /invalid.?key|unauthori[sz]ed|authentication/i.test(message)) return 'AUTH_ERROR';
+  if (status === 429 || /quota|rate.?limit|too many requests/i.test(message)) return 'QUOTA_EXCEEDED';
+  if (/fetch|network|timeout|ECONN|ENOTFOUND|socket/i.test(message)) return 'NETWORK_FAILURE';
+  return 'PROVIDER_UNAVAILABLE';
+}
+function worstTransitFailure(states: TransitProviderFailure[]): TransitProviderFailure {
+  return ['AUTH_ERROR','QUOTA_EXCEEDED','NETWORK_FAILURE','PROVIDER_UNAVAILABLE']
+    .find((state) => states.includes(state as TransitProviderFailure)) as TransitProviderFailure ?? 'PROVIDER_UNAVAILABLE';
+}
+function validTransitCoordinate(point: Coordinate): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y) &&
+    point.x >= -180 && point.x <= 180 && point.y >= -90 && point.y <= 90 &&
+    !(point.x === 0 && point.y === 0);
+}
 function dedupeTransit(results: TransitSearchResult[]): TransitSearchResult[] {
   const seen = new Set<string>();
   return results
     .filter((item) => {
-      const key = item.mode + ':' + item.providerId;
+      const coords = item.coordinate;
+      // Same label or numeric station name is never evidence of identity.
+      const key = [item.mode,item.providerId,
+        coords ? coords.x.toFixed(6) + ',' + coords.y.toFixed(6) : 'NO_COORDINATE'].join(':');
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -424,20 +446,23 @@ export async function handleApiRequest(
           if (segments[2] === 'transit-nearby') {
             const x = Number(url.searchParams.get('x'));
             const y = Number(url.searchParams.get('y'));
-            if (![x, y].every(Number.isFinite)) {
-              return json({ error: 'x/y are required.' }, 400);
+            if (!validTransitCoordinate({ x, y }) ||
+                !url.searchParams.has('x') || !url.searchParams.has('y')) {
+              return json({ error: 'Invalid transit coordinate.', reason: 'INVALID_COORDINATE' }, 400);
             }
             const near = { x, y };
             // Official stop IDs/ARS are authoritative. If Seoul's positional
             // endpoint is empty or unavailable, only transport-category Kakao
             // bus points inside the same absolute radius may be offered.
-            const [officialResult, busPlaces, subwayPlaces] = await Promise.all([
-              providerRuntime.seoulBus.nearbyStops(near, 800)
-                .then((stops) => ({ stops, failed: false }))
-                .catch(() => ({ stops: [] as TransitSearchResult[], failed: true })),
-              providerRuntime.kakao.searchPlaces('버스정류장', near).catch(() => []),
-              providerRuntime.kakao.searchPlaces('지하철역', near),
+            const failures: TransitProviderFailure[] = [];
+            const capture = async <T>(work: Promise<T>, fallback: T): Promise<T> =>
+              work.catch(error => { failures.push(classifyTransitFailure(error)); return fallback; });
+            const [officialBus, busPlaces, subwayPlaces] = await Promise.all([
+              capture(providerRuntime.seoulBus.nearbyStops(near, 800), [] as TransitSearchResult[]),
+              capture(providerRuntime.kakao.searchPlaces('버스정류장', near), [] as PlaceSearchResult[]),
+              capture(providerRuntime.kakao.searchPlaces('지하철역', near), [] as PlaceSearchResult[]),
             ]);
+            const officialResult = { stops: officialBus, failed: failures.length > 0 };
             const officialBusStops = officialResult.stops
               .filter((stop) => stop.mode === 'BUS' && stop.coordinate)
               .map((stop) => {
@@ -462,8 +487,8 @@ export async function handleApiRequest(
             const nearestStationName = closestStation?.placeName
               ?.replace(/\s*\d+호선.*$/, '').trim() ?? '';
             const stationNamedBusStops = !officialBusStops.length && nearestStationName
-              ? await providerRuntime.seoulBus.searchStops(nearestStationName, near)
-                .catch(() => [])
+              ? await capture(providerRuntime.seoulBus.searchStops(nearestStationName, near),
+                  [] as TransitSearchResult[])
               : [];
             const matchingOfficialStops = stationNamedBusStops
               .filter((point) => point.mode === 'BUS' && point.coordinate)
@@ -474,11 +499,18 @@ export async function handleApiRequest(
               .filter((point) => point.distanceM <= 800);
             const buses = officialBusStops.length ? officialBusStops :
               matchingOfficialStops.length ? matchingOfficialStops : categoryBusStops;
+            const nearbyResults = trimNearbyTransitByDistance([
+              ...buses, ...confirmedStations.map((place) => placeToTransit(place, near, 'SUBWAY')),
+            ]);
+            if (failures.length >= 3 && nearbyResults.length === 0) {
+              const reason = worstTransitFailure(failures);
+              return json({ error: 'Transit providers are unavailable.', reason },
+                reason === 'AUTH_ERROR' ? 401 : reason === 'QUOTA_EXCEEDED' ? 429 : 503);
+            }
             return json({
-              results: trimNearbyTransitByDistance([
-                ...buses,
-                ...confirmedStations.map((place) => placeToTransit(place, near, 'SUBWAY')),
-              ]),
+              results: nearbyResults,
+              status: failures.length ? 'PARTIAL_PROVIDER_FAILURE' :
+                nearbyResults.length ? 'SUCCESS_WITH_RESULTS' : 'SUCCESS_EMPTY',
               sourceStatus: {
                 bus: officialBusStops.length ? 'OFFICIAL' :
                   matchingOfficialStops.length ? 'OFFICIAL_STATION_NAME' :
@@ -496,15 +528,25 @@ export async function handleApiRequest(
             const x = Number(url.searchParams.get('x'));
             const y = Number(url.searchParams.get('y'));
             if (!query) return json({ error: 'q is required.' }, 400);
-            if (![x, y].every(Number.isFinite)) {
-              return json({ error: 'x/y are required.' }, 400);
+            if (!validTransitCoordinate({ x, y }) ||
+                !url.searchParams.has('x') || !url.searchParams.has('y')) {
+              return json({ error: 'Invalid transit coordinate.', reason: 'INVALID_COORDINATE' }, 400);
             }
             const near = { x, y };
             // Official transit registries only: never infer BUS from arbitrary POIs.
-            const [busStops, subwayStations] = await Promise.all([
-              providerRuntime.seoulBus.searchStops(query, near).catch(() => []),
-              providerRuntime.seoulSubway.searchStations(query, near).catch(() => []),
+            const checked = await Promise.allSettled([
+              providerRuntime.seoulBus.searchStops(query, near),
+              providerRuntime.seoulSubway.searchStations(query, near),
             ]);
+            const failed = checked.filter((item) => item.status === 'rejected')
+              .map((item) => classifyTransitFailure((item as PromiseRejectedResult).reason));
+            if (failed.length === 2) {
+              const reason = worstTransitFailure(failed);
+              return json({ error: 'Transit providers are unavailable.', reason },
+                reason === 'AUTH_ERROR' ? 401 : reason === 'QUOTA_EXCEEDED' ? 429 : 503);
+            }
+            const busStops = checked[0].status === 'fulfilled' ? checked[0].value : [];
+            const subwayStations = checked[1].status === 'fulfilled' ? checked[1].value : [];
             const verified = [...busStops, ...subwayStations]
               .filter((point) => point.mode === 'BUS' || point.mode === 'SUBWAY')
               .map((point) => {
@@ -512,7 +554,11 @@ export async function handleApiRequest(
                 const distanceM = coordinateDistanceMeters(near, point.coordinate);
                 return { ...point, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 75)) };
               });
-            return json({ results: dedupeTransit(verified).slice(0, 30) });
+            const results = dedupeTransit(verified).slice(0, 30);
+            return json({ results, status: failed.length ? 'PARTIAL_PROVIDER_FAILURE' :
+              results.length ? 'SUCCESS_WITH_RESULTS' : 'SUCCESS_EMPTY',
+              sourceStatus: {bus: checked[0].status === 'fulfilled' ? 'AVAILABLE' : failed[0],
+                subway: checked[1].status === 'fulfilled' ? 'AVAILABLE' : failed[0]} });
           }
 
           if (segments[2] === 'routes') {
