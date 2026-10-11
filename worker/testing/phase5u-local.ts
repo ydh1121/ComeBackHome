@@ -8,6 +8,7 @@ import { D1NotificationSettingsStore } from '../repositories/D1NotificationSetti
 import { D1NotificationJobStore } from '../repositories/D1NotificationJobStore';
 import { D1PersonRepository } from '../repositories/D1PersonRepository';
 import { D1ScheduleRepository } from '../repositories/D1ScheduleRepository';
+import { D1PresenceRepository } from '../repositories/D1PresenceRepository';
 import { D1SubscriptionStore } from '../repositories/D1SubscriptionStore';
 import type { WorkerEnv } from '../runtime-types';
 import { runScheduledNotificationCycle } from '../scheduler';
@@ -220,6 +221,55 @@ async function probeProcessingLease(env: WorkerEnv): Promise<Response> {
   });
 }
 
+
+async function probeAtomicPresenceState(env: WorkerEnv): Promise<Response> {
+  const person = await new D1PersonRepository(env.DB).create({
+    name: 'Synthetic presence transaction',
+    relation: 'test-only',
+  });
+  const presence = new D1PresenceRepository(env.DB);
+  const input = {
+    eventId: 'phasef-atomic-presence-' + person.id,
+    personId: person.id,
+    type: 'LEFT_WORK' as const,
+    acceptedAt: '2026-10-07T13:00:00.000Z',
+    workDate: '2026-10-07',
+  };
+
+  await env.DB.prepare(
+    "CREATE TRIGGER cbh_phasef_abort_presence BEFORE INSERT ON presence_state BEGIN SELECT RAISE(ABORT, 'synthetic presence write failure'); END",
+  ).run();
+  let failed = false;
+  try { await presence.record(input); }
+  catch { failed = true; }
+  finally { await env.DB.prepare('DROP TRIGGER IF EXISTS cbh_phasef_abort_presence').run(); }
+
+  const eventAfterFailure = await env.DB.prepare(
+    'SELECT event_id FROM presence_events WHERE event_id = ?1',
+  ).bind(input.eventId).first();
+  const stateAfterFailure = await presence.get(person.id);
+
+  const success = await presence.record(input);
+  const duplicate = await presence.record(input);
+  let collisionBlocked = false;
+  try {
+    await presence.record({ ...input, personId: 'another-person-fixture' });
+  } catch (error) {
+    collisionBlocked = error instanceof Error && error.message === 'PRESENCE_EVENT_ID_CONFLICT';
+  }
+  const finalState = await presence.get(person.id);
+  return json({
+    failed,
+    receiptRolledBack: eventAfterFailure === null,
+    stateRolledBack: stateAfterFailure === null,
+    firstAccepted: success.duplicate === false,
+    replayIgnored: duplicate.duplicate === true,
+    crossPersonIdCollisionBlocked: collisionBlocked,
+    persistedLeftWorkAt: finalState?.leftWorkAt,
+    syntheticOnly: true,
+  });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -235,6 +285,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/cycle') {
       return cycle(request, env);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/presence-atomic-probe') {
+      return probeAtomicPresenceState(env);
     }
 
     if (request.method === 'POST' && url.pathname === '/lease-probe') {
