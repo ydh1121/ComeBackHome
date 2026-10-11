@@ -270,6 +270,50 @@ async function probeAtomicPresenceState(env: WorkerEnv): Promise<Response> {
   });
 }
 
+
+async function probePendingReschedule(env: WorkerEnv): Promise<Response> {
+  const jobs = new D1NotificationJobStore(env.DB);
+  const id = crypto.randomUUID();
+  const dedupeKey = 'phasef-shift-reschedule:' + id;
+  const create = (scheduledFor: string, body: string) => ({
+    id: crypto.randomUUID(),
+    dedupeKey,
+    personId: null,
+    type: 'shift-end',
+    scheduledFor,
+    nextAttemptAt: scheduledFor,
+    payload: { title: 'Synthetic shift', body, tag: 'phasef-shift', path: '/' },
+  });
+  await jobs.enqueueOnce(create('2026-10-07T08:00:00.000Z', 'before edit'));
+  await jobs.enqueueOnce(create('2026-10-07T09:30:00.000Z', 'after edit'));
+  const fetchRow = () => env.DB.prepare(
+    'SELECT id, status, scheduled_for, next_attempt_at, payload_json FROM notification_jobs WHERE dedupe_key = ?1',
+  ).bind(dedupeKey).first<{
+    id:string;status:string;scheduled_for:string;next_attempt_at:string;payload_json:string;
+  }>();
+  const pending = await fetchRow();
+
+  // Neither a queued retry nor an already delivered event may be replaced
+  // by the planner's next scheduled poll.
+  await jobs.markRetry(pending?.id ?? '', '2026-10-07T10:30:00.000Z', 'Synthetic transient failure');
+  await jobs.enqueueOnce(create('2026-10-07T11:00:00.000Z', 'do not reset retry'));
+  const retry = await fetchRow();
+  await jobs.markSent(pending?.id ?? '', '2026-10-07T10:30:00.000Z');
+  await jobs.enqueueOnce(create('2026-10-07T12:00:00.000Z', 'do not resend'));
+  const sent = await fetchRow();
+  return json({
+    originalIdStable: pending?.id === sent?.id,
+    pendingTimeUpdated: pending?.scheduled_for === '2026-10-07T09:30:00.000Z'
+      && pending?.next_attempt_at === '2026-10-07T09:30:00.000Z',
+    pendingPayloadUpdated: pending ? JSON.parse(pending.payload_json).body === 'after edit' : false,
+    retryNotReset: retry?.status === 'retry'
+      && retry.next_attempt_at === '2026-10-07T10:30:00.000Z',
+    sentNotReset: sent?.status === 'sent'
+      && sent.scheduled_for === '2026-10-07T09:30:00.000Z',
+    syntheticOnly: true,
+  });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -285,6 +329,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/cycle') {
       return cycle(request, env);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/pending-reschedule-probe') {
+      return probePendingReschedule(env);
     }
 
     if (request.method === 'POST' && url.pathname === '/presence-atomic-probe') {
