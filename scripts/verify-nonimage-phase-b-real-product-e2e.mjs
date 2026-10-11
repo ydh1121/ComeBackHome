@@ -42,7 +42,7 @@ async function enterPerson(page,name,relation){
   await page.locator('.person-form input').nth(0).fill(name);
   await page.locator('.person-form input').nth(1).fill(relation);
   await page.getByRole('button',{name:'저장',exact:true}).click();
-  await page.waitForURL(/\/people\/[^/]+$/);
+  await page.waitForURL(url => /^\/people\/[^/]+$/.test(url.pathname) && url.pathname !== '/people/new');
   return decodeURIComponent(new URL(page.url()).pathname.split('/').at(-1));
 }
 async function chooseClock(page,kind,hour,minute){
