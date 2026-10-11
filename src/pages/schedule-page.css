@@ -24,3 +24,7 @@
 }
 .schedule-page .ios-wheel button{color:#667085;-webkit-text-fill-color:#667085;opacity:.74}
 .schedule-page .ios-wheel button.selected{color:#101828;-webkit-text-fill-color:#101828;opacity:1}
+
+/* Commit both direct range endpoints together; keep action reachable on mobile. */
+.schedule-page .range-direct-apply{grid-column:1/-1;min-height:42px;border:0;border-radius:12px;background:var(--cbh-blue,#255cff);color:#fff;font-weight:800}
+.schedule-page .range-direct-apply:disabled{background:#e4e7ec;color:#98a2b3}
