@@ -187,6 +187,10 @@ async function browserPass(kind,label,serial){
     await page.getByRole('button',{name:'직접 입력'}).click();
     await page.locator('.range-direct-v13 input').first().fill('2100-01-04');
     await page.locator('.range-direct-v13 input').last().fill('2100-01-11');
+    await page.getByRole('button',{name:'기간 적용',exact:true}).click();
+    const chosenRange=await page.locator('.range-date-pair').innerText();
+    assert(chosenRange.includes('1/4') && chosenRange.includes('1/11'),
+      label+' direct range must preserve both exact endpoints, got '+chosenRange);
     await page.locator('.range-accordion').click();
     await page.getByRole('button',{name:'화',exact:true}).click();
     await chooseClock(page,'출근','08','00');
