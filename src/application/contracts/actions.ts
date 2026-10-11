@@ -88,6 +88,10 @@ export interface CommuteActions {
   replacePreferenceStep(personId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
 }
 export interface TransitSearchActions {
+  searchDetailed?(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate):
+    Promise<import('./providers').TransitLookupResult>;
+  nearbyDetailed?(personId: EntityId, kind: PlaceKind, center?: Coordinate):
+    Promise<import('./providers').TransitLookupResult>;
   search(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; coordinate?: Coordinate; routeCount?: number }>>;
   nearby(personId: EntityId, kind: PlaceKind, center?: Coordinate): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; coordinate?: Coordinate; routeCount?: number }>>;
   addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint>;
