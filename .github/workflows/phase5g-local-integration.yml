@@ -183,6 +183,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  nonimage-phase-c-place-product-e2e:
+    name: NONIMAGE_PHASE_C_PRODUCT_E2E / map and place search / Chromium WebKit local D1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Real place search, interactive map and D1 persistence (fixture Kakao)
+        run: node scripts/verify-nonimage-phase-c-place-real-product-e2e.mjs
+
   nonimage-phase-b-product-e2e:
     name: NONIMAGE_PHASE_B_PRODUCT_E2E / people, OFF, breaks, bulk, isolation / Chromium WebKit local D1
     runs-on: ubuntu-latest
