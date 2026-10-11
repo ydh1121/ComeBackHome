@@ -99,8 +99,10 @@ async function ui(page,person,kind,params=''){
   if(!page.url().startsWith(origin)) {
     await page.goto(origin+route,{waitUntil:'domcontentloaded'});
   } else {
-    // Do not unload the WebKit document while a previous screen's
-    // non-mutating provider reads are pending. The real app uses SPA navigation.
+    // Finish the previous screen's provider GET fan-out before changing the
+    // requested person/route. A synthetic route request aborted by the next
+    // view would otherwise be surfaced by WebKit as an access-control error.
+    await page.waitForLoadState('networkidle',{timeout:15000});
     await page.evaluate(next=>{
       history.pushState(null,'',next);
       dispatchEvent(new PopStateEvent('popstate'));
