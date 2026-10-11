@@ -187,10 +187,19 @@ try {
   if (detectedId) await imports.setDetectedPersonMatch(batchId, detectedId, 'mock-person-1');
   const rematched = await imports.getBatch(batchId);
   expect(rematched?.reviewItems.every((item) => item.personId === 'mock-person-1'), 'person rematch did not propagate to review items');
-  expect(rematched?.reviewItems.every((item) => item.resolution === 'NEW'), 'rematched import rows must default selected');
+  expect(rematched?.reviewItems.every((item) => item.resolution === null),
+    'changing employee match must revoke legacy XLSX approval too');
+  let rematchUnreviewedBlocked = false;
+  try { await commit.execute(batchId); } catch (error) {
+    rematchUnreviewedBlocked = error instanceof Error &&
+      error.message === 'Import contains unreviewed schedules.';
+  }
+  expect(rematchUnreviewedBlocked, 'rematched legacy XLSX must not save without explicit reapproval');
 
   const skippedId = rematched?.reviewItems[0]?.id;
   if (skippedId) await imports.setResolution(batchId, skippedId, 'SKIP');
+  const reviewedId = rematched?.reviewItems[1]?.id;
+  if (reviewedId) await imports.setResolution(batchId, reviewedId, 'NEW');
   await commit.execute(batchId);
   const firstSaved = await schedules.getByDate('mock-person-1', '2099-01-04');
   const secondSaved = await schedules.getByDate('mock-person-1', '2099-01-05');
