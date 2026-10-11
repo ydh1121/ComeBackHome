@@ -94,15 +94,23 @@ async function mockMap(ctx){
     };
   });
 }
+async function settledNetwork(page) {
+  await page.waitForLoadState('networkidle',{timeout:15000});
+  // A quiet period catches route-candidate search fan-out scheduled by a
+  // settled UI update. Do not suppress WebKit errors or intercept API calls.
+  await page.waitForTimeout(650);
+  await page.waitForLoadState('networkidle',{timeout:15000});
+}
 async function ui(page,person,kind,params=''){
   const route=url(person)+'/commute/'+kind+'/access'+params;
   if(!page.url().startsWith(origin)) {
     await page.goto(origin+route,{waitUntil:'domcontentloaded'});
   } else {
-    // Finish the previous screen's provider GET fan-out before changing the
-    // requested person/route. A synthetic route request aborted by the next
-    // view would otherwise be surfaced by WebKit as an access-control error.
-    await page.waitForLoadState('networkidle',{timeout:15000});
+    // A route/person switch can queue another microtask-triggered provider
+    // fan-out after the first network-idle signal (including overview reads).
+    // Keep the assertion for all pageerrors; instead let existing requests
+    // actually finish before switching React Router's person/route context.
+    await settledNetwork(page);
     await page.evaluate(next=>{
       history.pushState(null,'',next);
       dispatchEvent(new PopStateEvent('popstate'));
@@ -192,7 +200,7 @@ async function execute(engine,label,tag){
     saved=(await overview(a)).accessPoints;
     assert(saved.filter(x=>x.selected).length===3 &&
       saved.find(x=>x.providerId==='11111')?.selected===true,label+' one removal must keep others');
-    await page.waitForLoadState('networkidle',{timeout:15000});
+    await settledNetwork(page);
     await page.reload({waitUntil:'networkidle'});
     await page.locator('.transit-selected-chip').first().waitFor();
     assert(await page.locator('.transit-selected-chip').count()===3,label+' persisted selections after reload');
@@ -274,7 +282,7 @@ async function execute(engine,label,tag){
     await page.locator('.transit-row').first().waitFor();
     await clickSelect(page,stops[0].name);
     await clickSelect(page,stops[2].name);
-    await page.waitForLoadState('networkidle',{timeout:15000});
+    await settledNetwork(page);
     await page.reload({waitUntil:'networkidle'});
     let snapshot=await overview(a);
     let route=snapshot.savedRoutes.find(r=>r.id===routeId);
@@ -288,7 +296,7 @@ async function execute(engine,label,tag){
     route=snapshot.savedRoutes.find(r=>r.id===routeId);
     assert(route?.originAccessPointIds?.length===2 && route?.destinationAccessPointIds?.length===2,
       label+' origin and destination route access sets overwritten');
-    await page.waitForLoadState('networkidle',{timeout:15000});
+    await settledNetwork(page);
     await page.reload({waitUntil:'networkidle'});
     snapshot=await overview(a);
     route=snapshot.savedRoutes.find(r=>r.id===routeId);
