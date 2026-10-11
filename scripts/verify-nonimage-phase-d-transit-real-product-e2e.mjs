@@ -147,7 +147,16 @@ async function execute(engine,label,tag){
   try{
     const a=await seed(tag+'갑'),b=await seed(tag+'을');
     await ui(page,a,'origin');
-    await page.locator('[data-map-state="ready"]').waitFor();
+    await page.locator('[data-map-state="ready"]').waitFor({timeout:8000}).catch(async()=>{
+      const diagnosis=await page.evaluate(()=>({
+        url:location.href,
+        route:document.querySelector('[data-page="TransitAccessPicker"]')?.outerHTML.slice(0,500),
+        map:document.querySelector('[data-map-state]')?.getAttribute('data-map-state'),
+        kakao:Boolean(window.kakao?.maps),
+        mapCount:window.__phaseDMaps?.length??0,
+      }));
+      throw Error(label+' MOCK_TRANSIT_MAP_STARTUP '+JSON.stringify({diagnosis,pageErrors:problems}));
+    });
     await page.locator('.transit-row').first().waitFor();
     const nearbyNames=await page.locator('.transit-row-focus').allTextContents();
     assert(nearbyNames.length===4,label+' near guards must remove distant/unlocated stops: '+nearbyNames);
