@@ -243,6 +243,8 @@ try {
   assert(lease.reclaimedClaims === 1, 'abandoned processing job must be recovered after 15 minutes');
   assert(lease.duplicateClaims === 0, 'immediate second recovery claim must not duplicate lease');
   assert(lease.afterSentClaims === 0, 'already sent job must never be recovered');
+  assert(lease.staleCompletionIgnored && lease.currentCompletionAccepted,
+    'stale worker completion must not overwrite a reclaimed lease');
   assert(lease.status === 'sent' && lease.attempts === 2,
     'reclaimed D1 job must preserve durable delivery status and two attempts');
 

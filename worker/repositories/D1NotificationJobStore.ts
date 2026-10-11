@@ -117,27 +117,40 @@ export class D1NotificationJobStore implements NotificationJobStore {
     return (result.results ?? []).map(toJob);
   }
 
-  async markSent(jobId: string, sentAt: string): Promise<void> {
-    await this.db.prepare(
+  // Fence delivery acknowledgements with the claim attempt (lease epoch).
+  // A Worker whose 15-minute lease was reclaimed must not finalize another
+  // Worker's processing attempt. The external Push side effect remains at-least-once.
+  private requireClaim(claimAttempts: number | undefined): number {
+    if (!Number.isInteger(claimAttempts) || (claimAttempts ?? 0) < 1) {
+      throw new Error('NOTIFICATION_CLAIM_ATTEMPT_REQUIRED');
+    }
+    return claimAttempts as number;
+  }
+
+  async markSent(jobId: string, sentAt: string, claimAttempts?: number): Promise<boolean> {
+    const result = await this.db.prepare(
       `UPDATE notification_jobs
       SET status = 'sent', sent_at = ?2, last_error = NULL, updated_at = ?2
-      WHERE id = ?1`,
-    ).bind(jobId, sentAt).run();
+      WHERE id = ?1 AND status = 'processing' AND attempts = ?3`,
+    ).bind(jobId, sentAt, this.requireClaim(claimAttempts)).run();
+    return result.meta?.changes === 1;
   }
 
-  async markRetry(jobId: string, nextAttemptAt: string, error: string): Promise<void> {
-    await this.db.prepare(
+  async markRetry(jobId: string, nextAttemptAt: string, error: string, claimAttempts?: number): Promise<boolean> {
+    const result = await this.db.prepare(
       `UPDATE notification_jobs
       SET status = 'retry', next_attempt_at = ?2, last_error = ?3, updated_at = ?4
-      WHERE id = ?1`,
-    ).bind(jobId, nextAttemptAt, error, utcNow()).run();
+      WHERE id = ?1 AND status = 'processing' AND attempts = ?5`,
+    ).bind(jobId, nextAttemptAt, error, utcNow(), this.requireClaim(claimAttempts)).run();
+    return result.meta?.changes === 1;
   }
 
-  async markFailed(jobId: string, error: string): Promise<void> {
-    await this.db.prepare(
+  async markFailed(jobId: string, error: string, claimAttempts?: number): Promise<boolean> {
+    const result = await this.db.prepare(
       `UPDATE notification_jobs
       SET status = 'failed', last_error = ?2, updated_at = ?3
-      WHERE id = ?1`,
-    ).bind(jobId, error, utcNow()).run();
+      WHERE id = ?1 AND status = 'processing' AND attempts = ?4`,
+    ).bind(jobId, error, utcNow(), this.requireClaim(claimAttempts)).run();
+    return result.meta?.changes === 1;
   }
 }

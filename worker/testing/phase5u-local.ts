@@ -202,7 +202,8 @@ async function probeProcessingLease(env: WorkerEnv): Promise<Response> {
   const withinLease = await jobs.claimDue('2026-10-07T08:14:59.000Z', 1);
   const expired = await jobs.claimDue('2026-10-07T08:15:00.000Z', 1);
   const duplicate = await jobs.claimDue('2026-10-07T08:15:01.000Z', 1);
-  await jobs.markSent(jobId, '2026-10-07T08:15:01.000Z');
+  const staleCompletion = await jobs.markSent(jobId, '2026-10-07T08:15:01.000Z', initial[0]?.attempts);
+  const currentCompletion = await jobs.markSent(jobId, '2026-10-07T08:15:01.000Z', expired[0]?.attempts);
   const afterSent = await jobs.claimDue('2026-10-07T09:00:00.000Z', 1);
   const persisted = await env.DB.prepare(
     'SELECT status, attempts, sent_at FROM notification_jobs WHERE id = ?1',
@@ -214,6 +215,8 @@ async function probeProcessingLease(env: WorkerEnv): Promise<Response> {
     reclaimedClaims: expired.filter(j => j.id === jobId).length,
     duplicateClaims: duplicate.filter(j => j.id === jobId).length,
     afterSentClaims: afterSent.filter(j => j.id === jobId).length,
+    staleCompletionIgnored: staleCompletion === false,
+    currentCompletionAccepted: currentCompletion === true,
     status: persisted?.status,
     attempts: persisted?.attempts,
     sentAt: persisted?.sent_at,
@@ -295,10 +298,16 @@ async function probePendingReschedule(env: WorkerEnv): Promise<Response> {
 
   // Neither a queued retry nor an already delivered event may be replaced
   // by the planner's next scheduled poll.
-  await jobs.markRetry(pending?.id ?? '', '2026-10-07T10:30:00.000Z', 'Synthetic transient failure');
+  const firstClaim = (await jobs.claimDue('2026-10-07T09:31:00.000Z', 100))
+    .find((job) => job.id === pending?.id);
+  if (!firstClaim) throw new Error('Pending fixture job was not claimed');
+  await jobs.markRetry(pending?.id ?? '', '2026-10-07T10:30:00.000Z', 'Synthetic transient failure', firstClaim.attempts);
   await jobs.enqueueOnce(create('2026-10-07T11:00:00.000Z', 'do not reset retry'));
   const retry = await fetchRow();
-  await jobs.markSent(pending?.id ?? '', '2026-10-07T10:30:00.000Z');
+  const secondClaim = (await jobs.claimDue('2026-10-07T10:30:00.000Z', 100))
+    .find((job) => job.id === pending?.id);
+  if (!secondClaim) throw new Error('Retry fixture job was not claimed');
+  await jobs.markSent(pending?.id ?? '', '2026-10-07T10:30:00.000Z', secondClaim.attempts);
   await jobs.enqueueOnce(create('2026-10-07T12:00:00.000Z', 'do not resend'));
   const sent = await fetchRow();
   return json({

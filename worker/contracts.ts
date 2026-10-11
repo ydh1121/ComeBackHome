@@ -73,9 +73,9 @@ export interface SubscriptionStore {
 export interface NotificationJobStore {
   enqueueOnce(job: Omit<NotificationJob, 'status' | 'attempts' | 'sentAt' | 'lastError'>): Promise<void>;
   claimDue(nowIso: string, limit: number): Promise<NotificationJob[]>;
-  markSent(jobId: string, sentAt: string): Promise<void>;
-  markRetry(jobId: string, nextAttemptAt: string, error: string): Promise<void>;
-  markFailed(jobId: string, error: string): Promise<void>;
+  markSent(jobId: string, sentAt: string, claimAttempts?: number): Promise<boolean | void>;
+  markRetry(jobId: string, nextAttemptAt: string, error: string, claimAttempts?: number): Promise<boolean | void>;
+  markFailed(jobId: string, error: string, claimAttempts?: number): Promise<boolean | void>;
 }
 
 export type PushDeliveryErrorKind = 'transient' | 'terminal-subscription' | 'permanent';

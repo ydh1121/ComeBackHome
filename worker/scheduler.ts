@@ -73,13 +73,15 @@ async function applyRetryOrFailure(
 ): Promise<void> {
   const nextAttemptAt = dependencies.retryPolicy.nextAttempt(job, error, now);
   if (nextAttemptAt) {
-    await dependencies.jobs.markRetry(job.id, nextAttemptAt, error.message);
-    result.retry += 1;
+    if (await dependencies.jobs.markRetry(job.id, nextAttemptAt, error.message, job.attempts) !== false) {
+      result.retry += 1;
+    }
     return;
   }
 
-  await dependencies.jobs.markFailed(job.id, error.message);
-  result.failed += 1;
+  if (await dependencies.jobs.markFailed(job.id, error.message, job.attempts) !== false) {
+    result.failed += 1;
+  }
 }
 
 export async function processNotificationOutbox(
@@ -134,8 +136,9 @@ export async function processNotificationOutbox(
     }
 
     if (permanentError) {
-      await dependencies.jobs.markFailed(job.id, permanentError.message);
-      result.failed += 1;
+      if (await dependencies.jobs.markFailed(job.id, permanentError.message, job.attempts) !== false) {
+        result.failed += 1;
+      }
       continue;
     }
 
@@ -145,8 +148,9 @@ export async function processNotificationOutbox(
     }
 
     if (delivered > 0) {
-      await dependencies.jobs.markSent(job.id, scheduledAt);
-      result.sent += 1;
+      if (await dependencies.jobs.markSent(job.id, scheduledAt, job.attempts) !== false) {
+        result.sent += 1;
+      }
       continue;
     }
 
