@@ -5,6 +5,7 @@ import type {
 } from '../contracts';
 import { createD1ScheduledNotificationDependencies } from '../notification-runtime';
 import { D1NotificationSettingsStore } from '../repositories/D1NotificationSettingsStore';
+import { D1NotificationJobStore } from '../repositories/D1NotificationJobStore';
 import { D1PersonRepository } from '../repositories/D1PersonRepository';
 import { D1ScheduleRepository } from '../repositories/D1ScheduleRepository';
 import { D1SubscriptionStore } from '../repositories/D1SubscriptionStore';
@@ -176,6 +177,49 @@ async function cycle(request: Request, env: WorkerEnv): Promise<Response> {
   });
 }
 
+
+/** Test-only HTTP endpoint: verifies persisted D1 lease recovery using SQL. */
+async function probeProcessingLease(env: WorkerEnv): Promise<Response> {
+  const jobs = new D1NotificationJobStore(env.DB);
+  const jobId = crypto.randomUUID();
+  const initialTime = '2026-10-07T08:00:00.000Z';
+  await jobs.enqueueOnce({
+    id: jobId,
+    dedupeKey: 'lease-probe:' + jobId,
+    personId: null,
+    type: 'fixture-probe',
+    scheduledFor: '2026-10-07T07:59:00.000Z',
+    nextAttemptAt: '2026-10-07T07:59:00.000Z',
+    payload: { title: 'Synthetic lease', body: 'No remote send', tag: 'fixture-lease', path: '/' },
+  });
+  const initial = await jobs.claimDue(initialTime, 1);
+  const oneSecondLater = '2026-10-07T08:00:01.000Z';
+  const parallel = await Promise.all([
+    jobs.claimDue(oneSecondLater, 1),
+    jobs.claimDue(oneSecondLater, 1),
+  ]);
+  const withinLease = await jobs.claimDue('2026-10-07T08:14:59.000Z', 1);
+  const expired = await jobs.claimDue('2026-10-07T08:15:00.000Z', 1);
+  const duplicate = await jobs.claimDue('2026-10-07T08:15:01.000Z', 1);
+  await jobs.markSent(jobId, '2026-10-07T08:15:01.000Z');
+  const afterSent = await jobs.claimDue('2026-10-07T09:00:00.000Z', 1);
+  const persisted = await env.DB.prepare(
+    'SELECT status, attempts, sent_at FROM notification_jobs WHERE id = ?1',
+  ).bind(jobId).first<{status:string; attempts:number; sent_at:string | null}>();
+  return json({
+    initialClaims: initial.filter(j => j.id === jobId).length,
+    immediateClaims: parallel.flat().filter(j => j.id === jobId).length,
+    withinLeaseClaims: withinLease.filter(j => j.id === jobId).length,
+    reclaimedClaims: expired.filter(j => j.id === jobId).length,
+    duplicateClaims: duplicate.filter(j => j.id === jobId).length,
+    afterSentClaims: afterSent.filter(j => j.id === jobId).length,
+    status: persisted?.status,
+    attempts: persisted?.attempts,
+    sentAt: persisted?.sent_at,
+    syntheticOnly: true,
+  });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -191,6 +235,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/cycle') {
       return cycle(request, env);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/lease-probe') {
+      return probeProcessingLease(env);
     }
 
     if (request.method === 'GET' && url.pathname === '/state') {
