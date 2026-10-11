@@ -117,6 +117,7 @@ export function TimeRangeWheelPicker({
                     key={hour}
                     className={hour === parsed.hour ? 'selected' : ''}
                     data-wheel-selected={hour === parsed.hour ? 'true' : 'false'}
+                    onPointerDown={(event) => { if (event.pointerType === 'mouse') setPart('hour', hour); }}
                     onClick={() => setPart('hour', hour)}
                   >
                     {String(hour).padStart(2, '0')}
@@ -134,6 +135,7 @@ export function TimeRangeWheelPicker({
                     key={minute}
                     className={minute === parsed.minute ? 'selected' : ''}
                     data-wheel-selected={minute === parsed.minute ? 'true' : 'false'}
+                    onPointerDown={(event) => { if (event.pointerType === 'mouse') setPart('minute', minute); }}
                     onClick={() => setPart('minute', minute)}
                   >
                     {String(minute).padStart(2, '0')}
