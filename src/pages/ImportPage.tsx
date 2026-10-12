@@ -29,8 +29,9 @@ export function ImportPage() {
   const [parsing, setParsing] = useState(false);
   useEffect(() => {
     const cancel = () => { request.current?.abort(); request.current = null; };
-    window.addEventListener('pagehide', cancel);
-    return () => { cancel(); window.removeEventListener('pagehide', cancel); };
+    const hide = () => { cancel(); setParsing(false); };
+    window.addEventListener('pagehide', hide);
+    return () => { cancel(); window.removeEventListener('pagehide', hide); };
   }, []);
 
   if (workflow.status === 'loading') {

@@ -12,6 +12,9 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.equal(await page.getByRole('region',{name:'주로 오는 길',exact:true}).count(),1);
   assert.ok(await page.locator('[data-transit-mode="BUS"]').count());
   assert.ok(await page.locator('[data-transit-mode="SUBWAY"]').count());
+  assert.ok(await page.locator('[data-transit-mode="WALKING"]').count());
+  assert.equal(await page.getByRole('region',{name:'도착지',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(189, 176, 146)','shared Line 9 color');
+  assert.equal(await page.getByRole('region',{name:'주로 오는 길',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(102, 112, 133)','unknown line fallback');
   const width = await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(width.scroll<=width.viewport,'mobile UI overflow');
   const before=(await api('/people/'+id+'/commute?kind=origin')).body.preferredRouteCandidateId;
@@ -34,7 +37,8 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.ok(prior.length,'baseline schedule missing');
   const midnightContext = await page.context().browser().newContext({storageState:await page.context().storageState(),serviceWorkers:'block'});
   const midnight = await midnightContext.newPage();
-  await midnight.clock.install({time:new Date(todayKst+'T23:59:59+09:00')});
+  await midnight.clock.install({time:new Date(todayKst+'T23:59:58+09:00')});
+  await midnight.clock.pauseAt(new Date(todayKst+'T23:59:59+09:00'));
   await midnight.goto(base+'/schedule',{waitUntil:'domcontentloaded'});
   await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').waitFor();
   await midnight.clock.runFor(2200);
@@ -75,6 +79,13 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   await page.locator('input[accept=".xlsx"]').setInputFiles({name:'cancel-fixture.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic invalid workbook')});
   await page.getByRole('alert').filter({hasText:'일정을 인식하지 못했습니다.'}).waitFor();
   assert.equal(await page.locator('input[accept=".xlsx"]').inputValue(),'');
+  await page.locator('input[accept=".xlsx"]').setInputFiles({name:'leave-fixture.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic invalid workbook')});
+  await page.getByRole('button',{name:'가져오기 취소',exact:true}).waitFor();
+  await open('/');
+  await page.locator('[data-page="TodayPage"][data-state="WORKING"]').waitFor();
+  await open('/import');
+  await page.locator('input[accept=".xlsx"]').waitFor();
+  assert.equal(await page.getByRole('button',{name:'인식 결과 보기'}).isDisabled(),true,'page exit cancels unfinished import');
   await open('/');
   await page.locator('[data-page="TodayPage"][data-state="WORKING"]').waitFor();
   return {mobileSvg:true,preferredOnly:true,historyPreserved:true,etaRange:true,arrivalRuleD1:true,alarmContractOnly:true,cancelAndRetry:true};

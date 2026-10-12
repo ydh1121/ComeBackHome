@@ -31,6 +31,8 @@ try {
   assert.equal(calculateArrivalEta({departureMs:departure,now:new Date(departure+11*60_000),route}).departureUnconfirmed,true);
   assert.equal(calculateArrivalEta({departureMs:departure,now:new Date(departure+4*60_000),route,arrivals,departureBasis:'ACTUAL'}).confidence,'FALLBACK','cannot track a traveller after boarding');
 
+  assert.equal(calculateArrivalEta({departureMs:departure,now,route:{totalMinutes:2},departureBasis:'ACTUAL'}).earliestArrivalAt.getTime(),departure,'arrival cannot precede actual departure');
+
   const { buildClockAlarmPlan, reconcileOwnedAlarms, clockShortcutUrl } = await load('src/features/alarms/alarm-plan.ts');
   const alarmNow = new Date('2026-10-11T23:30:00+09:00');
   const entries=[{id:'s',personId:'p',date:'2026-10-12',start:'01:30',end:'08:00',enabled:true}];

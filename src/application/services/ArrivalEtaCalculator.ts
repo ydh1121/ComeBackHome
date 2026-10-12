@@ -57,7 +57,7 @@ export function calculateArrivalEta(input: {
   const travelVariation = confidence === 'LIVE' ? 5 : 10;
   return {
     arrivalAt: new Date(arrivalMs),
-    earliestArrivalAt: new Date(arrivalMs - (variation + travelVariation) * 60_000),
+    earliestArrivalAt: new Date(Math.max(input.departureMs - variation * 60_000, arrivalMs - (variation + travelVariation) * 60_000)),
     latestArrivalAt: new Date(arrivalMs + (variation + travelVariation) * 60_000),
     departureBasis: basis,
     departureUnconfirmed: basis === 'SCHEDULED' && input.now.getTime() > input.departureMs + variation * 60_000,
