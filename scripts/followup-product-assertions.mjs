@@ -32,13 +32,14 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   await page.getByRole('button',{name:'과거 일정 숨기기',exact:true}).click();
   assert.ok((await api('/people/'+id+'/schedules')).body.schedules.some(row=>row.date===historyDate),'history must remain in D1');
   assert.ok(prior.length,'baseline schedule missing');
-  const midnight = await page.context().newPage();
+  const midnightContext = await page.context().browser().newContext({storageState:await page.context().storageState(),serviceWorkers:'block'});
+  const midnight = await midnightContext.newPage();
   await midnight.clock.install({time:new Date(todayKst+'T23:59:59+09:00')});
   await midnight.goto(base+'/schedule',{waitUntil:'domcontentloaded'});
   await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').waitFor();
   await midnight.clock.runFor(2200);
   assert.equal(await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').count(),0,'KST midnight hides yesterday without deleting');
-  await midnight.close();
+  await midnightContext.close();
 
   await open('/');await page.locator('.departure-estimate').waitFor();
   assert.ok((await page.locator('.big-time').innerText()).includes('–'),'ETA range is missing');

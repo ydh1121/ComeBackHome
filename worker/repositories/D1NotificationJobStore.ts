@@ -113,7 +113,7 @@ export class D1NotificationJobStore implements NotificationJobStore {
           AND s.enabled = 1
           AND (strftime('%s', s.schedule_date || ' ' || s.end_time || ':00', '-9 hours') + CASE WHEN s.end_time < s.start_time THEN 86400 ELSE 0 END - 600)
               = CAST(strftime('%s', notification_jobs.scheduled_for) AS INTEGER)
-          AND strftime('%s', ?1) <= CAST(strftime('%s', notification_jobs.scheduled_for) AS INTEGER) + 900
+          AND CAST(strftime('%s', ?1) AS INTEGER) <= CAST(strftime('%s', notification_jobs.scheduled_for) AS INTEGER) + 900
           AND NOT EXISTS (SELECT 1 FROM presence_state ps WHERE ps.person_id=s.person_id
             AND ps.work_date=s.schedule_date AND (ps.left_work_at IS NOT NULL OR ps.arrived_home_at IS NOT NULL))
       )
