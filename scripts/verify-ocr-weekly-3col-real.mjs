@@ -822,6 +822,7 @@ try{
       // this is a user's unseen original or real production acceptance.
       let productDomFlow=null;
       if(focusedRealHttpD1){
+        const writesBeforeDom=realLocalHttpD1.stats.atomicImports;
         const fixture=immutableImageBytes['A-CLEAN'];
         if(!fixture)throw Error('REAL_UI_RASTER_BYTES_MISSING');
         await page.goto('http://127.0.0.1:'+port+'/import',
@@ -839,7 +840,14 @@ try{
           '[data-page="ImportPage"]')?.textContent?.includes('인식 완료')||
           document.querySelector('[data-page="ImportPage"]')?.textContent?.includes('최종 검토 필요')||
           document.querySelector('[data-page="ImportPage"]')?.textContent?.includes('일부 인식'));
-        if(!(await viewButton.isEnabled()))throw Error('REAL_UI_UPLOAD_NOT_RECOVERABLE');
+        // READY labels precede matching/snapshot hydration and the selection
+        // action's finally block. Wait for the actual user-facing completion.
+        await page.waitForFunction(()=>{
+          const root=document.querySelector('[data-page="ImportPage"]');
+          const error=root?.querySelector('[role="alert"]');
+          if(error)throw Error('REAL_UI_UPLOAD_FAILED: '+error.textContent);
+          return root?.querySelector('button.cta')?.disabled===false;
+        },null,{timeout:60_000});
         await viewButton.click();
         await page.locator('[data-page="ImportPersonMatchPage"]').waitFor();
         await page.getByRole('button',{name:'다음'}).click();
@@ -848,6 +856,8 @@ try{
         await page.locator('[data-page="ImportReviewPage"]').waitFor();
         const beforeSave=await page.locator('button.cta').isDisabled();
         if(!beforeSave)throw Error('REAL_UI_SAVE_ENABLED_BEFORE_DATES');
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom)
+          throw Error('REAL_UI_PREAPPROVAL_WRITE');
         const dateField=page.getByLabel('주간 시작일');
         if(await dateField.inputValue()!=='2026-10-12')
           await dateField.fill('2026-10-12');
@@ -870,7 +880,7 @@ try{
             await item.getByRole('button',{name:/휴무로 변경/}).click();
             approvedOff++;
           }
-          const choice=item.locator('.review-choice-list button').filter({has:item.locator('.review-choice-label')});
+          const choice=item.locator('.review-choice-list button').filter({has:page.locator('.review-choice-label')});
           await choice.click();
         }
         if(approvedOff!==2)throw Error('REAL_UI_OFF_CANDIDATE_NOT_TWO:'+approvedOff);
@@ -878,6 +888,8 @@ try{
           throw Error('REAL_UI_APPROVAL_CTA_DISABLED');
         await page.locator('button.cta').click();
         await page.waitForURL(/\/schedule$/);
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+1)
+          throw Error('REAL_UI_APPROVAL_NOT_SINGLE_ATOMIC_REQUEST');
         const readback=await page.evaluate(async()=>{
           const people=await fetch('/api/people').then(r=>r.json());
           const result=[];
