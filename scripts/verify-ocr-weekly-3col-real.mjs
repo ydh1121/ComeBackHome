@@ -887,10 +887,12 @@ try{
           }
           const choice=item.locator('.review-choice-list button').filter({has:page.locator('.review-choice-label')});
           await choice.click();
+          // A click starts the repository action. The visible query refresh
+          // also loads people over HTTP, so wait for its committed UI state.
+          await item.locator('.review-choice-list button[aria-pressed="true"] .review-choice-label').waitFor();
         }
         if(approvedOff!==2)throw Error('REAL_UI_OFF_CANDIDATE_NOT_TWO:'+approvedOff);
-        if(!(await page.locator('button.cta').isEnabled()))
-          throw Error('REAL_UI_APPROVAL_CTA_DISABLED');
+        await page.locator('button.cta:enabled').waitFor();
         console.log('CBH_OCR_TRACE: DOM_APPROVED '+browserName);
         await page.locator('button.cta').click();
         await page.waitForURL(/\/schedule$/);
