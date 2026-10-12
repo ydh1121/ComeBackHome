@@ -53,7 +53,7 @@ export function createMockApplicationServices(): ApplicationServices {
     () => store.mutate(() => undefined),
   );
   const queries = new ComeBackHomeQueries(repositories, personSelection);
-  const importWorkflow = new ImportWorkflowService(repositories.imports, repositories.people);
+  const importWorkflow = new ImportWorkflowService(repositories.imports, repositories.people, repositories.schedules);
   const placeSearchProvider = new MockPlaceSearchProvider();
   const transitSearchProvider = new MockTransitAccessSearchProvider();
   const importFileSelection = new WorkbookImportFileSelectionAction(

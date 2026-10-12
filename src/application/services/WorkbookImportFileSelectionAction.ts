@@ -12,7 +12,25 @@ import type {
   DetectedImportPerson,
   ImportFileRecord,
   ImportReviewItem,
+  ImportSourceRegion,
 } from '../../domain/models';
+
+// Object URLs stay in browser memory only. Never persist roster images
+// to localStorage, send them to backend or include them in CI artifacts.
+const privateImageUrls=new Map<string,string>();
+export function getPrivateImportImageUrl(batchId:string):string|null {
+  return privateImageUrls.get(batchId)??null;
+}
+export function releasePrivateImportImage(batchId?: string): void {
+  for (const [id, url] of privateImageUrls) {
+    if (batchId && id !== batchId) continue;
+    URL.revokeObjectURL(url);
+    privateImageUrls.delete(id);
+  }
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => releasePrivateImportImage());
+}
 
 function normalizeName(value: string): string {
   return value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, '');
@@ -45,13 +63,19 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
     const batch = await this.imports.createBatch();
     const cancel = () => {
+      releasePrivateImportImage(batch.id);
       void this.imports.replaceFiles(batch.id, []).catch(() => undefined);
       void this.imports.replaceParsedResult(batch.id, { detectedPeople: [], reviewItems: [], structure: batch.structure }).catch(() => undefined);
     };
     this.cancelPrevious = cancel;
     signal?.addEventListener('abort', cancel, { once: true });
+    let reviewPublished = false;
     try {
     assertActive();
+    releasePrivateImportImage();
+    const firstImage=files.find(item=>item.kind==='IMAGE');
+    if(firstImage && firstImage.file instanceof Blob && typeof URL.createObjectURL==='function')
+      privateImageUrls.set(batch.id,URL.createObjectURL(firstImage.file));
     const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
       const supported = kind === 'WORKBOOK' || this.imageRecognizer != null;
       return {
@@ -133,6 +157,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     const weeklyRequiresPerCellApproval = parsedResults.some(
       (parsed) => parsed.structure.sheet === 'weekly 7 day x start/end/break physical matrix',
     );
+    // Different weekly images may describe different calendar weeks. A single
+    // review batch has only one confirmed start date, so never silently merge
+    // candidates with the same person/dayIndex from multiple uploaded weeks.
+    if(weeklyRequiresPerCellApproval && parsedResults.length!==1)
+      throw new Error('주간 근무표는 한 번에 한 주씩 가져와 주세요. 다른 주의 일정을 합치지 않습니다.');
     const detectedByName = new Map<string, DetectedImportPerson>();
     for (const parsed of parsedResults) {
       for (const person of parsed.detectedPeople) {
@@ -162,39 +191,53 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     const candidateByKey = new Map<string, {
       detectedPersonId: string;
       personId: string | null;
-      date: string;
+      date: string | null;
+      dayIndex?: number;
+      sourceRow?: number;
+      sourceRegion?: ImportSourceRegion;
       enabled: boolean;
       start: string | null;
       end: string | null;
       breakMinutes?: number | null;
       confidence: number;
       recognitionState: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
+      breakReviewRequired?: boolean;
     }>();
     let duplicateCandidate = false;
 
     const registerCandidate = (candidate: {
       sourcePersonName: string;
-      date: string;
+      date: string | null;
+      dayIndex?: number;
+      sourceRow?: number;
+      sourceRegion?: ImportSourceRegion;
       start: string | null;
       end: string | null;
       breakMinutes?: number | null;
       confidence: number;
       enabled?: boolean;
       recognitionState?: 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
+      breakReviewRequired?: boolean;
     }) => {
       const detected = detectedByName.get(normalizeName(candidate.sourcePersonName));
       if (!detected) return;
 
-      const key = normalizeName(candidate.sourcePersonName) + '|' + candidate.date;
+      const key = normalizeName(candidate.sourcePersonName) + '|' +
+        (weeklyRequiresPerCellApproval && candidate.dayIndex!=null
+          ? 'day:'+candidate.dayIndex : candidate.date);
       const next = {
         detectedPersonId: detected.id,
         personId: detected.matchedPersonId,
         date: candidate.date,
+        sourceRow: candidate.sourceRow,
+        sourceRegion: candidate.sourceRegion,
+        ...(candidate.dayIndex!=null?{dayIndex:candidate.dayIndex}:{}),
         enabled: candidate.enabled ?? true,
         start: candidate.start,
         end: candidate.end,
         ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         confidence: candidate.confidence,
+        ...(candidate.breakReviewRequired?{breakReviewRequired:true}:{}),
         recognitionState:
           candidate.recognitionState ??
           (candidate.start && candidate.end ? 'WORK' : 'INCOMPLETE'),
@@ -255,7 +298,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     // matched DB person does not constitute approval of every WORK/OFF date.
     const reviewItems: ImportReviewItem[] = [];
     for (const candidate of candidateByKey.values()) {
-      const existing = candidate.personId
+      const existing = candidate.personId && candidate.date
         ? await this.schedules.getByDate(candidate.personId, candidate.date)
         : null;
       const exactDuplicate = Boolean(
@@ -279,6 +322,9 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         detectedPersonId: candidate.detectedPersonId,
         personId: candidate.personId,
         date: candidate.date,
+        sourceRow: candidate.sourceRow,
+        sourceRegion: candidate.sourceRegion,
+        ...(candidate.dayIndex!=null?{dayIndex:candidate.dayIndex}:{}),
         ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end,
           breakMinutes: existing.breakMinutes ?? null } } : {}),
         imported: {
@@ -288,6 +334,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
           ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),
         },
         recognitionState: candidate.recognitionState,
+        ...(candidate.breakReviewRequired?{breakReviewRequired:true}:{}),
         // Weekly OCR requires an explicit decision even when a generated
         // OCR candidate happens to equal the already-stored schedule.
         resolution: weeklyRequiresPerCellApproval ? null :
@@ -303,6 +350,11 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       detectedPeople: [...detectedByName.values()],
       structure: {
         ...first.structure,
+        // A weekly image never commits itself, including when every
+        // recognized calendar glyph is consistent.
+        ...(weeklyRequiresPerCellApproval && first.structure.weeklyReview
+          ? {weeklyReview:{...first.structure.weeklyReview,confirmed:false}}
+          : {}),
         needsReview:
           first.structure.needsReview ||
           parsedResults.length > 1 ||
@@ -313,10 +365,12 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     });
 
     assertActive();
+    reviewPublished = true;
     return batch.id;
     } finally {
       signal?.removeEventListener('abort', cancel);
       if (signal?.aborted || generation !== this.generation) cancel();
+      if (!reviewPublished) releasePrivateImportImage(batch.id);
       if (this.cancelPrevious === cancel) this.cancelPrevious = null;
       files.length = 0;
     }

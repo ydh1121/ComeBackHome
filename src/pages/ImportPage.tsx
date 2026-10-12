@@ -75,14 +75,13 @@ export function ImportPage() {
 
       <button type="button" className="upload" onClick={() => imageInputRef.current?.click()}>
         <Icon name="upload" />
-        <span><b>근무표 이미지 추가</b><span className="meta">사진 · 스크린샷 여러 장 가능</span></span>
+        <span><b>근무표 이미지 추가</b><span className="meta">한 주의 사진 · 스크린샷 한 장</span></span>
       </button>
       <input
         ref={imageInputRef}
         className="import-file-input"
         type="file"
         accept="image/*"
-        multiple
         onChange={(event) => onFiles(event.target.files)}
       />
 
@@ -109,7 +108,11 @@ export function ImportPage() {
               <b>{file.name}</b>
               {file.status === 'PARSING' ? (
                 <div className="progress"><i style={{ width: Math.max(0, Math.min(100, file.progress)) + '%' }} /></div>
-              ) : <div className="small">{statusLabel(file.status)}</div>}
+              ) : <div className="small">{file.status === 'READY' && file.kind === 'IMAGE'
+                ? batch?.structure.weeklyReview?.status === 'MANUAL_RECOVERY_REQUIRED'
+                  ? '수동 입력 필요' : batch?.structure.weeklyReview?.status === 'PARTIAL_REVIEW_REQUIRED'
+                    ? '일부 인식 · 직접 확인 필요' : '인식 결과 · 최종 검토 필요'
+                : statusLabel(file.status)}</div>}
               {file.status === 'ERROR' && file.message ? (
                 <div className="import-file-diagnostic">{file.message}</div>
               ) : null}

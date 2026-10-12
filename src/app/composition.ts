@@ -151,7 +151,7 @@ export async function createHybridApiApplicationServices(
   });
 
   const queries = new ComeBackHomeQueries(repositories, personSelection);
-  const importWorkflow = new ImportWorkflowService(imports, people);
+  const importWorkflow = new ImportWorkflowService(imports, people, schedules);
   const placeSearchProvider = providerMode === 'api'
     ? new HttpPlaceSearchProvider(client)
     : disabledPlaceSearchProvider;

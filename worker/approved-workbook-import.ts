@@ -1,7 +1,7 @@
 import type { D1DatabaseLike, D1PreparedStatementLike } from './runtime-types';
 import { batchOrThrow, utcNow } from './repositories/d1-helpers';
 
-// Dedicated to approved native XLSX imports. No OCR module or second backend.
+// Shared approved XLSX/image transaction. Recognition never writes here.
 type ExistingSnapshot = {
   enabled: boolean;
   start: string;
@@ -25,12 +25,15 @@ type ImportShift = {
   end: string | null;
   breakMinutes: number | null;
   existing: ExistingSnapshot | null;
+  dayIndex?: number;
+  breakReviewRequired?: boolean;
 };
 type Normalized = {
   requestId: string;
   approved: true;
   people: ImportPerson[];
   schedules: ImportShift[];
+  imageWeek?: { source: 'WEEKLY_IMAGE'; weekStart: string; datesConfirmed: true };
 };
 
 export class ApprovedWorkbookImportConflict extends Error {
@@ -89,6 +92,18 @@ function normalize(value: unknown): Normalized {
   const requestId = string(body.requestId, 'REQUEST_ID', 128);
   if (!/^[a-zA-Z0-9_-]{8,128}$/.test(requestId)) throw new Error('INVALID_REQUEST_ID');
   if (body.approved !== true) throw new Error('IMPORT_NOT_APPROVED');
+  if (body.source !== undefined && body.source !== 'WEEKLY_IMAGE') {
+    throw new Error('INVALID_IMPORT_SOURCE');
+  }
+  let imageWeek: Normalized['imageWeek'];
+  if (body.source === 'WEEKLY_IMAGE') {
+    if (body.datesConfirmed !== true) throw new Error('WEEKLY_DATES_NOT_CONFIRMED');
+    const weekStart = date(body.weekStart);
+    if (new Date(weekStart + 'T00:00:00Z').getUTCDay() !== 1) {
+      throw new Error('WEEK_START_MUST_BE_MONDAY');
+    }
+    imageWeek = { source: 'WEEKLY_IMAGE', weekStart, datesConfirmed: true };
+  }
   if (!Array.isArray(body.people) || !Array.isArray(body.schedules) ||
       body.people.length < 1 || body.people.length > 100 ||
       body.schedules.length < 1 || body.schedules.length > 700) {
@@ -118,6 +133,13 @@ function normalize(value: unknown): Normalized {
     const personRef = string(item.personRef, 'PERSON_REF');
     if (!refs.has(personRef)) throw new Error('INVALID_PERSON_REF');
     const day = date(item.date);
+    if (imageWeek) {
+      if (typeof item.dayIndex !== 'number' || !Number.isInteger(item.dayIndex) ||
+          item.dayIndex < 0 || item.dayIndex > 6 || day !== new Date(
+            Date.parse(imageWeek.weekStart + 'T00:00:00Z') + item.dayIndex * 86400000,
+          ).toISOString().slice(0, 10)) throw new Error('UNCONFIRMED_WEEKLY_DAY');
+      if (typeof item.breakReviewRequired !== 'boolean') throw new Error('INVALID_BREAK_REVIEW_STATE');
+    }
     const key = personRef + '|' + day;
     if (keys.has(key)) throw new Error('DUPLICATE_PERSON_DATE');
     keys.add(key);
@@ -143,6 +165,8 @@ function normalize(value: unknown): Normalized {
       throw new Error('INVALID_OFF_PAYLOAD');
     }
     const breakMinutes = enabled ? minutes(item.breakMinutes) : null;
+    if (imageWeek && item.resolution === 'NEW' && enabled &&
+        item.breakReviewRequired && breakMinutes === null) throw new Error('UNREVIEWED_BREAK_MINUTES');
     if (!Object.prototype.hasOwnProperty.call(item, 'existing')) {
       throw new Error('MISSING_EXISTING_SNAPSHOT');
     }
@@ -150,15 +174,19 @@ function normalize(value: unknown): Normalized {
       personRef, date: day, resolution: item.resolution as ImportShift['resolution'],
       approved: true, enabled, explicitOff: item.explicitOff,
       start, end, breakMinutes, existing: snapshot(item.existing),
+      ...(imageWeek ? { dayIndex: item.dayIndex as number, breakReviewRequired: item.breakReviewRequired as boolean } : {}),
     };
   }).sort((a,b) => (a.personRef+'|'+a.date).localeCompare(b.personRef+'|'+b.date));
   const selectedRefs = new Set(schedules.filter(s => s.resolution === 'NEW').map(s => s.personRef));
   for (const person of people) {
+    if (imageWeek && schedules.filter(row => row.personRef === person.ref).length !== 7) {
+      throw new Error('INCOMPLETE_WEEKLY_REVIEW');
+    }
     if (person.kind === 'PENDING_NEW' && !selectedRefs.has(person.ref)) {
       throw new Error('PENDING_PERSON_HAS_NO_APPROVED_SCHEDULE');
     }
   }
-  return { requestId, approved: true, people, schedules };
+  return { requestId, approved: true, people, schedules, ...(imageWeek ? { imageWeek } : {}) };
 }
 
 async function hexHash(value: string): Promise<string> {
@@ -177,7 +205,8 @@ interface ReceiptRow { payload_digest: string; receipt_json: string; }
 
 export async function commitApprovedWorkbookImport(db: D1DatabaseLike, input: unknown): Promise<unknown> {
   const data = normalize(input);
-  const digest = await hexHash(JSON.stringify({ people: data.people, schedules: data.schedules, approved: true }));
+  const digest = await hexHash(JSON.stringify({ people: data.people, schedules: data.schedules, approved: true,
+    ...(data.imageWeek ? { imageWeek: data.imageWeek } : {}) }));
   const lookup = () => db.prepare(
     'SELECT payload_digest, receipt_json FROM approved_workbook_import_receipts WHERE request_id = ?1',
   ).bind(data.requestId).first<ReceiptRow>();

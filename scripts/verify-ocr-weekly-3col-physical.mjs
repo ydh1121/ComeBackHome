@@ -21,7 +21,8 @@ try{
       const result=await page.evaluate(async()=>{
         const [{BrowserScheduleTableStructureDetector},
                {buildWeekly3ColumnPhysicalMatrix,resolveWeekly3ColumnDates,
-                weekly3ColumnProbeRegions,interpretWeekly3Column}] = await Promise.all([
+                weekly3ColumnProbeRegions,interpretWeekly3Column,
+                 reconcileWeekly3ColumnObservedHeader}] = await Promise.all([
           import('/src/providers/import/ScheduleTableStructureDetector.ts'),
           import('/src/providers/import/Weekly3ColumnScheduleMatrix.ts'),
         ]);
@@ -32,10 +33,15 @@ try{
           {id:'A_DEGRADED',width:56,height:58,people:4,scale:.8},
           {id:'B_DEGRADED',width:50,height:54,people:6,scale:.78},
           {id:'C_DEGRADED_HOLDOUT',width:60,height:61,people:3,scale:.76},
+          // Four physically separated header bands, with a late label row.
+          {id:'D_MULTIBAND_HEADER',width:56,height:58,people:4,scale:1,
+            headerRows:4,dateHeaderRow:2,headerLabelRow:3},
         ];
         const results=[];
         for(const spec of specs){
-          const left=18,top=72,nameWidth=150,headerRows=2,subcolumns=21;
+          const left=18,top=72,nameWidth=150,headerRows=spec.headerRows??2,
+            dateHeaderRow=spec.dateHeaderRow??0,
+            headerLabelRow=spec.headerLabelRow??1,subcolumns=21;
           const width=left+nameWidth+spec.width*subcolumns+18;
           const height=top+spec.height*(headerRows+spec.people)+18;
           const canvas=document.createElement('canvas');
@@ -53,9 +59,9 @@ try{
             const groupLeft=left+nameWidth+d*3*spec.width;
             ctx.font='bold 15px sans-serif';
             ctx.fillStyle='#171717';
-            ctx.fillText(String(d+12)+'일',groupLeft+spec.width+8,top+34);
+            ctx.fillText(String(d+12)+'일',groupLeft+spec.width+8,top+dateHeaderRow*spec.height+34);
             for(let f=0;f<3;f++){
-              ctx.fillText(labels[f],groupLeft+f*spec.width+4,top+spec.height+34);
+              ctx.fillText(labels[f],groupLeft+f*spec.width+4,top+headerLabelRow*spec.height+34);
             }
           }
           for(let p=0;p<spec.people;p++){
@@ -104,6 +110,48 @@ try{
             rowBands:detection.structure.rowBands.length,
           };
           if(physical){
+            if(spec.id==='D_MULTIBAND_HEADER'){
+              // These are synthetic UNIT observations only, never credited
+              // as OCR accuracy. They prove remapping and fail-closed dates.
+              const labels=['출근','퇴근','쉬는시간'];
+              const evidence=Array.from({length:7},(_,day)=>
+                labels.map((text,field)=>({
+                  id:'weekly::1::'+day+'::'+['start','end','break'][field],
+                  purpose:'cell',text,confidence:.98,tokens:[],
+                }))).flat();
+              const sparse=evidence.filter(item=>item.id.includes('::0::'));
+              const notEnough=reconcileWeekly3ColumnObservedHeader(physical,sparse);
+              if(notEnough.shiftedRows!==0)
+                throw Error('One-day header labels cannot change geometry');
+              const aligned=reconcileWeekly3ColumnObservedHeader(physical,evidence);
+              if(aligned.shiftedRows!==2||aligned.matrix.rows.length!==spec.people||
+                 aligned.matrix.headerBands.length!==4||
+                 aligned.matrix.headerSource!=='OBSERVED_LABELS')
+                throw Error('Observed multi-day header not reconciled');
+              const owned=weekly3ColumnProbeRegions(aligned.matrix)
+                .filter(item=>item.purpose==='date');
+              if(owned.length!==28||
+                 !owned.some(item=>item.id==='date::grid-cell::weekly::4::header::2'))
+                throw Error('Multi-band physical date ROI missing');
+              const direct=[0,4].map(day=>({
+                id:'date::grid-cell::weekly::'+day+'::header::2',
+                purpose:'date',text:'2026-10-'+String(12+day).padStart(2,'0'),
+                confidence:.99,tokens:[],
+              }));
+              const dates=resolveWeekly3ColumnDates(aligned.matrix,emptyLayout,direct);
+              if(!dates.uniqueWeek||dates.observedDayAnchors!==2||
+                 dates.dates[0].date!=='2026-10-12'||
+                 dates.dates[6].date!=='2026-10-18'||
+                 dates.acceptedForAutomaticSave)
+                throw Error('Observed full-date anchors not preserved');
+              const contradicted=resolveWeekly3ColumnDates(aligned.matrix,
+                emptyLayout,[...direct,{...direct[1],text:'2026-10-17'}]);
+              if(contradicted.uniqueWeek||contradicted.dates.some(x=>x.date!=null))
+                throw Error('Conflicting physical date evidence accepted');
+              result.headerRealignmentUnit='PASS';
+              result.multibandDateUnit='PASS';
+              result.dateContradictionUnit='PASS';
+            }
             const emptyOcr=regions.map(region=>({
               id:region.id,purpose:region.purpose,text:'',tokens:[],confidence:0,
             }));

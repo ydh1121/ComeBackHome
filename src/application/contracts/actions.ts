@@ -6,12 +6,15 @@ export interface ImportFileSelectionAction { accept(files: ImportInputFile[], si
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
 export interface ImportMatchActions {
   setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void>;
+  addManualPerson(batchId: EntityId, personId: EntityId): Promise<void>;
   cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>;
-  setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
+  setPendingNewPerson(batchId: EntityId, detectedPersonId: EntityId, proposedName: string): Promise<void>; setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
   setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
 }
 export interface ImportReviewActions {
   setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void>;
+  setWeeklyStartDate(batchId: EntityId, startDate: ISODate): Promise<void>;
+  confirmWeeklyDates(batchId: EntityId): Promise<void>;
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
   setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>;

@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer as createTcpServer} from 'node:net';
+import {weeklyPayload,invalidWeeklyPayloads} from './approved-weekly-import-cases.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const config=resolve(root,'wrangler.local.jsonc');
@@ -91,7 +92,7 @@ export async function startWeeklyRealHttpD1(){
       async proxy(request,response){
         stats.proxiedApi++;
         const path=new URL(request.url??'/','http://localhost').pathname;
-        if(path==='/api/schedules/import'&&request.method==='PUT'){
+        if((path==='/api/schedules/import'||path==='/api/workbooks/approved-import')&&request.method==='PUT'){
           stats.atomicImports++;
           console.info('CBH_REAL_HTTP_D1_TRACE: HTTP_ATOMIC_REQUEST_'+stats.atomicImports);
         }
@@ -119,6 +120,45 @@ export async function startWeeklyRealHttpD1(){
           for(const item of r.body.schedules)result.push({...item});
         }
         return result.sort((a,b)=>(a.personId+'|'+a.date).localeCompare(b.personId+'|'+b.date));
+      },
+      async atomicReviewedChecks(){
+        const call=payload=>json('/api/workbooks/approved-import',{
+          method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
+        });
+        const peopleBefore=(await json('/api/people')).body.people;
+        const baseline=await this.snapshot();
+        const assertUnchanged=async label=>{
+          if(JSON.stringify((await json('/api/people')).body.people)!==JSON.stringify(peopleBefore)||
+             JSON.stringify(await this.snapshot())!==JSON.stringify(baseline))
+            throw Error(label+' partially mutated local D1');
+        };
+        const negativeCases=[];
+        for(const {name,payload} of invalidWeeklyPayloads()){
+          const result=await call(payload);
+          if(result.status<400)throw Error(name+' accepted an invalid image review');
+          await assertUnchanged(name);negativeCases.push(name);
+        }
+        // This passes validation, inserts a pending person, then fails a
+        // snapshot assertion inside the SQL transaction. Nothing may survive.
+        const bad=weeklyPayload('weekly-rollback-retry-001');
+        bad.schedules[3].existing={enabled:true,start:'09:00',end:'18:00',breakMinutes:30};
+        if((await call(bad)).status<400)throw Error('Stale image snapshot was accepted');
+        await assertUnchanged('SQL_ROLLBACK');
+        const repaired=weeklyPayload(bad.requestId);
+        const first=await call(repaired),again=await call(repaired);
+        if(first.status!==200||again.status!==200||
+           JSON.stringify(first.body.receipt)!==JSON.stringify(again.body.receipt))
+          throw Error('Image approval retry/replay contract failed');
+        const personId=first.body.receipt.people[0].personId;
+        const stored=(await json('/api/people/'+personId+'/schedules')).body.schedules;
+        if(stored.length!==7||stored.filter(r=>!r.enabled&&r.breakMinutes===null).length!==1)
+          throw Error('Image approval did not persist seven reviewed days');
+        const changed=structuredClone(repaired);changed.schedules[0].end='19:00';
+        if((await call(changed)).status!==409)throw Error('Changed image request was replayed');
+        const changedSource=structuredClone(repaired);delete changedSource.source;
+        if((await call(changedSource)).status!==409)throw Error('Image evidence missing from idempotency digest');
+        return {negativeCases,rollback:true,sameRequestReplayNoDuplicate:true,
+          imageEvidenceInDigest:true,approvedDays:7,productionD1Writes:0};
       },
       async negativeChecks(){
         console.info('CBH_REAL_HTTP_D1_TRACE: NEGATIVE_GATES_BEGIN');
