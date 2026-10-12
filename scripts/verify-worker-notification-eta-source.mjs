@@ -161,7 +161,7 @@ try {
     schedules,places,presence,commute:matchedCommute,providers:matchedProviders});
   const matched=await matchedSource.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
   expect(matched?.confidence==='LIVE' &&
-    matched.arrivalAt==='2026-10-06T12:42:00.000Z',
+    matched.arrivalAt==='2026-10-06T12:40:00.000Z',
     'verified route/stop realtime must update notification ETA without double counting');
   expect(busLookupCount===1,'matched notification route should request one bus arrival');
   providerLegMatch=false;

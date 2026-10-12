@@ -1,3 +1,4 @@
+import { TransitIcon } from '../shared/components/TransitIcon';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -29,7 +30,7 @@ function routeAccessIds(route: SavedCommuteRoute, role: 'origin' | 'destination'
 function RouteSteps({ route }: { route: RouteCandidate }) {
   return <div className="route-steps">{(route.steps ?? []).map((step, index) => (
     <div className="route-step" key={index}>
-      <Icon name={stepIcon(step.type)} />
+      <TransitIcon mode={step.type} line={step.label} />
       <span>{step.label}</span>
     </div>
   ))}</div>;

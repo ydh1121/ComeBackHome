@@ -54,7 +54,7 @@ export class ComeBackHomeQueries {
           : await this.repositories.commute.listRouteCandidates(selectedId);
 
     const nextShift = selectNextShift(
-      schedule.filter((entry) => entry.date > referenceDate),
+      schedule.filter((entry) => entry.date > (today?.workDate ?? referenceDate)),
       referenceDate,
     );
     const route = today?.routeCandidate?.personId === selectedId &&

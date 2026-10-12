@@ -48,6 +48,7 @@ export interface ImageTextProbeResult {
   confidence: number;
 }
 export interface RegionalImageTextExtractor extends ImageTextExtractor {
+  releaseResources?(): Promise<void>;
   extractRegions(
     file: File,
     regions: ImageTextProbeRegion[],

@@ -196,6 +196,7 @@ export class HttpCommuteRepository implements CommuteRepository {
 }
 
 interface ServerNotificationSettings {
+  arrivalAdvanceEnabled?: boolean;
   shiftEndEnabled: boolean;
   etaChangeEnabled: boolean;
   leftWorkEnabled: boolean;
@@ -221,6 +222,7 @@ export class HttpNotificationRepository implements NotificationRepository {
       permission: this.permission,
       subscription: this.subscription,
       rules: {
+        arrivalAdvance: settings.arrivalAdvanceEnabled ?? false,
         shiftEnd: settings.shiftEndEnabled,
         etaChange: settings.etaChangeEnabled,
         leftWork: settings.leftWorkEnabled,
@@ -231,6 +233,7 @@ export class HttpNotificationRepository implements NotificationRepository {
 
   async setRules(rules: NotificationRules): Promise<void> {
     await this.client.put('/notifications/settings', {
+      arrivalAdvanceEnabled: rules.arrivalAdvance ?? false,
       shiftEndEnabled: rules.shiftEnd,
       etaChangeEnabled: rules.etaChange,
       leftWorkEnabled: rules.leftWork,

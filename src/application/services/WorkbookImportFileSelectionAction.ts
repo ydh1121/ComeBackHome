@@ -27,13 +27,31 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     private readonly imageRecognizer?: ImageScheduleRecognizer,
   ) {}
 
-  async accept(files: ImportInputFile[]): Promise<string> {
+  private generation = 0;
+  private cancelPrevious: (() => void) | null = null;
+
+  async accept(files: ImportInputFile[], signal?: AbortSignal): Promise<string> {
+    this.cancelPrevious?.();
+    const generation = ++this.generation;
+    files = [...files];
+    const assertActive = () => {
+      if (signal?.aborted || generation !== this.generation) throw new DOMException('가져오기를 취소했습니다.', 'AbortError');
+    };
+    assertActive();
     if (!files.length) throw new Error('No import files were selected.');
     if (files.some(input => input.kind === 'WORKBOOK' && !/\.xlsx$/i.test(input.file.name))) {
       throw new Error('엑셀 가져오기는 .xlsx 파일만 지원합니다. .xls 파일은 .xlsx로 저장해 주세요.');
     }
 
     const batch = await this.imports.createBatch();
+    const cancel = () => {
+      void this.imports.replaceFiles(batch.id, []).catch(() => undefined);
+      void this.imports.replaceParsedResult(batch.id, { detectedPeople: [], reviewItems: [], structure: batch.structure }).catch(() => undefined);
+    };
+    this.cancelPrevious = cancel;
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+    assertActive();
     const initialRecords: ImportFileRecord[] = files.map(({ kind, file }) => {
       const supported = kind === 'WORKBOOK' || this.imageRecognizer != null;
       return {
@@ -49,6 +67,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     const parsedResults = [];
     const completedRecords = [...initialRecords];
     const updateProgress = async (index: number, progress: number) => {
+      assertActive();
       const current = completedRecords[index];
       if (!current || current.status !== 'PARSING') return;
       completedRecords[index] = {
@@ -59,6 +78,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     };
 
     for (let index = 0; index < files.length; index += 1) {
+      assertActive();
       const input = files[index];
       const recognizer = input.kind === 'WORKBOOK' ? this.parser : this.imageRecognizer;
       if (!recognizer) continue;
@@ -75,6 +95,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
               input.file,
               (progress) => updateProgress(index, progress),
             );
+        assertActive();
         parsedResults.push(parsed);
         completedRecords[index] = {
           ...completedRecords[index],
@@ -82,6 +103,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
           status: 'READY',
         };
       } catch (error) {
+        assertActive();
         completedRecords[index] = {
           ...completedRecords[index],
           progress: 100,
@@ -91,6 +113,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       }
     }
 
+    assertActive();
     await this.imports.replaceFiles(batch.id, completedRecords);
 
     if (!parsedResults.length) {
@@ -275,6 +298,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     const first = parsedResults[0];
     const confidence = parsedResults.reduce((sum, parsed) => sum + parsed.confidence, 0) / parsedResults.length;
 
+    assertActive();
     await this.imports.replaceParsedResult(batch.id, {
       detectedPeople: [...detectedByName.values()],
       structure: {
@@ -288,6 +312,13 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       reviewItems,
     });
 
+    assertActive();
     return batch.id;
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+      if (signal?.aborted || generation !== this.generation) cancel();
+      if (this.cancelPrevious === cancel) this.cancelPrevious = null;
+      files.length = 0;
+    }
   }
 }

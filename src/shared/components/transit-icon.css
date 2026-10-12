@@ -1,0 +1,4 @@
+.transit-icon{display:inline-flex;position:relative;flex-direction:column;align-items:center;justify-content:center;min-width:24px;min-height:26px;flex-shrink:0}
+.transit-icon .svg{width:23px!important;height:23px!important;color:inherit!important;stroke-width:1.8}
+.transit-line-dots{display:flex;gap:2px;position:absolute;bottom:-2px}
+.transit-line-dots i{display:block;width:7px;height:3px;border-radius:2px}

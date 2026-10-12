@@ -1,3 +1,4 @@
+import { TransitIcon } from '../shared/components/TransitIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -530,7 +531,7 @@ export function TransitAccessPage() {
                 aria-current={activeMarkerId === point.id ? 'true' : undefined}
                 onClick={() => activateMarker(point.id)}
               >
-              <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
+              <TransitIcon mode={point.mode} line={point.line} />
               <span className="transit-copy">
                 <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
                 <span className="row-sub">

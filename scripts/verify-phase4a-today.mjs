@@ -18,7 +18,7 @@ const requiredPageFragments = [
   "eta.status === 'STALE'",
   "eta.status === 'FALLBACK'",
   '사람 선택',
-  '집 도착 예정',
+  '집 도착 예상 범위',
   '퇴근',
   '다음 출근',
   '일정',

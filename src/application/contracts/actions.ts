@@ -2,7 +2,7 @@ import type { EntityId, ISODate } from '../../domain/common';
 import type { Address, Coordinate, ImportResolution, NotificationRules, Person, Place, PlaceKind, RouteCandidate, SavedCommuteRoute, TransitAccessPoint, TransitMode } from '../../domain/models';
 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
-export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
+export interface ImportFileSelectionAction { accept(files: ImportInputFile[], signal?: AbortSignal): Promise<EntityId>; }
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
 export interface ImportMatchActions {
   setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void>;

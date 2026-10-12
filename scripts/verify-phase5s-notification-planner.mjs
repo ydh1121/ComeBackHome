@@ -114,8 +114,8 @@ try {
 
   const shiftJobs = jobs.jobs.filter((job) => job.type === 'shift-end');
   expect(shiftJobs.length === 1, 'shift-end dedupe failed on first plan');
-  expect(shiftJobs[0]?.scheduledFor === '2026-10-05T13:10:00.000Z', 'shift-end scheduled time must equal 22:10 KST');
-  expect(shiftJobs[0]?.payload.title === '여자친구 퇴근 예정', 'shift-end title mismatch');
+  expect(shiftJobs[0]?.scheduledFor === '2026-10-05T13:00:00.000Z', 'shift-end scheduled time must be ten minutes before 22:10 KST');
+  expect(shiftJobs[0]?.payload.title === '여자친구 퇴근 예정 10분 전', 'shift-end title mismatch');
   expect(shiftJobs[0]?.payload.body.includes('퇴근 예정 22:10'), 'shift-end body missing planned shift end');
   expect(shiftJobs[0]?.payload.body.includes('귀가 예상 22:48'), 'shift-end body missing ETA');
   expect(shiftJobs[0]?.payload.body.includes('예상 기준'), 'fallback ETA must not be labeled live');

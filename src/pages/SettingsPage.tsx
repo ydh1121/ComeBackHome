@@ -11,12 +11,13 @@ export function SettingsPage() {
       <BackButton fallbackTo="/" />
       <h1 className="page-title">설정</h1>
       <div className="settings-list">
+        <button type="button" className="settings-row-button" onClick={() => navigate('/settings/alarms')}><b>iPhone 시계 알람</b><Icon name="chevron-right" /></button>
         <button type="button" className="settings-row-button" onClick={() => navigate('/notifications')}>
           <b>알림</b>
           <Icon name="chevron-right" />
         </button>
         <button type="button" className="settings-row-button" onClick={() => navigate('/settings/presence')}>
-          <b>퇴근 · 귀가 자동화</b>
+          <b>퇴근 · 귀가 기록 연결</b>
           <Icon name="chevron-right" />
         </button>
       </div>

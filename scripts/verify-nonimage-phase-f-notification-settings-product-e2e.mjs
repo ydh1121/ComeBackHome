@@ -57,10 +57,10 @@ async function browserPass(type,name){
   try{
     await page.goto(origin+'/notifications',{waitUntil:'domcontentloaded'});
     await page.locator('[data-page="NotificationSetupPage"]').waitFor();
-    const shift=selectRule(page,'예정 퇴근 시간에');
+    const shift=selectRule(page,'예정 퇴근 10분 전에');
     const eta=selectRule(page,'도착 시간이 크게 바뀔 때');
-    const left=selectRule(page,'실제 퇴근을 감지했을 때');
-    const home=selectRule(page,'집 도착을 감지했을 때');
+    const left=selectRule(page,'퇴근이 직접 기록됐을 때');
+    const home=selectRule(page,'집 도착이 직접 기록됐을 때');
     await page.waitForFunction(()=>document.querySelector('[data-page="NotificationSetupPage"]')?.getAttribute('data-state')!=='LOADING');
     const initially=(await api()).body.settings;
     assert(typeof initially.shiftEndEnabled==='boolean'&&typeof initially.etaChangeEnabled==='boolean',
@@ -70,11 +70,11 @@ async function browserPass(type,name){
     await eta.click();
     const nextEta=!initially.etaChangeEnabled;
     await page.waitForFunction(value =>
-      document.querySelectorAll('.notification-page button.rule')[1]?.getAttribute('aria-pressed')===String(value),nextEta);
+      document.querySelectorAll('.notification-page button.rule')[2]?.getAttribute('aria-pressed')===String(value),nextEta);
     await assertSaved('etaChangeEnabled',nextEta,name+' ETA toggle missing');
     await shift.click();
     await page.waitForFunction(value =>
-      document.querySelectorAll('.notification-page button.rule')[0]?.getAttribute('aria-pressed')===String(value),!initially.shiftEndEnabled);
+      document.querySelectorAll('.notification-page button.rule')[1]?.getAttribute('aria-pressed')===String(value),!initially.shiftEndEnabled);
     const afterTwo=(await api()).body.settings;
     assert(afterTwo.shiftEndEnabled===!initially.shiftEndEnabled &&
       afterTwo.etaChangeEnabled===nextEta,
@@ -105,13 +105,13 @@ async function browserPass(type,name){
       await route.continue();
     });
     await page.evaluate(()=>{
-      const rule=document.querySelectorAll('.notification-page button.rule')[2];
+      const rule=document.querySelectorAll('.notification-page button.rule')[3];
       if(!(rule instanceof HTMLButtonElement))throw Error('Rule toggle missing');
       rule.click();
       rule.click();
     });
     await page.waitForFunction(value=>
-      document.querySelectorAll('.notification-page button.rule')[2]?.getAttribute('aria-pressed')===String(value),
+      document.querySelectorAll('.notification-page button.rule')[3]?.getAttribute('aria-pressed')===String(value),
       !leftBefore);
     assert(acceptedPuts===1,name+' same-event double click should result in one PUT');
     await assertSaved('leftWorkEnabled',!leftBefore,name+' error retry not persisted');
@@ -121,7 +121,7 @@ async function browserPass(type,name){
     const prevHome=(await api()).body.settings.homeArrivalEnabled;
     await home.click();
     await page.waitForFunction(value=>
-      document.querySelectorAll('.notification-page button.rule')[3]?.getAttribute('aria-pressed')===String(value),!prevHome);
+      document.querySelectorAll('.notification-page button.rule')[4]?.getAttribute('aria-pressed')===String(value),!prevHome);
     const full=(await api()).body.settings;
     assert(full.shiftEndEnabled===!initially.shiftEndEnabled &&
       full.etaChangeEnabled===nextEta &&
@@ -133,9 +133,9 @@ async function browserPass(type,name){
     await page.locator('[data-page="NotificationSetupPage"]').waitFor();
     await page.waitForFunction(saved=>{
       const buttons=document.querySelectorAll('.notification-page button.rule');
-      return buttons.length===4 && [...buttons].every((button,i)=>
+      return buttons.length===5 && [...buttons].every((button,i)=>
         button.getAttribute('aria-pressed')===String(saved[i]));
-    },[full.shiftEndEnabled,full.etaChangeEnabled,full.leftWorkEnabled,full.homeArrivalEnabled]);
+    },[full.arrivalAdvanceEnabled,full.shiftEndEnabled,full.etaChangeEnabled,full.leftWorkEnabled,full.homeArrivalEnabled]);
     assert(pageErrors.length===0,name+' uncaught notification UI errors: '+pageErrors.join('; '));
 
     // Reject invalid rule payload before it can change any stored setting.

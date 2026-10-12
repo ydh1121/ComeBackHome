@@ -1,3 +1,4 @@
+import { AlarmPage } from '../pages/AlarmPage';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { productRoutes } from '../application/route-manifest';
 import { ImplementationBoundaryPage } from '../pages/ImplementationBoundaryPage';
@@ -45,6 +46,7 @@ function componentFor(path: string) {
   if (path === '/people/:personId/commute/:placeKind/access') return TransitAccessPage;
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;
   if (path === '/notifications') return NotificationPage;
+  if (path === '/settings/alarms') return AlarmPage;
   if (path === '/settings') return SettingsPage;
   if (path === '/settings/presence') return PresenceAutomationPage;
   return ImplementationBoundaryPage;

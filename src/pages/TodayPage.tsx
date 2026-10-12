@@ -1,3 +1,5 @@
+import { TransitIcon } from '../shared/components/TransitIcon';
+import { useSeoulDate } from '../shared/runtime/useSeoulDate';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApplicationServices, useApplicationVersion } from '../app/ApplicationServicesContext';
@@ -12,12 +14,6 @@ type LoadState =
   | { status: 'ready'; data: TodayOverviewQueryResult }
   | { status: 'error' };
 
-function currentLocalDate(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
-}
 
 function stepIcon(type: CommuteStepType): IconName {
   return type === 'BUS' ? 'bus' : 'train';
@@ -53,16 +49,17 @@ export function TodayPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const online = useOnlineStatus();
+  const currentDate = useSeoulDate();
 
   useEffect(() => {
     let active = true;
-    services.queries.getTodayOverview(currentLocalDate()).then((data) => {
+    services.queries.getTodayOverview(currentDate).then((data) => {
       if (active) setLoadState({ status: 'ready', data });
     }).catch(() => {
       if (active) setLoadState({ status: 'error' });
     });
     return () => { active = false; };
-  }, [services, version]);
+  }, [services, version, currentDate]);
 
   if (loadState.status === 'loading') {
     return <section className="today-page" data-route="/" data-page="TodayPage" data-state="LOADING"><div className="today-loading" aria-live="polite">오늘 정보를 불러오는 중</div></section>;
@@ -123,12 +120,13 @@ export function TodayPage() {
 
       <div className="hero anti-ai-hero" data-component="TodayStatus">
         <div className="today-statusline">{online ? freshnessLabel(data) : '오프라인 · 마지막 정보'}</div>
-        <div className="time-label">{actualHomeArrival ? '집 도착' : '집 도착 예정'}</div>
-        <div className="big-time">{actualHomeArrival ?? data.eta?.arrivalTime ?? '—'}</div>
+        <div className="time-label">{actualHomeArrival ? '집 도착' : '집 도착 예상 범위'}</div>
+        <div className="big-time">{actualHomeArrival ?? (data.eta?.earliestArrivalAt && data.eta?.latestArrivalAt ? kstTimeFromIso(data.eta.earliestArrivalAt) + '–' + kstTimeFromIso(data.eta.latestArrivalAt) : data.eta?.arrivalTime ?? '—')}</div>
+        {!actualHomeArrival && data.shiftEnd && !actualLeftWork ? <p className="departure-estimate">{data.eta?.departureUnconfirmed ? '예정 퇴근 시간이 지났습니다. 실제 출발은 확인되지 않았습니다.' : '예정 퇴근 ±10분 기준 · 실제 출발 미확인'}</p> : null}
         <div className="commute-simple">
           {nonWalkingSteps.map((step, index) => (
             <div className="commute-simple-row" key={`${step.type}-${index}`}>
-              <span className="commute-simple-icon"><Icon name={stepIcon(step.type)} /></span>
+              <span className="commute-simple-icon"><TransitIcon mode={step.type} line={step.label} /></span>
               <span>{step.label}</span>
             </div>
           ))}

@@ -84,6 +84,7 @@ export class Weekly3ColumnScheduleImageRecognizer implements ImageScheduleRecogn
   }
 
   async parse(file: File, onProgress?: ImportProgressReporter): Promise<ParsedImport> {
-    return (await this.evaluate(file, onProgress)).parsed;
+    try { return (await this.evaluate(file, onProgress)).parsed; }
+    finally { await this.regionExtractor.releaseResources?.(); }
   }
 }

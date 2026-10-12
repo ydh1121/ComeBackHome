@@ -150,7 +150,7 @@ try {
   expect(live?.leftWorkAt === '2026-10-05T13:15:00.000Z', 'actual LEFT_WORK state missing from Today');
   expect(live?.eta.status === 'LIVE', 'fresh realtime arrival must promote LIVE ETA '+JSON.stringify(live?.eta));
   expect(live?.eta.freshnessMinutes === 1, 'realtime freshness calculation mismatch '+JSON.stringify(live?.eta));
-  expect(live?.eta.arrivalTime === '22:55', 'realtime wait overlay ETA mismatch '+JSON.stringify(live?.eta));
+  expect(live?.eta.arrivalTime === '22:53', 'route total must not double-count unknown planned wait '+JSON.stringify(live?.eta));
   expect(live?.routeCandidate?.id === 'provider-route-fast',
     'the Today displayed route must be the exact ETA-selected route');
   // A second provider with the same ID but unrelated boarding legs must not

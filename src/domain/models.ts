@@ -30,7 +30,7 @@ export interface ImportBatch {
   reviewItems: ImportReviewItem[];
   committed: boolean;
 }
-export interface NotificationRules { shiftEnd: boolean; etaChange: boolean; leftWork: boolean; homeArrival: boolean; }
+export interface NotificationRules { arrivalAdvance?: boolean; shiftEnd: boolean; etaChange: boolean; leftWork: boolean; homeArrival: boolean; }
 export interface WebPushSubscriptionRecord {
   endpoint: string;
   expirationTime: number | null;
@@ -43,5 +43,5 @@ export interface PresenceState {
   leftWorkAt?: ISODateTime;
   arrivedHomeAt?: ISODateTime;
 }
-export interface EtaSnapshot { personId: EntityId; status: 'ACTUAL' | 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
-export interface TodaySnapshot { personId: EntityId; eta: EtaSnapshot; routeCandidate?: RouteCandidate; shiftEnd?: string; leftWorkAt?: ISODateTime; arrivedHomeAt?: ISODateTime; routeCandidateId?: EntityId; }
+export interface EtaSnapshot { personId: EntityId; status: 'ACTUAL' | 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN'; arrivalTime?: string; earliestArrivalAt?: ISODateTime; latestArrivalAt?: ISODateTime; departureBasis?: 'ACTUAL' | 'SCHEDULED'; departureUnconfirmed?: boolean; freshnessMinutes?: number; calculatedAt?: ISODateTime; }
+export interface TodaySnapshot { workDate?: ISODate; personId: EntityId; eta: EtaSnapshot; routeCandidate?: RouteCandidate; shiftEnd?: string; leftWorkAt?: ISODateTime; arrivedHomeAt?: ISODateTime; routeCandidateId?: EntityId; }

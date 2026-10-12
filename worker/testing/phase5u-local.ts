@@ -103,6 +103,7 @@ async function seed(env: WorkerEnv): Promise<Response> {
 
   await settings.updateRules({
     shiftEndEnabled: true,
+    arrivalAdvanceEnabled: false,
     etaChangeEnabled: true,
     leftWorkEnabled: true,
     homeArrivalEnabled: true,
@@ -474,8 +475,8 @@ async function probeShiftEndCurrentSchedule(env: WorkerEnv): Promise<Response> {
 
   const offDate = '2026-10-07';
   const oldDate = '2026-10-08';
-  const oldDue = '2026-10-08T08:00:00.000Z';
-  const revisedDue = '2026-10-08T09:00:00.000Z';
+  const oldDue = '2026-10-08T07:50:00.000Z';
+  const revisedDue = '2026-10-08T08:50:00.000Z';
   await schedules.upsert(makeSchedule(offDate, '17:00'));
   await jobs.enqueueOnce(makeJob(offDate, '2026-10-07T08:00:00.000Z'));
   await schedules.upsert(makeSchedule(offDate, '', false));
@@ -511,6 +512,49 @@ async function probeShiftEndCurrentSchedule(env: WorkerEnv): Promise<Response> {
   });
 }
 
+/** Exercise arrival policy in real local D1. Never uses a delivery gateway. */
+async function probeArrivalPolicy(env: WorkerEnv): Promise<Response> {
+  const people = new D1PersonRepository(env.DB);
+  const schedules = new D1ScheduleRepository(env.DB);
+  const settings = new D1NotificationSettingsStore(env.DB);
+  const jobs = new D1NotificationJobStore(env.DB);
+  const person = await people.create({ name: 'Arrival policy synthetic', relation: 'test-only' });
+  const schedule = { id: crypto.randomUUID(), personId: person.id, date: '2026-10-09', enabled: true, start: '09:00', end: '17:00' };
+  const now = '2026-10-09T08:30:00.000Z';
+  const arrival = '2026-10-09T08:40:00.000Z';
+  const job = { id: crypto.randomUUID(), personId: person.id, type: 'arrival-advance',
+    dedupeKey: 'arrival-advance:' + person.id + ':' + schedule.date,
+    scheduledFor: now, nextAttemptAt: now,
+    payload: { title: 'Synthetic arrival', body: 'test only', tag: 'arrival-probe', path: '/' } };
+  const claimed = async () => (await jobs.claimDue(now, 100)).filter(row => row.personId === person.id);
+  const rules = { shiftEndEnabled: true, etaChangeEnabled: false, leftWorkEnabled: false, homeArrivalEnabled: false };
+  await settings.updateRules({ ...rules, arrivalAdvanceEnabled: true });
+  await schedules.upsert(schedule);
+  await jobs.enqueueOnce(job);
+  await jobs.setArrivalPlan(person.id, schedule.date, arrival, now, schedule);
+  await schedules.upsert({ ...schedule, end: '18:00' });
+  const changedBlocked = (await claimed()).length === 0;
+  await schedules.upsert({ ...schedule, enabled: false });
+  const offBlocked = (await claimed()).length === 0;
+  await schedules.upsert(schedule);
+  await settings.updateRules({ ...rules, arrivalAdvanceEnabled: false });
+  const ruleOffBlocked = (await claimed()).length === 0;
+  await settings.updateRules({ ...rules, arrivalAdvanceEnabled: true });
+  await jobs.setArrivalPlan(person.id, schedule.date, arrival, '2026-10-09T08:27:00.000Z', schedule);
+  const staleBlocked = (await claimed()).length === 0;
+  await jobs.setArrivalPlan(person.id, schedule.date, null, now, schedule);
+  const noEtaBlocked = (await claimed()).length === 0;
+  await jobs.setArrivalPlan(person.id, schedule.date, arrival, now, schedule);
+  const first = await claimed();
+  const claimedOnce = first.length === 1 && (await claimed()).length === 0;
+  if (first[0]) await jobs.markSent(first[0].id, now, first[0].attempts);
+  await jobs.enqueueOnce({ ...job, id: crypto.randomUUID() });
+  const sentNotReplayed = (await claimed()).length === 0;
+  // Turn the new rule off again so legacy planner fixtures remain isolated.
+  await settings.updateRules({ ...rules, arrivalAdvanceEnabled: false });
+  return json({ syntheticOnly: true, changedBlocked, offBlocked, ruleOffBlocked, staleBlocked, noEtaBlocked, claimedOnce, sentNotReplayed });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -527,6 +571,8 @@ export default {
     if (request.method === 'POST' && url.pathname === '/cycle') {
       return cycle(request, env);
     }
+
+    if (request.method === 'POST' && url.pathname === '/arrival-policy-probe') return probeArrivalPolicy(env);
 
     if (request.method === 'POST' && url.pathname === '/shift-current-validity-probe') {
       return probeShiftEndCurrentSchedule(env);

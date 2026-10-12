@@ -54,3 +54,6 @@
 
 .today-page .presence-status-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
 .today-page .presence-status-row span{font-size:11px;font-weight:800;color:#214dc2;background:#e7efff;border-radius:999px;padding:6px 9px}
+
+.today-page .big-time{font-size:clamp(32px,10vw,48px);white-space:nowrap}
+.today-page .departure-estimate{font-size:13px;line-height:1.5;color:#667085;margin:8px 0 18px}

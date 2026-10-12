@@ -1,3 +1,4 @@
+import { activeWorkSchedule, previousSeoulDate, shiftTimes } from '../src/domain/product-time';
 import type {
   NotificationEtaSource,
   NotificationEtaState,
@@ -31,10 +32,6 @@ function seoulDate(now: Date): string {
   return values.year + '-' + values.month + '-' + values.day;
 }
 
-function parseSeoulDateTime(date: string, time: string): number | null {
-  const value = Date.parse(date + 'T' + time + ':00+09:00');
-  return Number.isFinite(value) ? value : null;
-}
 
 export interface ProviderNotificationEtaDependencies {
   schedules: ScheduleRepository;
@@ -49,13 +46,14 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
 
   async get(personId: string, now: Date): Promise<NotificationEtaState | null> {
     const date = seoulDate(now);
-    const [schedule, presence] = await Promise.all([
-      this.dependencies.schedules.getByDate(personId, date),
+    const [schedules, presence] = await Promise.all([
+      Promise.all([this.dependencies.schedules.getByDate(personId, date), this.dependencies.schedules.getByDate(personId, previousSeoulDate(now))]),
       this.dependencies.presence.get(personId),
     ]);
 
-    if (!schedule?.enabled) return null;
-    const currentPresence = presence?.workDate === date ? presence : null;
+    const schedule = activeWorkSchedule(schedules.filter((entry): entry is NonNullable<typeof entry> => entry !== null), now);
+    if (!schedule) return null;
+    const currentPresence = presence?.workDate === schedule.date ? presence : null;
     if (currentPresence?.arrivedHomeAt) return null;
 
     const runtimeCommute = new ProviderCommuteRepository(
@@ -90,8 +88,8 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
       return { personId, arrivalAt: null, confidence: 'UNKNOWN' };
     }
 
-    const shiftEndMs = parseSeoulDateTime(schedule.date, schedule.end);
-    if (shiftEndMs == null) {
+    const shiftEndMs = shiftTimes(schedule).end;
+    if (!Number.isFinite(shiftEndMs)) {
       return { personId, arrivalAt: null, confidence: 'UNKNOWN' };
     }
 
@@ -113,7 +111,7 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
       : undefined;
 
     let arrivals: Arrival[] = [];
-    if (departureMs <= now.getTime()) {
+    if (Number.isFinite(actualDeparture) && departureMs <= now.getTime()) {
       try {
         if (selectedAccess?.mode === 'BUS' && selectedAccess.selectedBusRouteId) {
           arrivals = await this.dependencies.providers.seoulBus.arrivals(
@@ -135,6 +133,7 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
 
     const calculated = calculateArrivalEta({
       departureMs,
+      departureBasis: Number.isFinite(actualDeparture) ? 'ACTUAL' : 'SCHEDULED',
       now,
       route,
       fallbackAccessMinutes: selectedAccess?.walkMinutes,
@@ -143,8 +142,13 @@ export class ProviderNotificationEtaSource implements NotificationEtaSource {
 
     return {
       personId,
+      workDate: schedule.date,
       arrivalAt: calculated.arrivalAt.toISOString(),
       confidence: calculated.confidence,
+      earliestArrivalAt: calculated.earliestArrivalAt.toISOString(),
+      latestArrivalAt: calculated.latestArrivalAt.toISOString(),
+      departureUnconfirmed: calculated.departureUnconfirmed,
+      departureBasis: calculated.departureBasis,
     };
   }
 }

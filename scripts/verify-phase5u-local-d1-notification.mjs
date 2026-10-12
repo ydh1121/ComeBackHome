@@ -225,7 +225,7 @@ try {
   assert(nextWorkday.state?.jobs?.length === 3, 'next D1 workday pending shift-end job missing');
   const pending = nextWorkday.state.jobs.find((job) => job.status === 'pending');
   assert(pending?.job_type === 'shift-end', 'next D1 workday pending job type mismatch');
-  assert(pending?.scheduled_for === '2026-10-07T09:30:00.000Z', 'next D1 workday shift-end UTC schedule mismatch');
+  assert(pending?.scheduled_for === '2026-10-07T09:20:00.000Z', 'next D1 workday shift-end UTC schedule mismatch');
   assert(nextWorkday.state?.plannerState?.[0]?.eta_baseline_at === '2026-10-07T10:20:00.000Z', 'next D1 workday baseline timestamp mismatch');
   assert(nextWorkday.state?.plannerState?.[0]?.eta_baseline_work_date === '2026-10-07', 'next D1 workday baseline date mismatch');
   assert(nextWorkday.state?.plannerState?.[0]?.last_eta_notification_at === null, 'new D1 workday must reset last ETA notification timestamp');
@@ -284,6 +284,12 @@ try {
       'Phase G shift schedule validity D1: ' + field);
   }
   console.log('PHASE_G_SHIFT_END_CURRENT_VALIDITY_PASS=' + JSON.stringify(validity));
+
+  const arrivalPolicy = await postJson('/arrival-policy-probe', {});
+  for (const field of ['changedBlocked', 'offBlocked', 'ruleOffBlocked', 'staleBlocked', 'noEtaBlocked', 'claimedOnce', 'sentNotReplayed']) {
+    assert(arrivalPolicy.syntheticOnly && arrivalPolicy[field] === true, 'F08 arrival D1: ' + field);
+  }
+  console.log('F08_ARRIVAL_POLICY_D1_PASS=' + JSON.stringify(arrivalPolicy));
 
   const rescheduled = await postJson('/pending-reschedule-probe', {});
   assert(rescheduled.syntheticOnly && rescheduled.originalIdStable,

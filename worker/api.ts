@@ -1022,6 +1022,7 @@ export async function handleApiRequest(
       if (request.method === 'PUT') {
         const body = await readObject(request);
         const updated = await settings.updateRules({
+          ...(body.arrivalAdvanceEnabled === undefined ? {} : { arrivalAdvanceEnabled: asBoolean(body.arrivalAdvanceEnabled, 'arrivalAdvanceEnabled') }),
           shiftEndEnabled: asBoolean(body.shiftEndEnabled, 'shiftEndEnabled'),
           etaChangeEnabled: asBoolean(body.etaChangeEnabled, 'etaChangeEnabled'),
           leftWorkEnabled: asBoolean(body.leftWorkEnabled, 'leftWorkEnabled'),

@@ -190,6 +190,9 @@ async function engineTest(engine, label) {
       (await todayScreen.getAttribute('data-eta-status')) !== 'UNKNOWN',
       label + ' selected route and ETA did not reach Today');
 
+    const followup = process.env.CBH_FOLLOWUP_E2E === '1'
+      ? await (await import('./followup-product-assertions.mjs')).verifyFollowupUi({page,api,id,base,todayKst}) : undefined;
+
     // Actual Pages API ingestion, not a stand-in repository test. Push stays disabled.
     const prefs = await api('/notifications/settings', 'PUT', {
       shiftEndEnabled: true, etaChangeEnabled: true, leftWorkEnabled: true, homeArrivalEnabled: true,
@@ -228,7 +231,7 @@ async function engineTest(engine, label) {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('[data-page="TodayPage"]').waitFor();
     assert(errors.length === 0, label + ' browser page errors: ' + errors.join('; '));
-    return { engine: label, staffXlsxReview: true, noPreapprovalWrites: true,
+    return { engine: label, followup, staffXlsxReview: true, noPreapprovalWrites: true,
       personAndScheduleD1: true, placeTransitRouteD1: true,
       exactRouteTodayEta: true, notificationRulesD1: true,
       presenceReceipts: 2, eventJobs: 2, duplicateEventIdOnce: true,
