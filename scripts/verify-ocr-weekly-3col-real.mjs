@@ -822,6 +822,10 @@ try{
       // this is a user's unseen original or real production acceptance.
       let productDomFlow=null;
       if(focusedRealHttpD1){
+        // Model evaluation needs its own long budget; DOM selectors should
+        // fail promptly with their exact location instead of exhausting CI.
+        page.setDefaultTimeout(30_000);
+        console.log('CBH_OCR_TRACE: DOM_UPLOAD '+browserName);
         const writesBeforeDom=realLocalHttpD1.stats.atomicImports;
         const fixture=immutableImageBytes['A-CLEAN'];
         if(!fixture)throw Error('REAL_UI_RASTER_BYTES_MISSING');
@@ -852,8 +856,9 @@ try{
         await page.locator('[data-page="ImportPersonMatchPage"]').waitFor();
         await page.getByRole('button',{name:'다음'}).click();
         await page.locator('[data-page="ImportStructurePage"]').waitFor();
-        await page.getByRole('button',{name:'다음'}).click();
+        await page.getByRole('button',{name:'계속',exact:true}).click();
         await page.locator('[data-page="ImportReviewPage"]').waitFor();
+        console.log('CBH_OCR_TRACE: DOM_REVIEW '+browserName);
         const beforeSave=await page.locator('button.cta').isDisabled();
         if(!beforeSave)throw Error('REAL_UI_SAVE_ENABLED_BEFORE_DATES');
         if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom)
@@ -886,6 +891,7 @@ try{
         if(approvedOff!==2)throw Error('REAL_UI_OFF_CANDIDATE_NOT_TWO:'+approvedOff);
         if(!(await page.locator('button.cta').isEnabled()))
           throw Error('REAL_UI_APPROVAL_CTA_DISABLED');
+        console.log('CBH_OCR_TRACE: DOM_APPROVED '+browserName);
         await page.locator('button.cta').click();
         await page.waitForURL(/\/schedule$/);
         if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+1)
