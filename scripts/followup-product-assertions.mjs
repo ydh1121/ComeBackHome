@@ -13,7 +13,7 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.ok(await page.locator('[data-transit-mode="BUS"]').count());
   assert.ok(await page.locator('[data-transit-mode="SUBWAY"]').count());
   assert.ok(await page.locator('[data-transit-mode="WALKING"]').count());
-  assert.equal(await page.getByRole('region',{name:'도착지',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(189, 176, 146)','shared Line 9 color');
+  assert.equal(await page.getByRole('region',{name:'도착지',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(164, 157, 135)','official RGB Line 9 color');
   assert.equal(await page.getByRole('region',{name:'주로 오는 길',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(102, 112, 133)','unknown line fallback');
   const width = await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(width.scroll<=width.viewport,'mobile UI overflow');

@@ -9,9 +9,26 @@ try {
   assert.equal(shiftTimes({ date:'2026-12-31', start:'22:00', end:'02:00' }).end, Date.parse('2027-01-01T02:00:00+09:00'));
   assert.equal(activeWorkSchedule([{date:'2026-12-31',start:'22:00',end:'02:00',enabled:true}],new Date('2027-01-01T00:01:00+09:00')).date,'2026-12-31');
   const { subwayLines, UNKNOWN_LINE_COLOR } = await load('src/features/transit/subway-lines.ts');
-  assert.deepEqual(subwayLines('2호선 → 9호선').map(x => x.color), ['#00A84D','#BDB092']);
+  assert.deepEqual(subwayLines('2호선 → 9호선').map(x => x.color), ['#00A23F','#A49D87']);
   assert.equal(subwayLines('11호선')[0].color, UNKNOWN_LINE_COLOR);
+  assert.equal(subwayLines('인천 1호선')[0].color, '#B4C7E7');
+  assert.equal(subwayLines('부산 1호선')[0].color, UNKNOWN_LINE_COLOR);
+  assert.equal(subwayLines('서울 지하철 1호선')[0].color, '#004A85');
   assert.equal(subwayLines('신분당선')[0].label, '신분당선');
+
+  const { createChangeSignalController } = await load('src/app/changeSignal.ts');
+  const documentLifecycle = new EventTarget();
+  const changes = createChangeSignalController(documentLifecycle);
+  let refreshes = 0;
+  changes.subscribe(() => { refreshes++; });
+  changes.emit();
+  documentLifecycle.dispatchEvent(new Event('pagehide'));
+  changes.emit(); changes.emit();
+  assert.equal(refreshes, 1, 'unload cleanup must not start fresh queries');
+  assert.equal(changes.getVersion(), 1, 'unload freezes the React snapshot');
+  documentLifecycle.dispatchEvent(new Event('pageshow'));
+  assert.equal(refreshes, 2, 'bfcache restore refreshes persisted cleanup once');
+  assert.equal(changes.getVersion(), 2);
 
   const { calculateArrivalEta } = await load('src/application/services/ArrivalEtaCalculator.ts');
   const departure = Date.parse('2026-10-12T17:00:00+09:00');
