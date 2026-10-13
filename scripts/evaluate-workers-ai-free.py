@@ -146,6 +146,9 @@ def request_once(account, token, payload, model=MODEL):
                 choices = value['choices']
                 choice = choices[0] if len(choices) == 1 and isinstance(choices[0], dict) else {}
                 message = choice.get('message', {})
+                if isinstance(message, dict):
+                    report['reasoning_present'] = any(isinstance(message.get(key), str) and bool(message[key])
+                                                      for key in ('reasoning', 'reasoning_content'))
                 reason = choice.get('finish_reason')
                 report['finish_reason'] = reason if reason in ('stop', 'length', 'tool_calls', 'content_filter') else 'OTHER'
                 value = {'response': message.get('content') if isinstance(message, dict) else None,
@@ -432,7 +435,7 @@ def gemma_schema_check(account, token):
                 for child in node:
                     visit(child)
         visit(schema)
-        required = ('messages', 'image_url', 'max_completion_tokens', 'response_format')
+        required = ('messages', 'image_url', 'max_completion_tokens', 'response_format', 'chat_template_kwargs')
         report.update(response_sha256=sha(raw),
             supported_fields={key: key in keys for key in required},
             schema_verified=data.get('success') is True and all(key in keys for key in required))
@@ -446,9 +449,9 @@ def gemma_schema_check(account, token):
 def run_english_full(images, truth, scorer, gemma=False):
     """Evaluate original full images with a new, explicitly recorded method."""
     account, token = gate()
-    evidence_name = 'workers-ai-full-json-20261013.json' if gemma else 'workers-ai-english-20261013.json'
+    evidence_name = 'workers-ai-gemma-initial-20261013.json' if gemma else 'workers-ai-english-20261013.json'
     previous = json.loads((ROOT / 'runtime-evidence' / evidence_name).read_text())
-    if previous['run_id'] != (38405347734 if gemma else 38404633180):
+    if previous['run_id'] != (38406403822 if gemma else 38404633180):
         raise ValueError('COMPLETED_ENGLISH_DIAGNOSTIC_REQUIRED')
     model = GEMMA_MODEL if gemma else MODEL
     reserved = previous['budget_reserved_neurons']
@@ -459,7 +462,7 @@ def run_english_full(images, truth, scorer, gemma=False):
         'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
         'licence_requests_attempted': 0, 'prior_verified_licence_run': 38356883322,
         'prior_budget_reserved_neurons': reserved, 'local_budget_neurons': BUDGET_NEURONS,
-        'max_output_tokens': max_tokens, 'images': [], 'actual_neurons': None,
+        'max_output_tokens': max_tokens, 'reasoning_disabled': gemma, 'images': [], 'actual_neurons': None,
         'account_neurons_remaining': None, 'production_writes': 0, 'private_images': 0,
         'paid_fallback': False, 'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
     predictions = []
@@ -489,7 +492,7 @@ def run_english_full(images, truth, scorer, gemma=False):
             payload = {'messages': [{'role': 'user', 'content': [
                 {'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': image_uri}}]}],
                 'max_completion_tokens': max_tokens, 'temperature': 0, 'stream': False,
-                'response_format': {'type': 'json_object'}}
+                'response_format': {'type': 'json_object'}, 'chat_template_kwargs': {'enable_thinking': False}}
         item, value = request_once(account, token, payload, model=model)
         cells, error = parse_complete_cells(value)
         subset = [x for x in truth if x['source_image_id'] == entry['id']]

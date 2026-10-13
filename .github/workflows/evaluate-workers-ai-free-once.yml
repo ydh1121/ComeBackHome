@@ -1,4 +1,4 @@
-name: Workers Free OCR v2 / Gemma4 official schema and full images
+name: Workers Free OCR v2 / Gemma4 bounded nonthinking image evaluation
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       github.repository == 'ydh1121/ComeBackHome' &&
       github.ref == 'refs/heads/feat/nonimage-weekly-xlsx-import' &&
       github.run_attempt == 1 &&
-      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-gemma4]')
+      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-gemma4-nothink]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

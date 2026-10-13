@@ -194,3 +194,20 @@ Sources checked2026-10-13:
 - https://developers.cloudflare.com/workers-ai/platform/pricing/
 - https://developers.cloudflare.com/api/resources/ai/subresources/models/subresources/schema/methods/get/
 - https://blog.google/intl/ko-kr/company-news/technology/gemma-4-kr/
+
+Gemma initial run `38406403822` / job `115327039866` at `26b9d45`:
+official schema GET HTTP200 confirmed all four required multimodal/format fields.
+The A image inference returned HTTP200 in20,950ms,592 input/3,072 completion
+tokens,89.164528 estimated Neurons, finish_reason=length and no final text.
+No recognition accuracy is established. Cumulative reservation1,981.807700.
+The returned metadata did not capture reasoning-token detail, so reasoning
+exhaustion is a hypothesis, not a measured diagnosis.
+
+Cloudflare's official Gemma4 example specifies
+`chat_template_kwargs: {enable_thinking: false}`. The next request configuration
+applies that documented flag, keeps3,072 maximum completion tokens, and verifies
+chat_template_kwargs in the schema. No thought text is read as OCR output or
+published; only the presence boolean is recorded. This changes a concrete
+configuration omission instead of increasing token/time budgets or repairing
+partial output. Prior usage is retained.
+Source: https://developers.cloudflare.com/workers-ai/get-started/workers-wrangler/
