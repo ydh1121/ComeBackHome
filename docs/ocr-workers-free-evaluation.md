@@ -242,3 +242,24 @@ Gemma rate the entire context+output reservation remains within the cumulative
 8000 ceiling. Reasoning stays disabled; one failure stops without retry. If this
 variant fails quality, the model remains rejected and the next provider needs
 authenticated free-tier access; no further prompt-fitting in this execution.
+
+## Final Cloudflare disposition — stop, quality not accepted
+
+Named-schema run `38408335772` / job `115333744440` at
+`f475c7cdb60541875b7ec59a4532b3a8ed1e845e` verified the official input schema
+(HTTP200, including json_schema) but the first original A image timed out after
+120,126ms without an HTTP response. There are zero parsed predictions and a null
+full-v2 aggregate; this is not measured 0% recognition accuracy. Completion and
+consumption are unknown. The 2,494.861312-Neuron worst-case reservation is retained.
+
+Across this execution, known returned-token pricing estimates total **815.160775
+Neurons**; three unknown full-image outcomes reserve **4,190.540800**, for a
+conservative cumulative **5,005.701575**. These are not billed Neurons or verified
+remaining allowance. The dated Free gate and 8,000 ceiling were respected; no
+paid upgrade, fallback, Gateway or deployment was used. Required software CI at
+f475c7c: run `38408341474`, 12/12 SUCCESS plus one conditional oracle skipped.
+
+The actual complete-v2 quality failures above reject this Cloudflare candidate.
+No further Cloudflare prompt-fitting or identical retry is scheduled in this
+execution. No external model is selected or activated. The next provider is
+Gemini; see `ocr-gemini-free-evaluation.md` for the prepared, closed readiness gate.

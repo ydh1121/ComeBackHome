@@ -1,0 +1,40 @@
+name: Gemini Free OCR v2 / readiness and owner-gated evaluation
+
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/evaluate-gemini-free-once.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-gemini-free-evaluation
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    if: github.repository == 'ydh1121/ComeBackHome' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      # Remain closed until owner supplies same-project Free-tier evidence.
+      CBH_GEMINI_FREE_PROJECT_CONFIRMED: 'false'
+      CBH_GEMINI_FREE_PROJECT_PROOF_DATE: ''
+    steps:
+      - name: Checkout reviewed evaluator only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify offline guards with no provider credentials
+        run: python scripts/verify-free-ocr-guards.py
+      - name: Verify original corpus and readiness without network or secret output
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py
+      - name: Evaluate only after concrete owner Free-project confirmation
+        if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-eval]')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py --run
