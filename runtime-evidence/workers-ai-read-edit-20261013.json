@@ -1,0 +1,31 @@
+{
+  "schema": "comebackhome-workers-free-read-edit/v1",
+  "source_head": "7e34c11bb0e489c1b27d8c5ee57ce2c3f6388553",
+  "run_id": 38356883322,
+  "job_id": 115161747063,
+  "owner_read_edit_screenshot": true,
+  "model": "@cf/meta/llama-3.2-11b-vision-instruct",
+  "licence_api": {
+    "http": 200,
+    "latency_ms": 7514,
+    "usage": {
+      "prompt_tokens": 2,
+      "completion_tokens": 256,
+      "total_tokens": 258
+    },
+    "neurons_measured": null,
+    "neurons_pricing_estimate": 15.751028,
+    "response_sha256": "1a20dccbe88adb92fd59b6249aba6ece99c5f5a786edef3107756cdce89199cd",
+    "api_success": true,
+    "error_codes": []
+  },
+  "inference_requests_attempted": 1,
+  "completed_image_responses": 0,
+  "image_timeout_ms": 120064,
+  "image_source_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+  "unknown_request_worst_case_neurons": 942.292992,
+  "budget_reserved_neurons": 958.04402,
+  "actual_neurons": null,
+  "model_accuracy": null,
+  "production_writes": 0
+}

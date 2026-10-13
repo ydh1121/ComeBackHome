@@ -1,4 +1,4 @@
-name: Workers Free OCR v2 / owner-confirmed Read Edit resume
+name: Workers Free OCR v2 / bounded day-crop diagnostic
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       github.repository == 'ydh1121/ComeBackHome' &&
       github.ref == 'refs/heads/feat/nonimage-weekly-xlsx-import' &&
       github.run_attempt == 1 &&
-      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-read-edit]')
+      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-day0]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -28,9 +28,9 @@ jobs:
           persist-credentials: false
       - name: Verify original synthetic corpus and independent scorer hashes
         run: python scripts/evaluate-workers-ai-free.py
-      - name: Inspect same official licence request after owner confirms Read and Edit
+      - name: Evaluate one smaller day crop with prior unknown consumption reserved
         env:
           CBH_AI_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_AI_TOKEN }}
           CBH_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CBH_FREE_EVAL_APPROVED_DATE: '2026-10-13'
-        run: python scripts/evaluate-workers-ai-free.py --run
+        run: python scripts/evaluate-workers-ai-free.py --pilot-day0

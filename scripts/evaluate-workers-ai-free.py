@@ -179,11 +179,60 @@ def score_with_original(scorer_source, truth, cells):
         return module.score(truth, cells)
 
 
+def run_day0_pilot(truth, prompt, scorer):
+    """One materially smaller diagnostic; never repeat the timed-out full image."""
+    account, token = gate()
+    previous = json.loads((ROOT / 'runtime-evidence/workers-ai-read-edit-20261013.json').read_text())
+    if (previous['run_id'] != 38356883322 or previous['model'] != MODEL
+            or previous['licence_api']['http'] != 200 or not previous['licence_api']['api_success']):
+        raise ValueError('VERIFIED_OFFICIAL_LICENCE_RESPONSE_REQUIRED')
+    prior_reserved = previous['budget_reserved_neurons']
+    max_tokens = 1024
+    reserve = 128000 * 4410 / 1e6 + max_tokens * 61493 / 1e6
+    if prior_reserved + reserve > BUDGET_NEURONS:
+        raise ValueError('PRIOR_UNKNOWN_REQUEST_MUST_REMAIN_IN_BUDGET')
+    image = (ROOT / 'test/fixtures/import/free-ocr-v2-day0-pilot.png').read_bytes()
+    crop_sha = 'd125815fb3eb26f544116105e16970ad0ab7f7af7ffd621c2e3576f35ce40c4b'
+    if sha(image) != crop_sha:
+        raise ValueError('PILOT_IMAGE_HASH_MISMATCH')
+    image_id = 'A_high_resolution'
+    instructions = prompt + '\nsource_image_id = ' + image_id
+    instructions += ('\n이 이미지는 원본 근무표의 직원명 열과 1번째 날짜 그룹만 나란히 붙인 테스트입니다. '
+                     '원본 column_group=0을 유지하고 직원-날짜 관계는 이미지에 실제 있는 근거로만 추출하세요.')
+    result, value = request_once(account, token, {'prompt': instructions,
+        'image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
+        'max_tokens': max_tokens, 'temperature': 0})
+    cells, parse_error = parse_cells(value)
+    subset = [x for x in truth if x['source_image_id'] == image_id and x['column_group'] == 0]
+    estimate = result.get('neurons_pricing_estimate')
+    report = {'model': MODEL, 'scope': 'KNOWN_TEMPLATE_DAY_CROP_DIAGNOSTIC_NOT_FULL_IMAGE_ACCURACY',
+        'original_corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
+        'source_image_id': image_id, 'source_image_sha256': previous['image_source_sha256'],
+        'crop_sha256': crop_sha, 'source_regions': [[18, 0, 134, 311], [134, 0, 437, 311]],
+        'image_requests_attempted': 1, 'licence_requests_attempted': 0,
+        'prior_verified_licence_run': previous['run_id'], 'max_output_tokens': max_tokens,
+        'prior_budget_reserved_neurons': prior_reserved,
+        'budget_reserved_neurons': round(prior_reserved + (estimate if estimate is not None else reserve), 6),
+        'actual_neurons': None, 'api': result, 'parse_error': parse_error,
+        'completed_model_response': result.get('api_success') is True,
+        'score': score_with_original(scorer, subset, cells) if result.get('api_success') else None,
+        'production_writes': 0, 'private_images': 0, 'paid_fallback': False,
+        'acceptance': 'DIAGNOSTIC_ONLY_NOT_PRODUCT_ACCEPTANCE'}
+    print('CBH_FREE_OCR_DAY0=' + json.dumps(report, ensure_ascii=False, separators=(',', ':')), flush=True)
+    if not result.get('api_success') or parse_error:
+        raise SystemExit(2)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--run', action='store_true', help='Execute only the dated owner-authorized evaluation')
+    ap.add_argument('--pilot-day0', action='store_true', help='One bounded existing-v2 day-crop diagnostic')
     args = ap.parse_args()
+    if args.run and args.pilot_day0:
+        ap.error('choose exactly one execution scope')
     images, truth, prompt, scorer = load_corpus()
+    if args.pilot_day0:
+        return run_day0_pilot(truth, prompt, scorer)
     if not args.run:
         print(json.dumps({'check': 'PASS', 'network_calls': 0, 'images': len(images),
                           'truth_cells': len(truth), 'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA}))

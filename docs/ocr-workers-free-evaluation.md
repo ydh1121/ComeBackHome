@@ -87,6 +87,28 @@ printed. An edge denial must not be worked around by rotating the user agent,
 credentials, endpoint or network. The attempt still stops on any HTTP failure;
 no retry occurs within the runner. Existing Meta owner approval is retained.
 
+Actual read/edit resume, run `38356883322` / job `115161747063` at `7e34c11`:
+the **same official licence request succeeded (HTTP 200, 7,514 ms)**, with API
+usage 2 input / 256 output tokens. At the published rate this is a 15.751028
+Neuron estimate; actual billed Neurons are not measured. The previous 403 did
+not recur; its historical root cause is still unknown. Do not request the same
+permissions again or report authentication as the current blocker.
+
+The first full synthetic image request did not return a response within 120,064
+ms. Its completion/consumption is unknown and its 942.292992-Neuron worst-case
+reservation is retained. Zero model image responses were obtained; the scorer's
+missing-cell output is not measured recognition accuracy.
+
+The next bounded diagnostic uses the **existing v2 probe's day-crop method**:
+concatenate the synthetic A image's employee-name column with its first date
+group, retaining the original source-region coordinates. This is a new,
+materially smaller input with max 1,024 output tokens, not an automatic repeat
+of the timed-out full-image request. It skips the already-successful licence
+operation, carries the prior 958.044020-Neuron reservation, makes at most one
+request and stops on failure. It reports only that three-cell subset, separately
+from original full-image/v2 accuracy. It cannot establish layout discovery or
+production acceptance. Original images, truth and independent scorer are unchanged.
+
 Official references:
 
 - https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/
