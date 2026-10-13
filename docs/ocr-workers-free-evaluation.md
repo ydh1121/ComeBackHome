@@ -31,8 +31,9 @@ The original v2 archive is copied verbatim to
 - independent scorer SHA-256: `c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004`
 - 12 explicitly synthetic PNGs / 336 truth cells; no real employee data
 
-The existing scorer is unchanged. The model receives the original prompt, a
-source image identifier and the full image only, never ground truth. Missing or
+The existing scorer is unchanged. The baseline uses the original prompt; subsequent prompt/serialization variants
+are recorded separately. The model receives an image and source identifier,
+never ground truth. Missing or
 malformed JSON stays missing; dates, names and approval flags are not repaired
 using expected values. Output limits are explicitly recorded in the runner.
 Raw responses stay in process memory. Only hashes, timings, token usage and
@@ -41,7 +42,7 @@ independent aggregate/per-image metrics reach logs. There is no artifact upload.
 API execution, accuracy, reviewed import software, original private screenshots,
 production and real iPhone acceptance remain separate judgments.
 
-## Actual 2026-10-13 result
+## Historical 14:05 KST denial (resolved at 15:25 KST)
 
 - Read-only run `38346720248`, attempt 2 / job `115134832055`: catalog HTTP 200,
   Llama Vision listed; subscription metadata HTTP 403 / error code 10000.
@@ -59,13 +60,8 @@ production and real iPhone acceptance remain separate judgments.
 - Original/private images in repository/CI **0**; production writes **0**.
   The dated automatic trigger has already been consumed; reruns are blocked.
 
-Next official resolution: check that the dedicated token is scoped to the same
-account and has **Workers AI Read and Edit**, or create it using the Workers AI
-page's **REST API → Create a Workers AI API Token** template. Update only the
-repository Actions secret `CLOUDFLARE_WORKERS_AI_TOKEN`. Existing deployment
-credentials are not changed. This is not a request for paid service or billing
-permissions. If both AI permissions are already present, preserve the 403
-evidence for Cloudflare account/API support instead of widening unrelated access.
+The original permission follow-up is superseded by the successful official API
+response below. Do not request these same permissions again.
 
 The next providers (Gemini / OCR.space Engine 3) have no authenticated execution
 path available in this session. No public playground or guessed credential is
@@ -142,3 +138,28 @@ Official references:
 
 - https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/
 - https://developers.cloudflare.com/workers-ai/platform/pricing/
+
+## 22:25 KST syntax finding and full-image method
+
+English diagnostic run `38404633180` / job `115320913617`, source `43e2a5a`,
+returned HTTP200 in21,649ms:1,886 input/464 output tokens, estimate36.850012
+Neurons. It did not hit its1,536-token cap. The output has explanatory prose
+and one fenced block with balanced delimiters, but the strict original parser
+rejected the whole response. Raw OCR text was not logged or retained. Balanced
+delimiters alone do not prove valid JSON or recognition accuracy.
+
+The complete-JSON reader now accepts one complete JSON object, either directly
+or inside exactly one closed JSON fence. It rejects partial JSON, multiple
+blocks, JSON outside the fence, duplicate keys and non-JSON constants. Named
+records and compact arrays map without correcting any model-produced value.
+Incorrect source IDs, dates, names, times and review flags remain incorrect.
+
+A new full-image method uses English instructions, max3,072 output tokens and
+this parser on the original12 PNGs. It is explicitly separate from the timed-out
+Korean baseline and known-template crop pilots. Prior usage/reservation
+1,139.256676 Neurons is carried forward; licence acceptance is not repeated.
+Any HTTP/timeout/output-contract failure or insufficient conservative budget
+stops the sequence without retry. A full336-cell aggregate is produced only
+when all12 images complete; otherwise only the attempted subset is reported.
+The evaluator, ground truth, original images and acceptance requirements remain
+unchanged. This method is not product integration or private-original acceptance.

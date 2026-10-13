@@ -202,6 +202,68 @@ def parse_compact_cells(value):
     return cells, None
 
 
+def complete_json(value):
+    """Read one complete JSON value; prose is allowed only outside one fence."""
+    response = value.get('response') if isinstance(value, dict) else None
+    if not isinstance(response, str):
+        return None, 'NO_TEXT_RESPONSE'
+    text = response.strip()
+    if '```' in text:
+        fences = list(re.finditer(r'```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```', text, re.I))
+        if text.count('```') != 2 or len(fences) != 1:
+            return None, 'AMBIGUOUS_OR_INCOMPLETE_JSON_FENCE'
+        match = fences[0]
+        outside = text[:match.start()] + text[match.end():]
+        if any(c in outside for c in '{}[]'):
+            return None, 'AMBIGUOUS_JSON_OUTSIDE_FENCE'
+        text = match.group(1).strip()
+    def unique_object(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError('DUPLICATE_JSON_KEY')
+            result[key] = item
+        return result
+    def reject_constant(_):
+        raise ValueError('NON_JSON_CONSTANT')
+    try:
+        return json.loads(text, object_pairs_hook=unique_object, parse_constant=reject_constant), None
+    except ValueError:
+        return None, 'INVALID_OR_TRUNCATED_JSON'
+
+
+def parse_complete_cells(value):
+    data, error = complete_json(value)
+    if error:
+        return [], error
+    if not isinstance(data, dict):
+        return [], 'INVALID_ROOT_SCHEMA'
+    if 'cells' in data and 'rows' in data:
+        return [], 'AMBIGUOUS_CELL_REPRESENTATION'
+    rows = data.get('rows', data.get('cells'))
+    if not isinstance(rows, list) or len(rows) > 100:
+        return [], 'INVALID_CELLS_SCHEMA'
+    if rows and all(isinstance(row, list) for row in rows):
+        return parse_compact_cells({'response': json.dumps(data)})
+    if any(not isinstance(row, dict) for row in rows):
+        return [], 'MIXED_OR_INVALID_CELL_REPRESENTATION'
+    cells = []
+    for row in rows:
+        cell = dict(row)
+        source_id = cell.get('source_image_id', data.get('source_image_id'))
+        if not isinstance(source_id, str):
+            return [], 'MISSING_MODEL_SOURCE_ID'
+        if 'source_image_id' in data and source_id != data['source_image_id']:
+            return [], 'CONFLICTING_MODEL_SOURCE_IDS'
+        cell['source_image_id'] = source_id
+        if any(isinstance(cell.get(k), (dict, list)) for k in (
+                'employee_row', 'column_group', 'date', 'weekday', 'employee_name',
+                'status', 'clock_in', 'clock_out', 'break_minutes', 'review_required')):
+            return [], 'INVALID_CELL_SCALAR'
+        cells.append(cell)
+    return cells, None
+
+
 def compact_instructions(prompt):
     # Preserve recognition/review rules from v2; replace only the repeated-key
     # serialization line. The evaluator and truth are never provided to model.
@@ -326,16 +388,76 @@ def run_day0_pilot(truth, prompt, scorer, compact=False, english=False):
         raise SystemExit(2)
 
 
+def run_english_full(images, truth, scorer):
+    """Evaluate original full images with a new, explicitly recorded method."""
+    account, token = gate()
+    previous = json.loads((ROOT / 'runtime-evidence/workers-ai-english-20261013.json').read_text())
+    if previous['run_id'] != 38404633180 or previous['api']['http'] != 200:
+        raise ValueError('COMPLETED_ENGLISH_DIAGNOSTIC_REQUIRED')
+    reserved = previous['budget_reserved_neurons']
+    max_tokens = 3072
+    reserve = 128000 * 4410 / 1e6 + max_tokens * 61493 / 1e6
+    report = {'model': MODEL, 'method': 'FULL_ORIGINAL_IMAGES_ENGLISH_COMPACT_COMPLETE_JSON',
+        'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
+        'licence_requests_attempted': 0, 'prior_verified_licence_run': 38356883322,
+        'prior_budget_reserved_neurons': reserved, 'local_budget_neurons': BUDGET_NEURONS,
+        'max_output_tokens': max_tokens, 'images': [], 'actual_neurons': None,
+        'account_neurons_remaining': None, 'production_writes': 0, 'private_images': 0,
+        'paid_fallback': False, 'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
+    predictions = []
+    attempted_truth = []
+    for entry, image in images:
+        if reserved + reserve > BUDGET_NEURONS:
+            report['blocker'] = 'CONSERVATIVE_RUN_BUDGET_STOP'
+            break
+        if datetime.now(timezone.utc).date().isoformat() != AUTHORIZED_DATE:
+            report['blocker'] = 'PLAN_EVIDENCE_EXPIRED'
+            break
+        prompt = english_compact_instructions().replace(
+            'It is an existing synthetic diagnostic crop: employee-name column plus the original first day group. '
+            'The original column_group is 0. ',
+            'Read the entire original weekly schedule. Column groups are numbered from 0 in visible order. ')
+        prompt = prompt.replace('A_high_resolution', entry['id'])
+        item, value = request_once(account, token, {'prompt': prompt,
+            'image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
+            'max_tokens': max_tokens, 'temperature': 0})
+        cells, error = parse_complete_cells(value)
+        subset = [x for x in truth if x['source_image_id'] == entry['id']]
+        item.update(image_id=entry['id'], image_sha256=entry['sha256'],
+            input='ORIGINAL_FULL_SYNTHETIC_PNG', output_syntax=output_shape(value),
+            parse_error=error, predicted_cells=len(cells),
+            score=score_with_original(scorer, subset, cells) if item.get('api_success') else None)
+        predictions.extend(cells)
+        attempted_truth.extend(subset)
+        report['images'].append(item)
+        estimate = item.get('neurons_pricing_estimate')
+        reserved += estimate if estimate is not None else reserve
+        print('CBH_FREE_OCR_IMAGE=' + json.dumps(item, ensure_ascii=False, separators=(',', ':')), flush=True)
+        if not item.get('api_success') or error:
+            report['blocker'] = 'REQUEST_OR_OUTPUT_CONTRACT_FAILED_STOP_NO_RETRY'
+            break
+    report.update(budget_reserved_neurons=round(reserved, 6),
+        attempted_images=len(report['images']), complete_v2=len(report['images']) == len(images) and not report.get('blocker'),
+        attempted_subset_score=score_with_original(scorer, attempted_truth, predictions) if attempted_truth else None)
+    report['aggregate'] = score_with_original(scorer, truth, predictions) if report['complete_v2'] else None
+    print('CBH_FREE_OCR_V2=' + json.dumps(report, ensure_ascii=False, separators=(',', ':')), flush=True)
+    if report.get('blocker'):
+        raise SystemExit(2)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--run', action='store_true', help='Execute only the dated owner-authorized evaluation')
     ap.add_argument('--pilot-day0', action='store_true', help='One bounded existing-v2 day-crop diagnostic')
     ap.add_argument('--pilot-compact', action='store_true', help='One compact serialization diagnostic after completed pilot')
     ap.add_argument('--pilot-english', action='store_true', help='One English-instruction compact diagnostic with syntax inspection')
+    ap.add_argument('--run-english', action='store_true', help='Original v2 images; complete JSON parser; carry all prior usage')
     args = ap.parse_args()
-    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english)) > 1:
+    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english, args.run_english)) > 1:
         ap.error('choose exactly one execution scope')
     images, truth, prompt, scorer = load_corpus()
+    if args.run_english:
+        return run_english_full(images, truth, scorer)
     if args.pilot_day0 or args.pilot_compact or args.pilot_english:
         return run_day0_pilot(truth, prompt, scorer, compact=args.pilot_compact or args.pilot_english,
                              english=args.pilot_english)
