@@ -169,6 +169,54 @@ def parse_cells(value):
     return cells, None
 
 
+def parse_compact_cells(value):
+    """Expand repeated field names only; never repair a model-produced value."""
+    response = value.get('response') if isinstance(value, dict) else None
+    if not isinstance(response, str):
+        return [], 'NO_TEXT_RESPONSE'
+    text = response.strip()
+    if text.startswith('```') and text.endswith('```'):
+        text = text[text.find('\n') + 1:-3].strip()
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return [], 'INVALID_OR_TRUNCATED_JSON'
+    if not isinstance(data, dict) or not isinstance(data.get('source_image_id'), str):
+        return [], 'INVALID_COMPACT_SOURCE'
+    rows = data.get('rows')
+    if not isinstance(rows, list) or len(rows) > 100:
+        return [], 'INVALID_COMPACT_ROWS'
+    cells = []
+    keys = ('employee_row', 'column_group', 'date', 'weekday', 'employee_name',
+            'status', 'clock_in', 'clock_out', 'break_minutes', 'review_required')
+    for row in rows:
+        if not isinstance(row, list) or len(row) != 14:
+            return [], 'INVALID_COMPACT_ROW_LENGTH'
+        if any(isinstance(x, (dict, list)) for x in row[:10]):
+            return [], 'INVALID_COMPACT_SCALAR'
+        cell = dict(zip(keys, row[:10]))
+        cell.update(source_image_id=data['source_image_id'],
+            original_text={'clock_in': row[10], 'clock_out': row[11], 'break': row[12]},
+            evidence_bbox=row[13])
+        cells.append(cell)
+    return cells, None
+
+
+def compact_instructions(prompt):
+    # Preserve recognition/review rules from v2; replace only the repeated-key
+    # serialization line. The evaluator and truth are never provided to model.
+    lines = [line for line in prompt.splitlines() if not line.startswith('각 직원/날짜 셀마다 ')]
+    lines += [
+        '응답은 설명이나 마크다운 없이 압축 JSON {"source_image_id":"이미지 ID","rows":[[...]]} 한 개만 반환하세요.',
+        '각 직원/날짜 셀을 14개 원소의 배열로 출력하세요. 배열의 순서는 다음과 같습니다:',
+        '[employee_row(0 기반), column_group(0..6), date(YYYY-MM-DD), weekday(월요일0), employee_name, '
+        'status(SHIFT|OFF_CANDIDATE|UNREADABLE|BLANK), clock_in(HH:mm 또는 null), clock_out(HH:mm 또는 null), '
+        'break_minutes(숫자 또는 null), review_required(true), 원문출근문자열, 원문퇴근문자열, 원문휴게문자열, evidence_bbox(없으면 null)]',
+        '필드 이름을 각 셀에 반복하지 마세요. 빈 값도 해당 위치에 null로 남기세요. 직원 순서와 날짜 연결을 이미지 근거대로 유지하세요.',
+    ]
+    return '\n'.join(lines)
+
+
 def score_with_original(scorer_source, truth, cells):
     with tempfile.TemporaryDirectory(prefix='cbh-independent-scorer-') as tmp:
         path = Path(tmp) / 'evaluate.py'
@@ -179,7 +227,7 @@ def score_with_original(scorer_source, truth, cells):
         return module.score(truth, cells)
 
 
-def run_day0_pilot(truth, prompt, scorer):
+def run_day0_pilot(truth, prompt, scorer, compact=False):
     """One materially smaller diagnostic; never repeat the timed-out full image."""
     account, token = gate()
     previous = json.loads((ROOT / 'runtime-evidence/workers-ai-read-edit-20261013.json').read_text())
@@ -187,6 +235,12 @@ def run_day0_pilot(truth, prompt, scorer):
             or previous['licence_api']['http'] != 200 or not previous['licence_api']['api_success']):
         raise ValueError('VERIFIED_OFFICIAL_LICENCE_RESPONSE_REQUIRED')
     prior_reserved = previous['budget_reserved_neurons']
+    if compact:
+        prior_pilot = json.loads((ROOT / 'runtime-evidence/workers-ai-day0-20261013.json').read_text())
+        if prior_pilot['run_id'] != 38357728022 or prior_pilot['api']['http'] != 200:
+            raise ValueError('COMPLETED_PILOT_EVIDENCE_REQUIRED')
+        prior_reserved = prior_pilot['budget_reserved_neurons']
+        prompt = compact_instructions(prompt)
     max_tokens = 1024
     reserve = 128000 * 4410 / 1e6 + max_tokens * 61493 / 1e6
     if prior_reserved + reserve > BUDGET_NEURONS:
@@ -202,10 +256,11 @@ def run_day0_pilot(truth, prompt, scorer):
     result, value = request_once(account, token, {'prompt': instructions,
         'image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
         'max_tokens': max_tokens, 'temperature': 0})
-    cells, parse_error = parse_cells(value)
+    cells, parse_error = (parse_compact_cells if compact else parse_cells)(value)
     subset = [x for x in truth if x['source_image_id'] == image_id and x['column_group'] == 0]
     estimate = result.get('neurons_pricing_estimate')
     report = {'model': MODEL, 'scope': 'KNOWN_TEMPLATE_DAY_CROP_DIAGNOSTIC_NOT_FULL_IMAGE_ACCURACY',
+        'output_representation': 'COMPACT_14_FIELDS_LOSSLESS_MAP' if compact else 'VERBOSE_CELLS',
         'original_corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
         'source_image_id': image_id, 'source_image_sha256': previous['image_source_sha256'],
         'crop_sha256': crop_sha, 'source_regions': [[18, 0, 134, 311], [134, 0, 437, 311]],
@@ -227,12 +282,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--run', action='store_true', help='Execute only the dated owner-authorized evaluation')
     ap.add_argument('--pilot-day0', action='store_true', help='One bounded existing-v2 day-crop diagnostic')
+    ap.add_argument('--pilot-compact', action='store_true', help='One compact serialization diagnostic after completed pilot')
     args = ap.parse_args()
-    if args.run and args.pilot_day0:
+    if sum((args.run, args.pilot_day0, args.pilot_compact)) > 1:
         ap.error('choose exactly one execution scope')
     images, truth, prompt, scorer = load_corpus()
-    if args.pilot_day0:
-        return run_day0_pilot(truth, prompt, scorer)
+    if args.pilot_day0 or args.pilot_compact:
+        return run_day0_pilot(truth, prompt, scorer, compact=args.pilot_compact)
     if not args.run:
         print(json.dumps({'check': 'PASS', 'network_calls': 0, 'images': len(images),
                           'truth_cells': len(truth), 'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA}))

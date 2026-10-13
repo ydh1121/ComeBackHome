@@ -109,6 +109,21 @@ request and stops on failure. It reports only that three-cell subset, separately
 from original full-image/v2 accuracy. It cannot establish layout discovery or
 production acceptance. Original images, truth and independent scorer are unchanged.
 
+Day-crop run `38357728022` / job `115164408343` at `35ecc51`: **HTTP200 in30,907ms**,
+2,031 input/1,024 output tokens, estimated71.925542 Neurons. It reached the output
+cap and did not produce valid complete JSON. Authentication and image execution
+work; structured OCR output is not yet accepted. Cumulative known-token estimate
+87.676570 plus the unknown-request reservation942.292992 totals1029.969562 Neurons.
+
+The next single-call experiment changes only the serialization contract: a
+14-position array per cell avoids repeated JSON keys/source identifiers. A
+lossless mapper restores the original evaluator's field names. It preserves
+every model-produced value, including wrong dates/names/row/group/status/approval
+flags; no ground-truth correction or partial-JSON salvage occurs. The prior
+known and unknown consumption is carried forward; licence acceptance is not
+repeated. This remains a three-cell known-template diagnostic, not a replacement
+for the 12-source/336-cell evaluation or product integration acceptance.
+
 Official references:
 
 - https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/
