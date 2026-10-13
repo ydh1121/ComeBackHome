@@ -18,6 +18,7 @@ import tempfile
 from time import perf_counter
 import urllib.error
 import urllib.request
+import urllib.parse
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,9 @@ CORPUS = ROOT / 'test/fixtures/import/free-ocr-evaluation-v2.zip'
 CORPUS_SHA = '6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a'
 SCORER_SHA = 'c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004'
 MODEL = '@cf/meta/llama-3.2-11b-vision-instruct'
+GEMMA_MODEL = '@cf/google/gemma-4-26b-a4b-it'
+# Fixed Cloudflare-hosted Free-eligible models; never accept a caller-supplied URL.
+MODEL_RATES = {MODEL: (4410, 61493), GEMMA_MODEL: (9091, 27273)}
 # Owner screenshots dated 2026-10-13 prove Workers Free for this account.
 # The owner reports negligible usage; exact account Neurons remain unmeasured.
 PLAN_ACCOUNT_HASH = 'd325a0ebefd8e3dd7787698c1e4eed887ce6893214ef7b34ac442518b4f85f8d'
@@ -107,10 +111,13 @@ def failure_diagnostics(raw, headers):
     return info
 
 
-def request_once(account, token, payload):
+def request_once(account, token, payload, model=MODEL):
     # Fixed official origin, model and account. No Gateway, paid fallback,
     # billing write, D1 access, worker creation, retry or redirect.
-    url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/ai/run/' + MODEL
+    if model not in MODEL_RATES:
+        raise ValueError('MODEL_NOT_FREE_EVALUATION_ALLOWLISTED')
+    input_rate, output_rate = MODEL_RATES[model]
+    url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/ai/run/' + model
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), method='POST',
         headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
     started = perf_counter()
@@ -129,6 +136,20 @@ def request_once(account, token, payload):
         report['error_codes'] = [e['code'] for e in result.get('errors', [])
                                  if isinstance(e, dict) and isinstance(e.get('code'), int)]
         value = result.get('result')
+        # New Workers AI models use the documented chat-completion response.
+        # Normalize only its single assistant text, never tool/reasoning output.
+        if model == GEMMA_MODEL:
+            if 'success' not in result and isinstance(result.get('choices'), list):
+                value = result
+                report['api_success'] = not result.get('errors') and not result.get('error')
+            if isinstance(value, dict) and isinstance(value.get('choices'), list):
+                choices = value['choices']
+                choice = choices[0] if len(choices) == 1 and isinstance(choices[0], dict) else {}
+                message = choice.get('message', {})
+                reason = choice.get('finish_reason')
+                report['finish_reason'] = reason if reason in ('stop', 'length', 'tool_calls', 'content_filter') else 'OTHER'
+                value = {'response': message.get('content') if isinstance(message, dict) else None,
+                         'usage': value.get('usage')}
         usage = value.get('usage') if isinstance(value, dict) else None
         if isinstance(usage, dict):
             report['usage'] = {k: usage[k] for k in ('prompt_tokens', 'completion_tokens', 'total_tokens')
@@ -136,7 +157,7 @@ def request_once(account, token, payload):
             u = report['usage']
             if 'prompt_tokens' in u and 'completion_tokens' in u:
                 report['neurons_pricing_estimate'] = round(
-                    (u['prompt_tokens'] * 4410 + u['completion_tokens'] * 61493) / 1e6, 6)
+                    (u['prompt_tokens'] * input_rate + u['completion_tokens'] * output_rate) / 1e6, 6)
         return report, value
     except urllib.error.HTTPError as e:
         report['http'] = e.code
@@ -388,16 +409,53 @@ def run_day0_pilot(truth, prompt, scorer, compact=False, english=False):
         raise SystemExit(2)
 
 
-def run_english_full(images, truth, scorer):
+def gemma_schema_check(account, token):
+    url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/ai/models/schema?'
+    url += urllib.parse.urlencode({'model': GEMMA_MODEL})
+    request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token})
+    report = {'model': GEMMA_MODEL, 'http': None, 'inference_calls': 0}
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as response:
+            report['http'] = response.status
+            raw = response.read(2 * 1024 * 1024 + 1)
+        if len(raw) > 2 * 1024 * 1024:
+            raise ValueError('SCHEMA_RESPONSE_TOO_LARGE')
+        data = json.loads(raw)
+        schema = data.get('result', {}).get('input', {})
+        keys = set()
+        def visit(node):
+            if isinstance(node, dict):
+                keys.update(node)
+                for child in node.values():
+                    visit(child)
+            elif isinstance(node, list):
+                for child in node:
+                    visit(child)
+        visit(schema)
+        required = ('messages', 'image_url', 'max_completion_tokens', 'response_format')
+        report.update(response_sha256=sha(raw),
+            supported_fields={key: key in keys for key in required},
+            schema_verified=data.get('success') is True and all(key in keys for key in required))
+    except urllib.error.HTTPError as e:
+        report.update(http=e.code, schema_verified=False, **failure_diagnostics(e.read(65536), e.headers))
+    except Exception:
+        report.update(schema_verified=False, error='SCHEMA_UNVERIFIED_STOP_BEFORE_INFERENCE')
+    return report
+
+
+def run_english_full(images, truth, scorer, gemma=False):
     """Evaluate original full images with a new, explicitly recorded method."""
     account, token = gate()
-    previous = json.loads((ROOT / 'runtime-evidence/workers-ai-english-20261013.json').read_text())
-    if previous['run_id'] != 38404633180 or previous['api']['http'] != 200:
+    evidence_name = 'workers-ai-full-json-20261013.json' if gemma else 'workers-ai-english-20261013.json'
+    previous = json.loads((ROOT / 'runtime-evidence' / evidence_name).read_text())
+    if previous['run_id'] != (38405347734 if gemma else 38404633180):
         raise ValueError('COMPLETED_ENGLISH_DIAGNOSTIC_REQUIRED')
+    model = GEMMA_MODEL if gemma else MODEL
     reserved = previous['budget_reserved_neurons']
     max_tokens = 3072
-    reserve = 128000 * 4410 / 1e6 + max_tokens * 61493 / 1e6
-    report = {'model': MODEL, 'method': 'FULL_ORIGINAL_IMAGES_ENGLISH_COMPACT_COMPLETE_JSON',
+    input_rate, output_rate = MODEL_RATES[model]
+    reserve = (256000 if gemma else 128000) * input_rate / 1e6 + max_tokens * output_rate / 1e6
+    report = {'model': model, 'method': 'FULL_ORIGINAL_IMAGES_ENGLISH_COMPACT_COMPLETE_JSON',
         'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
         'licence_requests_attempted': 0, 'prior_verified_licence_run': 38356883322,
         'prior_budget_reserved_neurons': reserved, 'local_budget_neurons': BUDGET_NEURONS,
@@ -406,6 +464,13 @@ def run_english_full(images, truth, scorer):
         'paid_fallback': False, 'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
     predictions = []
     attempted_truth = []
+    if gemma:
+        report['schema_check'] = gemma_schema_check(account, token)
+        if not report['schema_check'].get('schema_verified'):
+            report.update(blocker='OFFICIAL_MODEL_INPUT_SCHEMA_UNVERIFIED',
+                budget_reserved_neurons=reserved, attempted_images=0, complete_v2=False, aggregate=None)
+            print('CBH_FREE_OCR_V2=' + json.dumps(report, separators=(',', ':')), flush=True)
+            raise SystemExit(2)
     for entry, image in images:
         if reserved + reserve > BUDGET_NEURONS:
             report['blocker'] = 'CONSERVATIVE_RUN_BUDGET_STOP'
@@ -418,9 +483,14 @@ def run_english_full(images, truth, scorer):
             'The original column_group is 0. ',
             'Read the entire original weekly schedule. Column groups are numbered from 0 in visible order. ')
         prompt = prompt.replace('A_high_resolution', entry['id'])
-        item, value = request_once(account, token, {'prompt': prompt,
-            'image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
-            'max_tokens': max_tokens, 'temperature': 0})
+        image_uri = 'data:image/png;base64,' + base64.b64encode(image).decode('ascii')
+        payload = {'prompt': prompt, 'image': image_uri, 'max_tokens': max_tokens, 'temperature': 0}
+        if gemma:
+            payload = {'messages': [{'role': 'user', 'content': [
+                {'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': image_uri}}]}],
+                'max_completion_tokens': max_tokens, 'temperature': 0, 'stream': False,
+                'response_format': {'type': 'json_object'}}
+        item, value = request_once(account, token, payload, model=model)
         cells, error = parse_complete_cells(value)
         subset = [x for x in truth if x['source_image_id'] == entry['id']]
         item.update(image_id=entry['id'], image_sha256=entry['sha256'],
@@ -452,12 +522,13 @@ def main():
     ap.add_argument('--pilot-compact', action='store_true', help='One compact serialization diagnostic after completed pilot')
     ap.add_argument('--pilot-english', action='store_true', help='One English-instruction compact diagnostic with syntax inspection')
     ap.add_argument('--run-english', action='store_true', help='Original v2 images; complete JSON parser; carry all prior usage')
+    ap.add_argument('--run-gemma', action='store_true', help='Free Cloudflare Gemma4; verify official schema before image calls')
     args = ap.parse_args()
-    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english, args.run_english)) > 1:
+    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english, args.run_english, args.run_gemma)) > 1:
         ap.error('choose exactly one execution scope')
     images, truth, prompt, scorer = load_corpus()
-    if args.run_english:
-        return run_english_full(images, truth, scorer)
+    if args.run_english or args.run_gemma:
+        return run_english_full(images, truth, scorer, gemma=args.run_gemma)
     if args.pilot_day0 or args.pilot_compact or args.pilot_english:
         return run_day0_pilot(truth, prompt, scorer, compact=args.pilot_compact or args.pilot_english,
                              english=args.pilot_english)

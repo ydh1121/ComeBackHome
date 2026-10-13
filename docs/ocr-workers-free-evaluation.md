@@ -11,7 +11,7 @@ expansion is requested. Exact account Neurons have not been measured. The billin
 cost of $0 is not treated as zero Neurons.
 
 The dated one-time runner uses the provider-enforced Workers Free daily limit,
-the fixed Llama 3.2 Vision endpoint and no AI Gateway or paid fallback. It reserves
+the fixed, documented Free-eligible model allowlist and no AI Gateway or paid fallback. It reserves
 at most 8,000 Neurons using returned token usage at the published model rates,
 or the model's full context/output ceiling when usage is absent. These are
 **pricing estimates/reservations**, not a measured account Neurons delta. Every
@@ -163,3 +163,34 @@ stops the sequence without retry. A full336-cell aggregate is produced only
 when all12 images complete; otherwise only the attempted subset is reported.
 The evaluator, ground truth, original images and acceptance requirements remain
 unchanged. This method is not product integration or private-original acceptance.
+
+## Full-image Llama result and bounded Cloudflare Gemma4 comparison
+
+Run `38405347734` / job `115323394237` at `8cd6708` stopped on the
+first original A image after120,106ms without an HTTP response. Consumption
+is unknown; reserve753.386496 Neurons, carrying cumulative1,892.643172.
+The full336-cell aggregate is null, and the unparsed21-cell missing count is
+not a measured recognition accuracy. No identical automatic retry occurs.
+
+The same authenticated Cloudflare account can evaluate the separate hosted
+`@cf/google/gemma-4-26b-a4b-it` candidate under Workers Free. Cloudflare explicitly
+lists Vision and a256,000-token context; current pricing lists9,091/27,273
+Neurons per million input/output tokens and does not include Gemma4 among the
+paid-billing-only models. Google publishes Gemma4 under Apache2.0. This is a
+Cloudflare-hosted comparison, not a Google AI Studio/Gemini call or a paid fallback.
+No new licence-acceptance, billing, Gateway or deployment operation is performed.
+
+Before any Gemma inference the runner GETs its official input schema and requires
+messages, image_url, max_completion_tokens and response_format support. Schema
+failure stops before images. Requests use native /ai/run, one in-memory base64
+image in user content, json_object format and3,072 max completion tokens.
+The existing complete-JSON parser and unchanged independent scorer remain in use.
+Each request reserves the entire documented context plus capped output at the
+Gemma rates; missing usage retains that reservation. Cumulative8,000 budget,
+date/account/branch gates, stop-on-failure and no-retry remain unchanged.
+
+Sources checked2026-10-13:
+- https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/
+- https://developers.cloudflare.com/workers-ai/platform/pricing/
+- https://developers.cloudflare.com/api/resources/ai/subresources/models/subresources/schema/methods/get/
+- https://blog.google/intl/ko-kr/company-news/technology/gemma-4-kr/
