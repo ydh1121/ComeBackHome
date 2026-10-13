@@ -1,0 +1,2203 @@
+{
+  "schema": "comebackhome-workers-free-gemma-v2/v1",
+  "run_id": 38406839538,
+  "job_id": 115328555593,
+  "source_head": "d67e6d502beb4705e9afb32d7871e69eebe81bc2",
+  "model": "@cf/google/gemma-4-26b-a4b-it",
+  "method": "FULL_ORIGINAL_IMAGES_ENGLISH_COMPACT_COMPLETE_JSON",
+  "corpus_sha256": "6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a",
+  "scorer_sha256": "c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004",
+  "licence_requests_attempted": 0,
+  "prior_verified_licence_run": 38356883322,
+  "prior_budget_reserved_neurons": 1981.8077,
+  "local_budget_neurons": 8000,
+  "max_output_tokens": 3072,
+  "reasoning_disabled": true,
+  "images": [
+    {
+      "http": 200,
+      "latency_ms": 21153,
+      "usage": {
+        "prompt_tokens": 589,
+        "completion_tokens": 1122,
+        "total_tokens": 1711
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 35.954905,
+      "response_sha256": "615b9499a050d003628d145d56cffc8cd5cfe014e503c1e35f5f135d4068f943",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "A_high_resolution",
+      "image_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 1740,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 22,
+        "close_brackets": 22,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 21,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 21,
+        "predicted_cells": 21,
+        "aligned_cells": 21,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 20,
+            "total": 21,
+            "accuracy": 0.952381
+          },
+          "break_minutes_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 20,
+            "total": 21,
+            "accuracy": 0.952381
+          },
+          "break_minutes_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "review_required": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 21,
+            "aligned": 21,
+            "employee_row_matches": 21,
+            "column_group_matches": 21,
+            "date_matches": 21,
+            "weekday_matches": 21,
+            "employee_name_matches": 21,
+            "status_matches": 21,
+            "clock_in_matches_all": 21,
+            "clock_out_matches_all": 20,
+            "break_minutes_matches_all": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 42660,
+      "usage": {
+        "prompt_tokens": 571,
+        "completion_tokens": 1469,
+        "total_tokens": 2040
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 45.254998,
+      "response_sha256": "75add7a354fd2220fa590d33a6d366bff4d152ad86903e010a8ea211d7623092",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "B_low_resolution",
+      "image_sha256": "06f1e3141b4ebaed14261eff0ae1aa1127559804d2846cedffece2205fa5e66d",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2326,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 29,
+        "close_brackets": 29,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 28,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 28,
+        "predicted_cells": 28,
+        "aligned_cells": 28,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 0,
+            "total": 28,
+            "accuracy": 0
+          },
+          "employee_name": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 20,
+            "total": 28,
+            "accuracy": 0.714286
+          },
+          "clock_out_shift": {
+            "correct": 16,
+            "total": 28,
+            "accuracy": 0.571429
+          },
+          "break_minutes_shift": {
+            "correct": 6,
+            "total": 28,
+            "accuracy": 0.214286
+          },
+          "clock_in_all": {
+            "correct": 20,
+            "total": 28,
+            "accuracy": 0.714286
+          },
+          "clock_out_all": {
+            "correct": 16,
+            "total": 28,
+            "accuracy": 0.571429
+          },
+          "break_minutes_all": {
+            "correct": 6,
+            "total": 28,
+            "accuracy": 0.214286
+          },
+          "review_required": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 28,
+            "aligned": 28,
+            "employee_row_matches": 28,
+            "column_group_matches": 28,
+            "date_matches": 28,
+            "weekday_matches": 0,
+            "employee_name_matches": 28,
+            "status_matches": 28,
+            "clock_in_matches_all": 20,
+            "clock_out_matches_all": 16,
+            "break_minutes_matches_all": 6
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 28
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 39911,
+      "usage": {
+        "prompt_tokens": 559,
+        "completion_tokens": 1832,
+        "total_tokens": 2391
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 55.046005,
+      "response_sha256": "a111150719a206f44afe70a78919fb537b297d093af934012b1ba15ebb50a0a6",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "C_small_font",
+      "image_sha256": "08840c7b54ea178e0002ca8815acf898b621990645a4cb7cabcac1b664fb30a9",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2977,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 36,
+        "close_brackets": 36,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",\"xx\",\"xxxx\",\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 35,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 35,
+        "predicted_cells": 35,
+        "aligned_cells": 35,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "employee_name": {
+            "correct": 28,
+            "total": 35,
+            "accuracy": 0.8
+          },
+          "row_and_column": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 25,
+            "total": 35,
+            "accuracy": 0.714286
+          },
+          "clock_out_shift": {
+            "correct": 20,
+            "total": 35,
+            "accuracy": 0.571429
+          },
+          "break_minutes_shift": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "clock_in_all": {
+            "correct": 25,
+            "total": 35,
+            "accuracy": 0.714286
+          },
+          "clock_out_all": {
+            "correct": 20,
+            "total": 35,
+            "accuracy": 0.571429
+          },
+          "break_minutes_all": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "review_required": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 35,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 35,
+            "aligned": 35,
+            "employee_row_matches": 35,
+            "column_group_matches": 35,
+            "date_matches": 35,
+            "weekday_matches": 0,
+            "employee_name_matches": 28,
+            "status_matches": 35,
+            "clock_in_matches_all": 25,
+            "clock_out_matches_all": 20,
+            "break_minutes_matches_all": 0,
+            "dangerous_auto_confirmations": 35
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 35
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 39024,
+      "usage": {
+        "prompt_tokens": 589,
+        "completion_tokens": 1122,
+        "total_tokens": 1711
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 35.954905,
+      "response_sha256": "f8cf62613a66e68db67aee198e09fe422a9c03778b28359d77e7b4cae86217cf",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "D_merged_headers",
+      "image_sha256": "4a7ff5169886e2fecced230cbade6de3eb69493076370a80b0b867f2ce006628",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 1739,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 22,
+        "close_brackets": 22,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 21,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 21,
+        "predicted_cells": 21,
+        "aligned_cells": 21,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "review_required": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 21,
+            "aligned": 21,
+            "employee_row_matches": 21,
+            "column_group_matches": 21,
+            "date_matches": 21,
+            "weekday_matches": 21,
+            "employee_name_matches": 21,
+            "status_matches": 21,
+            "clock_in_matches_all": 21,
+            "clock_out_matches_all": 21,
+            "break_minutes_matches_all": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 43454,
+      "usage": {
+        "prompt_tokens": 573,
+        "completion_tokens": 1436,
+        "total_tokens": 2009
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 44.373171,
+      "response_sha256": "a4efefdd2340a45dd531267d5a6af1957e8d7c3456de6e05666b2dc2ca496e36",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "E_month_year_boundary",
+      "image_sha256": "df6e3a5ae99d2d8cc6a1a7c88d7898815298e70e5ef494674d8056fa3281ee0c",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2336,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 29,
+        "close_brackets": 29,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",\"x\",xxxx,\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",\"x\",xxxx,\"x",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 28,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 28,
+        "predicted_cells": 28,
+        "aligned_cells": 28,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 0,
+            "total": 28,
+            "accuracy": 0
+          },
+          "employee_name": {
+            "correct": 0,
+            "total": 28,
+            "accuracy": 0
+          },
+          "row_and_column": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 27,
+            "total": 28,
+            "accuracy": 0.964286
+          },
+          "clock_in_all": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 27,
+            "total": 28,
+            "accuracy": 0.964286
+          },
+          "review_required": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 28,
+            "aligned": 28,
+            "employee_row_matches": 28,
+            "column_group_matches": 28,
+            "date_matches": 28,
+            "weekday_matches": 0,
+            "employee_name_matches": 0,
+            "status_matches": 28,
+            "clock_in_matches_all": 28,
+            "clock_out_matches_all": 28,
+            "break_minutes_matches_all": 27
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 28
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 41157,
+      "usage": {
+        "prompt_tokens": 560,
+        "completion_tokens": 1855,
+        "total_tokens": 2415
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 55.682375,
+      "response_sha256": "c331af294fc05f2e12a06bfc990684a9953fec6918eadfbd01efa77f7deed913",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "F_swapped_rows",
+      "image_sha256": "82956ec60b59ba8047c26481609d5e361a572f74299c0b4b2bb9d71a1fc1153d",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2863,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 36,
+        "close_brackets": 36,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 35,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 35,
+        "predicted_cells": 35,
+        "aligned_cells": 35,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 31,
+            "total": 35,
+            "accuracy": 0.885714
+          },
+          "clock_in_all": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 31,
+            "total": 35,
+            "accuracy": 0.885714
+          },
+          "review_required": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 35,
+            "aligned": 35,
+            "employee_row_matches": 35,
+            "column_group_matches": 35,
+            "date_matches": 35,
+            "weekday_matches": 35,
+            "employee_name_matches": 35,
+            "status_matches": 35,
+            "clock_in_matches_all": 35,
+            "clock_out_matches_all": 35,
+            "break_minutes_matches_all": 31
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 35
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 12209,
+      "usage": {
+        "prompt_tokens": 589,
+        "completion_tokens": 1179,
+        "total_tokens": 1768
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 37.509466,
+      "response_sha256": "f307345e5c44fad8603e45292a6932311fe1fa0a0da99a4603aa77a40aa9a9eb",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "G_decimal_clock",
+      "image_sha256": "a1b7ad4f6b200e24583d55518ef5658ee9aeb96f8faee48b0e6a3eff553f6f66",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 1919,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 22,
+        "close_brackets": 22,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",\"xx\",\"xxxx\",\"xxxx\",\"xxxx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 21,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 21,
+        "predicted_cells": 21,
+        "aligned_cells": 21,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 0,
+            "total": 21,
+            "accuracy": 0
+          },
+          "clock_in_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 0,
+            "total": 21,
+            "accuracy": 0
+          },
+          "review_required": {
+            "correct": 0,
+            "total": 21,
+            "accuracy": 0
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 21,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 21,
+            "aligned": 21,
+            "employee_row_matches": 21,
+            "column_group_matches": 21,
+            "date_matches": 21,
+            "weekday_matches": 21,
+            "employee_name_matches": 21,
+            "status_matches": 21,
+            "clock_in_matches_all": 21,
+            "clock_out_matches_all": 21,
+            "break_minutes_matches_all": 0,
+            "dangerous_auto_confirmations": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 9981,
+      "usage": {
+        "prompt_tokens": 572,
+        "completion_tokens": 1491,
+        "total_tokens": 2063
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 45.864095,
+      "response_sha256": "a9380dbf58c11fb35d3bba19d7505a4446d933e00c5a3f3dcf0141aa085fcade",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "H_break_fractions",
+      "image_sha256": "3e3155a1230ea07bd3bc0555a500b16cec21dc448c74cf91302257773a9f3105",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2304,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 29,
+        "close_brackets": 29,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 28,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 28,
+        "predicted_cells": 28,
+        "aligned_cells": 28,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_in_all": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "review_required": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 28,
+            "aligned": 28,
+            "employee_row_matches": 28,
+            "column_group_matches": 28,
+            "date_matches": 28,
+            "weekday_matches": 28,
+            "employee_name_matches": 28,
+            "status_matches": 28,
+            "clock_in_matches_all": 28,
+            "clock_out_matches_all": 28,
+            "break_minutes_matches_all": 28
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 28
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 44516,
+      "usage": {
+        "prompt_tokens": 559,
+        "completion_tokens": 1275,
+        "total_tokens": 1834
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 39.854944,
+      "response_sha256": "086f0206c4574b53272a7f27676ab5fe121398ab512a200ea85e3b470c5f221f",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "I_blank_cells",
+      "image_sha256": "6e65b1868d464607c9fb6392cb420822ab2a5558e27f41c84dc91ee5873ac820",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2198,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 28,
+        "close_brackets": 28,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",xxxx,\"xxx\",\"xxxxx\",xxxx,xxxx,xxxx,xxxx,xxxx,xxxx,xxxx,xxxx],[x,x,\"xxxxxxxxxx\",xxxx,\"xxx\",\"xxxxx\",\"x",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 27,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 35,
+        "predicted_cells": 27,
+        "aligned_cells": 27,
+        "missing_cells": 8,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 27,
+            "total": 35,
+            "accuracy": 0.771429
+          },
+          "column_group": {
+            "correct": 27,
+            "total": 35,
+            "accuracy": 0.771429
+          },
+          "date": {
+            "correct": 27,
+            "total": 35,
+            "accuracy": 0.771429
+          },
+          "weekday": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "employee_name": {
+            "correct": 27,
+            "total": 35,
+            "accuracy": 0.771429
+          },
+          "row_and_column": {
+            "correct": 27,
+            "total": 35,
+            "accuracy": 0.771429
+          },
+          "status": {
+            "correct": 26,
+            "total": 35,
+            "accuracy": 0.742857
+          },
+          "clock_in_shift": {
+            "correct": 0,
+            "total": 26,
+            "accuracy": 0
+          },
+          "clock_out_shift": {
+            "correct": 0,
+            "total": 26,
+            "accuracy": 0
+          },
+          "break_minutes_shift": {
+            "correct": 0,
+            "total": 26,
+            "accuracy": 0
+          },
+          "clock_in_all": {
+            "correct": 1,
+            "total": 35,
+            "accuracy": 0.028571
+          },
+          "clock_out_all": {
+            "correct": 1,
+            "total": 35,
+            "accuracy": 0.028571
+          },
+          "break_minutes_all": {
+            "correct": 1,
+            "total": 35,
+            "accuracy": 0.028571
+          },
+          "review_required": {
+            "correct": 27,
+            "total": 35,
+            "accuracy": 0.771429
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 1,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 1,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 26,
+            "aligned": 26,
+            "employee_row_matches": 26,
+            "column_group_matches": 26,
+            "date_matches": 26,
+            "weekday_matches": 0,
+            "employee_name_matches": 26,
+            "status_matches": 26,
+            "clock_in_matches_all": 0,
+            "clock_out_matches_all": 0,
+            "break_minutes_matches_all": 0
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {
+            "truth": 9,
+            "aligned": 1,
+            "employee_row_matches": 1,
+            "column_group_matches": 1,
+            "date_matches": 1,
+            "weekday_matches": 0,
+            "employee_name_matches": 1,
+            "status_matches": 0,
+            "clock_in_matches_all": 1,
+            "clock_out_matches_all": 1,
+            "break_minutes_matches_all": 1,
+            "missing": 8
+          },
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 26
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {
+            "SHIFT": 1,
+            "MISSING": 8
+          },
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [
+          {
+            "source_image_id": "I_blank_cells",
+            "employee_row": 0,
+            "column_group": 0,
+            "truth": "BLANK",
+            "predicted": "SHIFT"
+          }
+        ],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 24396,
+      "usage": {
+        "prompt_tokens": 590,
+        "completion_tokens": 1046,
+        "total_tokens": 1636
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 33.891248,
+      "response_sha256": "97694d6c6191db922c6c639add924c791f3e2a8c1e479981698cb3de1067d4e0",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "J_off_unreadable",
+      "image_sha256": "21c39c07b0f8795eac87a8bdf18b915996b3b0ae9f77e9cb5d29b628eb262740",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 1743,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 22,
+        "close_brackets": 22,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxxxxxxxxxx\",xxxx,xxxx,xxxx,xxxx,\"xx\",xxxx,xxxx,xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxx",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 21,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 21,
+        "predicted_cells": 21,
+        "aligned_cells": 21,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 13,
+            "total": 13,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 13,
+            "total": 13,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 0,
+            "total": 13,
+            "accuracy": 0
+          },
+          "clock_in_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 8,
+            "total": 21,
+            "accuracy": 0.380952
+          },
+          "review_required": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 4
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 13,
+            "aligned": 13,
+            "employee_row_matches": 13,
+            "column_group_matches": 13,
+            "date_matches": 13,
+            "weekday_matches": 13,
+            "employee_name_matches": 13,
+            "status_matches": 13,
+            "clock_in_matches_all": 13,
+            "clock_out_matches_all": 13,
+            "break_minutes_matches_all": 0
+          },
+          "OFF_CANDIDATE": {
+            "truth": 4,
+            "aligned": 4,
+            "employee_row_matches": 4,
+            "column_group_matches": 4,
+            "date_matches": 4,
+            "weekday_matches": 4,
+            "employee_name_matches": 4,
+            "status_matches": 4,
+            "clock_in_matches_all": 4,
+            "clock_out_matches_all": 4,
+            "break_minutes_matches_all": 4
+          },
+          "BLANK": {},
+          "UNREADABLE": {
+            "truth": 4,
+            "aligned": 4,
+            "employee_row_matches": 4,
+            "column_group_matches": 4,
+            "date_matches": 4,
+            "weekday_matches": 4,
+            "employee_name_matches": 4,
+            "status_matches": 4,
+            "clock_in_matches_all": 4,
+            "clock_out_matches_all": 4,
+            "break_minutes_matches_all": 4
+          }
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 13
+          },
+          "OFF_CANDIDATE": {
+            "OFF_CANDIDATE": 4
+          },
+          "BLANK": {},
+          "UNREADABLE": {
+            "UNREADABLE": 4
+          }
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 31139,
+      "usage": {
+        "prompt_tokens": 571,
+        "completion_tokens": 1484,
+        "total_tokens": 2055
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 45.664093,
+      "response_sha256": "5b138f4a77b78a45396903b8674416f611813481676f32ef1b7cdc18ecb9177f",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "K_similar_names",
+      "image_sha256": "fc907a3f8da5ee9d51582e7bec0be116fd76a5accc52d2713920c9f3fb7654c7",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 2296,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 29,
+        "close_brackets": 29,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"xx:xx\",\"xx:xx\",xx,xxxx,\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",x,\"xxx\",\"xxxxx\",\"x",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 28,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 28,
+        "predicted_cells": 28,
+        "aligned_cells": 28,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 20,
+            "total": 28,
+            "accuracy": 0.714286
+          },
+          "clock_out_shift": {
+            "correct": 16,
+            "total": 28,
+            "accuracy": 0.571429
+          },
+          "break_minutes_shift": {
+            "correct": 27,
+            "total": 28,
+            "accuracy": 0.964286
+          },
+          "clock_in_all": {
+            "correct": 20,
+            "total": 28,
+            "accuracy": 0.714286
+          },
+          "clock_out_all": {
+            "correct": 16,
+            "total": 28,
+            "accuracy": 0.571429
+          },
+          "break_minutes_all": {
+            "correct": 27,
+            "total": 28,
+            "accuracy": 0.964286
+          },
+          "review_required": {
+            "correct": 28,
+            "total": 28,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 28,
+            "aligned": 28,
+            "employee_row_matches": 28,
+            "column_group_matches": 28,
+            "date_matches": 28,
+            "weekday_matches": 28,
+            "employee_name_matches": 28,
+            "status_matches": 28,
+            "clock_in_matches_all": 20,
+            "clock_out_matches_all": 16,
+            "break_minutes_matches_all": 27
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 28
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 200,
+      "latency_ms": 29864,
+      "usage": {
+        "prompt_tokens": 562,
+        "completion_tokens": 1792,
+        "total_tokens": 2354
+      },
+      "neurons_measured": null,
+      "neurons_pricing_estimate": 53.982358,
+      "response_sha256": "e32a24e5cfa23b111bfcccd6c09dab1bf214fbcb202d87c58d5fe375f7bae155",
+      "api_success": true,
+      "error_codes": [],
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "image_id": "L_colors_notes_holidays",
+      "image_sha256": "a9171f7d3329a624bc3824ef580b7bb6faf31e2b3d028fdc17cbf7c32f24c753",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": true,
+        "characters": 3118,
+        "starts_object": true,
+        "starts_array": false,
+        "code_fences": 0,
+        "open_braces": 1,
+        "close_braces": 1,
+        "open_brackets": 36,
+        "close_brackets": 36,
+        "known_keys_present": [
+          "rows",
+          "source_image_id"
+        ],
+        "licence_language_present": false,
+        "prefix_syntax_only": "{\"xxxxxxxxxxxxxxx\":\"xxxxxxxxxxxxxxxxxxxxxxx\",\"xxxx\":[[x,x,\"xxxxxxxxxx\",\"x\",xxxx,\"xxxxx\",\"xx:xx\",\"xx:xx\",\"xx\",\"xxxx\",\"x\",\"xx\",\"xxx\",xxxx],[x,x,\"xxxxxxxxxx\",\"x\",x",
+        "json_valid": true
+      },
+      "parse_error": null,
+      "predicted_cells": 35,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 35,
+        "predicted_cells": 35,
+        "aligned_cells": 35,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "employee_name": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "row_and_column": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 35,
+            "total": 35,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 31,
+            "total": 35,
+            "accuracy": 0.885714
+          },
+          "clock_out_shift": {
+            "correct": 31,
+            "total": 35,
+            "accuracy": 0.885714
+          },
+          "break_minutes_shift": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "clock_in_all": {
+            "correct": 31,
+            "total": 35,
+            "accuracy": 0.885714
+          },
+          "clock_out_all": {
+            "correct": 31,
+            "total": 35,
+            "accuracy": 0.885714
+          },
+          "break_minutes_all": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          },
+          "review_required": {
+            "correct": 0,
+            "total": 35,
+            "accuracy": 0
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 35,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 35,
+            "aligned": 35,
+            "employee_row_matches": 35,
+            "column_group_matches": 35,
+            "date_matches": 35,
+            "weekday_matches": 0,
+            "employee_name_matches": 0,
+            "status_matches": 35,
+            "clock_in_matches_all": 31,
+            "clock_out_matches_all": 31,
+            "break_minutes_matches_all": 0,
+            "dangerous_auto_confirmations": 35
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 35
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    }
+  ],
+  "actual_neurons": null,
+  "account_neurons_remaining": null,
+  "production_writes": 0,
+  "private_images": 0,
+  "paid_fallback": false,
+  "acceptance": "NOT_ACCEPTED_BY_THIS_BENCHMARK",
+  "schema_check": {
+    "model": "@cf/google/gemma-4-26b-a4b-it",
+    "http": 200,
+    "inference_calls": 0,
+    "response_sha256": "13830d814475ea4f11574342d82514cbc44d7c73017717cf35cf182fe16607f9",
+    "supported_fields": {
+      "messages": true,
+      "image_url": true,
+      "max_completion_tokens": true,
+      "response_format": true,
+      "chat_template_kwargs": true
+    },
+    "schema_verified": true
+  },
+  "budget_reserved_neurons": 2510.840263,
+  "attempted_images": 12,
+  "complete_v2": true,
+  "aggregate": {
+    "scorer_version": "2.0-independent-fields",
+    "real_provider_accuracy_measured": true,
+    "truth_cells": 336,
+    "predicted_cells": 328,
+    "aligned_cells": 328,
+    "missing_cells": 8,
+    "unmatched_predictions": 0,
+    "duplicate_position_predictions": 0,
+    "metrics": {
+      "employee_row": {
+        "correct": 328,
+        "total": 336,
+        "accuracy": 0.97619
+      },
+      "column_group": {
+        "correct": 328,
+        "total": 336,
+        "accuracy": 0.97619
+      },
+      "date": {
+        "correct": 328,
+        "total": 336,
+        "accuracy": 0.97619
+      },
+      "weekday": {
+        "correct": 175,
+        "total": 336,
+        "accuracy": 0.520833
+      },
+      "employee_name": {
+        "correct": 258,
+        "total": 336,
+        "accuracy": 0.767857
+      },
+      "row_and_column": {
+        "correct": 328,
+        "total": 336,
+        "accuracy": 0.97619
+      },
+      "status": {
+        "correct": 327,
+        "total": 336,
+        "accuracy": 0.973214
+      },
+      "clock_in_shift": {
+        "correct": 263,
+        "total": 319,
+        "accuracy": 0.824451
+      },
+      "clock_out_shift": {
+        "correct": 249,
+        "total": 319,
+        "accuracy": 0.780564
+      },
+      "break_minutes_shift": {
+        "correct": 161,
+        "total": 319,
+        "accuracy": 0.504702
+      },
+      "clock_in_all": {
+        "correct": 272,
+        "total": 336,
+        "accuracy": 0.809524
+      },
+      "clock_out_all": {
+        "correct": 258,
+        "total": 336,
+        "accuracy": 0.767857
+      },
+      "break_minutes_all": {
+        "correct": 170,
+        "total": 336,
+        "accuracy": 0.505952
+      },
+      "review_required": {
+        "correct": 237,
+        "total": 336,
+        "accuracy": 0.705357
+      }
+    },
+    "safety": {
+      "dangerous_auto_confirmations": 91,
+      "dangerous_shift_on_nonshift": 1,
+      "dangerous_off_on_blank_or_unreadable": 0,
+      "incomplete_shift_predictions": 1,
+      "invalid_status": 0,
+      "unreadable_predictions": 4
+    },
+    "by_truth_status": {
+      "SHIFT": {
+        "truth": 319,
+        "aligned": 319,
+        "employee_row_matches": 319,
+        "column_group_matches": 319,
+        "date_matches": 319,
+        "weekday_matches": 167,
+        "employee_name_matches": 249,
+        "status_matches": 319,
+        "clock_in_matches_all": 263,
+        "clock_out_matches_all": 249,
+        "break_minutes_matches_all": 161,
+        "dangerous_auto_confirmations": 91
+      },
+      "OFF_CANDIDATE": {
+        "truth": 4,
+        "aligned": 4,
+        "employee_row_matches": 4,
+        "column_group_matches": 4,
+        "date_matches": 4,
+        "weekday_matches": 4,
+        "employee_name_matches": 4,
+        "status_matches": 4,
+        "clock_in_matches_all": 4,
+        "clock_out_matches_all": 4,
+        "break_minutes_matches_all": 4
+      },
+      "BLANK": {
+        "truth": 9,
+        "aligned": 1,
+        "employee_row_matches": 1,
+        "column_group_matches": 1,
+        "date_matches": 1,
+        "weekday_matches": 0,
+        "employee_name_matches": 1,
+        "status_matches": 0,
+        "clock_in_matches_all": 1,
+        "clock_out_matches_all": 1,
+        "break_minutes_matches_all": 1,
+        "missing": 8
+      },
+      "UNREADABLE": {
+        "truth": 4,
+        "aligned": 4,
+        "employee_row_matches": 4,
+        "column_group_matches": 4,
+        "date_matches": 4,
+        "weekday_matches": 4,
+        "employee_name_matches": 4,
+        "status_matches": 4,
+        "clock_in_matches_all": 4,
+        "clock_out_matches_all": 4,
+        "break_minutes_matches_all": 4
+      }
+    },
+    "status_confusion": {
+      "SHIFT": {
+        "SHIFT": 319
+      },
+      "OFF_CANDIDATE": {
+        "OFF_CANDIDATE": 4
+      },
+      "BLANK": {
+        "SHIFT": 1,
+        "MISSING": 8
+      },
+      "UNREADABLE": {
+        "UNREADABLE": 4
+      }
+    },
+    "dangerous_cases": [
+      {
+        "source_image_id": "I_blank_cells",
+        "employee_row": 0,
+        "column_group": 0,
+        "truth": "BLANK",
+        "predicted": "SHIFT"
+      }
+    ],
+    "usage": {
+      "model": "NOT_RECORDED_BY_SCORER",
+      "neurons": "NOT_MEASURED",
+      "latency_ms": "NOT_MEASURED"
+    }
+  }
+}

@@ -211,3 +211,34 @@ published; only the presence boolean is recorded. This changes a concrete
 configuration omission instead of increasing token/time budgets or repairing
 partial output. Prior usage is retained.
 Source: https://developers.cloudflare.com/workers-ai/get-started/workers-wrangler/
+
+## First complete actual v2 evaluation — measured, quality not accepted
+
+Gemma4 nonthinking run `38406839538` / job `115328555593` at `d67e6d5`
+completed all12 original synthetic images with HTTP200 and complete parsed JSON.
+Independent unchanged scorer:336 truth cells,328 predictions,8 missing,0
+unmatched/duplicate positions. Date/row/column97.6190%; weekday52.0833%;
+name76.7857%; status97.3214%; SHIFT start82.4451%,end78.0564%,break50.4702%.
+Review-required boolean was true in237/336;91 aligned predictions were not
+explicitly review-required. One blank was classified SHIFT;8 blanks were omitted.
+These are measured failures, not waived gates. No predictions were stored or
+activated in the product, and no real user approval was bypassed.
+
+Usage:6,884 input +17,103 completion tokens;529.032563-Neuron pricing estimate.
+Latency9,981–44,516ms,mean31,622ms,total379,464ms. Cumulative reservation
+2,510.840263 includes all previous known usage and both unknown full-image calls.
+Exact account/billed Neurons remain unmeasured. Required software CI at the same
+HEAD: run38406847120,12/12 SUCCESS plus one conditional oracle skipped. API
+workflow success only means evaluation completed; it does not accept OCR quality.
+
+One final Cloudflare full-corpus variant in this execution restores the original
+Korean OCR_PROMPT.txt verbatim and requests named JSON-schema fields instead of
+positional arrays. This tests output/normalization ambiguity without using truth
+values to fix predictions. The schema constrains field types/enumerated states,
+not names, dates, times, employee count or the review_required value (false remains
+allowed and scored as a failure). All12 unmodified images and the original scorer
+remain the same. Max completion6144 accounts for repeated field names; at the
+Gemma rate the entire context+output reservation remains within the cumulative
+8000 ceiling. Reasoning stays disabled; one failure stops without retry. If this
+variant fails quality, the model remains rejected and the next provider needs
+authenticated free-tier access; no further prompt-fitting in this execution.

@@ -412,7 +412,7 @@ def run_day0_pilot(truth, prompt, scorer, compact=False, english=False):
         raise SystemExit(2)
 
 
-def gemma_schema_check(account, token):
+def gemma_schema_check(account, token, require_named=False):
     url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/ai/models/schema?'
     url += urllib.parse.urlencode({'model': GEMMA_MODEL})
     request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token})
@@ -436,6 +436,8 @@ def gemma_schema_check(account, token):
                     visit(child)
         visit(schema)
         required = ('messages', 'image_url', 'max_completion_tokens', 'response_format', 'chat_template_kwargs')
+        if require_named:
+            required += ('json_schema',)
         report.update(response_sha256=sha(raw),
             supported_fields={key: key in keys for key in required},
             schema_verified=data.get('success') is True and all(key in keys for key in required))
@@ -446,16 +448,44 @@ def gemma_schema_check(account, token):
     return report
 
 
-def run_english_full(images, truth, scorer, gemma=False):
+def roster_json_schema():
+    """Value types only: no expected people, dates, times, count or approval value."""
+    nullable_text = {'type': ['string', 'null']}
+    properties = {
+        'source_image_id': {'type': 'string'}, 'employee_row': {'type': 'integer', 'minimum': 0},
+        'column_group': {'type': 'integer', 'minimum': 0, 'maximum': 6},
+        'date': nullable_text, 'weekday': {'type': ['integer', 'null'], 'minimum': 0, 'maximum': 6},
+        'employee_name': nullable_text,
+        'status': {'type': 'string', 'enum': ['SHIFT', 'OFF_CANDIDATE', 'BLANK', 'UNREADABLE']},
+        'clock_in': nullable_text, 'clock_out': nullable_text,
+        'break_minutes': {'type': ['integer', 'null'], 'minimum': 0},
+        'review_required': {'type': 'boolean'},
+        'original_text': {'type': 'object', 'properties': {
+            'clock_in': nullable_text, 'clock_out': nullable_text, 'break': nullable_text},
+            'required': ['clock_in', 'clock_out', 'break'], 'additionalProperties': False},
+        'evidence_bbox': {'anyOf': [{'type': 'null'},
+            {'type': 'array', 'items': {'type': 'number'}, 'minItems': 4, 'maxItems': 4}]},
+    }
+    return {'type': 'object', 'properties': {'cells': {'type': 'array', 'maxItems': 100,
+        'items': {'type': 'object', 'properties': properties, 'required': list(properties),
+                  'additionalProperties': False}}}, 'required': ['cells'], 'additionalProperties': False}
+
+
+def run_english_full(images, truth, scorer, gemma=False, named_schema=False, original_prompt=None):
     """Evaluate original full images with a new, explicitly recorded method."""
     account, token = gate()
     evidence_name = 'workers-ai-gemma-initial-20261013.json' if gemma else 'workers-ai-english-20261013.json'
+    if named_schema:
+        if not gemma or not original_prompt:
+            raise ValueError('ORIGINAL_PROMPT_REQUIRED_FOR_NAMED_GEMMA')
+        evidence_name = 'workers-ai-gemma-v2-20261013.json'
     previous = json.loads((ROOT / 'runtime-evidence' / evidence_name).read_text())
-    if previous['run_id'] != (38406403822 if gemma else 38404633180):
+    expected_run = 38406839538 if named_schema else (38406403822 if gemma else 38404633180)
+    if previous['run_id'] != expected_run:
         raise ValueError('COMPLETED_ENGLISH_DIAGNOSTIC_REQUIRED')
     model = GEMMA_MODEL if gemma else MODEL
     reserved = previous['budget_reserved_neurons']
-    max_tokens = 3072
+    max_tokens = 6144 if named_schema else 3072
     input_rate, output_rate = MODEL_RATES[model]
     reserve = (256000 if gemma else 128000) * input_rate / 1e6 + max_tokens * output_rate / 1e6
     report = {'model': model, 'method': 'FULL_ORIGINAL_IMAGES_ENGLISH_COMPACT_COMPLETE_JSON',
@@ -465,10 +495,12 @@ def run_english_full(images, truth, scorer, gemma=False):
         'max_output_tokens': max_tokens, 'reasoning_disabled': gemma, 'images': [], 'actual_neurons': None,
         'account_neurons_remaining': None, 'production_writes': 0, 'private_images': 0,
         'paid_fallback': False, 'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
+    if named_schema:
+        report['method'] = 'FULL_ORIGINAL_IMAGES_ORIGINAL_KOREAN_PROMPT_NAMED_TYPED_JSON_SCHEMA'
     predictions = []
     attempted_truth = []
     if gemma:
-        report['schema_check'] = gemma_schema_check(account, token)
+        report['schema_check'] = gemma_schema_check(account, token, require_named=named_schema)
         if not report['schema_check'].get('schema_verified'):
             report.update(blocker='OFFICIAL_MODEL_INPUT_SCHEMA_UNVERIFIED',
                 budget_reserved_neurons=reserved, attempted_images=0, complete_v2=False, aggregate=None)
@@ -486,6 +518,8 @@ def run_english_full(images, truth, scorer, gemma=False):
             'The original column_group is 0. ',
             'Read the entire original weekly schedule. Column groups are numbered from 0 in visible order. ')
         prompt = prompt.replace('A_high_resolution', entry['id'])
+        if named_schema:
+            prompt = original_prompt + '\nsource_image_id = ' + entry['id']
         image_uri = 'data:image/png;base64,' + base64.b64encode(image).decode('ascii')
         payload = {'prompt': prompt, 'image': image_uri, 'max_tokens': max_tokens, 'temperature': 0}
         if gemma:
@@ -493,6 +527,9 @@ def run_english_full(images, truth, scorer, gemma=False):
                 {'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': image_uri}}]}],
                 'max_completion_tokens': max_tokens, 'temperature': 0, 'stream': False,
                 'response_format': {'type': 'json_object'}, 'chat_template_kwargs': {'enable_thinking': False}}
+            if named_schema:
+                payload['response_format'] = {'type': 'json_schema', 'json_schema': {
+                    'name': 'weekly_roster', 'strict': True, 'schema': roster_json_schema()}}
         item, value = request_once(account, token, payload, model=model)
         cells, error = parse_complete_cells(value)
         subset = [x for x in truth if x['source_image_id'] == entry['id']]
@@ -526,12 +563,15 @@ def main():
     ap.add_argument('--pilot-english', action='store_true', help='One English-instruction compact diagnostic with syntax inspection')
     ap.add_argument('--run-english', action='store_true', help='Original v2 images; complete JSON parser; carry all prior usage')
     ap.add_argument('--run-gemma', action='store_true', help='Free Cloudflare Gemma4; verify official schema before image calls')
+    ap.add_argument('--run-gemma-schema', action='store_true', help='Original Korean prompt with named typed fields, no expected answers')
     args = ap.parse_args()
-    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english, args.run_english, args.run_gemma)) > 1:
+    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english, args.run_english,
+            args.run_gemma, args.run_gemma_schema)) > 1:
         ap.error('choose exactly one execution scope')
     images, truth, prompt, scorer = load_corpus()
-    if args.run_english or args.run_gemma:
-        return run_english_full(images, truth, scorer, gemma=args.run_gemma)
+    if args.run_english or args.run_gemma or args.run_gemma_schema:
+        return run_english_full(images, truth, scorer, gemma=args.run_gemma or args.run_gemma_schema,
+            named_schema=args.run_gemma_schema, original_prompt=prompt)
     if args.pilot_day0 or args.pilot_compact or args.pilot_english:
         return run_day0_pilot(truth, prompt, scorer, compact=args.pilot_compact or args.pilot_english,
                              english=args.pilot_english)

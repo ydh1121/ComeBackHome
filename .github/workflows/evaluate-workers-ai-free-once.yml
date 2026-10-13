@@ -1,4 +1,4 @@
-name: Workers Free OCR v2 / Gemma4 bounded nonthinking image evaluation
+name: Workers Free OCR v2 / Gemma4 typed original-prompt evaluation
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       github.repository == 'ydh1121/ComeBackHome' &&
       github.ref == 'refs/heads/feat/nonimage-weekly-xlsx-import' &&
       github.run_attempt == 1 &&
-      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-gemma4-nothink]')
+      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-gemma4-schema]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -33,4 +33,4 @@ jobs:
           CBH_AI_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_AI_TOKEN }}
           CBH_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CBH_FREE_EVAL_APPROVED_DATE: '2026-10-13'
-        run: python scripts/evaluate-workers-ai-free.py --run-gemma
+        run: python scripts/evaluate-workers-ai-free.py --run-gemma-schema
