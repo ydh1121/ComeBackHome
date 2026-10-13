@@ -71,6 +71,22 @@ The next providers (Gemini / OCR.space Engine 3) have no authenticated execution
 path available in this session. No public playground or guessed credential is
 used as a fallback. Cloud OCR and complete product acceptance remain blocked.
 
+## Owner-confirmed permission evidence, 15:25 KST
+
+The owner's new screenshot shows both **Workers AI:Edit** and **Workers AI:Read**
+for their account, and the owner explicitly instructed execution to continue.
+Do not repeat the instruction to add these already-visible permissions.
+The screenshot does not expose a token value or prove which token bytes are in
+Actions; no credential is extracted or compared through logs.
+
+The new dated attempt keeps the same URL, payload, credential reference, Python
+HTTP client and default request headers. The only request-path change is better
+failure reporting: numeric error markers from JSON or edge text, content type,
+response hash/length and a validated Cloudflare Ray ID. No raw error body is
+printed. An edge denial must not be worked around by rotating the user agent,
+credentials, endpoint or network. The attempt still stops on any HTTP failure;
+no retry occurs within the runner. Existing Meta owner approval is retained.
+
 Official references:
 
 - https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/

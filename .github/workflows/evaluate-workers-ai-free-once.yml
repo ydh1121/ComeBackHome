@@ -1,4 +1,4 @@
-name: Workers Free OCR v2 / owner-authorized one-time evaluation
+name: Workers Free OCR v2 / owner-confirmed Read Edit resume
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       github.repository == 'ydh1121/ComeBackHome' &&
       github.ref == 'refs/heads/feat/nonimage-weekly-xlsx-import' &&
       github.run_attempt == 1 &&
-      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013]')
+      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-read-edit]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
       - name: Verify original synthetic corpus and independent scorer hashes
         run: python scripts/evaluate-workers-ai-free.py
-      - name: Accept approved Meta terms and evaluate original synthetic images once
+      - name: Inspect same official licence request after owner confirms Read and Edit
         env:
           CBH_AI_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_AI_TOKEN }}
           CBH_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

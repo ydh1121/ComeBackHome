@@ -13,6 +13,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from time import perf_counter
 import urllib.error
@@ -83,6 +84,29 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def failure_diagnostics(raw, headers):
+    """Return only bounded, non-secret protocol diagnostics, never response text."""
+    mime = (headers.get('Content-Type', '') if headers else '').split(';')[0].lower()
+    ray = headers.get('CF-Ray', '') if headers else ''
+    info = {'response_format': 'NON_JSON', 'response_bytes': len(raw),
+            'response_sha256': sha(raw), 'error_codes': [],
+            'content_type': mime if mime in ('application/json', 'text/plain', 'text/html') else 'OTHER',
+            'cloudflare_ray': ray if re.fullmatch(r'[a-fA-F0-9]{16,32}-[A-Z]{3}', ray) else None}
+    try:
+        failure = json.loads(raw)
+        info['response_format'] = 'JSON'
+        if isinstance(failure, dict):
+            info['error_codes'] = [x['code'] for x in failure.get('errors', [])
+                if isinstance(x, dict) and type(x.get('code')) is int]
+    except (ValueError, TypeError):
+        # Cloudflare edge errors may be text/HTML instead of API JSON. Extract
+        # only a numeric error marker, not identifiers, URLs or arbitrary text.
+        text = raw.decode('utf-8', errors='replace')
+        codes = re.findall(r'\berror\s*(?:code\s*)?[:\s]+(\d{3,5})\b', text, re.I)
+        info['error_codes'] = sorted(set(int(code) for code in codes))[:5]
+    return info
+
+
 def request_once(account, token, payload):
     # Fixed official origin, model and account. No Gateway, paid fallback,
     # billing write, D1 access, worker creation, retry or redirect.
@@ -117,14 +141,7 @@ def request_once(account, token, payload):
     except urllib.error.HTTPError as e:
         report['http'] = e.code
         report['error'] = 'HTTP_FAILURE_STOP_NO_RETRY'
-        # Retain numeric diagnostics only. Error bodies/messages can contain
-        # account information and must never enter logs or artifacts.
-        try:
-            failure = json.loads(e.read(65536))
-            report['error_codes'] = [x['code'] for x in failure.get('errors', [])
-                if isinstance(x, dict) and type(x.get('code')) is int]
-        except Exception:
-            report['error_codes'] = []
+        report.update(failure_diagnostics(e.read(65536), e.headers))
         return report, None
     except Exception:
         report['error'] = 'NETWORK_OR_RESPONSE_FAILURE_CONSUMPTION_UNKNOWN_STOP_NO_RETRY'
@@ -174,6 +191,8 @@ def main():
     account, token = gate()
     report = {'model': MODEL, 'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
         'plan': 'WORKERS_FREE_OWNER_SCREENSHOT_VERIFIED', 'plan_evidence_date': AUTHORIZED_DATE,
+        'owner_scope_evidence': '2026-10-13T15:25+09:00_SCREENSHOT_WORKERS_AI_READ_AND_EDIT',
+        'http_client': 'PYTHON_URLLIB_UNCHANGED_NO_HEADER_OR_ROUTE_SUBSTITUTION',
         'prior_usage': 'OWNER_REPORTS_NEGLIGIBLE_EXACT_NEURONS_NOT_MEASURED',
         'free_only_enforcement': 'WORKERS_FREE_PROVIDER_HARD_CAP_NO_GATEWAY_NO_UPGRADE',
         'local_budget_neurons': BUDGET_NEURONS, 'account_neurons_remaining': None,
