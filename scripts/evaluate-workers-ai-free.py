@@ -217,6 +217,45 @@ def compact_instructions(prompt):
     return '\n'.join(lines)
 
 
+def output_shape(value):
+    """Inspect output syntax without publishing OCR text or model assertions."""
+    text = value.get('response') if isinstance(value, dict) else None
+    if not isinstance(text, str):
+        return {'text_response': False}
+    stripped = text.strip()
+    shape = {'text_response': True, 'characters': len(text),
+        'starts_object': stripped.startswith('{'), 'starts_array': stripped.startswith('['),
+        'code_fences': text.count('```'), 'open_braces': text.count('{'), 'close_braces': text.count('}'),
+        'open_brackets': text.count('['), 'close_brackets': text.count(']'),
+        'known_keys_present': [k for k in ('rows', 'cells', 'source_image_id', 'employee_name')
+                              if re.search(r'"' + k + r'"\s*:', text)],
+        'licence_language_present': bool(re.search(r'\b(?:license|licence|acceptable use)\b', text, re.I)),
+        'prefix_syntax_only': re.sub(r'[^{}\[\]:,"\\\s]', 'x', stripped[:160])}
+    try:
+        json.loads(stripped)
+        shape['json_valid'] = True
+    except json.JSONDecodeError as e:
+        shape.update(json_valid=False, json_error=e.msg, json_error_offset=e.pos)
+    return shape
+
+
+def english_compact_instructions():
+    return ('Read only the text visibly present in this Korean schedule image. Never guess missing text. '
+        'It is an existing synthetic diagnostic crop: employee-name column plus the original first day group. '
+        'The original column_group is 0. Derive employee rows, Korean names, date and times from the image. '
+        'Return exactly one compact JSON object, no prose, no markdown: '
+        '{"source_image_id":"A_high_resolution","rows":[...]}. '
+        'For each visible employee/day cell, rows must contain one array with exactly 14 values in this order: '
+        '[employee_row_zero_based,column_group,date_ISO_YYYY_MM_DD,weekday_Monday_0,employee_name,'
+        'status,clock_in_HH_mm,clock_out_HH_mm,break_minutes,review_required,'
+        'original_clock_in_text,original_clock_out_text,original_break_text,evidence_bbox]. '
+        'Allowed status: SHIFT, OFF_CANDIDATE, BLANK, UNREADABLE. Keep these four meanings distinct. '
+        'Use null when unreadable. Never interpret blank as OFF. Preserve Korean names exactly. '
+        'A decimal clock 23.5 means 23:30; a break of 0.5 hours means 30 minutes. Preserve raw strings too. '
+        'Set review_required=true for every cell. Use null for unknown bbox. Never invent hidden dates. '
+        'Output each visible cell once. Do not repeat the schema or continue after the JSON closes.')
+
+
 def score_with_original(scorer_source, truth, cells):
     with tempfile.TemporaryDirectory(prefix='cbh-independent-scorer-') as tmp:
         path = Path(tmp) / 'evaluate.py'
@@ -227,7 +266,7 @@ def score_with_original(scorer_source, truth, cells):
         return module.score(truth, cells)
 
 
-def run_day0_pilot(truth, prompt, scorer, compact=False):
+def run_day0_pilot(truth, prompt, scorer, compact=False, english=False):
     """One materially smaller diagnostic; never repeat the timed-out full image."""
     account, token = gate()
     previous = json.loads((ROOT / 'runtime-evidence/workers-ai-read-edit-20261013.json').read_text())
@@ -242,6 +281,12 @@ def run_day0_pilot(truth, prompt, scorer, compact=False):
         prior_reserved = prior_pilot['budget_reserved_neurons']
         prompt = compact_instructions(prompt)
     max_tokens = 1024
+    if english:
+        prior_compact = json.loads((ROOT / 'runtime-evidence/workers-ai-compact-20261013.json').read_text())
+        if prior_compact['run_id'] != 38358341886 or prior_compact['api']['http'] != 200:
+            raise ValueError('COMPLETED_COMPACT_PILOT_REQUIRED')
+        prior_reserved = prior_compact['budget_reserved_neurons']
+        max_tokens = 1536
     reserve = 128000 * 4410 / 1e6 + max_tokens * 61493 / 1e6
     if prior_reserved + reserve > BUDGET_NEURONS:
         raise ValueError('PRIOR_UNKNOWN_REQUEST_MUST_REMAIN_IN_BUDGET')
@@ -253,6 +298,8 @@ def run_day0_pilot(truth, prompt, scorer, compact=False):
     instructions = prompt + '\nsource_image_id = ' + image_id
     instructions += ('\n이 이미지는 원본 근무표의 직원명 열과 1번째 날짜 그룹만 나란히 붙인 테스트입니다. '
                      '원본 column_group=0을 유지하고 직원-날짜 관계는 이미지에 실제 있는 근거로만 추출하세요.')
+    if english:
+        instructions = english_compact_instructions()
     result, value = request_once(account, token, {'prompt': instructions,
         'image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
         'max_tokens': max_tokens, 'temperature': 0})
@@ -261,6 +308,7 @@ def run_day0_pilot(truth, prompt, scorer, compact=False):
     estimate = result.get('neurons_pricing_estimate')
     report = {'model': MODEL, 'scope': 'KNOWN_TEMPLATE_DAY_CROP_DIAGNOSTIC_NOT_FULL_IMAGE_ACCURACY',
         'output_representation': 'COMPACT_14_FIELDS_LOSSLESS_MAP' if compact else 'VERBOSE_CELLS',
+        'instruction_language': 'ENGLISH' if english else 'KOREAN', 'output_syntax': output_shape(value),
         'original_corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA,
         'source_image_id': image_id, 'source_image_sha256': previous['image_source_sha256'],
         'crop_sha256': crop_sha, 'source_regions': [[18, 0, 134, 311], [134, 0, 437, 311]],
@@ -283,12 +331,14 @@ def main():
     ap.add_argument('--run', action='store_true', help='Execute only the dated owner-authorized evaluation')
     ap.add_argument('--pilot-day0', action='store_true', help='One bounded existing-v2 day-crop diagnostic')
     ap.add_argument('--pilot-compact', action='store_true', help='One compact serialization diagnostic after completed pilot')
+    ap.add_argument('--pilot-english', action='store_true', help='One English-instruction compact diagnostic with syntax inspection')
     args = ap.parse_args()
-    if sum((args.run, args.pilot_day0, args.pilot_compact)) > 1:
+    if sum((args.run, args.pilot_day0, args.pilot_compact, args.pilot_english)) > 1:
         ap.error('choose exactly one execution scope')
     images, truth, prompt, scorer = load_corpus()
-    if args.pilot_day0 or args.pilot_compact:
-        return run_day0_pilot(truth, prompt, scorer, compact=args.pilot_compact)
+    if args.pilot_day0 or args.pilot_compact or args.pilot_english:
+        return run_day0_pilot(truth, prompt, scorer, compact=args.pilot_compact or args.pilot_english,
+                             english=args.pilot_english)
     if not args.run:
         print(json.dumps({'check': 'PASS', 'network_calls': 0, 'images': len(images),
                           'truth_cells': len(truth), 'corpus_sha256': CORPUS_SHA, 'scorer_sha256': SCORER_SHA}))

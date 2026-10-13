@@ -124,6 +124,20 @@ known and unknown consumption is carried forward; licence acceptance is not
 repeated. This remains a three-cell known-template diagnostic, not a replacement
 for the 12-source/336-cell evaluation or product integration acceptance.
 
+Compact Korean-instruction pilot `38358341886` / job `115166380831` at `c7e6762`
+also returned HTTP200 (31,587ms), 2,147 input/1,024 output tokens, but incomplete
+or invalid JSON. Its pricing estimate is72.437102 Neurons; cumulative reservation
+is1102.406664 including the original unknown full-image request. No field
+recognition accuracy is established from these invalid outputs.
+
+One final bounded syntax diagnostic uses English instructions with the same
+14-field contract and source crop, max1536 output tokens. It reports only syntax
+shape, known key presence, generic parser error and token/timing metadata, never
+raw OCR text. JSON Mode is not enabled: the official supported-model list does
+not include this Llama Vision model. The same independent scorer remains the
+judge of any complete parsed values; missing/incorrect output is not repaired.
+Reference: https://developers.cloudflare.com/workers-ai/features/json-mode/
+
 Official references:
 
 - https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/
