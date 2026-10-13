@@ -41,6 +41,36 @@ independent aggregate/per-image metrics reach logs. There is no artifact upload.
 API execution, accuracy, reviewed import software, original private screenshots,
 production and real iPhone acceptance remain separate judgments.
 
+## Actual 2026-10-13 result
+
+- Read-only run `38346720248`, attempt 2 / job `115134832055`: catalog HTTP 200,
+  Llama Vision listed; subscription metadata HTTP 403 / error code 10000.
+- Evaluation run `38348918544` / job `115136612608`, source `e12840c`:
+  official Meta agreement POST returned **HTTP 403 in 441 ms**. The first runner
+  did not retain numeric error codes from failed HTTP bodies. Do not infer the
+  exact missing permission from this response or confuse it with an OpenAI
+  safety-tool rejection. No alternate credential, endpoint or model was tried.
+- Image requests **0**; license request attempted **1**, successful license
+  acceptance **unconfirmed**; independent model accuracy, tokens and actual
+  Neurons **NOT MEASURED**. The original log's 336 missing-cell score is an
+  unexecuted scorer result, not measured 0% model accuracy. The runner now emits
+  a null aggregate for this case and retains safe numeric HTTP diagnostics for
+  any future owner-authorized execution. It has not been rerun.
+- Original/private images in repository/CI **0**; production writes **0**.
+  The dated automatic trigger has already been consumed; reruns are blocked.
+
+Next official resolution: check that the dedicated token is scoped to the same
+account and has **Workers AI Read and Edit**, or create it using the Workers AI
+page's **REST API → Create a Workers AI API Token** template. Update only the
+repository Actions secret `CLOUDFLARE_WORKERS_AI_TOKEN`. Existing deployment
+credentials are not changed. This is not a request for paid service or billing
+permissions. If both AI permissions are already present, preserve the 403
+evidence for Cloudflare account/API support instead of widening unrelated access.
+
+The next providers (Gemini / OCR.space Engine 3) have no authenticated execution
+path available in this session. No public playground or guessed credential is
+used as a fallback. Cloud OCR and complete product acceptance remain blocked.
+
 Official references:
 
 - https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/

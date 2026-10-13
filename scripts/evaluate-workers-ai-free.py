@@ -117,7 +117,14 @@ def request_once(account, token, payload):
     except urllib.error.HTTPError as e:
         report['http'] = e.code
         report['error'] = 'HTTP_FAILURE_STOP_NO_RETRY'
-        # Error bodies can contain account information. Never log them.
+        # Retain numeric diagnostics only. Error bodies/messages can contain
+        # account information and must never enter logs or artifacts.
+        try:
+            failure = json.loads(e.read(65536))
+            report['error_codes'] = [x['code'] for x in failure.get('errors', [])
+                if isinstance(x, dict) and type(x.get('code')) is int]
+        except Exception:
+            report['error_codes'] = []
         return report, None
     except Exception:
         report['error'] = 'NETWORK_OR_RESPONSE_FAILURE_CONSUMPTION_UNKNOWN_STOP_NO_RETRY'
@@ -171,7 +178,8 @@ def main():
         'free_only_enforcement': 'WORKERS_FREE_PROVIDER_HARD_CAP_NO_GATEWAY_NO_UPGRADE',
         'local_budget_neurons': BUDGET_NEURONS, 'account_neurons_remaining': None,
         'production_writes': 0, 'private_images': 0, 'paid_fallback': False,
-        'inference_requests_attempted': 0, 'images': [], 'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
+        'licence_requests_attempted': 1, 'inference_requests_attempted': 0,
+        'images': [], 'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
     # Existing owner Meta License/AUP consent is approved. This is its official
     # documented API operation, not a new request for owner approval.
     consent, _ = request_once(account, token, {'prompt': 'agree'})
@@ -209,7 +217,10 @@ def main():
                 break
     report['budget_reserved_neurons'] = round(reserved, 6)
     report['scored_images'] = len(report['images'])
-    report['aggregate'] = score_with_original(scorer, truth, predictions)
+    # No model call means accuracy is unmeasured, not 0%. An attempted image
+    # with malformed output still receives the unchanged scorer's missing-cell
+    # penalties; only a wholly unexecuted benchmark omits accuracy.
+    report['aggregate'] = score_with_original(scorer, truth, predictions) if report['images'] else None
     report['real_provider_requests_executed'] = bool(report['images'])
     # The scorer's bool(predictions) is not sufficient to establish provenance;
     # preserve its result and also report actual attempted HTTP requests above.
