@@ -43,7 +43,9 @@ def run():
     report = {'provider': 'OCRSPACE', 'engine': 3, 'method': 'COMPLETE_ORIGINAL_V2',
         'corpus_sha256': shared.CORPUS_SHA, 'scorer_sha256': shared.SCORER_SHA,
         'adapter_sha256': shared.sha(ADAPTER.read_bytes()), 'maximum_requests': 12,
-        'prior_probe_requests': 1, 'maximum_execution_requests_including_probe': 13,
+        'prior_probe_requests': 1, 'prior_complete_evaluation_requests': 12,
+        'maximum_execution_requests_including_probe': 25,
+        'adapter_variant': 'OBSERVED_MERGED_HEADERS_AND_OVERLAY_CELL_OWNERSHIP',
         'images': [], 'billed_conversions': None, 'remaining_conversions': None,
         'private_images': 0, 'production_writes': 0, 'paid_fallback': False,
         'field_provenance': {

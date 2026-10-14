@@ -37,6 +37,12 @@ function field(value: string): number | null {
   if (/(?:쉬는시간|휴게시간|휴게|휴식|break)$/i.test(text)) return 2;
   return null;
 }
+function headerFields(row: string[]): number[] {
+  // Markdown may merge several adjacent header labels into one cell. Consume
+  // only labels that are actually present; never synthesize a missing label.
+  return row.flatMap(cell => [...cell.matchAll(/쉬는\s*시간|휴게\s*시간|휴게|휴식|출근|시작|퇴근|종료|\bstart\b|\bend\b|\bbreak\b/gi)]
+    .map(match => field(match[0])).filter((value): value is number => value != null));
+}
 function observedDates(text: string): string[] {
   const dates = new Set<string>();
   for (const match of text.matchAll(/\b(20\d{2})[-./](\d{1,2})[-./](\d{1,2})\b/g)) {
@@ -71,29 +77,62 @@ function wordsOf(page: RecordValue): Word[] {
       ['Left', 'Top', 'Width', 'Height'].every(key => typeof word[key] === 'number' &&
         Number.isFinite(word[key]) && (word[key] as number) >= 0 && (word[key] as number) < 100_000));
 }
-function rowBounds(words: Word[], name: string, occurrence: number, day: number): OcrSpaceCell['evidence_bbox'] {
+function overlayHeader(words: Word[]): Word[] | null {
+  const labels = words.filter(word => field(clean(word.WordText)) != null && headerFields([word.WordText]).length === 1);
+  const groups: Word[][] = [];
+  for (const label of labels.sort((a, b) => a.Top - b.Top)) {
+    const group = groups.find(items => Math.abs(items[0].Top - label.Top) < Math.max(4, label.Height / 2));
+    if (group) group.push(label); else groups.push([label]);
+  }
+  const complete = groups.map(group => group.sort((a, b) => a.Left - b.Left))
+    .filter(group => group.length === 21 && group.every((word, i) => field(clean(word.WordText)) === i % 3));
+  return complete.length === 1 ? complete[0] : null;
+}
+function observedRow(words: Word[], name: string, occurrence: number) {
+  const bands = overlayHeader(words);
+  if (!bands) return null;
   const names = words.filter(word => clean(word.WordText) === name).sort((a, b) => a.Top - b.Top);
   const anchor = names[occurrence];
-  if (!anchor) return null;
+  if (!anchor || anchor.Top <= Math.max(...bands.map(word => word.Top + word.Height))) return null;
   // Only a complete, observed 21-label header may establish day ownership.
-  const headers = words.filter(word => field(clean(word.WordText)) != null && word.Top < anchor.Top);
-  const bands = headers.filter(word => Math.abs(word.Top - Math.max(...headers.map(h => h.Top))) < Math.max(4, word.Height / 2))
-    .sort((a, b) => a.Left - b.Left);
-  if (bands.length !== 21 || bands.some((word, i) => field(clean(word.WordText)) !== i % 3)) return null;
   const typical = (bands[20].Left - bands[0].Left) / 20;
   if (typical <= 0) return null;
-  const left = day ? (bands[day * 3 - 1].Left + bands[day * 3].Left) / 2 : Math.max(0, bands[0].Left - typical / 2);
-  const right = day < 6 ? (bands[day * 3 + 2].Left + bands[day * 3 + 3].Left) / 2 : bands[20].Left + typical;
-  const rowWords = words.filter(word => Math.abs(word.Top + word.Height / 2 - anchor.Top - anchor.Height / 2) < Math.max(anchor.Height, word.Height) * .6 && word.Left >= left && word.Left < right);
-  if (!rowWords.length) return null;
-  return [Math.max(0, Math.min(left, ...rowWords.map(word => word.Left))), Math.min(anchor.Top, ...rowWords.map(word => word.Top)),
-    Math.max(right, ...rowWords.map(word => word.Left + word.Width)), Math.max(anchor.Top + anchor.Height, ...rowWords.map(word => word.Top + word.Height))];
+  // Header labels are left-aligned. Boundaries lie in observed whitespace
+  // between adjacent label boxes, not halfway between their left edges.
+  if (bands.slice(1).some((word, i) => bands[i].Left + bands[i].Width >= word.Left)) return null;
+  const firstGap = bands[1].Left - bands[0].Left - bands[0].Width;
+  const edges = [Math.max(0, bands[0].Left - firstGap / 2), ...bands.slice(1).map((word, i) => (word.Left + bands[i].Left + bands[i].Width) / 2), bands[20].Left + typical];
+  if (anchor.Left + anchor.Width >= edges[0]) return null;
+  const rowWords = words.filter(word => Math.abs(word.Top + word.Height / 2 - anchor.Top - anchor.Height / 2) < Math.max(anchor.Height, word.Height) * .6 && word.Left >= edges[0] && word.Left < edges[21]);
+  return { anchor, edges, rowWords };
+}
+function rowBounds(words: Word[], name: string, occurrence: number, day: number): OcrSpaceCell['evidence_bbox'] {
+  const row = observedRow(words, name, occurrence);
+  if (!row) return null;
+  const { anchor, edges, rowWords } = row;
+  const left = edges[day * 3], right = edges[day * 3 + 3];
+  const tokens = rowWords.filter(word => word.Left >= left && word.Left < right);
+  return [Math.max(0, Math.min(left, ...tokens.map(word => word.Left))), Math.min(anchor.Top, ...tokens.map(word => word.Top)),
+    Math.max(right, ...tokens.map(word => word.Left + word.Width)), Math.max(anchor.Top + anchor.Height, ...tokens.map(word => word.Top + word.Height))];
+}
+function overlayTriple(words: Word[], name: string, occurrence: number, day: number): string[] | null {
+  const row = observedRow(words, name, occurrence);
+  if (!row) return null;
+  const triple = [0, 1, 2].map(fieldIndex => {
+    const col = day * 3 + fieldIndex;
+    const tokens = row.rowWords.filter(word => word.Left >= row.edges[col] && word.Left < row.edges[col + 1]);
+    // An overlay box spanning another column cannot establish cell ownership.
+    if (tokens.some(word => word.Left + word.Width > row.edges[col + 1])) return '?';
+    return tokens.sort((a, b) => a.Left - b.Left).map(word => clean(word.WordText)).join(' ');
+  });
+  // Missing OCR tokens do not prove a blank source image region.
+  return triple.some(Boolean) ? triple : null;
 }
 
 export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string): {
-  cells: OcrSpaceCell[]; error: string | null; diagnostics: { row_widths: number[]; header_candidates: number; data_rows: number };
+  cells: OcrSpaceCell[]; error: string | null; diagnostics: { row_widths: number[]; header_label_counts: number[]; header_candidates: number; data_rows: number; overlay_complete_header: boolean };
 } {
-  const diagnostics = { row_widths: [] as number[], header_candidates: 0, data_rows: 0 };
+  const diagnostics = { row_widths: [] as number[], header_label_counts: [] as number[], header_candidates: 0, data_rows: 0, overlay_complete_header: false };
   const fail = (error: string) => ({ cells: [] as OcrSpaceCell[], error, diagnostics });
   if (!record(value) || value.OCRExitCode !== 1 || value.IsErroredOnProcessing !== false || !Array.isArray(value.ParsedResults) || value.ParsedResults.length !== 1)
     return fail('PROVIDER_NOT_COMPLETE');
@@ -101,13 +140,22 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string):
   if (!record(page) || ![1, '1'].includes(page.FileParseExitCode as number) || typeof page.ParsedText !== 'string' || page.ParsedText.length > 1_000_000)
     return fail('INVALID_PAGE');
   const rows = tableRows(page.ParsedText);
+  const words = wordsOf(page);
+  diagnostics.overlay_complete_header = overlayHeader(words) != null;
   diagnostics.row_widths = rows.map(row => row.length).slice(0, 103);
-  const headers = rows.map((row, i) => row.length === 22 && row.slice(1).every((cell, j) => field(cell) === j % 3) ? i : -1).filter(i => i >= 0);
+  const rowFields = rows.map(headerFields);
+  diagnostics.header_label_counts = rowFields.map(fields => fields.length);
+  let headers = rowFields.map((fields, i) => fields.length === 21 && fields.every((value, j) => value === j % 3) ? i : -1).filter(i => i >= 0);
+  if (!headers.length && diagnostics.overlay_complete_header) {
+    // A full independent overlay header can establish the physical 21 fields
+    // when Markdown drops labels. Still require one identifiable header row.
+    headers = rowFields.map((fields, i) => fields.length >= 3 ? i : -1).filter(i => i >= 0);
+  }
   diagnostics.header_candidates = headers.length;
   if (headers.length !== 1) return fail('NO_UNIQUE_OBSERVED_7X3_HEADER');
   const index = headers[0];
   const body = rows.slice(index + 1);
-  if (!body.length || body.length > 100 || body.some(row => row.length !== 22)) return fail('AMBIGUOUS_STAFF_ROWS');
+  if (!body.length || body.length > 100 || body.some(row => row.length > 22 || row.length < 2 || (row.length !== 22 && !diagnostics.overlay_complete_header))) return fail('AMBIGUOUS_STAFF_ROWS');
   diagnostics.data_rows = body.length;
   const dates = Array.from({ length: 7 }, (_, day) => {
     const seen = new Set<string>();
@@ -117,7 +165,6 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string):
     }
     return seen.size === 1 ? [...seen][0] : null;
   });
-  const words = wordsOf(page);
   const occurrences = new Map<string, number>();
   const cells: OcrSpaceCell[] = [];
   for (const [rowIndex, row] of body.entries()) {
@@ -125,14 +172,16 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string):
     const occurrence = occurrences.get(name ?? '') ?? 0;
     occurrences.set(name ?? '', occurrence + 1);
     for (let day = 0; day < 7; day++) {
-      const triple = row.slice(day * 3 + 1, day * 3 + 4);
+      const physical = row.length !== 22;
+      const observed = physical ? (name ? overlayTriple(words, name, occurrence, day) : null) : row.slice(day * 3 + 1, day * 3 + 4);
+      const triple = observed ?? ['', '', ''];
       const [start, end, rest] = triple;
       const date = dates[day];
       const off = (text: string) => /^(OFF|휴무|휴가|연차)$/i.test(text);
       const blank = triple.every(text => !text);
       const explicitOff = triple.some(off) && triple.every(text => !text || off(text));
       const inClock = clock(start), outClock = clock(end), breakMinutes = minutes(rest, true);
-      const status: OcrSpaceCell['status'] = !date || !name ? 'UNREADABLE' : blank ? 'BLANK' : explicitOff ? 'OFF_CANDIDATE' :
+      const status: OcrSpaceCell['status'] = !date || !name || observed == null ? 'UNREADABLE' : blank ? 'BLANK' : explicitOff ? 'OFF_CANDIDATE' :
         inClock != null && outClock != null && breakMinutes != null ? 'SHIFT' : 'UNREADABLE';
       cells.push({ source_image_id: sourceImageId, employee_row: rowIndex, column_group: day, employee_name: name,
         date, weekday: date ? (new Date(date + 'T00:00:00Z').getUTCDay() + 6) % 7 : null, status,
