@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      CBH_OCRSPACE_EXECUTION_OPEN: 'true'
+      CBH_OCRSPACE_EXECUTION_OPEN: 'false'
       CBH_OCRSPACE_FREE_CONFIRMED: 'true'
       CBH_OCRSPACE_FREE_PROOF_DATE: '2026-10-14'
     steps:
