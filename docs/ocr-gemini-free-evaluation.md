@@ -99,5 +99,19 @@ separately and cannot establish OCR quality or product acceptance.
 
 References: https://ai.google.dev/api/models and https://ai.google.dev/api/tokens
 
+Run38514999336/job115691694904 at `fe5d0d0` passed both authenticated calls:
+exact-model GET HTTP200/128ms and countTokens HTTP200/164ms,1,458 input tokens.
+The exact model advertises generateContent and countTokens. No inference took
+place. The owner need not register a new key. This does not validate generation
+schema compilation or establish generation permission, quota or OCR accuracy.
+
+Because the first generation error reason was discarded, one explicit
+`[cbh-gemini-free-diagnose]` execution captures only allowlisted diagnostics from
+the original A request. It is limited to one call, with no retry or automatic
+full-corpus continuation. Original image/prompt/schema and scorer stay unchanged;
+this separates an API defect from any quality experiment. A full-v2 aggregate
+remains null even if this single request succeeds. No further identical request
+is made without a concrete result and a documented next action.
+
 OCR_SOFTWARE_ACCEPTED and FULL_PRODUCT_SOFTWARE_ACCEPTED remain PARTIAL/BLOCKED.
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL remains unchanged.

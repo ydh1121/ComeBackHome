@@ -196,7 +196,9 @@ def probe():
         raise SystemExit(2)
 
 
-def run():
+def run(limit=12):
+    if limit not in (1, 12):
+        raise ValueError('ONLY_ONE_DIAGNOSTIC_OR_COMPLETE_CORPUS_ALLOWED')
     ready = readiness()
     if not ready['ready']:
         print('CBH_GEMINI_PREFLIGHT=' + json.dumps(ready), flush=True)
@@ -205,14 +207,15 @@ def run():
     key = os.environ['GEMINI_API_KEY']
     report = {'provider': 'GOOGLE_GEMINI_DEVELOPER_API', 'model': MODEL,
         'corpus_sha256': shared.CORPUS_SHA, 'scorer_sha256': shared.SCORER_SHA,
-        'max_output_tokens': MAX_OUTPUT, 'maximum_requests': 12, 'images': [],
+        'max_output_tokens': MAX_OUTPUT, 'maximum_requests': limit, 'images': [],
+        'method': 'SINGLE_ORIGINAL_REQUEST_DIAGNOSTIC' if limit == 1 else 'COMPLETE_ORIGINAL_V2',
         'free_project': 'OWNER_CONFIRMED_SAME_DAY_NOT_PROGRAMMATIC_BILLING_VERIFICATION',
         'production_writes': 0, 'private_images': 0, 'paid_fallback': False,
         'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
     predictions = []
     attempted_truth = []
     previous_start = None
-    for entry, image in images:
+    for entry, image in images[:limit]:
         if not readiness()['ready']:
             report['blocker'] = 'FREE_PROJECT_PROOF_EXPIRED'
             break
@@ -249,11 +252,14 @@ if __name__ == '__main__':
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--run', action='store_true')
     mode.add_argument('--probe', action='store_true')
+    mode.add_argument('--diagnose-generation', action='store_true')
     args = parser.parse_args()
     if args.run:
         run()
     elif args.probe:
         probe()
+    elif args.diagnose_generation:
+        run(limit=1)
     else:
         shared.load_corpus()
         print('CBH_GEMINI_PREFLIGHT=' + json.dumps(readiness()))

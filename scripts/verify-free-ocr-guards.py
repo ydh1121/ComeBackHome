@@ -112,4 +112,16 @@ with patch.dict(os.environ, ready_env, clear=True), patch.object(gemini, 'reques
     assert ':generateContent' not in request.call_args.args[1]
     assert '"inference_calls":0' in output.getvalue()
 
+with patch.dict(os.environ, ready_env, clear=True), patch.object(gemini, 'request_once',
+        return_value=({'http': 200, 'api_success': True}, {'response': '{"cells":[]}'})) as request, \
+        patch.object(shared, 'parse_complete_cells', return_value=([], None)), \
+        patch.object(gemini, 'sleep') as pause, redirect_stdout(io.StringIO()) as output:
+    gemini.run(limit=1)
+    request.assert_called_once()
+    pause.assert_not_called()
+    report = json.loads(output.getvalue().split('CBH_GEMINI_V2=')[1])
+    assert report['maximum_requests'] == 1 and report['aggregate'] is None
+    assert report['complete_v2'] is False
+    assert report['method'] == 'SINGLE_ORIGINAL_REQUEST_DIAGNOSTIC'
+
 print('FREE_OCR_OFFLINE_GUARDS_PASS corpus=12/336 parser=strict free_gate=closed quota_retry=0 network=0')
