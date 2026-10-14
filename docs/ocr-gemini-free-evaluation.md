@@ -13,7 +13,7 @@ No Files API upload, cache, tools, search, paid fallback or SDK is involved.
 Free-tier data-use terms make the existing explicitly synthetic corpus the only
 permitted input here; no original employee image is included.
 
-## Required access, still closed
+## Required access and dated owner evidence
 
 1. An owner-created Gemini API key in this repository's Actions secret
    `GEMINI_API_KEY`, for the intended Google AI Studio project. Never paste it
@@ -25,7 +25,7 @@ Setup locations:
 - https://aistudio.google.com/api-keys
 - https://github.com/ydh1121/ComeBackHome/settings/secrets/actions
 
-The committed workflow leaves `CBH_GEMINI_FREE_PROJECT_CONFIRMED=false` and the
+The initial readiness commit left `CBH_GEMINI_FREE_PROJECT_CONFIRMED=false` and the
 proof date empty. Its normal push runs only offline boundary checks and a
 zero-network preflight that reports booleans, not secret values. It can establish
 key presence, not key validity or billing status. Inference requires reviewed
@@ -34,6 +34,20 @@ same-day proof, the exact repository/PR92 branch, run_attempt1 and the explicit
 not checkout or offline tests. The operator records proof before opening those
 guards; the owner does not need to edit source code. Adding a secret alone does
 not automatically start inference.
+
+On2026-10-14 at10:30 KST the owner supplied two screenshots and instructed work
+to continue. AI Studio shows the ComeBackHome project, one key and Free tier;
+the repository screenshot shows `GEMINI_API_KEY` just registered. The private
+project identifier is recorded only in the project SSOT. Screenshots and account
+identity are not uploaded into the repository/CI. Evidence SHA-256:
+
+- project/tier: `24693e0a6a12ef90be403b979a422250d1d7ff20f35566fe84f698fd15e1b60f`
+- secret registration: `f855e347c6a26a49db37907c55f158a41e429f17f69676561855b91b879024a9`
+
+The workflow now records owner confirmation and proof date2026-10-14. This
+authorizes the existing bounded synthetic evaluation only. The screenshots do
+not prove successful authentication, remaining quota or model accuracy; those
+come from actual API responses. No billing permission or paid upgrade is added.
 
 ## Bounded independent evaluation
 
