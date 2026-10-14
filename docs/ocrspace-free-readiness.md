@@ -79,6 +79,29 @@ API에 없어 미측정이다. 상태·해시 증거는 `runtime-evidence/ocrspa
 API 성공이나 offline guard PASS를 정확도 또는 제품 수락으로 바꾸지 않는다.
 실제 직원 원본·D1·운영 환경 변경은0이다.
 
+2026-10-15 KST 재개(UTC2026-10-14): 두 번째 전체 평가
+Actions38559006944/job115835137913, HEAD2131f2ca도12/12 HTTP200.
+154/336셀 배치,182누락, 이름147/336, SHIFT 출퇴근 각각143/319,
+휴게142/319. 일부 Markdown은 헤더18개만 반환했고 overlay도 완전한
+21열이 아니었다. 이 결과는 `runtime-evidence/ocrspace-overlay-v2-20261014.json`
+에 그대로 보존한다. 자동 승인이 실제로 실행된 것은0이며, scorer의
+review_required 미충족은 Provider 미제공 필드를 null로 남긴 결과다.
+
+남은 변환 문제에는 기존 제품 `ScheduleTableStructureDetector`와
+`Weekly3ColumnScheduleMatrix`를 그대로 재사용한다. 원본 이미지 크기의
+명암 픽셀에서 실제 표 경계/행/21물리셀/빈칸 근거를 얻고, 독립적으로 읽힌
+반복 라벨로 필드 순서를 확인한다. 원본 API 이미지는 변경하지 않는다.
+날짜·이름·시간을 정답으로 보정하지 않으며 저해상도에서 물리 경계가
+없으면 null 그대로 유지하고 별도 완전한 Markdown 근거만 허용한다.
+등록된 원본12개 중11개에서 물리 경계를 검출하고1개는 검출 불가였다.
+이 수치는 구조 검출 범위이며 OCR 정확도가 아니다. 새 표 검출기나 정답
+평가기, 이미지를 새로 만드는 작업은 하지 않았다.
+
+이 소프트웨어 연결 변경을 검증하는 세 번째 전체 원본 평가를 최대12회만
+실행한다. 현재 세션 누적 상한은 probe1+전체평가3×12=37회이며 Free
+소유자 확인/당일 gate/기존 PR/첫 실행 조건은 유지한다. 설치·오프라인
+검증 단계에는 Provider 키가 없고, 이미지는 메모리/pipe만 사용한다.
+
 공식 근거: https://ocr.space/ocrapi / https://ocr.space/ocrapi/freekey
 
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL.

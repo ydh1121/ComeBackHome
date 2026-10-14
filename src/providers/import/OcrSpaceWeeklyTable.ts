@@ -18,6 +18,11 @@ export interface OcrSpaceCell {
   evidence_bbox: [number, number, number, number] | null;
 }
 type Word = { WordText: string; Left: number; Top: number; Width: number; Height: number };
+type Bounds = { x: number; y: number; width: number; height: number };
+/** Structural subset of the existing WeeklyPhysicalMatrix, never truth data. */
+export interface OcrSpacePixelMatrix {
+  rows: Array<{ nameBounds: Bounds; cells: Array<{ dayIndex: number; field: 'start' | 'end' | 'break'; bounds: Bounds; visual: { occupancy: 'EMPTY' | 'CONTENT' | 'UNCERTAIN' } }> }>;
+}
 type RecordValue = Record<string, unknown>;
 function record(value: unknown): value is RecordValue {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -129,10 +134,27 @@ function overlayTriple(words: Word[], name: string, occurrence: number, day: num
   return triple.some(Boolean) ? triple : null;
 }
 
-export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string): {
-  cells: OcrSpaceCell[]; error: string | null; diagnostics: { row_widths: number[]; header_label_counts: number[]; header_candidates: number; data_rows: number; overlay_complete_header: boolean };
+function textWithin(words: Word[], bounds: Bounds): string {
+  return words.filter(word => word.Left + word.Width / 2 >= bounds.x && word.Left + word.Width / 2 < bounds.x + bounds.width &&
+    word.Top + word.Height / 2 >= bounds.y && word.Top + word.Height / 2 < bounds.y + bounds.height)
+    .sort((a, b) => a.Left - b.Left).map(word => clean(word.WordText)).join(' ');
+}
+function pixelEvidence(matrix: OcrSpacePixelMatrix, words: Word[], rowIndex: number, name: string | null, day: number) {
+  const row = matrix.rows[rowIndex];
+  if (!row || !name || textWithin(words, row.nameBounds).replace(/\s/g, '') !== name.replace(/\s/g, '')) return null;
+  const fields = (['start', 'end', 'break'] as const).map(field => row.cells.find(cell => cell.dayIndex === day && cell.field === field));
+  if (fields.some(field => !field)) return null;
+  const cells = fields.map(field => field!);
+  const values = cells.map(cell => textWithin(words, cell.bounds));
+  const bounds: OcrSpaceCell['evidence_bbox'] = [Math.min(...cells.map(cell => cell.bounds.x)), Math.min(...cells.map(cell => cell.bounds.y)),
+    Math.max(...cells.map(cell => cell.bounds.x + cell.bounds.width)), Math.max(...cells.map(cell => cell.bounds.y + cell.bounds.height))];
+  return { values, bounds, blank: values.every(value => !value) && cells.every(cell => cell.visual.occupancy === 'EMPTY') };
+}
+
+export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string, pixelMatrix?: OcrSpacePixelMatrix | null): {
+  cells: OcrSpaceCell[]; error: string | null; diagnostics: { row_widths: number[]; header_label_counts: number[]; header_candidates: number; data_rows: number; overlay_complete_header: boolean; pixel_matrix: boolean };
 } {
-  const diagnostics = { row_widths: [] as number[], header_label_counts: [] as number[], header_candidates: 0, data_rows: 0, overlay_complete_header: false };
+  const diagnostics = { row_widths: [] as number[], header_label_counts: [] as number[], header_candidates: 0, data_rows: 0, overlay_complete_header: false, pixel_matrix: pixelMatrix != null };
   const fail = (error: string) => ({ cells: [] as OcrSpaceCell[], error, diagnostics });
   if (!record(value) || value.OCRExitCode !== 1 || value.IsErroredOnProcessing !== false || !Array.isArray(value.ParsedResults) || value.ParsedResults.length !== 1)
     return fail('PROVIDER_NOT_COMPLETE');
@@ -151,11 +173,18 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string):
     // when Markdown drops labels. Still require one identifiable header row.
     headers = rowFields.map((fields, i) => fields.length >= 3 ? i : -1).filter(i => i >= 0);
   }
+  if (!headers.length && pixelMatrix) {
+    // Actual product pixels establish 21 columns; three observed repeated
+    // label triples establish field order without fabricating missing text.
+    headers = rowFields.map((fields, i) => fields.length >= 9 && fields.length % 3 === 0 &&
+      fields.every((value, j) => value === j % 3) ? i : -1).filter(i => i >= 0);
+  }
   diagnostics.header_candidates = headers.length;
   if (headers.length !== 1) return fail('NO_UNIQUE_OBSERVED_7X3_HEADER');
   const index = headers[0];
   const body = rows.slice(index + 1);
-  if (!body.length || body.length > 100 || body.some(row => row.length > 22 || row.length < 2 || (row.length !== 22 && !diagnostics.overlay_complete_header))) return fail('AMBIGUOUS_STAFF_ROWS');
+  if (!body.length || body.length > 100 || body.some(row => row.length > 22 || row.length < 2 || (row.length !== 22 && !diagnostics.overlay_complete_header && !pixelMatrix))) return fail('AMBIGUOUS_STAFF_ROWS');
+  if (pixelMatrix && pixelMatrix.rows.length !== body.length) return fail('PHYSICAL_ROW_COUNT_MISMATCH');
   diagnostics.data_rows = body.length;
   const dates = Array.from({ length: 7 }, (_, day) => {
     const seen = new Set<string>();
@@ -172,13 +201,14 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string):
     const occurrence = occurrences.get(name ?? '') ?? 0;
     occurrences.set(name ?? '', occurrence + 1);
     for (let day = 0; day < 7; day++) {
+      const pixel = pixelMatrix ? pixelEvidence(pixelMatrix, words, rowIndex, name, day) : null;
       const physical = row.length !== 22;
-      const observed = physical ? (name ? overlayTriple(words, name, occurrence, day) : null) : row.slice(day * 3 + 1, day * 3 + 4);
+      const observed = physical ? (pixel ? pixel.values : name ? overlayTriple(words, name, occurrence, day) : null) : row.slice(day * 3 + 1, day * 3 + 4);
       const triple = observed ?? ['', '', ''];
       const [start, end, rest] = triple;
       const date = dates[day];
       const off = (text: string) => /^(OFF|휴무|휴가|연차)$/i.test(text);
-      const blank = triple.every(text => !text);
+      const blank = physical ? pixel?.blank === true : triple.every(text => !text);
       const explicitOff = triple.some(off) && triple.every(text => !text || off(text));
       const inClock = clock(start), outClock = clock(end), breakMinutes = minutes(rest, true);
       const status: OcrSpaceCell['status'] = !date || !name || observed == null ? 'UNREADABLE' : blank ? 'BLANK' : explicitOff ? 'OFF_CANDIDATE' :
@@ -188,7 +218,7 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string):
         clock_in: status === 'SHIFT' ? inClock : null, clock_out: status === 'SHIFT' ? outClock : null,
         break_minutes: status === 'SHIFT' ? breakMinutes : null, review_required: null,
         original_text: { clock_in: start, clock_out: end, break: rest },
-        evidence_bbox: name ? rowBounds(words, name, occurrence, day) : null });
+        evidence_bbox: pixel?.bounds ?? (name ? rowBounds(words, name, occurrence, day) : null) });
     }
   }
   return { cells, error: null, diagnostics };

@@ -152,6 +152,16 @@ with patch.dict(os.environ, {}, clear=True), patch.object(ocrspace, 'request_onc
     request.assert_not_called()
 with patch.dict(os.environ, {'OCRSPACE_API_KEY': 'helloworld'}, clear=True):
     assert ocrspace.readiness()['checks']['owner_key_present'] is False
+owner_ready = {'OCRSPACE_API_KEY': 'test-key', 'CBH_OCRSPACE_FREE_CONFIRMED': 'true',
+    'CBH_OCRSPACE_FREE_PROOF_DATE': datetime.now(timezone.utc).date().isoformat(),
+    'GITHUB_REPOSITORY': 'ydh1121/ComeBackHome',
+    'GITHUB_REF': 'refs/heads/feat/nonimage-weekly-xlsx-import', 'GITHUB_RUN_ATTEMPT': '1'}
+with patch.dict(os.environ, owner_ready, clear=True):
+    assert ocrspace.readiness()['checks']['owner_key_present'] is True
+    assert ocrspace.readiness()['checks']['execution_open'] is False
+    assert not ocrspace.readiness()['ready']
+with patch.dict(os.environ, {**owner_ready, 'CBH_OCRSPACE_EXECUTION_OPEN': 'true'}, clear=True):
+    assert ocrspace.readiness()['ready']
 body = ocrspace.urllib.parse.parse_qs(ocrspace.build_payload(images[0][1]).decode())
 assert body['OCREngine'] == ['3'] and body['language'] == ['auto']
 assert body['isOverlayRequired'] == ['true'] and 'url' not in body and 'apikey' not in body

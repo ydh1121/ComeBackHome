@@ -64,4 +64,18 @@ assert.equal(positioned.cells[4].clock_out, '18:45', 'collapsed blank fields mus
 const missingHeaderEvidence = structuredClone(physical);
 missingHeaderEvidence.ParsedResults[0].TextOverlay.Lines[0].Words.shift();
 assert.notEqual(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x').error, null, 'missing actual header evidence must not be synthesized');
+const pixelMatrix = { rows: [{ nameBounds: { x: 0, y: 75, width: 100, height: 22 },
+  cells: Array.from({ length: 21 }, (_, i) => ({ dayIndex: Math.floor(i / 3), field: ['start', 'end', 'break'][i % 3],
+    bounds: { x: 110 + i * 40, y: 75, width: 40, height: 22 },
+    visual: { occupancy: i >= 6 && i < 9 ? 'EMPTY' : 'CONTENT' } })) }] };
+const pixelParsed = parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'new-pixels', pixelMatrix);
+assert.equal(pixelParsed.error, null);
+assert.equal(pixelParsed.cells[0].clock_in, '07:15');
+assert.equal(pixelParsed.cells[1].status, 'OFF_CANDIDATE');
+assert.equal(pixelParsed.cells[2].status, 'BLANK', 'only source pixel evidence can establish the omitted blank trio');
+assert.equal(pixelParsed.cells[3].status, 'UNREADABLE');
+const visibleButMissed = structuredClone(pixelMatrix);
+visibleButMissed.rows[0].cells[6].visual.occupancy = 'CONTENT';
+assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', visibleButMissed).cells[2].status, 'UNREADABLE');
+assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', { rows: [] }).error, 'PHYSICAL_ROW_COUNT_MISMATCH');
 console.log('OCRSPACE_TABLE_CONTRACT_PASS independent_dates_names_rows decimals OFF_BLANK_UNREADABLE missing_evidence_no_repair review_flag_not_fabricated network=0');

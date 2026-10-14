@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      CBH_OCRSPACE_EXECUTION_OPEN: 'true'
       CBH_OCRSPACE_FREE_CONFIRMED: 'true'
       CBH_OCRSPACE_FREE_PROOF_DATE: '2026-10-14'
     steps:
@@ -32,13 +33,16 @@ jobs:
           node-version: '24'
       - name: Verify offline guards and table adapter without credentials
         run: |
+          npm ci --ignore-scripts
+          python -m pip install --disable-pip-version-check Pillow==12.3.0
           python scripts/verify-free-ocr-guards.py
           node scripts/verify-ocrspace-table.mjs
+          python scripts/verify-ocrspace-pixels.py
       - name: Check owner key and dated Free confirmation without network
         env:
           OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
         run: python scripts/evaluate-ocrspace-free.py
-      - name: Evaluate observed header and overlay adaptation on original twelve images
+      - name: Evaluate existing product pixel geometry with original OCR responses
         if: startsWith(github.event.head_commit.message, '[cbh-ocrspace-free-eval]')
         env:
           OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}

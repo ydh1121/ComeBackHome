@@ -27,6 +27,7 @@ def readiness():
     key = os.environ.get('OCRSPACE_API_KEY', '').strip()
     checks = {
         'owner_key_present': bool(key) and key.lower() != 'helloworld',
+        'execution_open': os.environ.get('CBH_OCRSPACE_EXECUTION_OPEN') == 'true',
         'owner_free_key_confirmed': os.environ.get('CBH_OCRSPACE_FREE_CONFIRMED') == 'true',
         'same_day_free_key_proof': os.environ.get('CBH_OCRSPACE_FREE_PROOF_DATE') == datetime.now(timezone.utc).date().isoformat(),
         'repository': os.environ.get('GITHUB_REPOSITORY') == 'ydh1121/ComeBackHome',
