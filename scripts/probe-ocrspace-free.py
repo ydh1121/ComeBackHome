@@ -100,11 +100,12 @@ def response_metadata(data):
     return report
 
 
-def request_once(key, image):
+def request_response_once(key, image):
     request = urllib.request.Request(ENDPOINT, data=build_payload(image), method='POST',
         headers={'apikey': key, 'Content-Type': 'application/x-www-form-urlencoded'})
     report = {'http': None, 'api_success': False, 'latency_ms': None,
               'billed_conversions': None, 'remaining_conversions': None}
+    data = None
     started = perf_counter()
     try:
         opener = urllib.request.build_opener(shared.NoRedirect())
@@ -114,7 +115,8 @@ def request_once(key, image):
         if len(raw) > MAX_RESPONSE_BYTES:
             raise ValueError('RESPONSE_TOO_LARGE')
         report['response_sha256'] = shared.sha(raw)
-        report.update(response_metadata(json.loads(raw)))
+        data = json.loads(raw)
+        report.update(response_metadata(data))
         report['api_success'] = report['http'] == 200 and report['api_success']
     except urllib.error.HTTPError as error:
         report.update(http=error.code, error='HTTP_FAILURE_STOP_NO_RETRY',
@@ -123,6 +125,11 @@ def request_once(key, image):
         report['error'] = 'NETWORK_OR_RESPONSE_FAILURE_CONSUMPTION_UNKNOWN_STOP_NO_RETRY'
     finally:
         report['latency_ms'] = round((perf_counter() - started) * 1000)
+    return report, data if report['api_success'] else None
+
+
+def request_once(key, image):
+    report, _ = request_response_once(key, image)
     return report
 
 

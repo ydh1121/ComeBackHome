@@ -44,10 +44,23 @@ overlay와 기존 A 합성 이미지 한 장만 사용한다. 최대1회,120초,
 키·원문 이미지·OCR 원문·Provider 오류 본문은 로그/파일에 남기지 않는다.
 반환하는 것은 상태,해시,시간,텍스트/표/overlay 형태의 숫자 계측뿐이다.
 
-이 단계는 실제 응답 계약 확인이다. OCR.space의 Markdown/overlay를 기존
-7×3 검토 계약에 연결하고 원본12이미지/336셀 독립 평가를 수행하는 후속
-작업은 아직 실행하지 않았다. API 성공이나 offline guard PASS를 정확도 또는
-제품 수락으로 바꾸지 않는다. 실제 직원 원본·D1·운영 환경 변경은0이다.
+2026-10-14 실제 probe: HEAD7432817c, Actions38557218384/job115829227180.
+소유자 키 존재와 당일 Free 확인 모두 true, HTTP200/OCRExitCode1,
+11,180ms(Provider 처리10,350ms), 원본 A 합성 이미지1회 성공.
+Markdown 표6줄 및 유효 좌표94개를 반환했다. 차감/잔여 conversions는
+API에 없어 미측정이다. 상태·해시 증거는 `runtime-evidence/ocrspace-probe-20261014.json`.
+
+후속 평가에는 순수 TypeScript `OcrSpaceWeeklyTable` 변환기를 사용한다.
+실제 7×3 헤더와 직원 행, 명시적 전체 날짜, 원문 숫자와 OFF만 해석하며
+날짜/이름/누락 셀을 정답·파일명·현재 날짜로 복구하지 않는다. 휴무·빈칸·
+읽을 수 없는 값을 구별하고 좌표는 완전한 관측 헤더와 원문 행이 있을 때만
+반환한다. Provider가 제공하지 않는 `review_required`는 null 그대로 평가하며
+제품 수동 승인 정책과 혼동하지 않는다. 재사용한 원본 독립 평가기로
+12이미지/336셀을 평가하고 원문 응답/예측은 메모리와 pipe에만 둔다.
+후속 최대12회, probe 포함 최대13회이며 API 오류는 재시도 없이 중단한다.
+
+API 성공이나 offline guard PASS를 정확도 또는 제품 수락으로 바꾸지 않는다.
+실제 직원 원본·D1·운영 환경 변경은0이다.
 
 공식 근거: https://ocr.space/ocrapi / https://ocr.space/ocrapi/freekey
 

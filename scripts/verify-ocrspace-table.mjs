@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { parseOcrSpaceWeeklyTable } from '../src/providers/import/OcrSpaceWeeklyTable.ts';
+
+const dates = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2097, 11, 30 + i)).toISOString().slice(0, 10));
+const header = ['직원명', ...Array.from({ length: 21 }, (_, i) => ['출근', '퇴근', '쉬는시간'][i % 3])];
+const dateRow = ['', ...dates.flatMap(date => [date, '', ''])];
+const first = ['다른이름B', ...Array.from({ length: 21 }, (_, i) => ['7.25', '18:45', '0.75'][i % 3])];
+first.splice(4, 3, 'OFF', '', '');
+first.splice(7, 3, '', '', '');
+first.splice(10, 3, '??', '19', '1');
+const second = ['다른이름A', ...Array.from({ length: 21 }, (_, i) => ['9', '23.5', '0.5'][i % 3])];
+const page = rows => ({ OCRExitCode: 1, IsErroredOnProcessing: false, ParsedResults: [{
+  FileParseExitCode: 1, ParsedText: rows.map(row => '| ' + row.join(' | ') + ' |').join('\n'),
+}] });
+const parsed = parseOcrSpaceWeeklyTable(page([dateRow, header, first, second]), 'unseen-input');
+assert.equal(parsed.error, null);
+assert.equal(parsed.cells.length, 14);
+assert.equal(parsed.cells[0].employee_name, '다른이름B');
+assert.equal(parsed.cells[7].employee_name, '다른이름A');
+assert.equal(parsed.cells[0].date, dates[0]);
+assert.equal(parsed.cells[6].date, dates[6]);
+assert.equal(parsed.cells[0].clock_in, '07:15');
+assert.equal(parsed.cells[0].clock_out, '18:45');
+assert.equal(parsed.cells[0].break_minutes, 45);
+assert.equal(parsed.cells[1].status, 'OFF_CANDIDATE');
+assert.equal(parsed.cells[2].status, 'BLANK');
+assert.equal(parsed.cells[3].status, 'UNREADABLE');
+assert(parsed.cells.every(cell => cell.review_required === null && cell.evidence_bbox === null));
+assert.equal(parsed.cells[0].original_text.clock_in, '7.25');
+const missingDate = structuredClone(dateRow);
+missingDate[4] = '';
+const missing = parseOcrSpaceWeeklyTable(page([missingDate, header, first]), '2097-12-31-do-not-infer');
+assert.equal(missing.cells[1].date, null);
+assert.equal(missing.cells[1].status, 'UNREADABLE');
+assert.equal(missing.cells[2].date, dates[2]);
+const malformed = structuredClone(first);
+malformed.pop();
+assert.equal(parseOcrSpaceWeeklyTable(page([dateRow, header, malformed]), 'x').error, 'AMBIGUOUS_STAFF_ROWS');
+const uncertainOff = structuredClone(first);
+uncertainOff.splice(1, 3, 'OFF', '18', '0.5');
+assert.equal(parseOcrSpaceWeeklyTable(page([dateRow, header, uncertainOff]), 'x').cells[0].status, 'UNREADABLE');
+const invalidDate = structuredClone(dateRow);
+invalidDate[1] = '2097-02-30';
+assert.equal(parseOcrSpaceWeeklyTable(page([invalidDate, header, first]), 'x').cells[0].date, null);
+assert.equal(parseOcrSpaceWeeklyTable({ OCRExitCode: 2 }, 'x').error, 'PROVIDER_NOT_COMPLETE');
+console.log('OCRSPACE_TABLE_CONTRACT_PASS independent_dates_names_rows decimals OFF_BLANK_UNREADABLE missing_evidence_no_repair review_flag_not_fabricated network=0');

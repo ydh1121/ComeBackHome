@@ -1,0 +1,41 @@
+{
+  "http": 200,
+  "api_success": true,
+  "latency_ms": 11180,
+  "billed_conversions": null,
+  "remaining_conversions": null,
+  "response_sha256": "8ea0f462f966e9f47a9f4bcaf6c1e24899d8aa982eacecd8b2720e12124027e8",
+  "ocr_exit_code": 1,
+  "processing_error": false,
+  "provider_processing_ms": 10350,
+  "pages": 1,
+  "page_exit_code": 1,
+  "text_shape": {
+    "characters": 687,
+    "lines": 8,
+    "pipe_table_lines": 6,
+    "html_table_tags": 0
+  },
+  "overlay_shape": {
+    "lines": 94,
+    "words": 94,
+    "words_with_valid_bounds": 94
+  },
+  "provider": "OCRSPACE",
+  "engine": 3,
+  "image_id": "A_high_resolution",
+  "image_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+  "corpus_sha256": "6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a",
+  "scorer_sha256": "c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004",
+  "maximum_requests": 1,
+  "reserved_conversions": 1,
+  "private_images": 0,
+  "production_writes": 0,
+  "paid_fallback": false,
+  "score": null,
+  "aggregate": null,
+  "acceptance": "RESPONSE_CONTRACT_PROBE_ONLY_NOT_OCR_ACCEPTANCE",
+  "github_head": "7432817cfa12d52282c05ee141221727e2d92cef",
+  "github_run_id": 38557218384,
+  "github_job_id": 115829227180
+}

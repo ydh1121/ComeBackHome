@@ -181,4 +181,32 @@ with patch.object(ocrspace.urllib.request, 'build_opener') as opener:
     assert 'test-key' not in json.dumps(report) and 'sentinel-sensitive' not in json.dumps(report)
     assert report['http'] == 429 and report['billed_conversions'] is None
 
+spec = importlib.util.spec_from_file_location('cbh_ocrspace_eval', Path(__file__).with_name('evaluate-ocrspace-free.py'))
+ocr_eval = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ocr_eval)
+with patch.dict(os.environ, {}, clear=True), patch.object(ocr_eval.provider, 'request_response_once') as request, redirect_stdout(io.StringIO()):
+    try:
+        ocr_eval.run()
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError('Missing owner key/Free proof must block evaluation')
+    request.assert_not_called()
+with patch.object(ocr_eval.provider, 'readiness', return_value={'ready': True}), \
+        patch.dict(os.environ, {'OCRSPACE_API_KEY': 'test-key'}), \
+        patch.object(ocr_eval.provider, 'request_response_once', return_value=({'http': 429, 'api_success': False}, None)) as request, \
+        patch.object(ocr_eval, 'decode') as decode, redirect_stdout(io.StringIO()) as output:
+    try:
+        ocr_eval.run()
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError('Quota failure must stop evaluation')
+    request.assert_called_once()
+    decode.assert_not_called()
+    result = json.loads(output.getvalue().split('CBH_OCRSPACE_V2=')[1])
+    assert result['aggregate'] is None and result['complete_v2'] is False
+    assert result['requests_attempted'] == 1 and result['maximum_requests'] == 12
+    assert 'test-key' not in output.getvalue()
+
 print('FREE_OCR_OFFLINE_GUARDS_PASS corpus=12/336 parser=strict free_gate=closed quota_retry=0 network=0 providers=gemini,ocrspace')

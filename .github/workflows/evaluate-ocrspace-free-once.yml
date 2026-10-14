@@ -1,0 +1,45 @@
+name: OCR.space Free Engine 3 / original v2 independent evaluation
+
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/evaluate-ocrspace-free-once.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-ocrspace-free-evaluation
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    if: github.repository == 'ydh1121/ComeBackHome' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      CBH_OCRSPACE_FREE_CONFIRMED: 'true'
+      CBH_OCRSPACE_FREE_PROOF_DATE: '2026-10-14'
+    steps:
+      - name: Checkout reviewed adapter and immutable corpus
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare runtime without provider credentials
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify offline guards and table adapter without credentials
+        run: |
+          python scripts/verify-free-ocr-guards.py
+          node scripts/verify-ocrspace-table.mjs
+      - name: Check owner key and dated Free confirmation without network
+        env:
+          OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
+        run: python scripts/evaluate-ocrspace-free.py
+      - name: Evaluate the original twelve synthetic images once
+        if: startsWith(github.event.head_commit.message, '[cbh-ocrspace-free-eval]')
+        env:
+          OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
+        run: python scripts/evaluate-ocrspace-free.py --run
