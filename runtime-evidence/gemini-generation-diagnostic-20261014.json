@@ -1,0 +1,45 @@
+{
+  "provider": "GOOGLE_GEMINI_DEVELOPER_API",
+  "model": "gemini-3.8-flash",
+  "corpus_sha256": "6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a",
+  "scorer_sha256": "c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004",
+  "max_output_tokens": 8192,
+  "maximum_requests": 1,
+  "images": [
+    {
+      "http": 400,
+      "latency_ms": 95123,
+      "usage": null,
+      "api_success": false,
+      "error": "HTTP_FAILURE_STOP_NO_RETRY",
+      "response_sha256": "b01105ed229707571186fdc753a734401dcd3dca044538c55285824604725bd3",
+      "error_codes": [
+        400
+      ],
+      "diagnostic_codes": [],
+      "error_status": "INVALID_ARGUMENT",
+      "image_id": "A_high_resolution",
+      "image_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+      "parse_error": "NO_TEXT_RESPONSE",
+      "predicted_cells": 0,
+      "score": null
+    }
+  ],
+  "method": "SINGLE_ORIGINAL_REQUEST_DIAGNOSTIC",
+  "free_project": "OWNER_CONFIRMED_SAME_DAY_NOT_PROGRAMMATIC_BILLING_VERIFICATION",
+  "production_writes": 0,
+  "private_images": 0,
+  "paid_fallback": false,
+  "acceptance": "NOT_ACCEPTED_BY_THIS_BENCHMARK",
+  "blocker": "REQUEST_OR_OUTPUT_FAILURE_STOP_NO_RETRY",
+  "complete_v2": false,
+  "aggregate": null,
+  "head": "aaf6b70422a251ca53a8a5a72ad69977e5f62ef8",
+  "run_id": 38515239734,
+  "job_id": 115692444038,
+  "error_message_verification": {
+    "method": "EXACT_SHA256_MATCH_TO_KNOWN_GENERIC_ERROR_JSON",
+    "message": "Request contains an invalid argument.",
+    "field_detail": false
+  }
+}

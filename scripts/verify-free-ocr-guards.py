@@ -57,6 +57,13 @@ with patch.dict(os.environ, {}, clear=True), patch.object(gemini, 'request_once'
 payload = gemini.build_payload(images[0][0]['id'], images[0][1], prompt)
 assert payload['store'] is False and 'tools' not in payload and 'cachedContent' not in payload
 assert payload['generationConfig']['maxOutputTokens'] == 8192
+original_fields = shared.roster_json_schema()['properties']['cells']['items']
+generation_fields = gemini.generation_schema()['properties']['cells']['items']
+assert generation_fields['required'] == original_fields['required']
+assert set(generation_fields['properties']) == set(original_fields['properties'])
+assert generation_fields['properties']['review_required'] == {'type': 'boolean'}
+assert generation_fields['properties']['status'] == original_fields['properties']['status']
+assert 'maxItems' not in json.dumps(gemini.generation_schema())
 assert payload['contents'][0]['parts'][0]['text'].startswith(prompt + '\n')
 text, reason = gemini.extract_text({'candidates': [{'finishReason': 'STOP', 'content': {'parts': [
     {'thought': True, 'text': 'private reasoning'}, {'text': '{"cells":[]}'}]}}]})
@@ -85,6 +92,7 @@ with patch.dict(os.environ, ready_env, clear=True), patch.object(gemini, 'reques
     request.assert_called_once()
     report = json.loads(output.split('CBH_GEMINI_V2=')[1])
     assert report['aggregate'] is None and report['complete_v2'] is False
+    assert report['attempted_subset_score'] is None
 
 # UTC proof expiry between pacing and request also prevents network access.
 with patch.object(gemini, 'readiness', side_effect=[{'ready': True}, {'ready': True}, {'ready': False}]), \

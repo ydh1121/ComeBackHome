@@ -113,5 +113,23 @@ this separates an API defect from any quality experiment. A full-v2 aggregate
 remains null even if this single request succeeds. No further identical request
 is made without a concrete result and a documented next action.
 
+The one-call diagnostic at `aaf6b70422a251ca53a8a5a72ad69977e5f62ef8`,
+run38515239734/job115692444038, returned HTTP400/95,123ms with INVALID_ARGUMENT.
+Its error-body SHA matches the standard JSON for the generic message
+"Request contains an invalid argument." exactly. No field detail is available;
+no key or account identity was read from the error. Usage and accuracy remain
+unmeasured. No further identical generation request will be sent.
+
+The next bounded complete-v2 evaluation isolates the documented schema-complexity
+limitation. A Gemini-specific copy retains every required field, status enum,
+nullable type and review boolean, but removes numeric/array range constraints
+and expresses the optional bbox as an array-or-null type. Prompt,12 original
+images,truth,scorer,model,LOW thinking,store:false and8,192 output cap are unchanged.
+This is a hypothesis test, not a claim that the provider disclosed the cause.
+Application/parser checks remain authoritative. No expected values or cell counts
+are inserted and no prediction is repaired. One failed request immediately stops
+the run; no automatic schema/model/paid fallback. Failed requests now leave the
+attempted-subset score null instead of printing an unmeasured zero-accuracy table.
+
 OCR_SOFTWARE_ACCEPTED and FULL_PRODUCT_SOFTWARE_ACCEPTED remain PARTIAL/BLOCKED.
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL remains unchanged.

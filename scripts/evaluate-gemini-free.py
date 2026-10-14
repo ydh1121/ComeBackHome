@@ -37,12 +37,32 @@ def readiness():
             'acceptance': 'PREFLIGHT_ONLY_NOT_PROVIDER_ACCEPTANCE'}
 
 
+def generation_schema():
+    """Keep every output field/type without expanding numeric or array bounds.
+
+    The original schema produced only generic INVALID_ARGUMENT after successful
+    model/token validation. This isolates schema complexity, not image quality;
+    it never supplies ground-truth values or changes the independent scorer.
+    """
+    def simplify(value):
+        if isinstance(value, list):
+            return [simplify(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        return {key: simplify(item) for key, item in value.items()
+                if key not in ('minimum', 'maximum', 'minItems', 'maxItems')}
+    schema = simplify(shared.roster_json_schema())
+    schema['properties']['cells']['items']['properties']['evidence_bbox'] = {
+        'type': ['array', 'null'], 'items': {'type': 'number'}}
+    return schema
+
+
 def build_payload(image_id, image, prompt):
     return {'contents': [{'role': 'user', 'parts': [
         {'text': prompt + '\nsource_image_id = ' + image_id},
         {'inlineData': {'mimeType': 'image/png', 'data': base64.b64encode(image).decode('ascii')}}]}],
         'generationConfig': {'candidateCount': 1, 'maxOutputTokens': MAX_OUTPUT,
-            'responseMimeType': 'application/json', 'responseJsonSchema': shared.roster_json_schema(),
+            'responseMimeType': 'application/json', 'responseJsonSchema': generation_schema(),
             'thinkingConfig': {'thinkingLevel': 'LOW', 'includeThoughts': False}},
         'store': False}
 
@@ -89,6 +109,8 @@ def safe_error_metadata(raw):
                 result['diagnostic_codes'].append('UNKNOWN_FIELD:' + field)
         if re.search(r'API key not valid|API_KEY_INVALID', message, re.I):
             result['diagnostic_codes'].append('API_KEY_INVALID')
+        if message == 'Request contains an invalid argument.':
+            result['diagnostic_codes'].append('GENERIC_INVALID_ARGUMENT_NO_FIELD_DETAIL')
         if re.search(r'too many states|schema.{0,80}(too complex|too large)', message, re.I):
             result['diagnostic_codes'].append('SCHEMA_COMPLEXITY_LIMIT')
         reasons = {'API_KEY_INVALID', 'API_KEY_SERVICE_BLOCKED', 'API_KEY_HTTP_REFERRER_BLOCKED',
@@ -209,6 +231,7 @@ def run(limit=12):
         'corpus_sha256': shared.CORPUS_SHA, 'scorer_sha256': shared.SCORER_SHA,
         'max_output_tokens': MAX_OUTPUT, 'maximum_requests': limit, 'images': [],
         'method': 'SINGLE_ORIGINAL_REQUEST_DIAGNOSTIC' if limit == 1 else 'COMPLETE_ORIGINAL_V2',
+        'schema_variant': 'NAMED_FIELDS_WITHOUT_NUMERIC_OR_ARRAY_BOUNDS',
         'free_project': 'OWNER_CONFIRMED_SAME_DAY_NOT_PROGRAMMATIC_BILLING_VERIFICATION',
         'production_writes': 0, 'private_images': 0, 'paid_fallback': False,
         'acceptance': 'NOT_ACCEPTED_BY_THIS_BENCHMARK'}
@@ -234,7 +257,8 @@ def run(limit=12):
             score=shared.score_with_original(scorer, subset, cells) if item['api_success'] else None)
         report['images'].append(item)
         predictions.extend(cells)
-        attempted_truth.extend(subset)
+        if item['api_success'] and not error:
+            attempted_truth.extend(subset)
         print('CBH_GEMINI_IMAGE=' + json.dumps(item, separators=(',', ':')), flush=True)
         if not item['api_success'] or error:
             report['blocker'] = 'REQUEST_OR_OUTPUT_FAILURE_STOP_NO_RETRY'

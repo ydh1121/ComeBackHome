@@ -34,7 +34,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python scripts/evaluate-gemini-free.py
-      - name: Evaluate only after concrete owner Free-project confirmation
+      - name: Evaluate simplified typed schema after authenticated model and input validation
         if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-eval]')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
