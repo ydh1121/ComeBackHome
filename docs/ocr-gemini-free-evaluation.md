@@ -1,9 +1,10 @@
 # Gemini Free OCR evaluation readiness
 
-Cloudflare evaluation is complete with measured quality failures. No external
-model is selected. The next provider in the agreed order is the Gemini Developer
-API, with the stable `gemini-3.8-flash` candidate. This document prepares that
-evaluation; it does not claim API execution, accuracy or integration acceptance.
+Cloudflare evaluation is complete with measured quality failures. Gemini's real
+API authentication and one original synthetic image succeeded, but a subsequent
+HTTP503 and bounded full-run timeout prevented complete-v2 acceptance. No external
+model is selected. The Gemini execution gate is now closed; historical owner
+Free-project proof is retained. OCR.space Engine3 is next in the agreed order.
 
 The official model/pricing and REST reference checked on2026-10-13 list image
 input, structured text output, the standard Free tier, LOW thinking and supported
@@ -34,6 +35,10 @@ same-day proof, the exact repository/PR92 branch, run_attempt1 and the explicit
 not checkout or offline tests. The operator records proof before opening those
 guards; the owner does not need to edit source code. Adding a secret alone does
 not automatically start inference.
+
+`CBH_GEMINI_EVALUATION_OPEN` is an additional explicit execution gate. It is
+currently false after the final disposition below; closed preflight readiness is
+not a claim that the owner's registered key or Free-project evidence is missing.
 
 On2026-10-14 at10:30 KST the owner supplied two screenshots and instructed work
 to continue. AI Studio shows the ComeBackHome project, one key and Free tier;
@@ -149,6 +154,28 @@ keeps the original independent aggregate scorer intact. Cumulative pre-run
 inference attempts4; known tokens4,242; three failed-request usages unknown.
 Maximum cumulative generation attempts after this run16. No further identical
 full-corpus run is scheduled in this execution if the provider fails again.
+
+## Final disposition on2026-10-14
+
+At `0d7087ee761bebe6bf39c61a994a62e713d88282`,run38515914099/job115694554876,
+the bounded fresh corpus attempt timed out on original A after120,100ms. HTTP,
+usage and completion are unknown; no predictions or full aggregate exist. The
+prior21/21 A result remains valid one-image evidence. It does not establish the
+other315 cells,OFF/BLANK/UNREADABLE behavior or reliable service completion.
+
+Cumulative Gemini generation attempts5: two generic400s,one successful A,one503,
+one timeout. Known returned tokens1,458 input+2,784 output=4,242; usage unknown for
+the four failed requests. Model GET and countTokens each ran once separately.
+Actual billed amount and account remaining quota are not measured; unknown usage
+is not zero. No billing configuration,paid fallback or private-image request was
+made. No further Gemini requests in this execution. The registered key need not
+be replaced. No external recognizer was activated or wrote product/D1 data.
+
+The next authenticated candidate requires an owner Free OCR.space key. The
+closed one-image response-contract probe and exact owner setup instructions are
+in `docs/ocrspace-free-readiness.md`. It reuses the original corpus/scorer and
+does not claim that a new evaluation,Markdown adapter or product integration is
+already accepted.
 
 OCR_SOFTWARE_ACCEPTED and FULL_PRODUCT_SOFTWARE_ACCEPTED remain PARTIAL/BLOCKED.
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL remains unchanged.

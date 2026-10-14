@@ -27,6 +27,7 @@ def readiness():
     today = datetime.now(timezone.utc).date().isoformat()
     checks = {
         'key_present': bool(os.environ.get('GEMINI_API_KEY')),
+        'evaluation_open': os.environ.get('CBH_GEMINI_EVALUATION_OPEN') == 'true',
         'owner_free_project_confirmed': os.environ.get('CBH_GEMINI_FREE_PROJECT_CONFIRMED') == 'true',
         'same_day_free_project_proof': os.environ.get('CBH_GEMINI_FREE_PROJECT_PROOF_DATE') == today,
         'repository': os.environ.get('GITHUB_REPOSITORY') == 'ydh1121/ComeBackHome',

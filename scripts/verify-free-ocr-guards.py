@@ -82,7 +82,8 @@ with patch.object(gemini.urllib.request, 'build_opener') as opener:
     assert 'test-key' not in request_arg.full_url
     assert request_arg.get_header('X-goog-api-key') == 'test-key'
 
-ready_env = {'GEMINI_API_KEY': 'test-key', 'CBH_GEMINI_FREE_PROJECT_CONFIRMED': 'true',
+ready_env = {'GEMINI_API_KEY': 'test-key', 'CBH_GEMINI_EVALUATION_OPEN': 'true',
+    'CBH_GEMINI_FREE_PROJECT_CONFIRMED': 'true',
     'CBH_GEMINI_FREE_PROJECT_PROOF_DATE': datetime.now(timezone.utc).date().isoformat(),
     'GITHUB_REPOSITORY': 'ydh1121/ComeBackHome',
     'GITHUB_REF': 'refs/heads/feat/nonimage-weekly-xlsx-import', 'GITHUB_RUN_ATTEMPT': '1'}
@@ -132,4 +133,52 @@ with patch.dict(os.environ, ready_env, clear=True), patch.object(gemini, 'reques
     assert report['complete_v2'] is False
     assert report['method'] == 'SINGLE_ORIGINAL_REQUEST_DIAGNOSTIC'
 
-print('FREE_OCR_OFFLINE_GUARDS_PASS corpus=12/336 parser=strict free_gate=closed quota_retry=0 network=0')
+with patch.dict(os.environ, {**ready_env, 'CBH_GEMINI_EVALUATION_OPEN': 'false'}, clear=True), \
+        patch.object(gemini, 'request_once') as request:
+    stopped_run()
+    request.assert_not_called()
+
+spec = importlib.util.spec_from_file_location('cbh_ocrspace', Path(__file__).with_name('probe-ocrspace-free.py'))
+ocrspace = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ocrspace)
+with patch.dict(os.environ, {}, clear=True), patch.object(ocrspace, 'request_once') as request, \
+        redirect_stdout(io.StringIO()):
+    try:
+        ocrspace.probe()
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError('Missing Free proof/key must block OCR.space')
+    request.assert_not_called()
+with patch.dict(os.environ, {'OCRSPACE_API_KEY': 'helloworld'}, clear=True):
+    assert ocrspace.readiness()['checks']['owner_key_present'] is False
+body = ocrspace.urllib.parse.parse_qs(ocrspace.build_payload(images[0][1]).decode())
+assert body['OCREngine'] == ['3'] and body['language'] == ['auto']
+assert body['isOverlayRequired'] == ['true'] and 'url' not in body and 'apikey' not in body
+try:
+    ocrspace.build_payload(b'\x89PNG\r\n\x1a\n' + b'x' * 1_000_000)
+except ValueError:
+    pass
+else:
+    raise AssertionError('Free file-size boundary must be enforced before a request')
+metadata = ocrspace.response_metadata({'OCRExitCode': 1, 'IsErroredOnProcessing': False,
+    'ProcessingTimeInMilliseconds': '123', 'ParsedResults': [{'FileParseExitCode': 1,
+    'ParsedText': 'sentinel-private-ocr | x | y |', 'ErrorMessage': 'test-key',
+    'TextOverlay': {'Lines': [{'Words': [{'WordText': 'sentinel-private-ocr',
+    'Left': 1, 'Top': 2, 'Width': 3, 'Height': 4}]}]}}]})
+assert metadata['api_success'] and metadata['overlay_shape']['words_with_valid_bounds'] == 1
+assert 'sentinel-private-ocr' not in json.dumps(metadata) and 'test-key' not in json.dumps(metadata)
+assert not ocrspace.response_metadata({'OCRExitCode': 2, 'IsErroredOnProcessing': True,
+    'ErrorMessage': 'sentinel-sensitive', 'ParsedResults': []})['api_success']
+failure = urllib.error.HTTPError(ocrspace.ENDPOINT, 429, 'quota', {},
+    io.BytesIO(b'{"ErrorMessage":"sentinel-sensitive test-key"}'))
+with patch.object(ocrspace.urllib.request, 'build_opener') as opener:
+    opener.return_value.open.side_effect = failure
+    report = ocrspace.request_once('test-key', images[0][1])
+    opener.return_value.open.assert_called_once()
+    request_arg = opener.return_value.open.call_args.args[0]
+    assert request_arg.full_url == ocrspace.ENDPOINT and request_arg.get_header('Apikey') == 'test-key'
+    assert 'test-key' not in json.dumps(report) and 'sentinel-sensitive' not in json.dumps(report)
+    assert report['http'] == 429 and report['billed_conversions'] is None
+
+print('FREE_OCR_OFFLINE_GUARDS_PASS corpus=12/336 parser=strict free_gate=closed quota_retry=0 network=0 providers=gemini,ocrspace')

@@ -1,0 +1,39 @@
+name: OCR.space Free Engine 3 / readiness and response contract
+
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/probe-ocrspace-free-once.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-ocrspace-free-probe
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    if: github.repository == 'ydh1121/ComeBackHome' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      CBH_OCRSPACE_FREE_CONFIRMED: 'false'
+      CBH_OCRSPACE_FREE_PROOF_DATE: ''
+    steps:
+      - name: Checkout reviewed probe
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify offline guards without credentials
+        run: python scripts/verify-free-ocr-guards.py
+      - name: Check owner key presence without network or secret output
+        env:
+          OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
+        run: python scripts/probe-ocrspace-free.py
+      - name: Probe only after dated owner Free-key confirmation
+        if: startsWith(github.event.head_commit.message, '[cbh-ocrspace-free-probe]')
+        env:
+          OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
+        run: python scripts/probe-ocrspace-free.py --probe

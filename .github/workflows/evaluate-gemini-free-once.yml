@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      # Closed after bounded HTTP503 and timeout disposition; owner proof remains historical.
+      CBH_GEMINI_EVALUATION_OPEN: 'false'
       # Owner screenshots on 2026-10-14 confirm the project Free tier and secret registration.
       # This dated proof expires at UTC midnight; subsequent runs need current evidence.
       CBH_GEMINI_FREE_PROJECT_CONFIRMED: 'true'
