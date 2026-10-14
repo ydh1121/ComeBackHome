@@ -102,6 +102,22 @@ review_required 미충족은 Provider 미제공 필드를 null로 남긴 결과�
 소유자 확인/당일 gate/기존 PR/첫 실행 조건은 유지한다. 설치·오프라인
 검증 단계에는 Provider 키가 없고, 이미지는 메모리/pipe만 사용한다.
 
+세 번째 결과 Actions38597826083/job115969007387(HEADe4026707):12/12
+HTTP200,168/336셀 배치,168누락. 이름161/336, SHIFT 출퇴근126/319,
+휴게125/319. Engine3 overlay를 제품의 헤더 행 결정에 넣으면7장에서
+물리 직원 행 수가 한 행 늘어나는 계약 불일치를 확인했다. 이 실패도
+`runtime-evidence/ocrspace-pixel-v2-20261014.json`에 보존한다.
+
+마지막 수정은 overlay 좌표로 물리 헤더를 결정하는 결합을 제거한다.
+기존 제품 픽셀 검출이 제공한 행 수와 실제 Markdown 직원 행 수가 정확히
+일치해야만 행 순서를 대응시킨다. 축약된 빈 열은 실제21셀의 EMPTY/CONTENT
+판정과 모든 비어 있지 않은 OCR 원문의 수·순서가 일치할 때만 복원한다.
+불확실한 픽셀·토큰 누락·과잉·행 수 모순은 UNREADABLE/오류로 남긴다.
+시간/이름을 추정하는 단계는 없다. 오프라인 canary에 픽셀/텍스트 불일치와
+누락 토큰이 뒤 칸으로 밀리지 않는 검사를 추가했다. 동일 원본의 이 변경
+검증은 최대12회이며 세션 상한은49회(probe1+전체4×12),동일 요청 자동
+재시도·요금제 변경·모델 변경·평가기/정답 수정은0이다.
+
 공식 근거: https://ocr.space/ocrapi / https://ocr.space/ocrapi/freekey
 
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL.

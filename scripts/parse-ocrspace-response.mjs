@@ -19,12 +19,11 @@ try {
     const detector = await vite.ssrLoadModule('/src/providers/import/ScheduleTableStructureDetector.ts');
     const weekly = await vite.ssrLoadModule('/src/providers/import/Weekly3ColumnScheduleMatrix.ts');
     const plane = { width: raster.width, height: raster.height, luminance };
-    const lines = response?.ParsedResults?.[0]?.TextOverlay?.Lines ?? [];
-    const tokens = lines.flatMap(line => line.Words ?? []).filter(word => typeof word.WordText === 'string' &&
-      ['Left', 'Top', 'Width', 'Height'].every(key => Number.isFinite(word[key]) && word[key] >= 0))
-      .map(word => ({ text: word.WordText, x: word.Left, y: word.Top, width: word.Width, height: word.Height, confidence: 0 }));
     const detection = { raster: plane, structure: detector.detectScheduleTableStructureFromRaster(plane), preprocessingMs: 0, structureDetectionMs: 0 };
-    matrix = weekly.buildWeekly3ColumnPhysicalMatrix(detection, { width: raster.width, height: raster.height, tokens });
+    // Engine 3 approximate overlay coordinates must not shift physical headers
+    // into employee rows. Product geometry is separately checked against the
+    // observed Markdown row count and repeated field labels by the adapter.
+    matrix = weekly.buildWeekly3ColumnPhysicalMatrix(detection, { width: raster.width, height: raster.height, tokens: [] });
   }
   const parsed = parseOcrSpaceWeeklyTable(response, image_id, matrix);
   process.stdout.write(JSON.stringify({ ...parsed, pixel_shape: matrix ? {

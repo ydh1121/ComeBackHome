@@ -56,9 +56,9 @@ def run():
         'geometry_module_sha256': {name: shared.sha((shared.ROOT / 'src/providers/import' / name).read_bytes())
             for name in ('ScheduleTableStructureDetector.ts', 'Weekly3ColumnScheduleMatrix.ts')},
         'raster_decoder': 'Pillow12.3.0_NATIVE_SIZE_LUMINANCE_ONLY_API_IMAGE_UNCHANGED',
-        'prior_probe_requests': 1, 'prior_complete_evaluation_requests': 24,
-        'maximum_execution_requests_including_probe': 37,
-        'adapter_variant': 'EXISTING_PRODUCT_PIXEL_MATRIX_PLUS_OBSERVED_OCR_TEXT',
+        'prior_probe_requests': 1, 'prior_complete_evaluation_requests': 36,
+        'maximum_execution_requests_including_probe': 49,
+        'adapter_variant': 'PIXEL_MATRIX_AND_ORDERED_MARKDOWN_WITH_EMPTY_SLOT_EVIDENCE',
         'images': [], 'billed_conversions': None, 'remaining_conversions': None,
         'private_images': 0, 'production_writes': 0, 'paid_fallback': False,
         'field_provenance': {

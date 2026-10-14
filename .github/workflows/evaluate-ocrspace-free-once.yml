@@ -42,7 +42,7 @@ jobs:
         env:
           OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
         run: python scripts/evaluate-ocrspace-free.py
-      - name: Evaluate existing product pixel geometry with original OCR responses
+      - name: Evaluate physical row ownership and pixel-proven empty slots
         if: startsWith(github.event.head_commit.message, '[cbh-ocrspace-free-eval]')
         env:
           OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}

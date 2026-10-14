@@ -67,7 +67,7 @@ assert.notEqual(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x').error, null
 const pixelMatrix = { rows: [{ nameBounds: { x: 0, y: 75, width: 100, height: 22 },
   cells: Array.from({ length: 21 }, (_, i) => ({ dayIndex: Math.floor(i / 3), field: ['start', 'end', 'break'][i % 3],
     bounds: { x: 110 + i * 40, y: 75, width: 40, height: 22 },
-    visual: { occupancy: i >= 6 && i < 9 ? 'EMPTY' : 'CONTENT' } })) }] };
+    visual: { occupancy: first[i + 1] === '' ? 'EMPTY' : 'CONTENT' } })) }] };
 const pixelParsed = parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'new-pixels', pixelMatrix);
 assert.equal(pixelParsed.error, null);
 assert.equal(pixelParsed.cells[0].clock_in, '07:15');
@@ -77,5 +77,11 @@ assert.equal(pixelParsed.cells[3].status, 'UNREADABLE');
 const visibleButMissed = structuredClone(pixelMatrix);
 visibleButMissed.rows[0].cells[6].visual.occupancy = 'CONTENT';
 assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', visibleButMissed).cells[2].status, 'UNREADABLE');
+const incompleteText = structuredClone(missingHeaderEvidence);
+incompleteText.ParsedResults[0].ParsedText = incompleteText.ParsedResults[0].ParsedText.replace('7.25', '');
+assert.equal(parseOcrSpaceWeeklyTable(incompleteText, 'x', pixelMatrix).cells[0].status, 'UNREADABLE', 'unread OCR content cannot be shifted to the next occupied cell');
+const falseEmpty = structuredClone(pixelMatrix);
+falseEmpty.rows[0].cells[0].visual.occupancy = 'EMPTY';
+assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', falseEmpty).cells[0].status, 'UNREADABLE', 'a pixel/text disagreement is not repaired');
 assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', { rows: [] }).error, 'PHYSICAL_ROW_COUNT_MISMATCH');
 console.log('OCRSPACE_TABLE_CONTRACT_PASS independent_dates_names_rows decimals OFF_BLANK_UNREADABLE missing_evidence_no_repair review_flag_not_fabricated network=0');

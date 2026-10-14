@@ -134,21 +134,30 @@ function overlayTriple(words: Word[], name: string, occurrence: number, day: num
   return triple.some(Boolean) ? triple : null;
 }
 
-function textWithin(words: Word[], bounds: Bounds): string {
-  return words.filter(word => word.Left + word.Width / 2 >= bounds.x && word.Left + word.Width / 2 < bounds.x + bounds.width &&
-    word.Top + word.Height / 2 >= bounds.y && word.Top + word.Height / 2 < bounds.y + bounds.height)
-    .sort((a, b) => a.Left - b.Left).map(word => clean(word.WordText)).join(' ');
-}
-function pixelEvidence(matrix: OcrSpacePixelMatrix, words: Word[], rowIndex: number, name: string | null, day: number) {
+function pixelRowValues(matrix: OcrSpacePixelMatrix, rowIndex: number, markdownRow: string[]): string[] | null {
   const row = matrix.rows[rowIndex];
-  if (!row || !name || textWithin(words, row.nameBounds).replace(/\s/g, '') !== name.replace(/\s/g, '')) return null;
+  if (!row) return null;
+  const fields = Array.from({ length: 21 }, (_, i) => row.cells.find(cell => cell.dayIndex === Math.floor(i / 3) &&
+    cell.field === ['start', 'end', 'break'][i % 3]));
+  if (fields.some(field => !field || field.visual.occupancy === 'UNCERTAIN')) return null;
+  const observed = markdownRow.slice(1).filter(value => value !== '');
+  const occupied = fields.filter(field => field!.visual.occupancy === 'CONTENT');
+  // Restore only pixel-proven empty slots. Every non-empty OCR value must be
+  // consumed exactly once in its observed row order; no inferred times or OFF.
+  if (occupied.length !== observed.length) return null;
+  let next = 0;
+  return fields.map(field => field!.visual.occupancy === 'EMPTY' ? '' : observed[next++]);
+}
+function pixelEvidence(matrix: OcrSpacePixelMatrix, rowIndex: number, day: number, rowValues: string[] | null) {
+  const row = matrix.rows[rowIndex];
+  if (!row) return null;
   const fields = (['start', 'end', 'break'] as const).map(field => row.cells.find(cell => cell.dayIndex === day && cell.field === field));
   if (fields.some(field => !field)) return null;
   const cells = fields.map(field => field!);
-  const values = cells.map(cell => textWithin(words, cell.bounds));
+  const values = rowValues?.slice(day * 3, day * 3 + 3) ?? null;
   const bounds: OcrSpaceCell['evidence_bbox'] = [Math.min(...cells.map(cell => cell.bounds.x)), Math.min(...cells.map(cell => cell.bounds.y)),
     Math.max(...cells.map(cell => cell.bounds.x + cell.bounds.width)), Math.max(...cells.map(cell => cell.bounds.y + cell.bounds.height))];
-  return { values, bounds, blank: values.every(value => !value) && cells.every(cell => cell.visual.occupancy === 'EMPTY') };
+  return { values, bounds, blank: values != null && values.every(value => !value) && cells.every(cell => cell.visual.occupancy === 'EMPTY') };
 }
 
 export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string, pixelMatrix?: OcrSpacePixelMatrix | null): {
@@ -200,8 +209,9 @@ export function parseOcrSpaceWeeklyTable(value: unknown, sourceImageId: string, 
     const name = row[0] || null;
     const occurrence = occurrences.get(name ?? '') ?? 0;
     occurrences.set(name ?? '', occurrence + 1);
+    const physicalValues = pixelMatrix && row.length !== 22 ? pixelRowValues(pixelMatrix, rowIndex, row) : null;
     for (let day = 0; day < 7; day++) {
-      const pixel = pixelMatrix ? pixelEvidence(pixelMatrix, words, rowIndex, name, day) : null;
+      const pixel = pixelMatrix ? pixelEvidence(pixelMatrix, rowIndex, day, physicalValues) : null;
       const physical = row.length !== 22;
       const observed = physical ? (pixel ? pixel.values : name ? overlayTriple(words, name, occurrence, day) : null) : row.slice(day * 3 + 1, day * 3 + 4);
       const triple = observed ?? ['', '', ''];
