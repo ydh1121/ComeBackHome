@@ -34,7 +34,9 @@ Gemini 키·Cloudflare 권한·Meta 라이선스 재등록은 필요 없다. 이
 `scripts/probe-ocrspace-free.py`와 전용 Actions는 기본적으로 네트워크0
 preflight만 수행한다. 실제 키 유무는 불리언으로 확인하며,키 원문을 읽어
 로그로 옮기지 않는다. 실제 probe는 지정 repo/기존 PR92/최초 실행/당일 Free
-증거와 명시적 commit prefix가 모두 필요하다. 현재 Free 확인 gate는 닫혀 있다.
+증거와 명시적 commit prefix가 모두 필요하다. 2026-10-14 사용자가
+"OCR.space 무료 키 등록 완료"라고 확인했으므로 당일 Free 확인 gate를 연다.
+이는 키 존재·인증·잔여량·OCR 정확도 확인과 구분하며 실제 응답으로 검증한다.
 
 공식 HTTPS Free endpoint에 owner key를 header로 보내며,Engine3/auto/table/
 overlay와 기존 A 합성 이미지 한 장만 사용한다. 최대1회,120초,응답2MB,
