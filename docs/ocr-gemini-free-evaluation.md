@@ -78,5 +78,26 @@ Official references:
 - https://ai.google.dev/api/generate-content
 - https://ai.google.dev/gemini-api/docs/structured-output
 
+## First actual request and non-generating diagnosis
+
+Run38496293534/job115632690440 at
+`dba203abc678169ac80e7528df525bb74ec9e10e` confirmed every readiness check,
+including key presence and same-day Free-project evidence. The first original A
+image request returned **HTTP400 after62,362ms**. Error code400 is recorded, but
+the initial reporter discarded the provider's error status/reason. No text,
+usage or recognition accuracy was obtained; the full-v2 aggregate is null.
+Authentication success cannot be inferred from secret presence or this response.
+The original image request is not automatically repeated.
+
+The next explicit `[cbh-gemini-free-probe]` run performs only official model GET
+and, if the exact model/methods are confirmed, countTokens for the same synthetic
+input/request contract. No generateContent request is issued. Any failure stops
+without retry, redirect or model/key substitution. Error reporting now permits
+only known status/reason/field labels; response bodies, key values and error
+messages never enter logs. This diagnoses authentication/model/wire-format
+separately and cannot establish OCR quality or product acceptance.
+
+References: https://ai.google.dev/api/models and https://ai.google.dev/api/tokens
+
 OCR_SOFTWARE_ACCEPTED and FULL_PRODUCT_SOFTWARE_ACCEPTED remain PARTIAL/BLOCKED.
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL remains unchanged.

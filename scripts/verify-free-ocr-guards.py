@@ -93,4 +93,23 @@ with patch.object(gemini, 'readiness', side_effect=[{'ready': True}, {'ready': T
     request.assert_not_called()
     assert 'FREE_PROJECT_PROOF_EXPIRED' in output
 
+diagnostic = gemini.safe_error_metadata(json.dumps({'error': {'code': 400,
+    'status': 'INVALID_ARGUMENT', 'message': 'Unknown name "store": sentinel-sensitive test-key',
+    'details': [{'reason': 'API_KEY_INVALID', 'metadata': {'key': 'test-key'}}]}}).encode())
+assert diagnostic['diagnostic_codes'] == ['API_KEY_INVALID', 'UNKNOWN_FIELD:store']
+assert 'sentinel-sensitive' not in json.dumps(diagnostic) and 'test-key' not in json.dumps(diagnostic)
+with patch.dict(os.environ, ready_env, clear=True), patch.object(gemini, 'request_json_once',
+        return_value=({'http': 400, 'api_success': False}, None)) as request, \
+        patch.object(gemini, 'request_once') as generation, redirect_stdout(io.StringIO()) as output:
+    try:
+        gemini.probe()
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError('Metadata error must stop before count/inference')
+    request.assert_called_once()
+    generation.assert_not_called()
+    assert ':generateContent' not in request.call_args.args[1]
+    assert '"inference_calls":0' in output.getvalue()
+
 print('FREE_OCR_OFFLINE_GUARDS_PASS corpus=12/336 parser=strict free_gate=closed quota_retry=0 network=0')

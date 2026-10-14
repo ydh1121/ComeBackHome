@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 from time import monotonic, perf_counter, sleep
 import urllib.error
 import urllib.request
@@ -54,14 +55,60 @@ def extract_text(data):
     reason = candidate.get('finishReason')
     if reason != 'STOP':
         return None, reason if reason in ('MAX_TOKENS', 'SAFETY', 'RECITATION') else 'NONSTOP_RESPONSE'
-    parts = candidate.get('content', {}).get('parts', [])
+    content = candidate.get('content')
+    if not isinstance(content, dict) or not isinstance(content.get('parts'), list):
+        return None, 'INVALID_CONTENT_SHAPE'
+    parts = content['parts']
     texts = [part['text'] for part in parts if isinstance(part, dict)
              and not part.get('thought') and isinstance(part.get('text'), str)]
     return ''.join(texts) if texts else None, 'STOP'
 
 
-def request_once(key, payload):
-    request = urllib.request.Request(ENDPOINT, data=json.dumps(payload).encode(), method='POST',
+def safe_error_metadata(raw):
+    """Publish only known status/reason/field labels, never provider error text."""
+    result = {'error_codes': [], 'diagnostic_codes': []}
+    try:
+        error = json.loads(raw).get('error', {})
+        code = error.get('code')
+        result['error_codes'] = [code] if type(code) is int else []
+        status = error.get('status')
+        if status in ('INVALID_ARGUMENT', 'UNAUTHENTICATED', 'PERMISSION_DENIED',
+                      'NOT_FOUND', 'RESOURCE_EXHAUSTED', 'FAILED_PRECONDITION',
+                      'INTERNAL', 'UNAVAILABLE', 'DEADLINE_EXCEEDED'):
+            result['error_status'] = status
+        message = error.get('message', '')
+        if not isinstance(message, str):
+            message = ''
+        known_fields = {'store', 'responseJsonSchema', 'response_json_schema',
+            'thinkingConfig', 'thinking_config', 'thinkingLevel', 'thinking_level',
+            'includeThoughts', 'maxOutputTokens', 'candidateCount', 'generationConfig',
+            'inlineData', 'mimeType', 'contents', 'text', 'parts', 'role', 'model',
+            'generateContentRequest', 'generate_content_request'}
+        for field in re.findall(r'Unknown name [\"\x27]([A-Za-z_]+)[\"\x27]', message):
+            if field in known_fields:
+                result['diagnostic_codes'].append('UNKNOWN_FIELD:' + field)
+        if re.search(r'API key not valid|API_KEY_INVALID', message, re.I):
+            result['diagnostic_codes'].append('API_KEY_INVALID')
+        if re.search(r'too many states|schema.{0,80}(too complex|too large)', message, re.I):
+            result['diagnostic_codes'].append('SCHEMA_COMPLEXITY_LIMIT')
+        reasons = {'API_KEY_INVALID', 'API_KEY_SERVICE_BLOCKED', 'API_KEY_HTTP_REFERRER_BLOCKED',
+            'API_KEY_IP_ADDRESS_BLOCKED', 'API_KEY_EXPIRED', 'SERVICE_DISABLED',
+            'BILLING_DISABLED', 'CONSUMER_INVALID', 'PROJECT_DELETED', 'RATE_LIMIT_EXCEEDED'}
+        details = error.get('details', [])
+        if isinstance(details, list):
+            for detail in details:
+                if isinstance(detail, dict) and detail.get('reason') in reasons:
+                    result['diagnostic_codes'].append(detail['reason'])
+        result['diagnostic_codes'] = sorted(set(result['diagnostic_codes']))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return result
+
+
+def request_json_once(key, endpoint, payload=None):
+    request = urllib.request.Request(endpoint,
+        data=json.dumps(payload).encode() if payload is not None else None,
+        method='POST' if payload is not None else 'GET',
         headers={'x-goog-api-key': key, 'Content-Type': 'application/json'})
     started = perf_counter()
     report = {'http': None, 'latency_ms': None, 'usage': None, 'api_success': False}
@@ -73,28 +120,80 @@ def request_once(key, payload):
         if len(raw) > 2 * 1024 * 1024:
             raise ValueError('RESPONSE_TOO_LARGE')
         data = json.loads(raw)
-        usage = data.get('usageMetadata', {})
-        report['usage'] = {k: usage[k] for k in ('promptTokenCount', 'candidatesTokenCount',
-            'thoughtsTokenCount', 'totalTokenCount') if type(usage.get(k)) is int and usage[k] >= 0}
-        response_text, reason = extract_text(data)
-        report.update(finish_reason=reason, api_success=report['http'] == 200 and reason == 'STOP'
-                      and response_text is not None and not data.get('error'))
-        return report, {'response': response_text}
+        if not isinstance(data, dict):
+            raise ValueError('INVALID_RESPONSE_SHAPE')
+        report['api_success'] = report['http'] == 200 and not data.get('error')
+        return report, data
     except urllib.error.HTTPError as error:
         report.update(http=error.code, error='HTTP_FAILURE_STOP_NO_RETRY')
         raw = error.read(65536)
         report['response_sha256'] = shared.sha(raw)
-        try:
-            code = json.loads(raw).get('error', {}).get('code')
-            report['error_codes'] = [code] if type(code) is int else []
-        except (ValueError, AttributeError):
-            report['error_codes'] = []
+        report.update(safe_error_metadata(raw))
         return report, None
     except Exception:
         report['error'] = 'NETWORK_OR_RESPONSE_FAILURE_CONSUMPTION_UNKNOWN_STOP_NO_RETRY'
         return report, None
     finally:
         report['latency_ms'] = round((perf_counter() - started) * 1000)
+
+
+def request_once(key, payload):
+    report, data = request_json_once(key, ENDPOINT, payload)
+    if not report['api_success'] or data is None:
+        return report, None
+    usage = data.get('usageMetadata', {})
+    if isinstance(usage, dict):
+        report['usage'] = {k: usage[k] for k in ('promptTokenCount', 'candidatesTokenCount',
+            'thoughtsTokenCount', 'totalTokenCount') if type(usage.get(k)) is int and usage[k] >= 0}
+    response_text, reason = extract_text(data)
+    report.update(finish_reason=reason, api_success=reason == 'STOP' and response_text is not None)
+    return report, {'response': response_text}
+
+
+def probe():
+    """Bounded official metadata/token validation: no generateContent requests."""
+    if not readiness()['ready']:
+        print('CBH_GEMINI_PREFLIGHT=' + json.dumps(readiness()), flush=True)
+        raise SystemExit(2)
+    key = os.environ['GEMINI_API_KEY']
+    model_url = ENDPOINT.removesuffix(':generateContent')
+    report = {'model': MODEL, 'inference_calls': 0, 'private_images': 0,
+        'acceptance': 'DIAGNOSTIC_ONLY_NOT_OCR_ACCEPTANCE'}
+    metadata, data = request_json_once(key, model_url)
+    report['model_get'] = metadata
+    supported = []
+    if metadata['api_success'] and data:
+        methods = data.get('supportedGenerationMethods', [])
+        if not isinstance(methods, list):
+            methods = []
+        supported = [method for method in ('generateContent', 'countTokens') if method in methods]
+        metadata.update(model_name_matches=data.get('name') == 'models/' + MODEL,
+            supported_methods=supported)
+        for field in ('inputTokenLimit', 'outputTokenLimit'):
+            if type(data.get(field)) is int and data[field] >= 0:
+                metadata[field] = data[field]
+    if not metadata['api_success'] or not metadata.get('model_name_matches'):
+        report['blocker'] = 'MODEL_METADATA_FAILED_STOP'
+    elif not all(method in supported for method in ('generateContent', 'countTokens')):
+        report['blocker'] = 'MODEL_METHOD_UNAVAILABLE_STOP'
+    elif not readiness()['ready']:
+        report['blocker'] = 'FREE_PROJECT_PROOF_EXPIRED'
+    else:
+        images, _, prompt, _ = shared.load_corpus()
+        entry, image = images[0]
+        payload = build_payload(entry['id'], image, prompt)
+        payload['model'] = 'models/' + MODEL
+        token_report, token_data = request_json_once(key, model_url + ':countTokens',
+            {'generateContentRequest': payload})
+        report['count_tokens'] = token_report
+        report['synthetic_images_sent_for_token_count'] = 1
+        if token_report['api_success'] and token_data and type(token_data.get('totalTokens')) is int:
+            token_report['totalTokens'] = token_data['totalTokens']
+        else:
+            report['blocker'] = 'INPUT_TOKEN_VALIDATION_FAILED_STOP'
+    print('CBH_GEMINI_PROBE=' + json.dumps(report, separators=(',', ':')), flush=True)
+    if report.get('blocker'):
+        raise SystemExit(2)
 
 
 def run():
@@ -147,10 +246,14 @@ def run():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--run', action='store_true')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--run', action='store_true')
+    mode.add_argument('--probe', action='store_true')
     args = parser.parse_args()
     if args.run:
         run()
+    elif args.probe:
+        probe()
     else:
         shared.load_corpus()
         print('CBH_GEMINI_PREFLIGHT=' + json.dumps(readiness()))

@@ -39,3 +39,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python scripts/evaluate-gemini-free.py --run
+      - name: Diagnose official model and input contract without generation
+        if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-probe]')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py --probe
