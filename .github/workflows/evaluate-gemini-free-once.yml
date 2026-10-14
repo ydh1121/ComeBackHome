@@ -34,7 +34,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python scripts/evaluate-gemini-free.py
-      - name: Evaluate simplified typed schema after authenticated model and input validation
+      - name: Evaluate one bounded complete corpus after recorded transient 503 stop
         if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-eval]')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

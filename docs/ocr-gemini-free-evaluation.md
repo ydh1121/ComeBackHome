@@ -131,5 +131,24 @@ are inserted and no prediction is repaired. One failed request immediately stops
 the run; no automatic schema/model/paid fallback. Failed requests now leave the
 attempted-subset score null instead of printing an unmeasured zero-accuracy table.
 
+Run38515591438/job115693543858 at `f88ea9ae07de9773017f21910e570133813415a2`
+confirmed generation with the simplified typed schema. Original A returned
+HTTP200/14,852ms,STOP,21 predictions/21 aligned cells. All scored fields matched
+21/21,including names,dates,start/end/break and review_required; safety errors0.
+Returned usage:1,458 input+2,784 output=4,242 tokens. This is one-image accuracy,
+not complete-v2 acceptance. Original B returned HTTP503/UNAVAILABLE in1,045ms,
+without usage. The evaluator stopped as designed. Full aggregate remains null.
+
+After recording the service failure and a cooldown of more than two minutes,
+one explicit new full-corpus run uses exactly the successful simplified request
+contract. It may issue at most12 calls and stops on the first error. This is a
+bounded operator decision after a service-unavailable result, not an automatic
+retry loop or schema/model fallback. The prior A result remains evidence and is
+not combined with new predictions or used to tune the prompt. A full fresh run
+keeps the original independent aggregate scorer intact. Cumulative pre-run
+inference attempts4; known tokens4,242; three failed-request usages unknown.
+Maximum cumulative generation attempts after this run16. No further identical
+full-corpus run is scheduled in this execution if the provider fails again.
+
 OCR_SOFTWARE_ACCEPTED and FULL_PRODUCT_SOFTWARE_ACCEPTED remain PARTIAL/BLOCKED.
 RELEASE_HOLD_UNTIL_OWNER_APPROVAL remains unchanged.
