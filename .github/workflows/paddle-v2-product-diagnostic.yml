@@ -1,0 +1,34 @@
+name: Local product Paddle / immutable v2 independent measurement
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths:
+      - .github/workflows/paddle-v2-product-diagnostic.yml
+      - scripts/verify-paddle-v2-product.mjs
+      - scripts/evaluate-paddle-v2.py
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare existing same-origin runtime from pinned repository assets
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.58.2
+          npm run prepare:ocr-assets
+          npm run prepare:weekly-paddle-assets
+      - name: Measure original twelve images through actual product classes without external inference
+        run: node scripts/verify-paddle-v2-product.mjs
