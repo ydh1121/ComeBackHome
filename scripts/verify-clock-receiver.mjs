@@ -24,6 +24,14 @@ try {
   }
   const again=prepareClockReceiver(plan,ledger,alarms,options);
   assert.deepEqual([again.create.length,again.remove.length,again.enable.length],[0,0,0],'same sync is idempotent');
+  const manuallyDeleted=alarms.filter(a=>a.handle!=='native-2');
+  const restore=prepareClockReceiver(plan,ledger,manuallyDeleted,options);
+  assert.deepEqual(restore.create.map(t=>t.label),[plan.targets[0].label]);
+  const restoredAlarm={handle:'restored',label:plan.targets[0].label,clockTime:plan.targets[0].clockTime,enabled:true,repeating:false};
+  const restoredLedger=recordClockCreation({...ledger,pending:{operation:'CREATE',label:plan.targets[0].label}},plan.targets[0],[...manuallyDeleted,restoredAlarm]);
+  assert.equal(restoredLedger.receipts.length,2,'recreation replaces the old receipt instead of appending a duplicate');
+  const afterRestore=prepareClockReceiver(plan,restoredLedger,[...manuallyDeleted,restoredAlarm],options);
+  assert.deepEqual([afterRestore.create.length,afterRestore.remove.length,afterRestore.enable.length],[0,0,0]);
   const changed=buildClockAlarmPlan([{...entry,start:'02:00'}],'install-clock-1',now);
   const delta=prepareClockReceiver(changed,ledger,alarms,options);
   assert.deepEqual(delta.remove.map(x=>x.handle),['native-2']);assert.equal(delta.create[0].clockTime,'00:30');
@@ -44,6 +52,9 @@ try {
     p=>p.targets[0].fireAt='2026-12-31T14:59:01Z'];
   for(const mutate of mutations){const bad=structuredClone(plan);mutate(bad);assert.throws(()=>validateClockAlarmPlan(bad,now));}
   assert.throws(()=>validateClockAlarmPlan(plan,new Date(now.getTime()+300000)),/STALE/);
+  const closeToRing=new Date('2026-12-31T23:59:00+09:00');
+  const soon=buildClockAlarmPlan([entry],'install-clock-1',closeToRing);
+  assert.throws(()=>validateClockAlarmPlan(soon,new Date('2027-01-01T00:00:00+09:00')),/INVALID_ALARM_TARGET/,'an elapsed alarm is rejected even while the five-minute input is valid');
   assert.throws(()=>buildClockAlarmPlan([{...entry,start:'25:00'}],'install-clock-1',now),/INVALID_ALARM_SCHEDULE/);
   assert.throws(()=>buildClockAlarmPlan([{...entry,date:'2027-02-30'}],'install-clock-1',now),/INVALID_ALARM_SCHEDULE/);
   const overnight=buildClockAlarmPlan([{...entry,date:'2026-12-31',start:'22:00',end:'02:00'}],'install-clock-1',now);

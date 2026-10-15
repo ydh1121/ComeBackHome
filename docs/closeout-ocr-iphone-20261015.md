@@ -96,6 +96,8 @@ The executable [receiver reference](../src/features/alarms/clock-receiver.ts), [
 
 The reference rejects invalid/expired `cbh-clock/v1`, mismatched installation/person scope, duplicate labels, corrupt/missing ledgers and ambiguous ownership. Only exact ledger receipt + label + time + nonrepeating alarm matches are eligible. Prefix matches alone are never adopted. Personal alarms remain untouched. It covers start −90 minutes, end +30 minutes, OFF, midnight/year/overnight, edits, repeated synchronization, disabled owned alarms and interrupted creation. Native operations are explicitly Turn On / create / delete specified owned objects; no bulk delete or implicit toggle.
 
+Final recipe review also makes same-label receipt replacement explicit after a manually deleted alarm is recreated, and requires expiry/future-time checks before native actions. The reference regression verifies restored-alarm idempotency and rejects an elapsed target even while its five-minute input remains valid.
+
 Official Apple documentation supports URL text handoff and Find/Delete Alarm actions. The owner's exact iOS property availability, Files permissions, action translations, native execution and ringing remain unverified. Stop if a required alarm property is unavailable. There is no Apple-signed installable shortcut from this environment; JSON is not presented as one. Specific alarm sounds and atomic Clock+Files/concurrent synchronization are not promised. Run one synchronization at a time. No real iPhone installation or alarm operation occurred.
 
 ## Separate acceptance states and owner handoff
