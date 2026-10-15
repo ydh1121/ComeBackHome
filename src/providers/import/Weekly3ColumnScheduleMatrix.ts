@@ -530,9 +530,15 @@ export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageText
   const nameRegions:ImageTextProbeRegion[]=matrix.rows.map(row=>({
     id:'weekly-person::'+row.index,purpose:'person',...row.nameBounds,
   }));
-  const cellRegions:ImageTextProbeRegion[]=matrix.rows.flatMap(row=>
-    row.cells.filter(cell=>cell.visual.occupancy!=='EMPTY')
-      .map(cell=>({id:cell.id,purpose:'cell' as const,...cell.bounds})));
+  const cellRegions:ImageTextProbeRegion[]=matrix.rows.flatMap(row=>{
+    // A narrow '1' or a small clock can look empty by density even when the
+    // neighboring fields prove this is a populated shift. Recognize all
+    // three independently owned ROIs of each occupied day; never copy values
+    // between them. Entirely empty trios stay blank and require human review.
+    const occupiedDays=new Set(row.cells.filter(cell=>cell.visual.occupancy!=='EMPTY').map(cell=>cell.dayIndex));
+    return row.cells.filter(cell=>occupiedDays.has(cell.dayIndex))
+      .map(cell=>({id:cell.id,purpose:'cell' as const,...cell.bounds}));
+  });
   return [titleRegion,...dateRegions,...nameRegions,...cellRegions];
 }
 

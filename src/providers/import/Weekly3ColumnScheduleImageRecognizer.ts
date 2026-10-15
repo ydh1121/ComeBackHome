@@ -59,8 +59,9 @@ export class Weekly3ColumnScheduleImageRecognizer implements ImageScheduleRecogn
     }
     await onProgress?.(49);
     const regions = weekly3ColumnProbeRegions(initialMatrix);
-    // Only CV-visible content gets time OCR; date and person ROIs always
-    // get a recognition attempt. Initial cell OCR can reveal a label header
+    // Every field in a CV-occupied day gets independent OCR, including thin
+    // digits below the occupancy cutoff. Date and person ROIs always get a
+    // recognition attempt. Initial cell OCR can reveal a label header
     // that broad Tesseract dropped. Those observed labels are never shifts.
     const initialRecognized = await this.regionExtractor.extractRegions(file, regions, async (percent) => {
       await onProgress?.(Math.min(86, 49 + Math.round(percent * 0.37)));

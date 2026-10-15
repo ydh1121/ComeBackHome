@@ -5,7 +5,7 @@ const vite=await createServer({appType:'custom',logLevel:'error',server:{middlew
 const storage=new Map();
 globalThis.localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
 try {
-  const {interpretWeekly3Column,parseWeeklyBreakMinutes}=await vite.ssrLoadModule('/src/providers/import/Weekly3ColumnScheduleMatrix.ts');
+  const {interpretWeekly3Column,parseWeeklyBreakMinutes,weekly3ColumnProbeRegions}=await vite.ssrLoadModule('/src/providers/import/Weekly3ColumnScheduleMatrix.ts');
   const {WorkbookImportFileSelectionAction,releasePrivateImportImage}=await vite.ssrLoadModule('/src/application/services/WorkbookImportFileSelectionAction.ts');
   const {BrowserImportRepository}=await vite.ssrLoadModule('/src/providers/browser/BrowserImportRepository.ts');
   const fields=['start','end','break'];
@@ -18,6 +18,12 @@ try {
       id:`weekly::${index}::${day.index}::${field}`,rowIndex:index,dayIndex:day.index,field,bounds:{x:day.bounds.x+f*30,y:40+index*60,width:30,height:60},visual:{occupancy:inputs[day.index][f]?'CONTENT':'EMPTY'},
     })))})),physicalCellCount:42};
   const dates={dates:days.map(day=>({dayIndex:day.index,date:'2026-10-'+(12+day.index),observed:true,reviewRequired:false})),yearMonthObserved:true,observedDayAnchors:7,uniqueWeek:true,acceptedForAutomaticSave:false};
+  const faint=structuredClone(matrix);
+  faint.rows[0].cells.find(c=>c.dayIndex===0&&c.field==='start').visual.occupancy='EMPTY';
+  faint.rows[0].cells.find(c=>c.dayIndex===0&&c.field==='break').visual.occupancy='EMPTY';
+  const probes=weekly3ColumnProbeRegions(faint);
+  assert.equal(probes.filter(p=>p.id.startsWith('weekly::0::0::')).length,3,'thin clock/break glyphs must receive OCR when another field has content');
+  assert.equal(probes.filter(p=>p.id.startsWith('weekly::0::1::')).length,0,'entire blank trio must not become a fabricated shift');
   const regional=matrix.rows.flatMap(row=>[
     {id:'weekly-person::'+row.index,purpose:'person',text:'김가은',confidence:.99,tokens:[]},
     ...row.cells.map(cell=>({id:cell.id,purpose:'cell',text:inputs[cell.dayIndex][fields.indexOf(cell.field)],confidence:.99,tokens:[]})),
