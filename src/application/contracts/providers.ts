@@ -1,5 +1,5 @@
 import type { ISODate } from '../../domain/common';
-import type { BusRouteOption, CommuteStep, Coordinate, ImportSourceRegion, ImportStructure, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
+import type { BusRouteOption, CommuteStep, Coordinate, ImportSourceCellKind, ImportSourceRegion, ImportStructure, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
 
 export interface PlaceSearchResult { providerId: string; placeName?: string; roadAddress: string; lotAddress?: string; coordinate: Coordinate; category?: string; }
 export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; coordinate?: Coordinate; busRoutes?: BusRouteOption[]; }
@@ -23,9 +23,9 @@ export interface BusRouteLookupProvider { listByStop(arsId: string): Promise<Bus
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
 export interface RealtimeSubwayProvider { arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
-export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; dayIndex?: number; start: string; end: string; breakMinutes?: number | null; sourceRow: number; sourceRegion?: ImportSourceRegion; confidence: number; }
+export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; dayIndex?: number; start: string; end: string; breakMinutes?: number | null; sourceRow: number; sourceRegion?: ImportSourceRegion; sourceCellKind?: ImportSourceCellKind; confidence: number; }
 export type ImageScheduleCellState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
-export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate | null; dayIndex?: number; start: string | null; end: string | null; breakMinutes?: number | null; sourceRow: number; sourceRegion?: ImportSourceRegion; confidence: number; recognitionState?: ImageScheduleCellState; breakReviewRequired?: boolean; enabled?: boolean; }
+export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate | null; dayIndex?: number; start: string | null; end: string | null; breakMinutes?: number | null; sourceRow: number; sourceRegion?: ImportSourceRegion; sourceCellKind?: ImportSourceCellKind; confidence: number; recognitionState?: ImageScheduleCellState; breakReviewRequired?: boolean; enabled?: boolean; }
 export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; reviewCandidates?: ParsedScheduleReviewCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageTextToken { text: string; x: number; y: number; width: number; height: number; confidence: number; }

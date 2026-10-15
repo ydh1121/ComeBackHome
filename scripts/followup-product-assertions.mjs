@@ -62,6 +62,16 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   const downloadPromise=page.waitForEvent('download');
   await page.getByRole('button',{name:'알람 데이터 다운로드'}).click();
   const download=await downloadPromise;assert.equal(download.suggestedFilename(),'ComeBackHome-clock-plan.json');
+  await page.getByText('단축어 설정 방법',{exact:true}).click();
+  const guidePromise=page.waitForEvent('popup');
+  await page.getByRole('link',{name:'단축어 만들기: 액션 순서와 입력값'}).click();
+  const guide=await guidePromise;
+  await guide.getByRole('heading',{name:'iPhone 시계 알람 단축어 만들기',exact:true}).waitFor();
+  await guide.setViewportSize({width:360,height:780});
+  assert.equal(await guide.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'setup guide fits mobile viewport');
+  assert.ok((await guide.locator('body').innerText()).includes('clock-ledger.json'));
+  assert.ok((await guide.locator('body').innerText()).includes('실기기에서 아직 검증하지 않았습니다'));
+  await guide.close();
 
   // A real File input cancellation and retry. Delay read without mocking the
   // application action; abort must prevent any late review publication.
@@ -88,5 +98,5 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.equal(await page.getByRole('button',{name:'인식 결과 보기'}).isDisabled(),true,'page exit cancels unfinished import');
   await open('/');
   await page.locator('[data-page="TodayPage"][data-state="WORKING"]').waitFor();
-  return {mobileSvg:true,preferredOnly:true,historyPreserved:true,etaRange:true,arrivalRuleD1:true,alarmContractOnly:true,cancelAndRetry:true};
+  return {mobileSvg:true,preferredOnly:true,historyPreserved:true,etaRange:true,arrivalRuleD1:true,alarmContractOnly:true,alarmReceiverGuide:true,cancelAndRetry:true};
 }

@@ -8,13 +8,14 @@ import type {
 } from '../../application/contracts/providers';
 import {
   analyzeScheduleCellVisualEvidence,
+  detectScheduleTableStructureFromRaster,
   pixelSupportedColumnBounds,
   type ScheduleCellVisualEvidence,
   type SchedulePixelBounds,
   type ScheduleTableStructureDetection,
 } from './ScheduleTableStructureDetector';
 import { classifyScheduleShiftLabel } from './ScheduleImportSemantics';
-import { parseScheduleImageClock } from './StructuredTableImageScheduleRecognizer';
+import { parseScheduleHour } from './StructuredTableImageScheduleRecognizer';
 
 /**
  * A single workplace's Monday-Sunday roster only. Physical cell allocation
@@ -139,7 +140,15 @@ export function buildWeekly3ColumnPhysicalMatrix(
   detection: ScheduleTableStructureDetection,
   layout: ImageTextLayout,
 ): WeeklyPhysicalMatrix | null {
-  const selected=strictBands(detection);
+  let selected=strictBands(detection);
+  if(!selected){
+    // Resized light borders may survive only as long pale strokes. Retry
+    // pixel geometry with a lighter cutoff; retain all continuity, exact
+    // 22-band, width and adjacency requirements. Never invent missing lines.
+    const faint={...detection,structure:detectScheduleTableStructureFromRaster(detection.raster,true)};
+    selected=strictBands(faint);
+    if(selected)detection=faint;
+  }
   if(!selected)return null;
   const rows=[...detection.structure.rowBands]
     .map(b=>b.bounds).sort((a,b)=>a.y-b.y);
@@ -527,12 +536,16 @@ export function weekly3ColumnProbeRegions(matrix:WeeklyPhysicalMatrix):ImageText
   return [titleRegion,...dateRegions,...nameRegions,...cellRegions];
 }
 
-function parseBreakMinutes(value:string):number|null {
-  const text=String(value??'').normalize('NFKC').trim();
-  if(!/^\d{1,2}(?:\.(?:0|5))?$/.test(text))return null;
-  const [whole,half]=text.split('.');
-  const minutes=Number(whole)*60+(half==='5'?30:0);
-  return minutes>=0&&minutes<=12*60?minutes:null;
+export function parseWeeklyBreakMinutes(value:string):number|null {
+  const text=String(value??'').normalize('NFKC').replace(/\s+/g,'');
+  // The physically owned break column supplies the unit context. Keep raw
+  // OCR separate; do not repair missing digits or guess a decimal point.
+  const minutesOnly=/^(\d{1,3})분$/.exec(text);
+  const duration=/^(\d{1,2}):([0-5]\d)$/.exec(text);
+  const hours=/^\d{1,2}(?:\.(?:0|00|25|5|50|75))?$/.test(text);
+  const minutes=minutesOnly?Number(minutesOnly[1]):duration?
+    Number(duration[1])*60+Number(duration[2]):hours?Number(text)*60:NaN;
+  return Number.isInteger(minutes)&&minutes>=0&&minutes<=12*60?minutes:null;
 }
 
 export interface Weekly3ColumnInterpretation {
@@ -554,13 +567,17 @@ export function interpretWeekly3Column(
 ):Weekly3ColumnInterpretation {
   const byId=new Map(regional.map(r=>[r.id,r]));
   const known=new Set(knownPersonNames.map(x=>x.normalize('NFKC').replace(/\s+/g,'')));
-  const personNames=matrix.rows.map(row=>{
+  const rawPersonNames=matrix.rows.map(row=>{
     const raw=String(byId.get('weekly-person::'+row.index)?.text??'')
       .normalize('NFKC').replace(/\s+/g,'');
     // Preserve every visible employee row. DB identity is always subject
     // to explicit mapping; never silently discard unknown OCR person names.
     return /^[가-힣]{2,5}$/.test(raw)?raw:'인식불가 직원 '+(row.index+1);
   });
+  // Equal OCR spellings do not prove equal employees. Preserve distinct
+  // physical rows and require explicit identity mapping for every collision.
+  const personNames=rawPersonNames.map((name,index)=>
+    rawPersonNames.filter(other=>other===name).length>1?name+' (원본 '+(index+1)+'행)':name);
   const blocked=matrix.days.some(day=>!dates.dates[day.index]?.date);
   let reviewCount=0,offReviewCount=0,unreadableCount=0,breakReviewCount=0;
   const review:ParsedScheduleReviewCandidate[]=[];
@@ -596,17 +613,30 @@ export function interpretWeekly3Column(
     const pixels=Object.fromEntries(FIELDS.map(field=>[
       field,row.cells.find(c=>c.dayIndex===day.index&&c.field===field)?.visual.occupancy,
     ])) as Record<WeeklyField,ScheduleCellVisualEvidence['occupancy']|undefined>;
-    const start=parseScheduleImageClock(fields.start?.text??'');
-    const end=parseScheduleImageClock(fields.end?.text??'');
-    const breakMinutes=parseBreakMinutes(fields.break?.text??'');
+    // Unlike an untyped generic OCR token, these ROIs already own the
+    // start/end columns. Midnight and early-morning clocks are valid here.
+    const start=parseScheduleHour(fields.start?.text??'');
+    const end=parseScheduleHour(fields.end?.text??'');
+    const breakMinutes=parseWeeklyBreakMinutes(fields.break?.text??'');
     const threeEmpty=FIELDS.every(f=>pixels[f]==='EMPTY'&&
       !String(fields[f]?.text??'').trim());
     // Color-only blank detection never produces a committed OFF row.
     if(threeEmpty){offReviewCount++;review.push({
       sourcePersonName:sourceName,date:date??null,dayIndex:day.index,start:null,end:null,sourceRow:row.index+1,sourceRegion,
-      confidence:.1,recognitionState:'OFF_CANDIDATE',enabled:true,breakMinutes:null,
+      confidence:.1,recognitionState:'OFF_CANDIDATE',sourceCellKind:'BLANK',enabled:true,breakMinutes:null,
     });reviewCount++;continue;}
-    const valid=start!=null&&end!=null;
+    const texts=FIELDS.map(f=>String(fields[f]?.text??'').normalize('NFKC').trim());
+    const offLabel=(text:string)=>/^(?:OFF|휴무)$/i.test(text);
+    const explicitOff=texts.some(offLabel)&&texts.every(text=>!text||offLabel(text));
+    if(explicitOff){offReviewCount++;reviewCount++;review.push({
+      sourcePersonName:sourceName,date:date??null,dayIndex:day.index,start:null,end:null,
+      sourceRow:row.index+1,sourceRegion,confidence:.2,recognitionState:'OFF_CANDIDATE',
+      sourceCellKind:'EXPLICIT_OFF',enabled:true,breakMinutes:null,
+    });continue;}
+    const minutes=(clock:string)=>Number(clock.slice(0,2))*60+Number(clock.slice(3));
+    const duration=start!=null&&end!=null?(minutes(end)-minutes(start)+1440)%1440:0;
+    const valid=start!=null&&end!=null&&duration>0;
+    const invalidBreak=breakMinutes!=null&&valid&&breakMinutes>=duration;
     const breakHasContent=pixels.break!=='EMPTY'||!!fields.break?.text.trim();
     // A correctly recognized break does NOT make start/end incomplete.
     // Persist normalized minute evidence only after explicit weekly review.\n    // No ETA adjustment or subtraction from end is allowed.
@@ -616,17 +646,18 @@ export function interpretWeekly3Column(
         minutes:breakMinutes,verifiedByUser:false});
     }
     const confidentlyDated=date!=null&&!dates.dates[day.index]?.reviewRequired;
-    if(valid&&(!breakHasContent||breakMinutes!=null)&&confidentlyDated){
+    if(valid&&!invalidBreak&&(!breakHasContent||breakMinutes!=null)&&confidentlyDated){
       schedule.push({sourcePersonName:sourceName,date:date!,dayIndex:day.index,start,end,breakMinutes,
-        sourceRow:row.index+1,sourceRegion,
+        sourceRow:row.index+1,sourceRegion,sourceCellKind:'SHIFT',
         confidence:Math.min(fields.start?.confidence??0,fields.end?.confidence??0)});
     }else{
       if(!valid)unreadableCount++;
       reviewCount++;
       review.push({sourcePersonName:sourceName,date:date??null,dayIndex:day.index,
         start,end,breakMinutes,sourceRow:row.index+1,sourceRegion,confidence:.2,
-        ...(breakHasContent&&breakMinutes==null?{breakReviewRequired:true}:{}),
-        recognitionState:valid&&(!breakHasContent||breakMinutes!=null)
+        sourceCellKind:valid&&!invalidBreak&&(!breakHasContent||breakMinutes!=null)?'SHIFT':'UNREADABLE',
+        ...(invalidBreak||(breakHasContent&&breakMinutes==null)?{breakReviewRequired:true}:{}),
+        recognitionState:valid&&!invalidBreak&&(!breakHasContent||breakMinutes!=null)
           ?'WORK':valid?'INCOMPLETE':'UNREADABLE',enabled:true});
     }
   }

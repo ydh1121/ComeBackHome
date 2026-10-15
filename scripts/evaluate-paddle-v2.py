@@ -16,6 +16,8 @@ else:
     predictions = []
     for image in data['images']:
         cells = image.pop('cells')
+        if data['browser'] == 'CHROMIUM':
+            image['recognized_cells_before_review'] = cells
         predictions.extend(cells)
         subset = [cell for cell in truth if cell['source_image_id'] == image['id']]
         image['score'] = shared.score_with_original(scorer, subset, cells)

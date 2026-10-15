@@ -195,6 +195,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       dayIndex?: number;
       sourceRow?: number;
       sourceRegion?: ImportSourceRegion;
+      sourceCellKind?: 'SHIFT' | 'BLANK' | 'EXPLICIT_OFF' | 'UNREADABLE';
       enabled: boolean;
       start: string | null;
       end: string | null;
@@ -211,6 +212,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       dayIndex?: number;
       sourceRow?: number;
       sourceRegion?: ImportSourceRegion;
+      sourceCellKind?: 'SHIFT' | 'BLANK' | 'EXPLICIT_OFF' | 'UNREADABLE';
       start: string | null;
       end: string | null;
       breakMinutes?: number | null;
@@ -231,6 +233,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         date: candidate.date,
         sourceRow: candidate.sourceRow,
         sourceRegion: candidate.sourceRegion,
+        sourceCellKind: candidate.sourceCellKind,
         ...(candidate.dayIndex!=null?{dayIndex:candidate.dayIndex}:{}),
         enabled: candidate.enabled ?? true,
         start: candidate.start,
@@ -324,6 +327,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         date: candidate.date,
         sourceRow: candidate.sourceRow,
         sourceRegion: candidate.sourceRegion,
+        sourceCellKind: candidate.sourceCellKind,
         ...(candidate.dayIndex!=null?{dayIndex:candidate.dayIndex}:{}),
         ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end,
           breakMinutes: existing.breakMinutes ?? null } } : {}),

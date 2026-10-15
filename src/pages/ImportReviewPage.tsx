@@ -183,15 +183,15 @@ export function ImportReviewPage() {
                 ) : null}
 
                 {item.recognitionState ? (
-                  <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()}>
-                    {item.recognitionState === 'OFF'
+                  <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()} data-source-kind={item.sourceCellKind}>
+                    {item.sourceCellKind === 'BLANK'
+                      ? '빈칸 — 휴무 후보로 검토할 수 있지만 원본에 휴무 표기는 없음'
+                      : item.recognitionState === 'OFF'
                       ? '휴무로 인식'
                       : item.recognitionState === 'OFF_CANDIDATE'
-                        ? '휴무 후보 — 세 칸 모두 비어 있지만 직접 확인 전까지 확정되지 않음'
+                        ? '휴무 후보 — 원본 표기를 직접 확인한 뒤 선택 필요'
                       : item.recognitionState === 'UNREADABLE'
-                        ? weekly3ColumnReview && item.imported.start == null && item.imported.end == null
-                          ? '빈칸·휴무 후보 — 근무인지 휴무인지 직접 확인 필요'
-                          : '인식 불확실 — 이미지에 내용은 있으나 시간을 읽지 못함'
+                        ? '판독 불가 — 이미지 내용을 원본과 대조해 직접 입력 필요'
                         : item.recognitionState === 'INCOMPLETE'
                           ? '근무시간 일부만 인식'
                           : '근무로 인식'}

@@ -41,7 +41,7 @@ try {
       const report={provider:'LOCAL_PRODUCT_PADDLE',browser:browserName,source:'IMMUTABLE_SYNTHETIC_V2',
         external_inference:0,private_images:0,d1_writes:0,images:[],acceptance:'MEASUREMENT_NOT_AUTOMATIC_ACCEPTANCE'};
       for(const image of images) {
-        const item=await page.evaluate(async({id})=>{
+        const item=await page.evaluate(async({id,browserName})=>{
           const [{BrowserScheduleTableStructureDetector},{TesseractScheduleImageTextExtractor,TesseractJsWorkerFactory,BrowserScheduleOcrPreprocessor},
             {SAME_ORIGIN_TESSERACT_ASSETS},{PaddleWeeklyRegionalTextExtractor},{Weekly3ColumnScheduleImageRecognizer}]=await Promise.all([
             import('/src/providers/import/ScheduleTableStructureDetector.ts'),
@@ -51,8 +51,11 @@ try {
           const paddle=new PaddleWeeklyRegionalTextExtractor();
           const title=new TesseractScheduleImageTextExtractor(new TesseractJsWorkerFactory(SAME_ORIGIN_TESSERACT_ASSETS),new BrowserScheduleOcrPreprocessor(),{useStructureFirstMode:true});
           let observed=[];
-          const regional={extractRegions:async(...args)=>{const values=await paddle.extractRegions(...args);observed.push(...values);return values;}};
-          const recognizer=new Weekly3ColumnScheduleImageRecognizer(new BrowserScheduleTableStructureDetector(),title,regional,[]);
+          let geometry=null;
+          const detector=new BrowserScheduleTableStructureDetector();
+          const tracedDetector={detect:async(file)=>{const value=await detector.detect(file);geometry={width:value.raster.width,height:value.raster.height,rows:value.structure.rowBands.map(x=>x.bounds),columns:value.structure.columnBands.map(x=>x.bounds),evidence:value.structure.evidence};return value;}};
+          const regional={extractRegions:async(...args)=>{const values=await paddle.extractRegions(...args);observed.push(...values.map(value=>({...value,bounds:args[1].find(r=>r.id===value.id)})));return values;}};
+          const recognizer=new Weekly3ColumnScheduleImageRecognizer(tracedDetector,title,regional,[]);
           const started=performance.now();
           try {
             const value=await recognizer.evaluate(file);
@@ -60,7 +63,9 @@ try {
             const all=[...parsed.scheduleCandidates,...parsed.reviewCandidates??[]];
             const cells=all.map(c=>({source_image_id:id,employee_row:c.sourceRow-1,column_group:c.dayIndex,
               employee_name:c.sourcePersonName,date:c.date,weekday:c.date?(new Date(c.date+'T00:00:00Z').getUTCDay()+6)%7:null,
-              status:c.recognitionState==='OFF_CANDIDATE'?'OFF_CANDIDATE':c.recognitionState==='BLANK'?'BLANK':c.recognitionState==='UNREADABLE'||c.recognitionState==='INCOMPLETE'?'UNREADABLE':'SHIFT',
+              // Source evidence is distinct from the legacy manual OFF choice.
+              // No truth or review correction enters this classification.
+              status:c.sourceCellKind==='BLANK'?'BLANK':c.sourceCellKind==='EXPLICIT_OFF'?'OFF_CANDIDATE':c.sourceCellKind==='UNREADABLE'?'UNREADABLE':c.recognitionState==='OFF_CANDIDATE'?'OFF_CANDIDATE':c.recognitionState==='UNREADABLE'||c.recognitionState==='INCOMPLETE'?'UNREADABLE':'SHIFT',
               clock_in:c.start,clock_out:c.end,break_minutes:c.breakMinutes??null,
               review_required:parsed.structure.needsReview===true && parsed.structure.weeklyReview?.confirmed===false,
               evidence_bbox:c.sourceRegion?[c.sourceRegion.x,c.sourceRegion.y,c.sourceRegion.x+c.sourceRegion.width,c.sourceRegion.y+c.sourceRegion.height]:null}));
@@ -68,15 +73,16 @@ try {
             for(const c of all) {
               const key=c.recognitionState??'WORK';reasons[key]=(reasons[key]??0)+1;
             }
-            return {id,cells,rows:matrix.rows.length,physicalCells:matrix.physicalCellCount,headerSource:matrix.headerSource,
+            return {id,cells,geometry,rows:matrix.rows.length,physicalCells:matrix.physicalCellCount,headerSource:matrix.headerSource,
               dates:interpretation.dateResolution,states:reasons,raw_available:'IN_MEMORY_ONLY_NOT_PERSISTED',
+              ...(browserName==='CHROMIUM'?{raw_available:'IMMUTABLE_SYNTHETIC_ONLY',rawRegions:observed.map(({id,purpose,text,confidence,bounds,initialText,retryEvidence,selectedMode})=>({id,purpose,text,confidence,bounds,initialText,retryEvidence,selectedMode}))}:{}),
               observedRegions:observed.length,emptyRegionText:observed.filter(r=>!r.text.trim()).length,
               latency_ms:Math.round(performance.now()-started),error:null};
           } catch(e) {
             const code=String(e.message).match(/^WEEKLY_[A-Z0-9_]+/)?.[0]??'PRODUCT_RUNTIME_ERROR';
-            return {id,cells:[],error:code,errorDetail:String(e.message).slice(0,300),latency_ms:Math.round(performance.now()-started),observedRegions:observed.length};
+            return {id,cells:[],geometry,error:code,errorDetail:String(e.message).slice(0,300),latency_ms:Math.round(performance.now()-started),observedRegions:observed.length};
           } finally {await paddle.dispose();}
-        },{id:image.id});
+        },{id:image.id,browserName});
         item.image_sha256=image.sha256;report.images.push(item);
         console.log('CBH_PADDLE_V2_PROGRESS='+JSON.stringify({browser:browserName,id:item.id,cells:item.cells.length,error:item.error,latency_ms:item.latency_ms}));
       }
