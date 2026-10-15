@@ -1,5 +1,7 @@
 # Reviewed image import integration
 
+The [2026-10-15 closeout](closeout-ocr-iphone-20261015.md) records the later local Paddle fixes, independent immutable-v2 measurements, review/atomic-D1 regression, external-provider non-adoption and remaining private-image/native acceptance. Historical provider measurements below are preserved.
+
 PR #91 at `4ed6183d216e0e5e2c74e841afd0bd5f5fbd7976` supplies the weekly header reconciliation, recoverable missing dates, explicit Monday-to-Sunday confirmation, manual review and private original-image preview. These changes are integrated on PR #92 after its nonimage acceptance at `8076422f5578f5a218761edfd44987757079a2bd`. PR #91 itself remains unchanged, draft and unmerged.
 
 Image review uses the existing `PUT /api/workbooks/approved-import` transaction. There is no second weekly database writer. The request contains `source: WEEKLY_IMAGE`, a confirmed Monday, all seven day indices per included employee, explicit per-row decisions, pending employee names and current schedule snapshots. Date, person and time corrections revoke approval. Confirming dates reloads the existing schedules before review. The server rejects incomplete dates, unapproved OFF, unreadable required breaks and stale snapshots; employee creation, schedules and the idempotency receipt succeed or roll back together. Image evidence participates in the request digest without changing legacy XLSX fingerprints.

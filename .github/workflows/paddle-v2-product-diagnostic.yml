@@ -6,6 +6,7 @@ on:
       - .github/workflows/paddle-v2-product-diagnostic.yml
       - scripts/verify-paddle-v2-product.mjs
       - scripts/evaluate-paddle-v2.py
+      - scripts/paddle-v2-quality-gate.mjs
       - src/providers/import/**
 concurrency:
   group: local-paddle-v2-${{ github.ref }}

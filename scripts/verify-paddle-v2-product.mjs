@@ -3,6 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {createServer} from 'vite';
 import {chromium, webkit} from 'playwright';
+import {assertPaddleV2Quality} from './paddle-v2-quality-gate.mjs';
 
 const python = (args, input) => {
   const r=spawnSync('python3',['scripts/evaluate-paddle-v2.py',...args],{input,encoding:'utf8',maxBuffer:8*1024*1024});
@@ -90,6 +91,7 @@ try {
       const scored=python([],JSON.stringify(report));
       console.log('CBH_PADDLE_V2='+JSON.stringify(scored));
       assert.equal(report.images.filter(x=>x.error==='PRODUCT_RUNTIME_ERROR').length,0,'Runtime failure invalidates quality measurement');
+      console.log('CBH_PADDLE_V2_QUALITY_GATE='+JSON.stringify({browser:browserName,...assertPaddleV2Quality(scored)}));
     } finally {await browser.close();}
   }
 } finally {await vite.close();}
