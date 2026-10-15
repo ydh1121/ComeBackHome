@@ -12,10 +12,11 @@ const python = (args, input) => {
 const images=python(['--images']); // Exact archived PNGs; no generation or truth.
 const vite=await createServer({logLevel:'error',server:{host:'127.0.0.1',port:0},plugins:[{
   name:'immutable-v2-images',enforce:'pre',configureServer(server){server.middlewares.use((req,res,next)=>{
-    if(req.url==='/__v2') {res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><title>Local Paddle measurement</title>');return;}
-    if(/^\/ort\/ort-wasm-[a-z0-9.-]+\.(mjs|wasm)$/.test(req.url??'')) {
-      res.setHeader('Content-Type',req.url.endsWith('.mjs')?'text/javascript':'application/wasm');
-      res.end(readFileSync('public'+req.url));return;
+    const pathname=new URL(req.url??'/', 'http://127.0.0.1').pathname;
+    if(pathname==='/__v2') {res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><title>Local Paddle measurement</title>');return;}
+    if(/^\/ort\/ort-wasm-[a-z0-9.-]+\.(mjs|wasm)$/.test(pathname)) {
+      res.setHeader('Content-Type',pathname.endsWith('.mjs')?'text/javascript':'application/wasm');
+      res.end(readFileSync('public'+pathname));return;
     }
     const item=images.find(x=>req.url==='/__v2/'+x.id+'.png');
     if(!item)return next();
@@ -73,7 +74,7 @@ try {
               latency_ms:Math.round(performance.now()-started),error:null};
           } catch(e) {
             const code=String(e.message).match(/^WEEKLY_[A-Z0-9_]+/)?.[0]??'PRODUCT_RUNTIME_ERROR';
-            return {id,cells:[],error:code,latency_ms:Math.round(performance.now()-started),observedRegions:observed.length};
+            return {id,cells:[],error:code,errorDetail:String(e.message).slice(0,300),latency_ms:Math.round(performance.now()-started),observedRegions:observed.length};
           } finally {await paddle.dispose();}
         },{id:image.id});
         item.image_sha256=image.sha256;report.images.push(item);
@@ -82,6 +83,7 @@ try {
       assert.equal(external,0,'No external browser requests');
       const scored=python([],JSON.stringify(report));
       console.log('CBH_PADDLE_V2='+JSON.stringify(scored));
+      assert.equal(report.images.filter(x=>x.error==='PRODUCT_RUNTIME_ERROR').length,0,'Runtime failure invalidates quality measurement');
     } finally {await browser.close();}
   }
 } finally {await vite.close();}
