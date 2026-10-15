@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import {createServer} from 'vite';
 import {chromium, webkit} from 'playwright';
 
@@ -10,7 +11,12 @@ const python = (args, input) => {
 };
 const images=python(['--images']); // Exact archived PNGs; no generation or truth.
 const vite=await createServer({logLevel:'error',server:{host:'127.0.0.1',port:0},plugins:[{
-  name:'immutable-v2-images',configureServer(server){server.middlewares.use((req,res,next)=>{
+  name:'immutable-v2-images',enforce:'pre',configureServer(server){server.middlewares.use((req,res,next)=>{
+    if(req.url==='/__v2') {res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><title>Local Paddle measurement</title>');return;}
+    if(/^\/ort\/ort-wasm-[a-z0-9.-]+\.(mjs|wasm)$/.test(req.url??'')) {
+      res.setHeader('Content-Type',req.url.endsWith('.mjs')?'text/javascript':'application/wasm');
+      res.end(readFileSync('public'+req.url));return;
+    }
     const item=images.find(x=>req.url==='/__v2/'+x.id+'.png');
     if(!item)return next();
     res.setHeader('Content-Type','image/png');res.end(Buffer.from(item.base64,'base64'));
@@ -27,10 +33,10 @@ try {
       let external=0;
       await page.route('**/*',route=>{
         const url=route.request().url();
-        if(!url.startsWith(origin+'/')){external++;return route.abort();}
+        if(!url.startsWith(origin+'/')&&!url.startsWith('blob:'+origin+'/')&&!url.startsWith('data:')){external++;return route.abort();}
         return route.continue();
       });
-      await page.goto(origin+'/tools/ocr-eval/index.html');
+      await page.goto(origin+'/__v2');
       const report={provider:'LOCAL_PRODUCT_PADDLE',browser:browserName,source:'IMMUTABLE_SYNTHETIC_V2',
         external_inference:0,private_images:0,d1_writes:0,images:[],acceptance:'MEASUREMENT_NOT_AUTOMATIC_ACCEPTANCE'};
       for(const image of images) {
