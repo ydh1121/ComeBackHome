@@ -5,7 +5,7 @@ const vite=await createServer({appType:'custom',logLevel:'error',server:{middlew
 const storage=new Map();
 globalThis.localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
 try {
-  const {interpretWeekly3Column,parseWeeklyBreakMinutes,weekly3ColumnProbeRegions}=await vite.ssrLoadModule('/src/providers/import/Weekly3ColumnScheduleMatrix.ts');
+  const {interpretWeekly3Column,parseWeeklyBreakMinutes,weekly3ColumnProbeRegions,resolveWeekly3ColumnDates}=await vite.ssrLoadModule('/src/providers/import/Weekly3ColumnScheduleMatrix.ts');
   const {WorkbookImportFileSelectionAction,releasePrivateImportImage}=await vite.ssrLoadModule('/src/application/services/WorkbookImportFileSelectionAction.ts');
   const {BrowserImportRepository}=await vite.ssrLoadModule('/src/providers/browser/BrowserImportRepository.ts');
   const fields=['start','end','break'];
@@ -18,6 +18,27 @@ try {
       id:`weekly::${index}::${day.index}::${field}`,rowIndex:index,dayIndex:day.index,field,bounds:{x:day.bounds.x+f*30,y:40+index*60,width:30,height:60},visual:{occupancy:inputs[day.index][f]?'CONTENT':'EMPTY'},
     })))})),physicalCellCount:42};
   const dates={dates:days.map(day=>({dayIndex:day.index,date:'2026-10-'+(12+day.index),observed:true,reviewRequired:false})),yearMonthObserved:true,observedDayAnchors:7,uniqueWeek:true,acceptedForAutomaticSave:false};
+  // Synthetic observations only; no private image, name or raw OCR fixture.
+  const observedDates=days.map(day=>({id:`date::grid-cell::weekly::${day.index}`,purpose:'date',text:`2027-03-${String(29+day.index<=31?29+day.index:day.index-2).padStart(2,'0')}`,confidence:.96,tokens:[]}));
+  for(let i=3;i<7;i++)observedDates[i].text=observedDates[i].text.replace('2027-03','2027-04');
+  const headerToken=(text,confidence)=>({text,confidence,x:110,y:5,width:50,height:15});
+  const resolve=(tokens,probes=observedDates)=>resolveWeekly3ColumnDates(matrix,{width:730,height:180,tokens},probes);
+  const expectedDates=['2027-03-29','2027-03-30','2027-03-31','2027-04-01','2027-04-02','2027-04-03','2027-04-04'];
+  for(const confidence of [0,.28,.749,NaN]){
+    const result=resolve([headerToken('2027.9900',confidence)]);
+    assert.deepEqual(result.dates.map(d=>d.date),expectedDates,'weak invalid header cannot veto strong physical date crops');
+    assert.equal(result.acceptedForAutomaticSave,false);
+    assert.deepEqual(resolve([headerToken('2027-04-12',confidence)]).dates.map(d=>d.date),expectedDates,'weak conflicting calendar cannot supply evidence');
+    assert.equal(resolve([headerToken('2027-03-29',confidence)],[]).uniqueWeek,false,'weak header cannot establish a week');
+  }
+  for(const text of ['2027.9900','2027-04-12']){
+    const result=resolve([headerToken(text,.75)]);
+    assert.equal(result.uniqueWeek,false,'credible impossible or conflicting calendar must fail closed');
+    assert.ok(result.dates.every(d=>d.date===null&&d.reviewRequired));
+  }
+  assert.equal(resolve([],observedDates.slice(0,1)).uniqueWeek,false,'one anchor is insufficient');
+  assert.equal(resolve([],observedDates.map(p=>({...p,confidence:.74}))).uniqueWeek,false,'weak dedicated crops remain insufficient');
+  assert.equal(resolve([headerToken('2027-03-29',.99)]).uniqueWeek,true,'consistent broad header remains supported');
   const faint=structuredClone(matrix);
   faint.rows[0].cells.find(c=>c.dayIndex===0&&c.field==='start').visual.occupancy='EMPTY';
   faint.rows[0].cells.find(c=>c.dayIndex===0&&c.field==='break').visual.occupancy='EMPTY';
