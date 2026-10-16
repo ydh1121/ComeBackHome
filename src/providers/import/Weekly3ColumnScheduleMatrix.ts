@@ -287,6 +287,10 @@ function resolvePhysicalFullDateEvidence(
   const byDay=new Map<number,Set<string>>();
   let ownedInvalidCalendar=false;
   for(const token of header.tokens){
+    // Broad header OCR must meet the same evidence threshold as dedicated
+    // date crops. A low-confidence date-shaped hallucination must neither
+    // invent an anchor nor veto consistent, independently observed dates.
+    if(!(token.confidence>=.75))continue;
     const digits=fullDateDigits(token.text);
     if(digits==null)continue;
     const cx=token.x+token.width/2,cy=token.y+token.height/2;
