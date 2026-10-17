@@ -1,5 +1,5 @@
 name: PR92 owner-authorized production release
-run-name: PR92 production rollout / owner approved 2026-10-17
+run-name: PR92 rollout / date-route regression fixed / owner approved 2026-10-17
 
 # The owner explicitly requested MAIN merge and use of the new version.
 # This branch-scoped trigger is used because the connected GitHub interface
