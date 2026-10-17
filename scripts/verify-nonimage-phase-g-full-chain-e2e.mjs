@@ -12,7 +12,7 @@ const wrangler = resolve(root, 'node_modules/.bin/wrangler');
 const config = resolve(root, 'wrangler.local.jsonc');
 const persist = await mkdtemp(join(tmpdir(), 'cbh-phase-g-full-chain-'));
 const base = 'http://127.0.0.1:' + (process.env.CBH_PHASEG_PORT ?? '8851');
-let worker;
+let worker, referenceServer, referenceBase;
 const assert = (v, message) => { if (!v) throw Error(message); };
 const run = (cmd, args) => new Promise((done, fail) => {
   const child = spawn(cmd, args, { cwd: root,
@@ -193,6 +193,14 @@ async function engineTest(engine, label) {
     const followup = process.env.CBH_FOLLOWUP_E2E === '1'
       ? await (await import('./followup-product-assertions.mjs')).verifyFollowupUi({page,api,id,base,todayKst}) : undefined;
 
+    if (referenceBase) {
+      const referencePage = await ctx.newPage();
+      try {
+        await referencePage.addInitScript(personId => localStorage.setItem('cbh:selected-person-id',personId),id);
+        Object.assign(followup, await (await import('./followup-product-assertions.mjs')).verifyClockReferenceUi({page:referencePage,base:referenceBase}));
+      } finally { await referencePage.close(); }
+    }
+
     // Actual Pages API ingestion, not a stand-in repository test. Push stays disabled.
     const prefs = await api('/notifications/settings', 'PUT', {
       shiftEndEnabled: true, etaChangeEnabled: true, leftWorkEnabled: true, homeArrivalEnabled: true,
@@ -253,6 +261,14 @@ try {
   worker.stdout.on('data', d => { worker.logs += d; });
   worker.stderr.on('data', d => { worker.logs += d; });
   await ready();
+  if (process.env.CBH_FOLLOWUP_E2E === '1') {
+    process.env.VITE_CBH_RUNTIME = 'api';
+    process.env.VITE_CBH_PROVIDER_RUNTIME = 'api';
+    const {createServer} = await import('vite');
+    referenceServer = await createServer({root,server:{host:'127.0.0.1',port:0,proxy:{'/api':base}},logLevel:'error'});
+    await referenceServer.listen();
+    referenceBase = 'http://127.0.0.1:' + referenceServer.httpServer.address().port;
+  }
   const first = await engineTest(chromium, 'Chromium');
   const second = await engineTest(webkit, 'WebKit');
   console.log('PHASE_G_FULL_NONIMAGE_CHAIN_E2E_PASS=' + JSON.stringify({
@@ -260,6 +276,7 @@ try {
     productionWrites: 0, remotePushCalls: 0, liveProviderCalls: 0, realStaffData: 0,
   }));
 } finally {
+  if (referenceServer) await referenceServer.close();
   if (worker && worker.exitCode == null) {
     worker.kill();
     await new Promise(resolveDone => {
