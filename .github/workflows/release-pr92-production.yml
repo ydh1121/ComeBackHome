@@ -105,7 +105,7 @@ jobs:
         run: node scripts/release-pr92-production.mjs verify
       - name: Install isolated browser runtime
         run: |
-          npm install --no-save --ignore-scripts playwright@1.61.1
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.58.2
           npx playwright install --with-deps chromium webkit
       - name: Verify actual deployed screens without writes or test notifications
         run: |
@@ -132,7 +132,10 @@ jobs:
               await page.locator('[data-page="SettingsPage"]').waitFor();
               assert.equal(await page.locator('[data-page="AlarmPage"]').count(),0);
               await page.goto(origin+'/schedule',{waitUntil:'domcontentloaded'});
-              await page.locator('[data-page="SchedulePage"]').waitFor();
+              await page.locator('[data-page="SchedulePage"][data-state="VIEW_DAY"], [data-page="SchedulePage"][data-state="EMPTY"]').waitFor();
+              const settingsResponse=await context.request.get(origin+'/api/notifications/settings');
+              assert.equal(settingsResponse.status(),200);
+              assert.equal(typeof (await settingsResponse.json()).settings.arrivalAdvanceEnabled,'boolean');
               await page.goto(origin+'/import',{waitUntil:'domcontentloaded'});
               await page.locator('input[accept=".xlsx"]').waitFor({state:'attached'});
               assert.ok(await page.locator('input[type="file"]').count()>=2);
