@@ -22,7 +22,10 @@ export function ScheduleDayEditPage() {
   const services = useApplicationServices();
   const schedule = useSelectedSchedule();
   const creating = !routeDate;
-  const [selectedDate, setSelectedDate] = useState(routeDate || currentLocalIsoDate());
+  const [newDate, setNewDate] = useState(currentLocalIsoDate);
+  // React Router may reuse this component across day-edit routes. The URL
+  // remains authoritative so a previous draft cannot redirect a later save.
+  const selectedDate = routeDate || newDate;
   const entry = schedule.status === 'ready'
     ? schedule.entries.find((item) => item.date === selectedDate)
     : null;
@@ -78,6 +81,7 @@ export function ScheduleDayEditPage() {
       className="schedule-page"
       data-route={creating ? '/schedule/new' : '/schedule/' + routeDate + '/edit'}
       data-page="ScheduleDayEditPage"
+      data-date={selectedDate}
       data-state={(creating ? 'CREATING_DAY ' : 'EDITING_DAY ') + form.state}
     >
       <BackButton fallbackTo="/schedule" />
@@ -91,7 +95,7 @@ export function ScheduleDayEditPage() {
             type="date"
             value={selectedDate}
             onChange={(event) => {
-              setSelectedDate(event.currentTarget.value);
+              setNewDate(event.currentTarget.value);
               form.markDirty();
             }}
           />
