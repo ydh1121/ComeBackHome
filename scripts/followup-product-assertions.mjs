@@ -55,6 +55,10 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.equal((await api('/notifications/settings')).body.settings.arrivalAdvanceEnabled,initial!=='true');
   await reminder.click();
 
+  await open('/settings');await page.locator('[data-page="SettingsPage"]').waitFor();
+  assert.equal(await page.getByRole('button',{name:'iPhone 시계 알람',exact:true}).count(),0,'deferred manual Clock bridge must not be offered in Settings');
+  // DEV-only reference coverage is preserved; the production bundle gate
+  // independently rejects the manual Clock actions from shipped JavaScript.
   await open('/settings/alarms');await page.locator('[data-page="AlarmPage"]').waitFor();
   assert.equal(await page.locator('[data-page="AlarmPage"]').getAttribute('data-device-applied'),'false');
   assert.equal(await page.getByRole('button',{name:'단축어에서 확인하고 적용'}).isDisabled(),true);
