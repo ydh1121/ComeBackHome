@@ -16,7 +16,7 @@ export function SettingsPage() {
           <Icon name="chevron-right" />
         </button>
         <button type="button" className="settings-row-button" onClick={() => navigate('/settings/presence')}>
-          <b>퇴근 · 귀가 자동화</b>
+          <b>퇴근 · 귀가 기록 연결</b>
           <Icon name="chevron-right" />
         </button>
       </div>

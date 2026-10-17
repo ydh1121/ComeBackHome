@@ -6,6 +6,7 @@ import { formatDateLabel } from '../features/schedule/date-format';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
 import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
+import { getPrivateImportImageUrl } from '../application/services/WorkbookImportFileSelectionAction';
 import './import-page.css';
 
 export function ImportReviewPage() {
@@ -14,6 +15,8 @@ export function ImportReviewPage() {
   const services = useApplicationServices();
   const workflow = useImportWorkflow(batchId);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
+  const [dateError, setDateError] = useState<string | null>(null);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
 
   if (workflow.status === 'loading') {
     return <section className="import-page"><div className="import-message">일정을 불러오는 중</div></section>;
@@ -25,13 +28,25 @@ export function ImportReviewPage() {
   const batch = workflow.batch;
   const weekly3ColumnReview = batch.structure.sheet ===
     'weekly 7 day x start/end/break physical matrix';
+  const weeklyReview = batch.structure.weeklyReview;
+  const privateImageUrl = getPrivateImportImageUrl(batch.id);
+  const weekStart = weeklyReview?.startDate??'';
+  const validatedWeekStart = /^\d{4}-\d{2}-\d{2}$/.test(weekStart)
+    ? Date.parse(weekStart+'T00:00:00Z') : NaN;
+  const weekPreview = Number.isFinite(validatedWeekStart)
+    ? Array.from({length:7},(_,i)=>
+        new Date(validatedWeekStart+i*86400000).toISOString().slice(0,10))
+    : [];
+  const pendingPersons=new Map(batch.detectedPeople
+    .filter(person=>person.pendingCreateName)
+    .map(person=>[person.id,person.pendingCreateName!] as const));
   const ignoredDetectedIds = new Set(
     batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
   );
   const importedTimeComplete = (item: (typeof batch.reviewItems)[number]) =>
     item.imported.enabled === false ||
     (item.imported.start != null && item.imported.end != null &&
-     (!weekly3ColumnReview || item.recognitionState !== 'INCOMPLETE' ||
+     (!(weeklyReview ? item.breakReviewRequired : item.recognitionState === 'INCOMPLETE') ||
       item.imported.breakMinutes != null));
   const exactDuplicate = (item: (typeof batch.reviewItems)[number]) =>
     item.existing != null &&
@@ -52,10 +67,13 @@ export function ImportReviewPage() {
       !ignoredDetectedIds.has(item.detectedPersonId) &&
       (weekly3ColumnReview || !exactDuplicate(item)),
   );
-  const allReviewed = visibleReviewItems.every((item) =>
-    item.personId != null &&
+  const allReviewed = visibleReviewItems.length > 0 &&
+    (!weeklyReview || weeklyReview.confirmed === true) && visibleReviewItems.every((item) =>
+    item.date != null &&
+    (item.personId != null ||
+      batch.detectedPeople.some(person => person.id === item.detectedPersonId && person.pendingCreate)) &&
     (
-      item.resolution === 'SKIP' ||
+      item.resolution === 'SKIP' || item.resolution === 'KEEP' ||
       (item.resolution === 'NEW' && importedTimeComplete(item))
     )
   );
@@ -75,6 +93,55 @@ export function ImportReviewPage() {
     <section className="import-page" data-route={'/import/' + batchId + '/review'} data-page="ImportReviewPage" data-state="REVIEW_REQUIRED CONFLICT_RESOLUTION">
       <BackButton fallbackTo={'/import/' + encodeURIComponent(batch.id) + '/structure'} />
       <h1 className="page-title">일정 확인</h1>
+      {weeklyReview ? (
+        <section className="import-review-dates" data-state={weeklyReview.confirmed
+          ? 'WEEK_DATES_CONFIRMED':'WEEK_DATES_REVIEW_REQUIRED'}>
+          <h2>주간 날짜 확인</h2>
+          <p>{weeklyReview.status==='MANUAL_RECOVERY_REQUIRED'
+            ? '표 구조를 자동 인식하지 못했습니다. 이미지와 비교하여 직접 입력해 주세요.'
+            : weeklyReview.status==='PARTIAL_REVIEW_REQUIRED'
+              ? '일부 날짜를 읽지 못했습니다. 시작일을 확인해 주세요.'
+              : '날짜를 인식했습니다. 원본과 일치하는지 확인해 주세요.'}</p>
+          <label>월요일 시작일
+            <input type="date" aria-label="주간 시작일" value={weekStart}
+              onChange={async event=>{
+                try{
+                  setDateError(null);
+                  await services.actions.importReview.setWeeklyStartDate(batch.id,event.target.value);
+                }catch(error){
+                  setDateError(error instanceof Error?error.message:'주간 시작일을 확인해 주세요.');
+                }
+              }} />
+          </label>
+          {weekPreview.length ? (
+            <ol className="import-week-preview">
+              {weekPreview.map((date,i)=><li key={date}>{['월','화','수','목','금','토','일'][i]} {date}</li>)}
+            </ol>
+          ) : <p>날짜 미확정 — 저장할 수 없습니다.</p>}
+          {dateError ? <p role="alert">{dateError}</p> : null}
+          <button type="button" className="review-choice import-toggle"
+            disabled={!weekPreview.length||weeklyReview.confirmed}
+            onClick={async()=>{
+              try{
+                setDateError(null);
+                await services.actions.importReview.confirmWeeklyDates(batch.id);
+              }catch(error){
+                setDateError(error instanceof Error?error.message:'날짜 확정에 실패했습니다.');
+              }
+            }}>
+            {weeklyReview.confirmed?'주간 날짜 확인 완료':'7일 날짜 확인 및 확정'}
+          </button>
+          {!weeklyReview.confirmed ? <p role="status">날짜 승인 전에는 DB에 저장되지 않습니다.</p> : null}
+        </section>
+      ) : null}
+      {privateImageUrl ? (
+        <details className="import-original-preview">
+          <summary>원본 근무표와 대조</summary>
+          <img src={privateImageUrl} alt="가져온 근무표 원본" style={{maxWidth:'100%',height:'auto'}}
+            onLoad={event => setImageSize({width:event.currentTarget.naturalWidth,height:event.currentTarget.naturalHeight})} />
+          <p>이 사진은 브라우저 메모리에서만 표시됩니다. 새로고침 후에는 다시 표시되지 않을 수 있습니다.</p>
+        </details>
+      ) : null}
 
       {visibleReviewItems.length ? (
         <div className="import-review-list">
@@ -82,24 +149,49 @@ export function ImportReviewPage() {
             const person = workflow.people.find((candidate) => candidate.id === item.personId);
             const importedComplete = importedTimeComplete(item);
             return (
-              <div className="import-review-item" key={item.id}>
+              <div className="import-review-item" key={item.id} data-review-id={item.id}
+                data-person-id={item.detectedPersonId} data-work-date={item.date}>
                 <div className="import-review-head">
-                  <div className="review-date">{formatDateLabel(item.date)} 일정</div>
+                  {weekly3ColumnReview && !weeklyReview ? (
+                    <label className="review-date">
+                      근무 날짜
+                      <input type="date" aria-label="근무 날짜 수정"
+                        value={item.date ?? ''}
+                        onChange={(event)=>void services.actions.importReview.setImportedDate(
+                          batch.id,item.id,event.currentTarget.value)}
+                      />
+                    </label>
+                  ) : <div className="review-date">{item.date ? formatDateLabel(item.date) : ['월','화','수','목','금','토','일'][item.dayIndex ?? 0] + ' · 날짜 미확정'} 일정</div>}
                   <div className={'review-person' + (item.personId ? '' : ' unresolved')}>
-                    {person?.name ?? '사람 연결 필요'}
+                    {person?.name ?? (batch.detectedPeople.find(candidate =>
+                      candidate.id === item.detectedPersonId)?.pendingCreate
+                      ? (pendingPersons.get(item.detectedPersonId) ?? batch.detectedPeople.find(candidate => candidate.id === item.detectedPersonId)?.sourceName) + ' · 승인 후 생성' : '사람 연결 필요')}
                   </div>
                 </div>
 
+                {weeklyReview && item.sourceRow != null ? (
+                  <div className="small">원본 직원 {item.sourceRow}행 · {['월','화','수','목','금','토','일'][item.dayIndex ?? 0]}요일 · 출근 / 퇴근 / 휴게</div>
+                ) : null}
+                {privateImageUrl && item.sourceRegion && imageSize.width > 0 ? (
+                  <details className="import-cell-preview">
+                    <summary>이 일정의 원본 세 칸 보기</summary>
+                    <svg viewBox={`${item.sourceRegion.x} ${item.sourceRegion.y} ${item.sourceRegion.width} ${item.sourceRegion.height}`}
+                      role="img" aria-label="원본 출근·퇴근·휴게 세 칸" style={{width:'100%',maxHeight:160,background:'#fff'}}>
+                      <image href={privateImageUrl} width={imageSize.width} height={imageSize.height} />
+                    </svg>
+                  </details>
+                ) : null}
+
                 {item.recognitionState ? (
-                  <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()}>
-                    {item.recognitionState === 'OFF'
+                  <div className={'review-recognition-state ' + item.recognitionState.toLowerCase()} data-source-kind={item.sourceCellKind}>
+                    {item.sourceCellKind === 'BLANK'
+                      ? '빈칸 — 휴무 후보로 검토할 수 있지만 원본에 휴무 표기는 없음'
+                      : item.recognitionState === 'OFF'
                       ? '휴무로 인식'
                       : item.recognitionState === 'OFF_CANDIDATE'
-                        ? '휴무 후보 — 세 칸 모두 비어 있지만 직접 확인 전까지 확정되지 않음'
+                        ? '휴무 후보 — 원본 표기를 직접 확인한 뒤 선택 필요'
                       : item.recognitionState === 'UNREADABLE'
-                        ? weekly3ColumnReview && item.imported.start == null && item.imported.end == null
-                          ? '빈칸·휴무 후보 — 근무인지 휴무인지 직접 확인 필요'
-                          : '인식 불확실 — 이미지에 내용은 있으나 시간을 읽지 못함'
+                        ? '판독 불가 — 이미지 내용을 원본과 대조해 직접 입력 필요'
                         : item.recognitionState === 'INCOMPLETE'
                           ? '근무시간 일부만 인식'
                           : '근무로 인식'}
@@ -155,7 +247,7 @@ export function ImportReviewPage() {
                       placeholder="확인 필요"
                       onChange={(event) => {
                         const raw = event.currentTarget.value;
-                        if (raw !== '' && (!/^\\d+$/.test(raw) || Number(raw) > 720)) return;
+                        if (raw !== '' && (!/^\d+$/.test(raw) || Number(raw) > 720)) return;
                         void services.actions.importReview.setImportedBreakMinutes(
                           batch.id, item.id, raw === '' ? null : Number(raw),
                         );
@@ -165,6 +257,14 @@ export function ImportReviewPage() {
                 ) : null}
 
                 <div className="review-choice-list">
+                  <button type="button"
+                    className={'review-choice import-toggle' + (item.resolution === 'SKIP' ? ' selected' : '')}
+                    aria-pressed={item.resolution === 'SKIP'}
+                    onClick={() => services.actions.importReview.setResolution(
+                      batch.id,item.id,item.resolution === 'SKIP' ? 'KEEP' : 'SKIP'
+                    )}>
+                    가져오지 않음
+                  </button>
                   {item.existing && !exactDuplicate(item) ? (
                     <div className="review-existing-note">
                       {item.existing.enabled === false
@@ -176,7 +276,9 @@ export function ImportReviewPage() {
                     type="button"
                     className={'review-choice import-toggle' + (item.resolution === 'NEW' ? ' selected' : '')}
                     aria-pressed={item.resolution === 'NEW'}
-                    disabled={!item.personId || !importedComplete}
+                    disabled={!(item.personId || batch.detectedPeople.some(
+                      person => person.id === item.detectedPersonId && person.pendingCreate
+                    )) || !importedComplete}
                     onClick={() => services.actions.importReview.setResolution(
                       batch.id,
                       item.id,

@@ -3,6 +3,7 @@ import type { D1DatabaseLike } from '../runtime-types';
 import { asBoolean, asInteger, utcNow } from './d1-helpers';
 
 interface NotificationSettingsRow {
+  arrival_advance_enabled: number;
   shift_end_enabled: number;
   eta_change_enabled: number;
   left_work_enabled: number;
@@ -13,6 +14,7 @@ interface NotificationSettingsRow {
 
 function toRecord(row: NotificationSettingsRow): NotificationSettingsRecord {
   return {
+    arrivalAdvanceEnabled: asBoolean(row.arrival_advance_enabled),
     shiftEndEnabled: asBoolean(row.shift_end_enabled),
     etaChangeEnabled: asBoolean(row.eta_change_enabled),
     leftWorkEnabled: asBoolean(row.left_work_enabled),
@@ -28,6 +30,7 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
   async get(): Promise<NotificationSettingsRecord> {
     const row = await this.db.prepare(
       `SELECT
+        arrival_advance_enabled,
         shift_end_enabled,
         eta_change_enabled,
         left_work_enabled,
@@ -43,7 +46,7 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
     return toRecord(row);
   }
 
-  async updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled'>): Promise<NotificationSettingsRecord> {
+  async updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled' | 'arrivalAdvanceEnabled'>): Promise<NotificationSettingsRecord> {
     const now = utcNow();
     await this.db.prepare(
       `UPDATE notification_settings
@@ -52,7 +55,8 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
         eta_change_enabled = ?2,
         left_work_enabled = ?3,
         home_arrival_enabled = ?4,
-        updated_at = ?5
+        updated_at = ?5,
+        arrival_advance_enabled = COALESCE(?6, arrival_advance_enabled)
       WHERE id = 'default'`,
     ).bind(
       asInteger(input.shiftEndEnabled),
@@ -60,6 +64,7 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
       asInteger(input.leftWorkEnabled),
       asInteger(input.homeArrivalEnabled),
       now,
+      input.arrivalAdvanceEnabled === undefined ? null : asInteger(input.arrivalAdvanceEnabled),
     ).run();
 
     return this.get();

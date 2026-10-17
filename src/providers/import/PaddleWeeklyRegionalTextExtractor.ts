@@ -75,11 +75,21 @@ export class PaddleWeeklyRegionalTextExtractor implements RegionalImageTextExtra
     return task;
   }
 
+  async releaseResources(): Promise<void> {
+    // Queue cleanup itself so a later import cannot use a releasing session.
+    const cleanup = this.queue.catch(() => undefined).then(async () => {
+      const current = this.session;
+      this.session = null;
+      this.modelMetadata = null;
+      if (current) await current.then(x => x.release()).catch(() => undefined);
+    });
+    this.queue = cleanup;
+    await cleanup;
+    if (this.queue === cleanup) this.queue = Promise.resolve();
+  }
+
   async dispose(): Promise<void> {
     this.disposed = true;
-    try { await this.queue; } catch { /* drain failed import */ }
-    const current = this.session;
-    this.session = null;
-    if (current) await current.then(x => x.release()).catch(() => undefined);
+    await this.releaseResources();
   }
 }

@@ -6,6 +6,12 @@ import {startWeeklyRealHttpD1} from './ocr-weekly-real-http-d1-harness.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const focusedRealHttpD1=process.env.CBH_OCR_REAL_HTTP_D1_FOCUSED==='1';
+// The existing Vite app must exercise its real API composition in this
+// loopback-only isolated D1 test, not DEV mockComposition.
+if(focusedRealHttpD1){
+  process.env.VITE_CBH_RUNTIME='api';
+  process.env.VITE_CBH_PROVIDER_RUNTIME='mock';
+}
 let realLocalHttpD1=null;
 let negativeLocalD1=null;
 const server=await createServer({
@@ -399,6 +405,17 @@ try{
               const imports=new BrowserImportRepository(),
                 peopleRepo=new MockPersonRepository(state),
                 schedules=new MockScheduleRepository(state);
+              const approvedGateway={async commit(payload){
+                const mapping=new Map(payload.people.map(p=>[p.ref,p.personId]));
+                const rows=payload.schedules.filter(r=>r.resolution==='NEW').map(r=>({
+                  id:crypto.randomUUID(),personId:mapping.get(r.personRef),date:r.date,
+                  enabled:r.enabled,start:r.start??'00:00',end:r.end??'00:00',breakMinutes:r.breakMinutes,
+                }));
+                state.mutate(data=>{data.schedules.push(...rows);});
+                return {requestId:payload.requestId,applied:true,
+                  people:payload.people.map(p=>({ref:p.ref,personId:p.personId,created:false})),
+                  schedules:payload.schedules.filter(r=>r.resolution==='NEW')};
+              }};
               const selection=new WorkbookImportFileSelectionAction(
                 imports,peopleRepo,schedules,
                 {async parse(){throw Error('Unexpected workbook selection');}},
@@ -410,10 +427,14 @@ try{
                  initial.reviewItems.some(x=>x.resolution!==null))
                 throw Error('Weekly E2E review count or unreviewed default failed');
               let blocked=false;
-              try{await new CommitImportReview(imports,schedules).execute(batchId)}
-              catch(error){blocked=String(error).includes('unreviewed');}
+              try{await new CommitImportReview(imports,schedules,approvedGateway).execute(batchId)}
+              catch(error){blocked=String(error).includes('WEEKLY_DATES_NOT_CONFIRMED');}
               if(!blocked||state.read().schedules.length)
                 throw Error('Weekly E2E skipped required user approvals');
+              // Simulated explicit user date approval; fixture truth does NOT
+              // get injected into OCR or parser output.
+              await imports.setWeeklyStartDate(batchId,truth[0].date);
+              await imports.confirmWeeklyDates(batchId);
               // Actual production browser-review repository must revoke a
               // prior decision if a user corrects even an OCR rest duration.
               const editable=initial.reviewItems.find(x=>
@@ -451,7 +472,7 @@ try{
                 await imports.setResolution(batchId,item.id,'NEW');
               }
               const approvedBatch=await imports.getBatch(batchId);
-              await new CommitImportReview(imports,schedules).execute(batchId);
+              await new CommitImportReview(imports,schedules,approvedGateway).execute(batchId);
               let persisted=0;
               for(const expected of truth){
                 const owner=state.read().people.find(p=>p.name===expected.person);
@@ -499,9 +520,16 @@ try{
                   fetchTrace.personReads++;
                   return respond({people:sourcePeople});
                 }
-                if(url.pathname==='/api/schedules/import'&&method==='PUT'){
+                if(url.pathname==='/api/workbooks/approved-import'&&method==='PUT'){
                   const body=JSON.parse(init.body);
-                  const rows=body.schedules;
+                  if(body.source!=='WEEKLY_IMAGE'||body.datesConfirmed!==true||
+                     body.approved!==true||body.people.some(p=>p.kind!=='EXISTING'))
+                    throw Error('Expected explicitly approved reviewed schedule import');
+                  const mapping=new Map(body.people.map(p=>[p.ref,p.personId]));
+                  const rows=body.schedules.filter(r=>r.resolution==='NEW').map(r=>({
+                    ...r,id:crypto.randomUUID(),personId:mapping.get(r.personRef),
+                    start:r.start??'00:00',end:r.end??'00:00',
+                  }));
                   if(!Array.isArray(rows)||rows.length!==14||
                      new Set(rows.map(x=>x.personId)).size!==2)
                     throw Error('Expected two-person atomic import payload');
@@ -517,7 +545,9 @@ try{
                   for(const [key,value] of pending)apiStored.set(key,value);
                   fetchTrace.writes+=rows.length;
                   fetchTrace.atomicBatches++;
-                  return respond({schedules:rows});
+                  return respond({receipt:{requestId:body.requestId,applied:true,
+                    people:body.people.map(p=>({ref:p.ref,personId:p.personId,created:false})),
+                    schedules:body.schedules.filter(r=>r.resolution==='NEW')}});
                 }
                 const match=/^[/]api[/]people[/]([^/]+)[/]schedules(?:[/]([^/]+))?$/.exec(url.pathname);
                 if(match){
@@ -561,9 +591,12 @@ try{
                   throw Error('Actual product composition lost people or review-required days');
                 let blockedBeforeReview=false;
                 try{await app.actions.commitImportReview.execute(actualBatchId)}
-                catch(e){blockedBeforeReview=String(e).includes('unreviewed');}
+                catch(e){blockedBeforeReview=String(e).includes('WEEKLY_DATES_NOT_CONFIRMED');}
                 if(!blockedBeforeReview||apiStored.size)
                   throw Error('Actual product composition bypassed manual approval');
+                // User-confirmed week, independent of engine's OCR output.
+                await app.actions.importReview.setWeeklyStartDate(actualBatchId,truth[0].date);
+                await app.actions.importReview.confirmWeeklyDates(actualBatchId);
                 let approvedOff=0,approvedWork=0;
                 for(const item of initialBatch.reviewItems){
                   const recognized=initialBatch.detectedPeople.find(
@@ -618,12 +651,13 @@ try{
             let linkedHttpD1=null;
             if(focusedRealHttpD1&&spec.id==='A-CLEAN'){
               const original=globalThis.fetch.bind(globalThis);
-              let atomicRequests=0;
+              let atomicRequests=0,lastApprovedBody=null;
               globalThis.fetch=(input,init={})=>{
                 const url=new URL(typeof input==='string'?input:input.url,location.origin);
                 if(url.origin!==location.origin)throw Error('EXTERNAL_FETCH_FORBIDDEN');
-                if(url.pathname==='/api/schedules/import'&&init.method==='PUT')
-                  atomicRequests++;
+                if(url.pathname==='/api/workbooks/approved-import'&&init.method==='PUT'){
+                  atomicRequests++;lastApprovedBody=init.body;
+                }
                 return original(input,init);
               };
               try{
@@ -644,9 +678,11 @@ try{
                   throw Error('REAL_D1_EMPLOYEE_MATCH_UNSAFE');
                 let unapprovedBlocked=false;
                 try{await app.actions.commitImportReview.execute(batchId)}
-                catch(e){unapprovedBlocked=String(e).includes('unreviewed');}
+                catch(e){unapprovedBlocked=String(e).includes('WEEKLY_DATES_NOT_CONFIRMED');}
                 if(!unapprovedBlocked||atomicRequests)
                   throw Error('REAL_D1_UNAPPROVED_SAVE_ALLOWED');
+                await app.actions.importReview.setWeeklyStartDate(batchId,truth[0].date);
+                await app.actions.importReview.confirmWeeklyDates(batchId);
                 let work=0,off=0;
                 for(const item of batch.reviewItems){
                   const owner=batch.detectedPeople.find(p=>p.id===item.detectedPersonId);
@@ -685,9 +721,9 @@ try{
                                        stored.end!==expected.end)))
                     throw Error('REAL_D1_BREAK_OR_SCHEDULE_READBACK_MISMATCH');
                 }
-                const repeated=await fetch('/api/schedules/import',{
+                const repeated=await fetch('/api/workbooks/approved-import',{
                   method:'PUT',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({schedules:readback}),
+                  body:lastApprovedBody,
                 });
                 if(!repeated.ok||atomicRequests!==2)
                   throw Error('REAL_D1_REPEAT_ATOMIC_SAVE_REJECTED');
@@ -780,10 +816,128 @@ try{
       // The generated byte corpus is held only inside this test invocation,
       // never emitted as CI logs, artifacts, or checked-in source.
       delete result.generatedRasters;
-      all.push({browser:browserName,pageErrors,result});
+      // Genuine DOM product flow. The same generated raster is uploaded via
+      // ImportPage's native input, then reviewed through the actual React UI.
+      // Synthetic fixture/real Paddle on isolated Wrangler D1; never claim
+      // this is a user's unseen original or real production acceptance.
+      let productDomFlow=null;
+      if(focusedRealHttpD1){
+        // Model evaluation needs its own long budget; DOM selectors should
+        // fail promptly with their exact location instead of exhausting CI.
+        page.setDefaultTimeout(30_000);
+        console.log('CBH_OCR_TRACE: DOM_UPLOAD '+browserName);
+        const writesBeforeDom=realLocalHttpD1.stats.atomicImports;
+        const fixture=immutableImageBytes['A-CLEAN'];
+        if(!fixture)throw Error('REAL_UI_RASTER_BYTES_MISSING');
+        await page.goto('http://127.0.0.1:'+port+'/import',
+          {waitUntil:'domcontentloaded'});
+        await page.locator('[data-page="ImportPage"]').waitFor();
+        const imageInput=page.locator('input.import-file-input[accept="image/*"]');
+        await imageInput.setInputFiles({
+          name:'generated-ui-acceptance.png',
+          mimeType:fixture.type,
+          buffer:Buffer.from(fixture.base64,'base64'),
+        });
+        const viewButton=page.getByRole('button',{name:'인식 결과 보기'});
+        await viewButton.waitFor();
+        await page.waitForFunction(()=>document.querySelector(
+          '[data-page="ImportPage"]')?.textContent?.includes('인식 완료')||
+          document.querySelector('[data-page="ImportPage"]')?.textContent?.includes('최종 검토 필요')||
+          document.querySelector('[data-page="ImportPage"]')?.textContent?.includes('일부 인식'));
+        // READY labels precede matching/snapshot hydration and the selection
+        // action's finally block. Wait for the actual user-facing completion.
+        await page.waitForFunction(()=>{
+          const root=document.querySelector('[data-page="ImportPage"]');
+          const error=root?.querySelector('[role="alert"]');
+          if(error)throw Error('REAL_UI_UPLOAD_FAILED: '+error.textContent);
+          return root?.querySelector('button.cta')?.disabled===false;
+        },null,{timeout:60_000});
+        await viewButton.click();
+        await page.locator('[data-page="ImportPersonMatchPage"]').waitFor();
+        await page.getByRole('button',{name:'다음'}).click();
+        await page.locator('[data-page="ImportStructurePage"]').waitFor();
+        await page.getByRole('button',{name:'계속',exact:true}).click();
+        await page.locator('[data-page="ImportReviewPage"]').waitFor();
+        console.log('CBH_OCR_TRACE: DOM_REVIEW '+browserName);
+        const beforeSave=await page.locator('button.cta').isDisabled();
+        if(!beforeSave)throw Error('REAL_UI_SAVE_ENABLED_BEFORE_DATES');
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom)
+          throw Error('REAL_UI_PREAPPROVAL_WRITE');
+        const dateField=page.getByLabel('주간 시작일');
+        if(await dateField.inputValue()!=='2026-10-12')
+          await dateField.fill('2026-10-12');
+        await page.getByRole('button',{name:'7일 날짜 확인 및 확정'}).click();
+        await page.locator('[data-state="WEEK_DATES_CONFIRMED"]').waitFor();
+        const items=page.locator('.import-review-item');
+        const n=await items.count();
+        if(n!==14)throw Error('REAL_UI_REVIEW_ROWS_NOT_14:'+n);
+        await page.getByText('원본 근무표와 대조',{exact:true}).click();
+        await page.locator('.import-cell-preview').first().waitFor();
+        if(await page.locator('.import-cell-preview').count()!==14)
+          throw Error('REAL_UI_SOURCE_CELL_ASSOCIATION_MISSING');
+        await page.locator('.import-cell-preview summary').first().click();
+        await page.getByRole('img',{name:'원본 출근·퇴근·휴게 세 칸'}).first().waitFor({state:'visible'});
+        let approvedOff=0;
+        for(let i=0;i<n;i++){
+          const item=items.nth(i);
+          const state=await item.locator('.review-recognition-state').innerText();
+          if(state.includes('휴무 후보')||state.includes('빈칸·휴무 후보')){
+            await item.getByRole('button',{name:/휴무로 변경/}).click();
+            approvedOff++;
+          }
+          const choice=item.locator('.review-choice-list button').filter({has:page.locator('.review-choice-label')});
+          await choice.click();
+          // A click starts the repository action. The visible query refresh
+          // also loads people over HTTP, so wait for its committed UI state.
+          await item.locator('.review-choice-list button[aria-pressed="true"] .review-choice-label').waitFor();
+        }
+        if(approvedOff!==2)throw Error('REAL_UI_OFF_CANDIDATE_NOT_TWO:'+approvedOff);
+        await page.locator('button.cta:enabled').waitFor();
+        console.log('CBH_OCR_TRACE: DOM_APPROVED '+browserName);
+        await page.locator('button.cta').click();
+        await page.waitForURL(/\/schedule$/);
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+1)
+          throw Error('REAL_UI_APPROVAL_NOT_SINGLE_ATOMIC_REQUEST');
+        const readback=await page.evaluate(async()=>{
+          const people=await fetch('/api/people').then(r=>r.json());
+          const result=[];
+          for(const person of people.people){
+            const schedules=await fetch('/api/people/'+encodeURIComponent(person.id)+'/schedules').then(r=>r.json());
+            result.push(...schedules.schedules);
+          }
+          return result;
+        });
+        await page.reload({waitUntil:'domcontentloaded'});
+        await page.locator('[data-page="SchedulePage"]').waitFor();
+        const reloaded=await page.evaluate(async()=>{
+          const people=await fetch('/api/people').then(r=>r.json());
+          const total=await Promise.all(people.people.map(p=>fetch('/api/people/'+encodeURIComponent(p.id)+'/schedules')
+            .then(r=>r.json()).then(x=>x.schedules.length)));
+          return total.reduce((a,b)=>a+b,0);
+        });
+        if(readback.length!==14||reloaded!==14)
+          throw Error('REAL_UI_D1_RELOAD_READBACK_MISMATCH');
+        productDomFlow={browser:browserName,uploadedRealEngine:true,
+          reviewRows:n,explicitOff:approvedOff,approvalBeforeWrite:true,
+          storedAfterClick:readback.length,storedAfterReload:reloaded,
+          productionD1Writes:0};
+        console.log('CBH_REAL_IMPORTPAGE_DOM_D1='+JSON.stringify(productDomFlow));
+      }
+      all.push({browser:browserName,pageErrors,result,
+        ...(productDomFlow?{productDomFlow}:{})});
+      if(pageErrors.length)throw Error('Weekly product page errors: '+JSON.stringify(pageErrors));
     }finally{await browser.close();}
   }
-  if(focusedRealHttpD1)negativeLocalD1=await realLocalHttpD1.negativeChecks();
+  if(focusedRealHttpD1){
+    negativeLocalD1=await realLocalHttpD1.negativeChecks();
+    const approvedAtomic=await realLocalHttpD1.atomicReviewedChecks();
+    if(approvedAtomic.negativeCases.length!==10 ||
+       approvedAtomic.rollback!==true ||
+       approvedAtomic.sameRequestReplayNoDuplicate!==true ||
+       approvedAtomic.productionD1Writes!==0)
+      throw Error('ATOMIC_REVIEWED_IMPORT_LOCAL_D1_FAILED');
+    console.log('CBH_ATOMIC_WEEKLY_REVIEW_LOCAL_D1_PASS='+JSON.stringify(approvedAtomic));
+  }
 }finally{
   try{await server.close()}
   finally{if(realLocalHttpD1)await realLocalHttpD1.close()}
@@ -846,15 +1000,19 @@ async function verifyEphemeralLocalD1(cases){
     if(!db||typeof db.prepare!=='function')throw Error('Missing local DB binding');
     loader=await createServer({root,appType:'custom',logLevel:'error',
       server:{middlewareMode:true}});
-    const [{CommitImportReview},{D1ScheduleRepository}]=await Promise.all([
+    const [{CommitImportReview},{D1ScheduleRepository},{commitApprovedWorkbookImport}]=await Promise.all([
       loader.ssrLoadModule('/src/application/use-cases/commitImportReview.ts'),
       loader.ssrLoadModule('/worker/repositories/D1ScheduleRepository.ts'),
+      loader.ssrLoadModule('/worker/approved-workbook-import.ts'),
     ]);
     const schedules=new D1ScheduleRepository(db);
+    const approvedGateway={commit:payload=>commitApprovedWorkbookImport(db,payload)};
     let persisted=0,enabled=0,disabled=0,committedCases=0;
     let repeatedSaveVerifiedRows=0,repeatedSaveVerifiedCases=0;
-    // Store each generated case, namespaced per browser and image: original names and
-    // source dates are not changed, but test-only person IDs do not collide.
+    // Generated raster cases reuse the same source staff names. Each image/browser
+    // case is a distinct synthetic fixture employee, so namespace only the D1
+    // person's name (and ID). OCR source names, dates, and expected rows remain
+    // unchanged. Respect the production duplicate-person-name invariant.
     for(const {browser,id,review} of cases){
       if(!review?._approvedBatch||!review?._expectedRows)
         throw Error('Missing approved actual OCR evidence for '+browser+'/'+id);
@@ -868,7 +1026,7 @@ async function verifyEphemeralLocalD1(cases){
         person.matchedPersonId=updated;
         await db.prepare(
           'INSERT INTO people (id,name,relation,created_at,updated_at) VALUES (?1,?2,?3,?4,?4)',
-        ).bind(updated,person.sourceName,'synthetic',
+        ).bind(updated,'Fixture '+browser+' '+id+' '+person.sourceName,'synthetic',
           '2026-10-09T00:00:00.000Z').run();
       }
       for(const item of batch.reviewItems){
@@ -881,7 +1039,7 @@ async function verifyEphemeralLocalD1(cases){
         async getBatch(requested){return requested===batch.id?batch:null;},
         async markCommitted(requested){if(requested===batch.id)committed=true;},
       };
-      await new CommitImportReview(imports,schedules).execute(batch.id);
+      await new CommitImportReview(imports,schedules,approvedGateway).execute(batch.id);
       if(!committed)throw Error('Local D1 import did not commit');
       committedCases++;
       const firstReadback=[];
@@ -899,7 +1057,7 @@ async function verifyEphemeralLocalD1(cases){
       }
       // Repeat the same explicitly-approved commit. The real D1 upsert must
       // retain row identity and values, never insert duplicate person/date rows.
-      await new CommitImportReview(imports,schedules).execute(batch.id);
+      await new CommitImportReview(imports,schedules,approvedGateway).execute(batch.id);
       for(const prior of firstReadback){
         const next=await schedules.getByDate(prior.personId,prior.date);
         if(!next||next.id!==prior.id||next.enabled!==prior.enabled||

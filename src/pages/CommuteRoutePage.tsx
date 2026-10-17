@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { TransitIcon } from '../shared/components/TransitIcon';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import type { RouteCandidate, SavedCommuteRoute, TransitAccessPoint } from '../domain/models';
@@ -29,7 +30,7 @@ function routeAccessIds(route: SavedCommuteRoute, role: 'origin' | 'destination'
 function RouteSteps({ route }: { route: RouteCandidate }) {
   return <div className="route-steps">{(route.steps ?? []).map((step, index) => (
     <div className="route-step" key={index}>
-      <Icon name={stepIcon(step.type)} />
+      <TransitIcon mode={step.type} line={step.label} />
       <span>{step.label}</span>
     </div>
   ))}</div>;
@@ -89,8 +90,16 @@ export function CommuteRoutePage() {
   const [expanded, setExpanded] = useState(false);
   const [draftRouteId, setDraftRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
+  const savingRouteRef = useRef(false);
+  const activatingRouteRef = useRef(false);
   const [routeMessage, setRouteMessage] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftRouteId(null);
+    setRouteError(null);
+    setRouteMessage(null);
+  }, [personId]);
 
   if (state.status === 'loading') return <section className="commute-page"><div className="commute-message">경로를 불러오는 중</div></section>;
   if (state.status === 'error' || !state.overview.person) return <section className="commute-page"><div className="commute-message">경로를 불러오지 못했습니다.</div></section>;
@@ -140,7 +149,8 @@ export function CommuteRoutePage() {
   };
 
   const savePreferredRoute = async () => {
-    if (!draftRouteId || savingRoute) return;
+    if (!draftRouteId || savingRouteRef.current) return;
+    savingRouteRef.current = true;
     setSavingRoute(true);
     setRouteError(null);
     setRouteMessage(null);
@@ -155,7 +165,27 @@ export function CommuteRoutePage() {
     } catch (error) {
       setRouteError(error instanceof Error ? error.message : '추천 경로 저장에 실패했습니다.');
     } finally {
+      savingRouteRef.current = false;
       setSavingRoute(false);
+    }
+  };
+
+  const activateSavedRoute = async (routeId: string) => {
+    if (activatingRouteRef.current) return;
+    activatingRouteRef.current = true;
+    setRouteError(null);
+    setRouteMessage(null);
+    try {
+      await services.actions.commute.selectSavedRoute(personId, routeId);
+      const current = await services.queries.getCommuteOverview(personId);
+      if (!current.savedRoutes.some(route => route.id === routeId && route.active))
+        throw new Error('활성 경로 저장 결과가 확인되지 않았습니다.');
+      setDraftRouteId(null);
+      setRouteMessage('활성 경로 설정을 저장했습니다. 이전 추천 경로는 다시 선택해야 할 수 있습니다.');
+    } catch (error) {
+      setRouteError(error instanceof Error ? error.message : '활성 경로 저장에 실패했습니다.');
+    } finally {
+      activatingRouteRef.current = false;
     }
   };
 
@@ -171,7 +201,7 @@ export function CommuteRoutePage() {
             route={route}
             points={points}
             onEdit={() => navigate(routePath(route.id))}
-            onSelect={() => services.actions.commute.selectSavedRoute(personId, route.id)}
+            onSelect={() => void activateSavedRoute(route.id)}
           />
         ))}
         {!overview.savedRoutes.length ? <div className="empty-inline">저장된 경로가 없습니다.</div> : null}
@@ -198,6 +228,13 @@ export function CommuteRoutePage() {
       {stalePreferredRoute ? (
         <div className="search-inline-status" data-state="STALE_PREFERRED_ROUTE">
           이전에 저장한 경로를 현재 찾을 수 없습니다. 아래 추천 경로는 계속 선택할 수 있습니다.
+        </div>
+      ) : null}
+      {routeDiagnostics?.status === 'PARTIAL_PROVIDER_FAILURE' ? (
+        <div className="search-inline-status" data-state="PARTIAL_PROVIDER_FAILURE" role="status">
+          일부 경로 조회가 실패했습니다. 아래는 성공적으로 조회된 경로만 표시합니다.
+          {routeDiagnostics.pairs.some(pair => pair.errorCategory === 'QUOTA')
+            ? ' 카카오 경로 조회 한도가 초과되어 추가 조회를 중단했습니다.' : null}
         </div>
       ) : null}
       <div className="route-policy-list">

@@ -35,7 +35,13 @@ try {
   const mocks = await vite.ssrLoadModule('/src/mocks/repositories.ts');
   const stateModule = await vite.ssrLoadModule('/src/mocks/state.ts');
 
-  const store = new stateModule.MockStateStore(structuredClone(stateModule.MOCK_FIXTURE));
+  const fixture = structuredClone(stateModule.MOCK_FIXTURE);
+  // Phase E realtime is eligible only for an actual geolocated boarding
+  // access point tied to the selected provider route. The generic mock's
+  // name-only bus has no coordinate and must NOT qualify as live evidence.
+  fixture.accessPoints.find(point => point.id === 'mock-access-bus').coordinate =
+    { x: 127.0001, y: 37.5001 };
+  const store = new stateModule.MockStateStore(fixture);
   const places = new mocks.MockPlaceRepository(store);
   const schedules = new mocks.MockScheduleRepository(store);
   const persistedCommute = new mocks.MockCommuteRepository(store);
@@ -60,6 +66,10 @@ try {
           accessMinutes: 3,
           egressMinutes: 4,
           fare: 1550,
+          // The LIVE test must prove provider-route AND boarding stop identity.
+          // An unrelated bus leg is not evidence for an ETA overlay.
+          busLegs: [{stopNames:['샘플 정류장 A','샘플 환승역'],
+            routes:[{providerRouteId:'mock-route-100',routeNo:'QA-100',directionLabel:'샘플 중앙역 방면'}]}],
           steps: [
             { type: 'WALKING', label: 'fixture walk' },
             { type: 'BUS', label: 'fixture bus' },
@@ -138,9 +148,30 @@ try {
   );
   const live = await liveToday.get('mock-person-1');
   expect(live?.leftWorkAt === '2026-10-05T13:15:00.000Z', 'actual LEFT_WORK state missing from Today');
-  expect(live?.eta.status === 'LIVE', 'fresh realtime arrival must promote LIVE ETA');
-  expect(live?.eta.freshnessMinutes === 1, 'realtime freshness calculation mismatch');
-  expect(live?.eta.arrivalTime === '22:55', 'realtime wait overlay ETA mismatch');
+  expect(live?.eta.status === 'LIVE', 'fresh realtime arrival must promote LIVE ETA '+JSON.stringify(live?.eta));
+  expect(live?.eta.freshnessMinutes === 1, 'realtime freshness calculation mismatch '+JSON.stringify(live?.eta));
+  expect(live?.eta.arrivalTime === '22:53', 'route total must not double-count unknown planned wait '+JSON.stringify(live?.eta));
+  expect(live?.routeCandidate?.id === 'provider-route-fast',
+    'the Today displayed route must be the exact ETA-selected route');
+  // A second provider with the same ID but unrelated boarding legs must not
+  // borrow live arrivals from the first saved access point.
+  const mismatchedCommute = new runtime.ProviderCommuteRepository(
+    persistedCommute, places, {
+      async search() { return [{
+        id:'provider-route-fast', totalMinutes:38, transferCount:2, walkMinutes:7,
+        accessMinutes:3, egressMinutes:4,
+        steps:[{type:'BUS',label:'다른 버스'}],
+        busLegs:[{stopNames:['다른 정류장'],routes:[{providerRouteId:'other',routeNo:'999',directionLabel:'다른 노선'}]}],
+      }]; },
+    },
+  );
+  const mismatchedToday = new runtime.ProviderTodayRepository(
+    schedules,mismatchedCommute,presence,liveBus,subway,liveClock);
+  const mismatch = await mismatchedToday.get('mock-person-1');
+  expect(mismatch?.eta.status === 'FALLBACK',
+    'unrelated realtime bus arrival must not promote selected candidate to LIVE');
+  expect(mismatch?.eta.arrivalTime === '22:53',
+    'mismatched realtime fallback must use only actual departure plus route time');
 
   const failingBus = {
     async arrivals() {

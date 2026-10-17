@@ -1,0 +1,44 @@
+{
+  "schema": "comebackhome-workers-free-full-json/v1",
+  "run_id": 38405347734,
+  "job_id": 115323394237,
+  "source_head": "8cd670883c051bdfc3cd0ff5fb835082527b39eb",
+  "model": "@cf/meta/llama-3.2-11b-vision-instruct",
+  "method": "FULL_ORIGINAL_IMAGES_ENGLISH_COMPACT_COMPLETE_JSON",
+  "corpus_sha256": "6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a",
+  "scorer_sha256": "c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004",
+  "licence_requests_attempted": 0,
+  "prior_verified_licence_run": 38356883322,
+  "prior_budget_reserved_neurons": 1139.256676,
+  "local_budget_neurons": 8000,
+  "max_output_tokens": 3072,
+  "images": [
+    {
+      "http": null,
+      "latency_ms": 120106,
+      "usage": null,
+      "neurons_measured": null,
+      "neurons_pricing_estimate": null,
+      "error": "NETWORK_OR_RESPONSE_FAILURE_CONSUMPTION_UNKNOWN_STOP_NO_RETRY",
+      "image_id": "A_high_resolution",
+      "image_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+      "input": "ORIGINAL_FULL_SYNTHETIC_PNG",
+      "output_syntax": {
+        "text_response": false
+      },
+      "parse_error": "NO_TEXT_RESPONSE",
+      "predicted_cells": 0
+    }
+  ],
+  "actual_neurons": null,
+  "account_neurons_remaining": null,
+  "production_writes": 0,
+  "private_images": 0,
+  "paid_fallback": false,
+  "acceptance": "NOT_ACCEPTED_BY_THIS_BENCHMARK",
+  "blocker": "REQUEST_OR_OUTPUT_CONTRACT_FAILED_STOP_NO_RETRY",
+  "budget_reserved_neurons": 1892.643172,
+  "attempted_images": 1,
+  "complete_v2": false,
+  "aggregate": null
+}

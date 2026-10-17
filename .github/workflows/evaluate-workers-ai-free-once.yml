@@ -1,0 +1,36 @@
+name: Workers Free OCR v2 / Gemma4 typed original-prompt evaluation
+
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/evaluate-workers-ai-free-once.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-workers-ai-free-evaluation
+  cancel-in-progress: false
+
+jobs:
+  evaluate-synthetic-v2:
+    if: >-
+      github.repository == 'ydh1121/ComeBackHome' &&
+      github.ref == 'refs/heads/feat/nonimage-weekly-xlsx-import' &&
+      github.run_attempt == 1 &&
+      startsWith(github.event.head_commit.message, '[cbh-free-ocr-20261013-gemma4-schema]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact approved source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify original synthetic corpus and independent scorer hashes
+        run: python scripts/evaluate-workers-ai-free.py
+      - name: Verify official model schema and evaluate original images within cumulative free budget
+        env:
+          CBH_AI_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_AI_TOKEN }}
+          CBH_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CBH_FREE_EVAL_APPROVED_DATE: '2026-10-13'
+        run: python scripts/evaluate-workers-ai-free.py --run-gemma-schema

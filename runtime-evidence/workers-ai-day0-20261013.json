@@ -1,0 +1,30 @@
+{
+  "schema": "comebackhome-workers-free-day0/v1",
+  "run_id": 38357728022,
+  "job_id": 115164408343,
+  "source_head": "35ecc51bd5c4457aad754d376c7815eb0f099cc5",
+  "model": "@cf/meta/llama-3.2-11b-vision-instruct",
+  "scope": "KNOWN_TEMPLATE_DAY_CROP_DIAGNOSTIC_NOT_FULL_IMAGE_ACCURACY",
+  "api": {
+    "http": 200,
+    "latency_ms": 30907,
+    "usage": {
+      "prompt_tokens": 2031,
+      "completion_tokens": 1024,
+      "total_tokens": 3055
+    },
+    "neurons_measured": null,
+    "neurons_pricing_estimate": 71.925542,
+    "response_sha256": "edf0f114f88939854e4706e2f8485be001c53210618848550f3bb4545083feb2",
+    "api_success": true,
+    "error_codes": []
+  },
+  "parse_error": "INVALID_OR_TRUNCATED_JSON",
+  "model_accuracy": null,
+  "completed_image_responses": 1,
+  "budget_reserved_neurons": 1029.969562,
+  "prior_image_timeout_reservation": 942.292992,
+  "actual_neurons": null,
+  "private_images": 0,
+  "production_writes": 0
+}

@@ -1,5 +1,4 @@
 import type {
-  NotificationJobStore,
   NotificationPayload,
   NotificationSettingsStore,
 } from './contracts';
@@ -19,7 +18,6 @@ export interface PresenceEventInput {
 }
 
 export interface PresenceEventDependencies {
-  jobs: NotificationJobStore;
   people: PersonRepository;
   schedules: ScheduleRepository;
   settings: NotificationSettingsStore;
@@ -115,60 +113,37 @@ export async function enqueuePresenceEvent(
   const person = await dependencies.people.get(personId);
   if (!person) throw new Error('Person was not found.');
 
-  const acceptedAt = now.toISOString();
-  const workDate = seoulDate(now);
-  const recorded = await dependencies.presence.record({
-    eventId,
-    personId,
-    type: input.type,
-    acceptedAt,
-    workDate,
-  });
-  if (recorded.duplicate) {
-    return {
-      eventId,
-      personId,
-      type: input.type,
-      acceptedAt,
-      queued: false,
-    };
-  }
-
+  // Read notification preferences and assemble any outbox payload BEFORE the
+  // first write. A failed lookup must not leave a committed presence receipt.
   const settings = await dependencies.settings.get();
   const enabled = input.type === 'LEFT_WORK'
     ? settings.leftWorkEnabled
     : settings.homeArrivalEnabled;
-
-  if (!enabled) {
-    return {
-      eventId,
-      personId,
-      type: input.type,
-      acceptedAt,
-      queued: false,
-    };
-  }
-
-  const schedules = await dependencies.schedules.list(personId);
-  const futureWork = nextWork(schedules, seoulDate(now));
-  const payload = payloadFor(person, input.type, futureWork);
+  const acceptedAt = now.toISOString();
+  const workDate = seoulDate(now);
   const typeSlug = input.type === 'LEFT_WORK' ? 'left-work' : 'arrived-home';
-
-  await dependencies.jobs.enqueueOnce({
+  const schedules = enabled ? await dependencies.schedules.list(personId) : [];
+  const futureWork = enabled ? nextWork(schedules, workDate) : null;
+  const job = enabled ? {
     id: crypto.randomUUID(),
     dedupeKey: 'presence:' + typeSlug + ':' + personId + ':' + eventId,
     personId,
     type: 'presence-' + typeSlug,
     scheduledFor: acceptedAt,
     nextAttemptAt: acceptedAt,
-    payload,
+    payload: payloadFor(person, input.type, futureWork),
+  } : undefined;
+
+  const recorded = await dependencies.presence.record({
+    eventId, personId, type: input.type, acceptedAt, workDate,
+    ...(job ? { notificationJob: job } : {}),
   });
 
   return {
     eventId,
     personId,
     type: input.type,
-    acceptedAt,
-    queued: true,
+    acceptedAt: recorded.acceptedAt ?? acceptedAt,
+    queued: recorded.queued ?? (Boolean(job) && !recorded.duplicate),
   };
 }

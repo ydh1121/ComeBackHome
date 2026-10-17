@@ -9,6 +9,7 @@ import type {
   TransitRouteProvider,
   TransitRouteResult,
   TransitSearchResult,
+  TransitLookupResult,
 } from '../../application/contracts/providers';
 import type { BusRouteOption, Coordinate } from '../../domain/models';
 import { HttpJsonClient } from './HttpJsonClient';
@@ -26,6 +27,16 @@ export class HttpPlaceSearchProvider implements PlaceSearchProvider {
 
 export class HttpTransitAccessSearchProvider implements TransitAccessSearchProvider {
   constructor(private readonly client: HttpJsonClient) {}
+
+  async searchDetailed(query: string, near: Coordinate): Promise<TransitLookupResult> {
+    const params = new URLSearchParams({q:query,x:String(near.x),y:String(near.y)});
+    return this.client.get<TransitLookupResult>('/providers/transit-search?' + params);
+  }
+
+  async nearbyDetailed(near: Coordinate): Promise<TransitLookupResult> {
+    const params = new URLSearchParams({x:String(near.x),y:String(near.y)});
+    return this.client.get<TransitLookupResult>('/providers/transit-nearby?' + params);
+  }
 
   async search(query: string, near: Coordinate): Promise<TransitSearchResult[]> {
     const params = new URLSearchParams({

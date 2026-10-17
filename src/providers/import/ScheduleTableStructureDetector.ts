@@ -101,6 +101,7 @@ function repeatedSpacingScore(positions: number[]): number {
 function projectionScores(
   raster: ScheduleRasterPlane,
   direction: 'horizontal' | 'vertical',
+  faintGrid = false,
 ): number[] {
   const { width, height, luminance } = raster;
   const length = direction === 'horizontal' ? height : width;
@@ -111,7 +112,7 @@ function projectionScores(
   // moderate gray candidates. The later long-run continuity gate still
   // rejects compact Hangul/number strokes.
   const background = sampledBackgroundLuminance(raster);
-  const darkCutoff = clamp(background - 38, 145, 205);
+  const darkCutoff = faintGrid ? clamp(background - 18, 165, 238) : clamp(background - 38, 145, 205);
   const edgeCutoff = 24;
 
   for (let primary = 0; primary < length; primary += 1) {
@@ -184,12 +185,13 @@ function continuousGridPeaks(
   raster: ScheduleRasterPlane,
   peaks: Array<{ position: number; score: number }>,
   direction: 'horizontal' | 'vertical',
+  faintGrid = false,
 ): Array<{ position: number; score: number }> {
   const alongLength = direction === 'horizontal' ? raster.width : raster.height;
   const acrossLength = direction === 'horizontal' ? raster.height : raster.width;
   const minimumRun = Math.max(24, Math.round(alongLength * 0.32));
   const background = sampledBackgroundLuminance(raster);
-  const lineDarkCutoff = clamp(background - 24, 165, 220);
+  const lineDarkCutoff = faintGrid ? clamp(background - 14, 175, 242) : clamp(background - 24, 165, 220);
 
   return peaks.filter(({ position }) => {
     const coordinate = Math.round(position);
@@ -382,6 +384,7 @@ export function pixelSupportedColumnBounds(
 
 export function detectScheduleTableStructureFromRaster(
   raster: ScheduleRasterPlane,
+  faintGrid = false,
 ): ScheduleTableStructure {
   if (
     raster.width <= 0 ||
@@ -392,10 +395,10 @@ export function detectScheduleTableStructureFromRaster(
   }
 
   const horizontalPeaks = continuousGridPeaks(
-    raster, clusterProjectionPeaks(projectionScores(raster, 'horizontal')), 'horizontal',
+    raster, clusterProjectionPeaks(projectionScores(raster, 'horizontal', faintGrid)), 'horizontal', faintGrid,
   );
   const verticalPeaks = continuousGridPeaks(
-    raster, clusterProjectionPeaks(projectionScores(raster, 'vertical')), 'vertical',
+    raster, clusterProjectionPeaks(projectionScores(raster, 'vertical', faintGrid)), 'vertical', faintGrid,
   );
   const horizontalPositions = horizontalPeaks.map((item) => item.position);
   const verticalPositions = verticalPeaks.map((item) => item.position);

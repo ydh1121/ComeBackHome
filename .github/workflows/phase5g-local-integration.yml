@@ -183,6 +183,174 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  followup-f01-f09-product-e2e:
+    name: F01_F09_PRODUCT_E2E / mobile UI, lifecycle, alarms / Chromium WebKit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies and browser test runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Verify one isolated D1 with real XLSX browser approval to saved route Today and atomic outbox
+        run: |
+          node scripts/verify-followup-f01-f09.mjs
+          node scripts/verify-followup-product-e2e.mjs
+
+  nonimage-phase-g-full-chain-e2e:
+    name: NONIMAGE_PHASE_G_FULL_CHAIN_E2E / XLSX to route Today ETA and outbox / Chromium WebKit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies and browser test runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Verify one isolated D1 with real XLSX browser approval to saved route Today and atomic outbox
+        run: node scripts/verify-nonimage-phase-g-full-chain-e2e.mjs
+
+  nonimage-phase-f-notification-product-e2e:
+    name: NONIMAGE_PHASE_F_SETTINGS_E2E / browser UI + local D1 + real workerd lease
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Notification settings retry and D1 reload Chromium WebKit
+        run: node scripts/verify-nonimage-phase-f-notification-settings-product-e2e.mjs
+      - name: Real workerd encrypted Web Push and signed VAPID request (no outbound)
+        run: npm run verify:push-workerd-crypto
+      - name: Abandoned outbox job recovery and notification scheduler real D1
+        run: node scripts/verify-phase5u-local-d1-notification.mjs
+
+  nonimage-phase-e-route-today-e2e:
+    name: NONIMAGE_PHASE_E_PRODUCT_E2E / route selection, D1, Today ETA / Chromium WebKit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install app dependencies and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Route choice through D1 to exact Today display
+        run: node scripts/verify-nonimage-phase-e-route-today-real-product-e2e.mjs
+
+  nonimage-phase-d-transit-product-e2e:
+    name: NONIMAGE_PHASE_D_PRODUCT_E2E / transit and multiselect / Chromium WebKit local D1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Worker official transit provider/error policy (no live requests)
+        run: node scripts/verify-nonimage-phase-d-provider-policy.mjs
+      - name: Real browser transit selection, map and saved route local D1
+        run: node scripts/verify-nonimage-phase-d-transit-real-product-e2e.mjs
+
+  nonimage-phase-c-place-product-e2e:
+    name: NONIMAGE_PHASE_C_PRODUCT_E2E / map and place search / Chromium WebKit local D1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Real place search, interactive map and D1 persistence (fixture Kakao)
+        run: node scripts/verify-nonimage-phase-c-place-real-product-e2e.mjs
+
+  nonimage-phase-b-product-e2e:
+    name: NONIMAGE_PHASE_B_PRODUCT_E2E / people, OFF, breaks, bulk, isolation / Chromium WebKit local D1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Real people and schedule browser acceptance with local D1
+        run: node scripts/verify-nonimage-phase-b-real-product-e2e.mjs
+
+  nonimage-xlsx-product-e2e:
+    name: NONIMAGE_XLSX_PRODUCT_E2E / native binary + Chromium WebKit + isolated D1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application and pinned browser runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - name: Actual product XLSX import E2E (no remote resources)
+        run: node scripts/verify-nonimage-xlsx-real-product-e2e.mjs
+
   ocr-clean-production-runtime:
     name: PRODUCT_REQUIRED_GATE / clean production OCR assets / no CI pre-staging
     runs-on: ubuntu-latest
@@ -357,6 +525,9 @@ jobs:
 
       - name: Verify weekly 7x3 adapter and fail-closed synthetic contract
         run: node scripts/verify-ocr-weekly-3col-adapter-unit.mjs
+
+      - name: Verify approved image review joins the existing atomic import contract
+        run: node scripts/verify-ocr-approved-review.mjs
 
       - name: Verify actual product Paddle wiring and break-minute source contract
         run: node scripts/verify-ocr-product-static-contract.mjs

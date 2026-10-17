@@ -387,6 +387,153 @@ try {
   );
   assert((await services.repositories.imports.getBatch(importBatchId))?.committed === true, 'real workbook import batch was not committed');
 
+
+  // Non-image Phase A acceptance: approved XLSX -> SINGLE Worker/D1 transaction.
+  // Anonymous staff only, isolated local D1 only, no public roster/remote API.
+  const beforeDraftPeople = await services.repositories.people.list();
+  const draft = await services.repositories.imports.createBatch();
+  const newStaffRef = 'synthetic-pending-staff';
+  await services.repositories.imports.replaceFiles(draft.id,[{
+    id:'synthetic-xlsx',name:'anonymous-weekly.xlsx',kind:'XLSX',progress:100,status:'READY',
+  }]);
+  await services.repositories.imports.replaceParsedResult(draft.id,{
+    detectedPeople:[{id:newStaffRef,sourceName:'합성직원가',matchedPersonId:null,confidence:1}],
+    structure:{sheet:'weekly 7 day x start/end/break physical matrix',headerRow:4,
+      personColumn:'A',dateColumn:'B',shiftColumn:'B:V',needsReview:true},
+    reviewItems:[
+      {id:'synthetic-review-a',detectedPersonId:newStaffRef,personId:null,date:'2099-09-01',
+        imported:{enabled:true,start:'09:30',end:'23:30',breakMinutes:30},resolution:null},
+      {id:'synthetic-review-b',detectedPersonId:newStaffRef,personId:null,date:'2099-09-02',
+        imported:{enabled:false,start:null,end:null,breakMinutes:null},
+        recognitionState:'OFF_CANDIDATE',resolution:null},
+    ],
+  });
+  await services.actions.importMatch.setPendingPersonCreate(draft.id,newStaffRef,true);
+  assert((await services.repositories.people.list()).length === beforeDraftPeople.length,
+    'P0: pending create must NOT write PeopleRepository before approval');
+  assert((await services.repositories.imports.getBatch(draft.id))?.reviewItems.every(x=>x.resolution===null),
+    'P0: pending match must invalidate approvals');
+  await services.actions.importReview.setResolution(draft.id,'synthetic-review-a','NEW');
+  await services.actions.importReview.setResolution(draft.id,'synthetic-review-b','NEW');
+  await services.actions.commitImportReview.execute(draft.id);
+  const afterApprovedPeople=await services.repositories.people.list();
+  const approvedPerson=afterApprovedPeople.find(p=>p.name==='합성직원가');
+  assert(Boolean(approvedPerson) && afterApprovedPeople.length===beforeDraftPeople.length+1,
+    'atomic XLSX: pending person was not created only after final approval');
+  const approvedWork=await services.repositories.schedules.getByDate(approvedPerson.id,'2099-09-01');
+  const approvedOff=await services.repositories.schedules.getByDate(approvedPerson.id,'2099-09-02');
+  assert(approvedWork?.start==='09:30'&&approvedWork.end==='23:30'&&approvedWork.breakMinutes===30,
+    'atomic XLSX: reviewed work not persisted');
+  assert(approvedOff?.enabled===false&&approvedOff.breakMinutes===null,
+    'atomic XLSX: explicitly approved OFF not persisted');
+  assert((await services.repositories.imports.getBatch(draft.id))?.committed===true,
+    'atomic XLSX: receipt must precede markCommitted');
+
+  const approvedCall=async payload=>{
+    const response=await originalFetch(origin+'/api/workbooks/approved-import',{
+      method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
+    });
+    return {status:response.status,body:await response.json().catch(()=>null)};
+  };
+  const shift=(personRef,date,existing=null,enabled=true)=>({
+    personRef,date,resolution:'NEW',approved:true,enabled,explicitOff:!enabled,
+    start:enabled?'09:00':null,end:enabled?'18:00':null,
+    breakMinutes:enabled?30:null,existing,
+  });
+  const mk=(requestId,name,rows)=>({
+    requestId,approved:true,people:[{ref:'new',kind:'PENDING_NEW',name}],
+    schedules:rows,
+  });
+  const baselineCount=(await services.repositories.people.list()).length;
+  const bad=mk('nonimage-failed-batch-001','합성직원나',[
+    shift('new','2099-09-03'),
+    shift('new','2099-09-04',{enabled:true,start:'09:00',end:'18:00',breakMinutes:30}),
+  ]);
+  const badResponse=await approvedCall(bad);
+  assert(badResponse.status>=400,
+    'atomic batch with stale expected schedule MUST fail');
+  assert((await services.repositories.people.list()).length===baselineCount,
+    'rollback must not retain newly created person');
+  assert(!(await services.repositories.people.list()).some(p=>p.name==='합성직원나'),
+    'rollback must delete first person INSERT');
+  // A failed request never reserved the idempotency ID.
+  const repaired=mk(bad.requestId,'합성직원나',[shift('new','2099-09-03')]);
+  const firstApproved=await approvedCall(repaired);
+  assert(firstApproved.status===200&&firstApproved.body?.receipt?.applied===true,
+    'repaired atomic XLSX request must succeed after rollback');
+  const secondApproved=await approvedCall(repaired);
+  assert(secondApproved.status===200&&
+    JSON.stringify(secondApproved.body?.receipt)===JSON.stringify(firstApproved.body?.receipt),
+    'same requestId/payload must replay byte-identical saved receipt');
+  assert((await services.repositories.people.list()).filter(p=>p.name==='합성직원나').length===1,
+    'same request replay must not create duplicate staff');
+  const altered=structuredClone(repaired);
+  altered.schedules[0].end='19:00';
+  const conflict=await approvedCall(altered);
+  assert(conflict.status===409&&conflict.body?.reason==='IMPORT_CONFLICT',
+    'same requestId different payload must return explicit HTTP409 conflict');
+
+  const createdId=firstApproved.body.receipt.people[0].personId;
+  const current=await services.repositories.schedules.getByDate(createdId,'2099-09-03');
+  await services.repositories.schedules.upsert({...current,end:'20:00'});
+  const staleReplay=await approvedCall(repaired);
+  const afterStaleReplay=await services.repositories.schedules.getByDate(createdId,'2099-09-03');
+  assert(staleReplay.status===200&&afterStaleReplay?.end==='20:00',
+    'old receipt replay MUST NOT overwrite later legitimate edits');
+  const staleDifferentRequest={
+    requestId:'nonimage-stale-update-001',approved:true,
+    people:[{ref:'present',kind:'EXISTING',personId:createdId}],
+    schedules:[shift('present','2099-09-03',
+      {enabled:true,start:'09:00',end:'18:00',breakMinutes:30})],
+  };
+  assert((await approvedCall(staleDifferentRequest)).status>=400,
+    'another request with stale expected snapshot must fail closed');
+  assert((await services.repositories.schedules.getByDate(createdId,'2099-09-03'))?.end==='20:00',
+    'stale update must not overwrite newer schedule');
+
+  const negatives=[
+    ['UNREVIEWED',{...mk('nonimage-unreviewed-001','합성직원다',[shift('new','2099-09-06')]),approved:false}],
+    ['UNAPPROVED_OFF',mk('nonimage-off-001','합성직원다',[
+      {...shift('new','2099-09-06',null,false),explicitOff:false}])],
+    ['INVALID_DATE',mk('nonimage-date-001','합성직원다',[shift('new','2099-99-99')])],
+    ['INVALID_CLOCK',mk('nonimage-clock-001','합성직원다',[
+      {...shift('new','2099-09-06'),start:'99:90'}])],
+    ['DUPLICATE_DATE',mk('nonimage-dupday-001','합성직원다',[
+      shift('new','2099-09-06'),shift('new','2099-09-06')])],
+    ['EXISTING_NAME',mk('nonimage-dupname-001','합성직원가',[shift('new','2099-09-06')])],
+    ['UNKNOWN_PERSON',{requestId:'nonimage-unknown-001',approved:true,
+      people:[{ref:'absent',kind:'EXISTING',personId:'no-such-person'}],
+      schedules:[shift('absent','2099-09-06')]}],
+  ];
+  for(const [name,payload] of negatives){
+    const outcome=await approvedCall(payload);
+    assert(outcome.status>=400,name+' must fail approved import safely');
+    assert(!(await services.repositories.people.list()).some(p=>p.name==='합성직원다'),
+      name+' must not create a partial employee');
+  }
+
+  const raceName='합성직원라';
+  const raceA=mk('nonimage-race-a-001',raceName,[shift('new','2099-09-07')]);
+  const raceB=mk('nonimage-race-b-001',raceName,[shift('new','2099-09-07')]);
+  const raced=await Promise.all([approvedCall(raceA),approvedCall(raceB)]);
+  assert(raced.filter(x=>x.status===200).length===1,
+    'parallel different IDs same staff must allow only one winner');
+  assert((await services.repositories.people.list()).filter(p=>p.name===raceName).length===1,
+    'parallel different IDs must not duplicate person records');
+  const freshServices=await composition.createHybridApiApplicationServices('mock');
+  const reloaded=await freshServices.repositories.schedules.getByDate(approvedPerson.id,'2099-09-01');
+  assert(reloaded?.breakMinutes===30,
+    'new composition/readback after reload must preserve approved work');
+
+  console.log('CBH_APPROVED_XLSX_LOCAL_D1_PASS='+JSON.stringify({
+    draftPeopleWrites:0,createdAfterApproval:1,reviewedOff:true,
+    rollback:true,replayReceipt:true,payloadConflict409:true,
+    staleReplayDoesNotOverwrite:true,staleDifferentRequestRejected:true,
+    validationControls:negatives.map(x=>x[0]),
+    distinctRequestRaceExclusive:true,reloadedPersisted:true,
+    productionD1Writes:0,
+  }));
+
   const finalBootstrap = await requestJson('/api/bootstrap');
   assert(finalBootstrap.people.some((person) => person.id === personId), 'bootstrap did not expose persisted person after mutations');
   assert(finalBootstrap.notificationSettings?.etaChangeEnabled === true, 'bootstrap notification state did not reflect D1 mutation');

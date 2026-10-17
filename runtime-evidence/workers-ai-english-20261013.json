@@ -1,0 +1,76 @@
+{
+  "schema": "comebackhome-workers-free-english/v1",
+  "run_id": 38404633180,
+  "job_id": 115320913617,
+  "source_head": "43e2a5a50ce03d5a9b3fb2d583123ab378c3d6c2",
+  "model": "@cf/meta/llama-3.2-11b-vision-instruct",
+  "scope": "KNOWN_TEMPLATE_DAY_CROP_DIAGNOSTIC_NOT_FULL_IMAGE_ACCURACY",
+  "output_representation": "COMPACT_14_FIELDS_LOSSLESS_MAP",
+  "instruction_language": "ENGLISH",
+  "output_syntax": {
+    "text_response": true,
+    "characters": 1349,
+    "starts_object": false,
+    "starts_array": false,
+    "code_fences": 2,
+    "open_braces": 4,
+    "close_braces": 4,
+    "open_brackets": 1,
+    "close_brackets": 1,
+    "known_keys_present": [
+      "rows",
+      "source_image_id"
+    ],
+    "licence_language_present": false,
+    "prefix_syntax_only": "xxxxxxxxxx xxxxxxxx xxxxxx\n\nxxx xxxxx xxxxxxxx x xxxxx xxxx xxxxxxxx xxxxx, xxxxx, xxx xxxxxx xxx xxxxx xx xxxxxxx xxxx xxxxxxx xxx xxxx xxxxxxxx, xxxx xxx xxxx",
+    "json_valid": false,
+    "json_error": "Expecting value",
+    "json_error_offset": 0
+  },
+  "original_corpus_sha256": "6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a",
+  "scorer_sha256": "c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004",
+  "source_image_id": "A_high_resolution",
+  "source_image_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+  "crop_sha256": "d125815fb3eb26f544116105e16970ad0ab7f7af7ffd621c2e3576f35ce40c4b",
+  "source_regions": [
+    [
+      18,
+      0,
+      134,
+      311
+    ],
+    [
+      134,
+      0,
+      437,
+      311
+    ]
+  ],
+  "image_requests_attempted": 1,
+  "licence_requests_attempted": 0,
+  "prior_verified_licence_run": 38356883322,
+  "max_output_tokens": 1536,
+  "prior_budget_reserved_neurons": 1102.406664,
+  "budget_reserved_neurons": 1139.256676,
+  "actual_neurons": null,
+  "api": {
+    "http": 200,
+    "latency_ms": 21649,
+    "usage": {
+      "prompt_tokens": 1886,
+      "completion_tokens": 464,
+      "total_tokens": 2350
+    },
+    "neurons_measured": null,
+    "neurons_pricing_estimate": 36.850012,
+    "response_sha256": "4de45c69edc4c55b99651247e9a778b72df05ee28f29f3c15beb475aa202d209",
+    "api_success": true,
+    "error_codes": []
+  },
+  "parse_error": "INVALID_OR_TRUNCATED_JSON",
+  "completed_model_response": true,
+  "production_writes": 0,
+  "private_images": 0,
+  "paid_fallback": false,
+  "acceptance": "DIAGNOSTIC_ONLY_NOT_PRODUCT_ACCEPTANCE"
+}

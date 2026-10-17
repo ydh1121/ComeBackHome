@@ -1,3 +1,4 @@
+import { activeWorkSchedule, previousSeoulDate, shiftTimes } from '../../domain/product-time';
 import type { EntityId } from '../../domain/common';
 import type {
   EtaSnapshot,
@@ -66,10 +67,6 @@ function kstTime(now: Date): string {
   }).format(now);
 }
 
-function parseKstDateTime(date: string, time: string): number | null {
-  const value = Date.parse(date + 'T' + time + ':00+09:00');
-  return Number.isFinite(value) ? value : null;
-}
 
 function normalizeTransitEvidence(value: string): string {
   return value
@@ -127,11 +124,14 @@ function providerErrorCategory(error: unknown): RouteProviderErrorCategory {
 type RouteTarget = {
   coordinate: { x: number; y: number };
   source: RouteSearchSource;
+  accessPointId?: EntityId;
 };
 type FoundRoute = {
   result: TransitRouteResult;
   originSource: RouteSearchSource;
   destinationSource: RouteSearchSource;
+  originAccessPointId?: EntityId;
+  destinationAccessPointId?: EntityId;
 };
 
 function accessPriority(origin: RouteSearchSource, destination: RouteSearchSource): number {
@@ -148,22 +148,39 @@ export class ProviderCommuteRepository implements CommuteRepository {
   private readonly routeSearchCache = new Map<string, {
     expiresAt: number;
     value: Promise<TransitRouteResult[]>;
+    settled: boolean;
   }>();
   private quotaBlockedUntil = 0;
+  private readonly searchContexts = new Map<string, string>();
+  private readonly metrics = { requests: 0, cacheHits: 0, sharedRequests: 0, failures: 0, quotaBlocked: 0, invalidations: 0 };
+  getRouteCacheMetrics() { return { ...this.metrics, entries: this.routeSearchCache.size, ttlMs: 60_000 }; }
+
+  private invalidateRoutes(): void {
+    this.routeSearchCache.clear();
+    this.metrics.invalidations++;
+  }
 
   private searchProviderRoutes(origin: { x: number; y: number }, destination: { x: number; y: number }): Promise<TransitRouteResult[]> {
     const now = systemRuntimeClock.now().getTime();
     if (now < this.quotaBlockedUntil) {
+      this.metrics.quotaBlocked++;
       return Promise.reject(new Error('Provider request failed: kakao-map/public-transit-routing HTTP 400 CODE -10'));
     }
     const key = [origin.x, origin.y, destination.x, destination.y].join(':');
     const cached = this.routeSearchCache.get(key);
-    if (cached && now < cached.expiresAt) return cached.value;
+    if (cached && now < cached.expiresAt) {
+      this.metrics.cacheHits++;
+      if (!cached.settled) this.metrics.sharedRequests++;
+      return cached.value;
+    }
     if (cached) this.routeSearchCache.delete(key);
 
+    this.metrics.requests++;
+    const entry = { expiresAt: now + 60_000, settled: false, value: null as unknown as Promise<TransitRouteResult[]> };
     const value = this.routeProvider.search(origin, destination)
       .catch((error: unknown) => {
-        this.routeSearchCache.delete(key);
+        this.metrics.failures++;
+        if (this.routeSearchCache.get(key) === entry) this.routeSearchCache.delete(key);
         if (providerErrorCategory(error) === 'QUOTA') {
           // Avoid re-request storms for this app session. This is not a claim
           // that the provider quota resets in sixty seconds.
@@ -171,7 +188,9 @@ export class ProviderCommuteRepository implements CommuteRepository {
         }
         throw error;
       });
-    this.routeSearchCache.set(key, { expiresAt: now + 60_000, value });
+    entry.value = value;
+    void value.then(() => { entry.settled = true; }, () => { entry.settled = true; });
+    this.routeSearchCache.set(key, entry);
     if (this.routeSearchCache.size > 64) {
       this.routeSearchCache.delete(this.routeSearchCache.keys().next().value!);
     }
@@ -240,6 +259,13 @@ export class ProviderCommuteRepository implements CommuteRepository {
       this.persisted.listAccessPoints(personId, 'origin'),
       this.persisted.listAccessPoints(personId, 'destination'),
     ]);
+    // Re-read configuration on every discovery; never serve a route snapshot
+    // after place, selected transport, bus line or saved-route edits.
+    const context = JSON.stringify({ origin, destination, savedRoutes, originPoints, destinationPoints });
+    const previous = this.searchContexts.get(personId);
+    if (previous !== undefined && previous !== context) this.invalidateRoutes();
+    this.searchContexts.set(personId, context);
+    if (this.searchContexts.size > 64) this.searchContexts.delete(this.searchContexts.keys().next().value!);
     const activeSavedRoute = savedRoutes.find((route) => route.active) ?? savedRoutes[0] ?? null;
     const originIds = activeSavedRoute
       ? activeSavedRoute.originAccessPointIds ??
@@ -290,7 +316,7 @@ export class ProviderCommuteRepository implements CommuteRepository {
 
     const toTargets = (points: TransitAccessPoint[], source: RouteSearchSource): RouteTarget[] =>
       points.filter((point) => validRouteCoordinate(point.coordinate))
-        .map((point) => ({ coordinate: point.coordinate!, source }));
+        .map((point) => ({ coordinate: point.coordinate!, source, accessPointId: point.id }));
     const originRouteTargets = toTargets(routeOrigin, 'ROUTE_ACCESS');
     const destinationRouteTargets = toTargets(routeDestination, 'ROUTE_ACCESS');
     const originSelectedTargets = toTargets(selectedOrigin, 'SELECTED_ACCESS');
@@ -336,6 +362,8 @@ export class ProviderCommuteRepository implements CommuteRepository {
             result,
             originSource: originTarget.source,
             destinationSource: destinationTarget.source,
+            ...(originTarget.accessPointId ? { originAccessPointId: originTarget.accessPointId } : {}),
+            ...(destinationTarget.accessPointId ? { destinationAccessPointId: destinationTarget.accessPointId } : {}),
           });
         }
       } catch (error) {
@@ -390,9 +418,32 @@ export class ProviderCommuteRepository implements CommuteRepository {
       const matchScore = accessPriority(item.originSource, item.destinationSource);
       const viaMatch = !viaPoints.length || viaPoints.every((point) => routeMatchesAccessPoint(item.result, point));
       const matchesPreference = matchScore >= 0.95 && viaMatch;
+      // Only arrivals demonstrably associated with this provider route may
+      // affect ETA. A route-linked access ID alone is not proof the provider
+      // used that bus service or boarding station.
+      const originAccess = item.originAccessPointId
+        ? originById.get(item.originAccessPointId) : undefined;
+      const hasVerifiedBusLeg = originAccess?.mode === 'BUS' &&
+        !!originAccess.selectedBusRouteId &&
+        (item.result.busLegs ?? []).some(leg =>
+          leg.routes.some(service => service.providerRouteId === originAccess.selectedBusRouteId) &&
+          leg.stopNames.some(name =>
+            normalizeTransitEvidence(name) === normalizeTransitEvidence(originAccess.name)
+          )
+        );
+      const hasVerifiedSubwayLeg = originAccess?.mode === 'SUBWAY' &&
+        (item.result.steps ?? []).some(step => step.type === 'SUBWAY' &&
+          normalizeTransitEvidence(step.label).includes(normalizeTransitEvidence(originAccess.name)) &&
+          normalizeTransitEvidence(originAccess.name).length > 0);
       return {
         id: item.result.id,
         personId,
+        originSearchSource: item.originSource,
+        destinationSearchSource: item.destinationSource,
+        ...(item.originAccessPointId ? { originAccessPointId: item.originAccessPointId } : {}),
+        ...(item.destinationAccessPointId ? { destinationAccessPointId: item.destinationAccessPointId } : {}),
+        ...((hasVerifiedBusLeg || hasVerifiedSubwayLeg) && originAccess
+          ? { realtimeOriginAccessPointId: originAccess.id } : {}),
         totalMinutes: item.result.totalMinutes,
         transferCount: item.result.transferCount,
         walkMinutes: item.result.walkMinutes ?? 0,
@@ -402,11 +453,15 @@ export class ProviderCommuteRepository implements CommuteRepository {
         ...(item.result.steps ? { steps: item.result.steps } : {}),
         ...(matchScore > 0 ? { preferenceMatchScore: matchScore } : {}),
         ...(matchesPreference ? { matchesPreference: true, policyLabels: ['선택 교통 반영'] } : {}),
+        ...(diagnostics.placeFallbackUsed && item.originSource === 'PLACE' &&
+            item.destinationSource === 'PLACE'
+            ? { policyLabels: ['저장 장소 기반 대체 경로 · 선택 교통 미반영'] } : {}),
       };
     }).sort(compareRoutes);
     diagnostics.dedupedCandidateCount = candidates.length;
-    diagnostics.status = candidates.length ? 'OK' :
-      quotaExceeded ? 'QUOTA_EXCEEDED' :
+    diagnostics.status = candidates.length
+      ? hadProviderError ? 'PARTIAL_PROVIDER_FAILURE' : 'OK'
+      : quotaExceeded ? 'QUOTA_EXCEEDED' :
       runtimeDisabled ? 'RUNTIME_DISABLED' : hadProviderError ? 'PROVIDER_ERROR' : 'NO_RESULT';
     return { candidates, diagnostics };
   }
@@ -415,8 +470,17 @@ export class ProviderCommuteRepository implements CommuteRepository {
     return this.persisted.getPreferredRouteCandidateId(personId);
   }
 
-  setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void> {
-    return this.persisted.setPreferredRouteCandidateId(personId, routeCandidateId);
+  async setPreferredRouteCandidateId(personId: EntityId, routeCandidateId: EntityId): Promise<void> {
+    // A caller can only persist one of the CURRENT person's discovered routes.
+    // Do not save a stale or foreign candidate after a saved-route switch.
+    const discovery = await this.inspectRouteCandidates(personId);
+    if (!discovery.candidates.some(route =>
+      route.personId === personId && route.id === routeCandidateId)) {
+      throw new Error('STALE_OR_FOREIGN_ROUTE_CANDIDATE');
+    }
+    await this.persisted.setPreferredRouteCandidateId(personId, routeCandidateId);
+    const stored = await this.persisted.getPreferredRouteCandidateId(personId);
+    if (stored !== routeCandidateId) throw new Error('PREFERRED_ROUTE_READBACK_MISMATCH');
   }
 }
 
@@ -433,16 +497,16 @@ export class ProviderTodayRepository implements TodayRepository {
   async get(personId: EntityId): Promise<TodaySnapshot | null> {
     const now = this.clock.now();
     const date = kstDate(now);
-    const [schedule, routes, preferredRouteCandidateId, originAccessPoints, savedRoutes, presence] = await Promise.all([
-      this.schedules.getByDate(personId, date),
+    const [schedules, routes, preferredRouteCandidateId, originAccessPoints, presence] = await Promise.all([
+      Promise.all([this.schedules.getByDate(personId, date), this.schedules.getByDate(personId, previousSeoulDate(now))]),
       this.commute.listRouteCandidates(personId),
       this.commute.getPreferredRouteCandidateId(personId),
       this.commute.listAccessPoints(personId, 'origin'),
-      this.commute.listSavedRoutes(personId),
       this.presence.get(personId),
     ]);
 
-    const currentPresence = presence?.workDate === date ? presence : null;
+    const schedule = activeWorkSchedule(schedules.filter((entry): entry is NonNullable<typeof entry> => entry !== null), now);
+    const currentPresence = presence?.workDate === (schedule?.date ?? date) ? presence : null;
 
     // A persisted preferred route must never silently turn into another
     // route when the provider refresh changes candidate IDs. Report UNKNOWN
@@ -458,6 +522,7 @@ export class ProviderTodayRepository implements TodayRepository {
     if (arrivedHomeAt) {
       return {
         personId,
+        ...(schedule ? { workDate: schedule.date } : {}),
         eta: {
           personId,
           status: 'ACTUAL',
@@ -467,13 +532,14 @@ export class ProviderTodayRepository implements TodayRepository {
         ...(shiftEnd ? { shiftEnd } : {}),
         ...(leftWorkAt ? { leftWorkAt } : {}),
         arrivedHomeAt,
-        ...(route ? { routeCandidateId: route.id } : {}),
+        ...(route ? { routeCandidateId: route.id, routeCandidate: route } : {}),
       };
     }
 
-    if (!route) {
+    if (!route || (!schedule?.enabled && !leftWorkAt)) {
       return {
         personId,
+        ...(schedule ? { workDate: schedule.date } : {}),
         eta: {
           personId,
           status: 'UNKNOWN',
@@ -484,22 +550,20 @@ export class ProviderTodayRepository implements TodayRepository {
       };
     }
 
-    const shiftEndTime = shiftEnd ? parseKstDateTime(date, shiftEnd) : null;
+    const shiftEndTime = schedule?.enabled ? shiftTimes(schedule).end : null;
     const leftWorkTime = leftWorkAt ? Date.parse(leftWorkAt) : Number.NaN;
-    const baselineDepartureMs = shiftEndTime ?? now.getTime();
+    // An actual departure overrides the scheduled shift end, including early
+    // departures; do not postpone an actual commute until a future shift end.
     const departureMs = Number.isFinite(leftWorkTime)
-      ? Math.max(baselineDepartureMs, leftWorkTime)
-      : baselineDepartureMs;
-     const activeSavedRoute = savedRoutes.find((savedRoute) => savedRoute.active) ?? savedRoutes[0];
-    const activeOriginIds = activeSavedRoute
-      ? activeSavedRoute.originAccessPointIds ??
-        (activeSavedRoute.originAccessPointId ? [activeSavedRoute.originAccessPointId] : [])
-      : [];
-    const selectedAccess = activeOriginIds.length
-      ? originAccessPoints.find((point) => activeOriginIds.includes(point.id))
-      : originAccessPoints.find((point) => point.selected);
+      ? leftWorkTime
+      : shiftEndTime ?? now.getTime();
+    // Never borrow arrivals from the first active-route stop unless the exact
+    // candidate carries verified transit-leg evidence for that stop.
+    const selectedAccess = route.realtimeOriginAccessPointId
+      ? originAccessPoints.find(point => point.id === route.realtimeOriginAccessPointId)
+      : undefined;
     let arrivals: Arrival[] = [];
-    if (departureMs <= now.getTime()) {
+    if (Number.isFinite(leftWorkTime) && departureMs <= now.getTime()) {
       try {
         if (selectedAccess?.mode === 'BUS' && selectedAccess.selectedBusRouteId) {
           arrivals = await this.bus.arrivals(
@@ -520,6 +584,7 @@ export class ProviderTodayRepository implements TodayRepository {
 
     const calculated = calculateArrivalEta({
       departureMs,
+      departureBasis: Number.isFinite(leftWorkTime) ? 'ACTUAL' : 'SCHEDULED',
       now,
       route,
       fallbackAccessMinutes: selectedAccess?.walkMinutes,
@@ -531,16 +596,22 @@ export class ProviderTodayRepository implements TodayRepository {
 
     return {
       personId,
+      ...(schedule ? { workDate: schedule.date } : {}),
       eta: {
         personId,
         status,
         arrivalTime: kstTime(arrivalAt),
+        earliestArrivalAt: calculated.earliestArrivalAt.toISOString(),
+        latestArrivalAt: calculated.latestArrivalAt.toISOString(),
+        departureBasis: calculated.departureBasis,
+        departureUnconfirmed: calculated.departureUnconfirmed,
         ...(freshness == null ? {} : { freshnessMinutes: freshness }),
         calculatedAt: now.toISOString(),
       },
       ...(shiftEnd ? { shiftEnd } : {}),
       ...(leftWorkAt ? { leftWorkAt } : {}),
       routeCandidateId: route.id,
+      routeCandidate: route,
     };
   }
 }

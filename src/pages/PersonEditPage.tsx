@@ -4,6 +4,7 @@ import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { usePerson } from '../features/people/usePeople';
 import { BackButton } from '../shared/components/BackButton';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
+import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import './people-page.css';
 
 export function PersonEditPage() {
@@ -30,8 +31,12 @@ export function PersonEditPage() {
 
   const save = async () => {
     if (form.state === 'SAVING') return;
-    await form.save(() => services.actions.people.update(personId, { name, relation }));
-    navigate('/people/' + encodeURIComponent(personId), { replace: true });
+    try {
+      await form.save(() => services.actions.people.update(personId, { name, relation }));
+      navigate('/people/' + encodeURIComponent(personId), { replace: true });
+    } catch {
+      // Preserve entered fields for retry and display the recoverable error.
+    }
   };
 
   return (
@@ -50,7 +55,8 @@ export function PersonEditPage() {
         </label>
       </div>
 
-      <button type="button" className="cta" disabled={form.state === 'SAVING'} onClick={save}>
+      {form.error ? <p className="form-error" role="alert">{formErrorMessage(form.error)}</p> : null}
+      <button type="button" className="cta" disabled={!name.trim() || form.state === 'SAVING'} onClick={save}>
         {form.state === 'SAVING' ? '저장 중' : form.state === 'SAVED' ? '저장됨' : '저장'}
       </button>
     </section>

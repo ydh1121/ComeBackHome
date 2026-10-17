@@ -16,7 +16,7 @@ const css = await read('../src/pages/people-page.css');
 for (const text of ['사람','사람 추가','navigate(\'/people/\'']) if (!list.includes(text)) failures.push('list missing ' + text);
 for (const text of ['사람 추가','이름 입력','예: 연인, 가족','actions.people.create']) if (!create.includes(text)) failures.push('create missing ' + text);
 for (const text of ['사람 수정','actions.people.update','navigate(\'/people/\'']) if (!edit.includes(text)) failures.push('edit missing ' + text);
-for (const text of ['이동 경로','주로 오는 길','출발지 교통 수정','도착지 교통 수정','경로 설정']) if (!detail.includes(text)) failures.push('detail missing ' + text);
+for (const text of ['출발', '도착','주로 오는 길','출발지 교통 수정','도착지 교통 수정','경로 설정']) if (!detail.includes(text)) failures.push('detail missing ' + text);
 for (const path of ['/people','/people/new','/people/:personId/edit','/people/:personId']) if (!router.includes("'" + path + "'")) failures.push('route missing ' + path);
 
 if (!actions.includes('class PersonService')) failures.push('PersonService missing');

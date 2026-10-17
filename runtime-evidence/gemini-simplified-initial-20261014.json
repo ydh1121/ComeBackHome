@@ -1,0 +1,310 @@
+{
+  "provider": "GOOGLE_GEMINI_DEVELOPER_API",
+  "model": "gemini-3.8-flash",
+  "corpus_sha256": "6ef21653700982396adf75d32e0fd892c939fcfc3453a4d0ca389bb2ba08965a",
+  "scorer_sha256": "c673e7337cb65896057c543e07a599ed55050f221f74bcb1d6ded9fc94485004",
+  "max_output_tokens": 8192,
+  "maximum_requests": 12,
+  "images": [
+    {
+      "http": 200,
+      "latency_ms": 14852,
+      "usage": {
+        "promptTokenCount": 1458,
+        "candidatesTokenCount": 2784,
+        "totalTokenCount": 4242
+      },
+      "api_success": true,
+      "response_sha256": "ac7e25c33aa0fd0367a7d3516da27898811858a21d5a9c3d81763bf35eed0b61",
+      "finish_reason": "STOP",
+      "image_id": "A_high_resolution",
+      "image_sha256": "83942af9789e22f8be88e4f377c4275587661f5deee5f780aff6da9ca359084a",
+      "parse_error": null,
+      "predicted_cells": 21,
+      "score": {
+        "scorer_version": "2.0-independent-fields",
+        "real_provider_accuracy_measured": true,
+        "truth_cells": 21,
+        "predicted_cells": 21,
+        "aligned_cells": 21,
+        "missing_cells": 0,
+        "unmatched_predictions": 0,
+        "duplicate_position_predictions": 0,
+        "metrics": {
+          "employee_row": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "column_group": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "date": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "weekday": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "employee_name": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "row_and_column": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "status": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_shift": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_in_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "clock_out_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "break_minutes_all": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          },
+          "review_required": {
+            "correct": 21,
+            "total": 21,
+            "accuracy": 1
+          }
+        },
+        "safety": {
+          "dangerous_auto_confirmations": 0,
+          "dangerous_shift_on_nonshift": 0,
+          "dangerous_off_on_blank_or_unreadable": 0,
+          "incomplete_shift_predictions": 0,
+          "invalid_status": 0,
+          "unreadable_predictions": 0
+        },
+        "by_truth_status": {
+          "SHIFT": {
+            "truth": 21,
+            "aligned": 21,
+            "employee_row_matches": 21,
+            "column_group_matches": 21,
+            "date_matches": 21,
+            "weekday_matches": 21,
+            "employee_name_matches": 21,
+            "status_matches": 21,
+            "clock_in_matches_all": 21,
+            "clock_out_matches_all": 21,
+            "break_minutes_matches_all": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "status_confusion": {
+          "SHIFT": {
+            "SHIFT": 21
+          },
+          "OFF_CANDIDATE": {},
+          "BLANK": {},
+          "UNREADABLE": {}
+        },
+        "dangerous_cases": [],
+        "usage": {
+          "model": "NOT_RECORDED_BY_SCORER",
+          "neurons": "NOT_MEASURED",
+          "latency_ms": "NOT_MEASURED"
+        }
+      }
+    },
+    {
+      "http": 503,
+      "latency_ms": 1045,
+      "usage": null,
+      "api_success": false,
+      "error": "HTTP_FAILURE_STOP_NO_RETRY",
+      "response_sha256": "01f5c7d4e4d8ec06c8098777e731b3d552ba518feb02b681f6c569edcd9c6f6d",
+      "error_codes": [
+        503
+      ],
+      "diagnostic_codes": [],
+      "error_status": "UNAVAILABLE",
+      "image_id": "B_low_resolution",
+      "image_sha256": "06f1e3141b4ebaed14261eff0ae1aa1127559804d2846cedffece2205fa5e66d",
+      "parse_error": "NO_TEXT_RESPONSE",
+      "predicted_cells": 0,
+      "score": null
+    }
+  ],
+  "method": "COMPLETE_ORIGINAL_V2",
+  "schema_variant": "NAMED_FIELDS_WITHOUT_NUMERIC_OR_ARRAY_BOUNDS",
+  "free_project": "OWNER_CONFIRMED_SAME_DAY_NOT_PROGRAMMATIC_BILLING_VERIFICATION",
+  "production_writes": 0,
+  "private_images": 0,
+  "paid_fallback": false,
+  "acceptance": "NOT_ACCEPTED_BY_THIS_BENCHMARK",
+  "blocker": "REQUEST_OR_OUTPUT_FAILURE_STOP_NO_RETRY",
+  "complete_v2": false,
+  "aggregate": null,
+  "attempted_subset_score": {
+    "scorer_version": "2.0-independent-fields",
+    "real_provider_accuracy_measured": true,
+    "truth_cells": 21,
+    "predicted_cells": 21,
+    "aligned_cells": 21,
+    "missing_cells": 0,
+    "unmatched_predictions": 0,
+    "duplicate_position_predictions": 0,
+    "metrics": {
+      "employee_row": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "column_group": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "date": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "weekday": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "employee_name": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "row_and_column": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "status": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "clock_in_shift": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "clock_out_shift": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "break_minutes_shift": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "clock_in_all": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "clock_out_all": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "break_minutes_all": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      },
+      "review_required": {
+        "correct": 21,
+        "total": 21,
+        "accuracy": 1
+      }
+    },
+    "safety": {
+      "dangerous_auto_confirmations": 0,
+      "dangerous_shift_on_nonshift": 0,
+      "dangerous_off_on_blank_or_unreadable": 0,
+      "incomplete_shift_predictions": 0,
+      "invalid_status": 0,
+      "unreadable_predictions": 0
+    },
+    "by_truth_status": {
+      "SHIFT": {
+        "truth": 21,
+        "aligned": 21,
+        "employee_row_matches": 21,
+        "column_group_matches": 21,
+        "date_matches": 21,
+        "weekday_matches": 21,
+        "employee_name_matches": 21,
+        "status_matches": 21,
+        "clock_in_matches_all": 21,
+        "clock_out_matches_all": 21,
+        "break_minutes_matches_all": 21
+      },
+      "OFF_CANDIDATE": {},
+      "BLANK": {},
+      "UNREADABLE": {}
+    },
+    "status_confusion": {
+      "SHIFT": {
+        "SHIFT": 21
+      },
+      "OFF_CANDIDATE": {},
+      "BLANK": {},
+      "UNREADABLE": {}
+    },
+    "dangerous_cases": [],
+    "usage": {
+      "model": "NOT_RECORDED_BY_SCORER",
+      "neurons": "NOT_MEASURED",
+      "latency_ms": "NOT_MEASURED"
+    }
+  },
+  "head": "f88ea9ae07de9773017f21910e570133813415a2",
+  "run_id": 38515591438,
+  "job_id": 115693543858,
+  "cumulative_before_next_run": {
+    "inference_requests": 4,
+    "successful_inferences": 1,
+    "known_prompt_tokens": 1458,
+    "known_output_tokens": 2784,
+    "known_total_tokens": 4242,
+    "usage_unknown_failed_requests": 3
+  },
+  "disposition": "SCHEMA_VARIANT_A_SUCCEEDED; B_PROVIDER_503_STOPPED; FULL_CORPUS_NOT_ACCEPTED"
+}

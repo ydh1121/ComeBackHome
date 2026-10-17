@@ -30,13 +30,13 @@ export function Icon({ name, className }: IconProps) {
     case 'map':
       return <svg {...common}><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/></svg>;
     case 'bus':
-      return <svg {...common}><rect x="5" y="3" width="14" height="16" rx="3"/><path d="M8 19v2M16 19v2M8 8h8M8 14h.01M16 14h.01"/></svg>;
+      return <svg {...common}><rect x="5" y="3" width="14" height="16" rx="2"/><path d="M5 11h14M12 6v5M8 6h8M3 7v4M21 7v4M8 19v2M16 19v2"/><circle cx="8.5" cy="15.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/></svg>;
     case 'train':
-      return <svg {...common}><rect x="5" y="3" width="14" height="15" rx="4"/><path d="M8 21l2-3M16 18l2 3M8 8h8M8 13h.01M16 13h.01"/></svg>;
+      return <svg {...common}><rect x="5" y="2" width="14" height="16" rx="5"/><rect x="8" y="6" width="8" height="5" rx="1"/><path d="M8 14h.01M16 14h.01M9 18l-3 4M15 18l3 4M8 20h8"/></svg>;
     case 'edit':
       return <svg {...common}><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/></svg>;
     case 'walk':
-      return <svg {...common}><circle cx="13" cy="4.5" r="2"/><path d="m11.5 8-2.5 4 3 2 1.5 6M9 12l-4 5M12 14l4-1 3 4"/></svg>;
+      return <svg {...common}><circle cx="14" cy="3.5" r="1.75"/><path d="m7 12 3-4 3 1 3 4 4 1M13 9l-2 6 4 3 1 4M11 15l-3 6-3 1"/></svg>;
     case 'plus':
       return <svg {...common}><path d="M12 5v14M5 12h14"/></svg>;
     case 'search':

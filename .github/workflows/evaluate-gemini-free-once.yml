@@ -1,0 +1,53 @@
+name: Gemini Free OCR v2 / readiness and owner-gated evaluation
+
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/evaluate-gemini-free-once.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-gemini-free-evaluation
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    if: github.repository == 'ydh1121/ComeBackHome' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      # Closed after bounded HTTP503 and timeout disposition; owner proof remains historical.
+      CBH_GEMINI_EVALUATION_OPEN: 'false'
+      # Owner screenshots on 2026-10-14 confirm the project Free tier and secret registration.
+      # This dated proof expires at UTC midnight; subsequent runs need current evidence.
+      CBH_GEMINI_FREE_PROJECT_CONFIRMED: 'true'
+      CBH_GEMINI_FREE_PROJECT_PROOF_DATE: '2026-10-14'
+    steps:
+      - name: Checkout reviewed evaluator only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify offline guards with no provider credentials
+        run: python scripts/verify-free-ocr-guards.py
+      - name: Verify original corpus and readiness without network or secret output
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py
+      - name: Evaluate one bounded complete corpus after recorded transient 503 stop
+        if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-eval]')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py --run
+      - name: Diagnose official model and input contract without generation
+        if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-probe]')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py --probe
+      - name: Capture allowlisted generation diagnostics for one synthetic input
+        if: startsWith(github.event.head_commit.message, '[cbh-gemini-free-diagnose]')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/evaluate-gemini-free.py --diagnose-generation

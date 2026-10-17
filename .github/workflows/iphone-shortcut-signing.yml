@@ -1,0 +1,56 @@
+name: iPhone Shortcut official signing readiness
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/iphone-shortcut-signing.yml]
+permissions:
+  contents: read
+jobs:
+  apple-signing:
+    runs-on: macos-26
+    timeout-minutes: 5
+    steps:
+      - name: Build harmless signing probe
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/cbh-shortcut"
+          python3 - <<'PY'
+          import os, pathlib, plistlib
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "cbh-shortcut" / "signing-probe.shortcut"
+          data = {
+            "WFWorkflowName": "ComeBackHome signing probe",
+            "WFWorkflowClientVersion": "2600",
+            "WFWorkflowClientRelease": "26.0",
+            "WFWorkflowMinimumClientVersion": 900,
+            "WFWorkflowMinimumClientVersionString": "900",
+            "WFWorkflowIcon": {"WFWorkflowIconStartColor": 4282601983, "WFWorkflowIconGlyphNumber": 59511},
+            "WFWorkflowTypes": [],
+            "WFWorkflowInputContentItemClasses": [],
+            "WFWorkflowActions": [{
+              "WFWorkflowActionIdentifier": "is.workflow.actions.gettext",
+              "WFWorkflowActionParameters": {"WFTextActionText": "Signing readiness only. No alarm actions."}
+            }]
+          }
+          path.write_bytes(plistlib.dumps(data))
+          PY
+          plutil -lint "$RUNNER_TEMP/cbh-shortcut/signing-probe.shortcut"
+      - name: Sign through Apple official CLI without running shortcut
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, subprocess
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "cbh-shortcut"
+          print(subprocess.run(["sw_vers"], capture_output=True, text=True).stdout)
+          try:
+            result = subprocess.run(
+              ["/usr/bin/shortcuts", "sign", "--mode", "anyone",
+               "--input", str(root / "signing-probe.shortcut"),
+               "--output", str(root / "signing-probe-signed.shortcut")],
+              capture_output=True, text=True, timeout=90)
+            print(result.stdout)
+            print(result.stderr)
+            raise SystemExit(result.returncode)
+          except subprocess.TimeoutExpired:
+            raise SystemExit("APPLE_OFFICIAL_SIGNING_TIMEOUT: no account or UI workarounds attempted")
+          PY

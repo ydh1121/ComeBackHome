@@ -5,7 +5,7 @@ import type { RepositoryBundle } from '../contracts/runtime';
 import type { RouteSearchDiagnostics } from '../contracts/repositories';
 import { rankRouteCandidates, selectNextShift, selectVisibleAccessPoints } from '../selectors';
 
-export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; routeDiagnostics?: RouteSearchDiagnostics; }
+export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; preferredRouteCandidateId: EntityId | null; routeDiagnostics?: RouteSearchDiagnostics; }
 export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; leftWorkAt: string | null; arrivedHomeAt: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
 export interface CommuteOverviewQueryResult extends PersonDetailQueryResult { preferredRouteCandidateId: EntityId | null; }
 
@@ -37,19 +37,31 @@ export class ComeBackHomeQueries {
     const selectedId = this.selection.getSelectedPersonId() ?? people[0]?.id ?? null;
     if (!selectedId) return { people, person: null, eta: null, shiftEnd: null, leftWorkAt: null, arrivedHomeAt: null, nextShiftLabel: null, route: null };
 
-    const [person, today, schedule, routes] = await Promise.all([
+    const [person, today, schedule] = await Promise.all([
       this.repositories.people.get(selectedId),
       this.repositories.today.get(selectedId),
       this.repositories.schedules.list(selectedId),
-      this.repositories.commute.listRouteCandidates(selectedId),
     ]);
+    // ProviderTodayRepository's selected route is the same object used in
+    // ETA computation. Re-running route discovery here can return a different
+    // live response (or consume quota) and silently display inconsistent steps.
+    const routes = today?.routeCandidate
+      ? [today.routeCandidate]
+      : today?.routeCandidateId
+        ? await this.repositories.commute.listRouteCandidates(selectedId)
+        : today?.eta.status === 'UNKNOWN'
+          ? []
+          : await this.repositories.commute.listRouteCandidates(selectedId);
 
     const nextShift = selectNextShift(
-      schedule.filter((entry) => entry.date > referenceDate),
+      schedule.filter((entry) => entry.date > (today?.workDate ?? referenceDate)),
       referenceDate,
     );
-    const route = today?.routeCandidateId
-      ? routes.find((candidate) => candidate.id === today.routeCandidateId) ?? null
+    const route = today?.routeCandidate?.personId === selectedId &&
+      today?.routeCandidate?.id === today?.routeCandidateId
+      ? today.routeCandidate
+      : today?.routeCandidateId
+        ? routes.find((candidate) => candidate.id === today.routeCandidateId) ?? null
       : today?.eta.status === 'UNKNOWN'
         ? null
         : rankRouteCandidates(routes)[0] ?? null;
@@ -98,6 +110,6 @@ export class ComeBackHomeQueries {
     const ranked = rankRouteCandidates(routeDiscovery.candidates);
     const preferred = ranked.find((candidate) => candidate.id === preferredRouteCandidateId);
     const ordered = preferred ? [preferred, ...ranked.filter((candidate) => candidate.id !== preferred.id)] : ranked;
-    return { person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, routeCandidates: ordered, ...(routeDiscovery.diagnostics ? { routeDiagnostics: routeDiscovery.diagnostics } : {}) };
+    return { person, origin, destination, routePreference, savedRoutes, originAccessPoints, destinationAccessPoints, preferredRouteCandidateId, routeCandidates: ordered, ...(routeDiscovery.diagnostics ? { routeDiagnostics: routeDiscovery.diagnostics } : {}) };
   }
 }

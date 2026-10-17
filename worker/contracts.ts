@@ -51,6 +51,7 @@ export interface NotificationJob {
 }
 
 export interface NotificationSettingsRecord {
+  arrivalAdvanceEnabled?: boolean;
   shiftEndEnabled: boolean;
   etaChangeEnabled: boolean;
   leftWorkEnabled: boolean;
@@ -61,7 +62,7 @@ export interface NotificationSettingsRecord {
 
 export interface NotificationSettingsStore {
   get(): Promise<NotificationSettingsRecord>;
-  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled'>): Promise<NotificationSettingsRecord>;
+  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled' | 'arrivalAdvanceEnabled'>): Promise<NotificationSettingsRecord>;
 }
 
 export interface SubscriptionStore {
@@ -71,11 +72,12 @@ export interface SubscriptionStore {
 }
 
 export interface NotificationJobStore {
+  setArrivalPlan?(personId: string, workDate: string, arrivalAt: string | null, checkedAt: string, schedule?: { start: string; end: string }): Promise<void>;
   enqueueOnce(job: Omit<NotificationJob, 'status' | 'attempts' | 'sentAt' | 'lastError'>): Promise<void>;
   claimDue(nowIso: string, limit: number): Promise<NotificationJob[]>;
-  markSent(jobId: string, sentAt: string): Promise<void>;
-  markRetry(jobId: string, nextAttemptAt: string, error: string): Promise<void>;
-  markFailed(jobId: string, error: string): Promise<void>;
+  markSent(jobId: string, sentAt: string, claimAttempts?: number): Promise<boolean | void>;
+  markRetry(jobId: string, nextAttemptAt: string, error: string, claimAttempts?: number): Promise<boolean | void>;
+  markFailed(jobId: string, error: string, claimAttempts?: number): Promise<boolean | void>;
 }
 
 export type PushDeliveryErrorKind = 'transient' | 'terminal-subscription' | 'permanent';
@@ -105,6 +107,11 @@ export interface NotificationRetryPolicy {
 export type NotificationEtaConfidence = 'LIVE' | 'STALE' | 'FALLBACK' | 'UNKNOWN';
 
 export interface NotificationEtaState {
+  departureBasis?: 'ACTUAL' | 'SCHEDULED';
+  workDate?: string;
+  earliestArrivalAt?: string;
+  latestArrivalAt?: string;
+  departureUnconfirmed?: boolean;
   personId: string;
   arrivalAt: string | null;
   confidence: NotificationEtaConfidence;

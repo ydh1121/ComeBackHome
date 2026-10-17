@@ -2,14 +2,19 @@ import type { EntityId, ISODate } from '../../domain/common';
 import type { Address, Coordinate, ImportResolution, NotificationRules, Person, Place, PlaceKind, RouteCandidate, SavedCommuteRoute, TransitAccessPoint, TransitMode } from '../../domain/models';
 
 export type ImportInputFile = { kind: 'WORKBOOK'; file: File } | { kind: 'IMAGE'; file: File };
-export interface ImportFileSelectionAction { accept(files: ImportInputFile[]): Promise<EntityId>; }
+export interface ImportFileSelectionAction { accept(files: ImportInputFile[], signal?: AbortSignal): Promise<EntityId>; }
 export interface CommitImportReviewAction { execute(batchId: EntityId): Promise<void>; }
 export interface ImportMatchActions {
+  setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void>;
+  addManualPerson(batchId: EntityId, personId: EntityId): Promise<void>;
   cyclePersonMatch(batchId: EntityId, detectedPersonId: EntityId): Promise<void>;
-  setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
+  setPendingNewPerson(batchId: EntityId, detectedPersonId: EntityId, proposedName: string): Promise<void>; setPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void>;
   setPersonIgnored(batchId: EntityId, detectedPersonId: EntityId, ignored: boolean): Promise<void>;
 }
 export interface ImportReviewActions {
+  setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void>;
+  setWeeklyStartDate(batchId: EntityId, startDate: ISODate): Promise<void>;
+  confirmWeeklyDates(batchId: EntityId): Promise<void>;
   setResolution(batchId: EntityId, reviewItemId: EntityId, resolution: ImportResolution): Promise<void>;
   setImportedTime(batchId: EntityId, reviewItemId: EntityId, field: 'start' | 'end', value: string | null): Promise<void>;
   setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void>;
@@ -41,6 +46,8 @@ export interface ScheduleDayInput {
   enabled: boolean;
   start: string;
   end: string;
+  breakMinutes?: number | null;
+  expectedPersonId?: EntityId;
 }
 export interface ScheduleBulkRule {
   from: ISODate;
@@ -48,6 +55,7 @@ export interface ScheduleBulkRule {
   weekdays: number[];
   start: string;
   end: string;
+  expectedPersonId?: EntityId;
 }
 export interface ScheduleActions {
   saveDay(date: ISODate, input: ScheduleDayInput): Promise<void>;
@@ -83,6 +91,10 @@ export interface CommuteActions {
   replacePreferenceStep(personId: EntityId, index: number, accessPointId: EntityId): Promise<void>;
 }
 export interface TransitSearchActions {
+  searchDetailed?(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate):
+    Promise<import('./providers').TransitLookupResult>;
+  nearbyDetailed?(personId: EntityId, kind: PlaceKind, center?: Coordinate):
+    Promise<import('./providers').TransitLookupResult>;
   search(personId: EntityId, kind: PlaceKind, query: string, center?: Coordinate): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; coordinate?: Coordinate; routeCount?: number }>>;
   nearby(personId: EntityId, kind: PlaceKind, center?: Coordinate): Promise<Array<{ id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; coordinate?: Coordinate; routeCount?: number }>>;
   addAccessPoint(personId: EntityId, kind: PlaceKind, resultId: string): Promise<TransitAccessPoint>;

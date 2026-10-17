@@ -113,7 +113,7 @@ try {
       async record(input) {
         if (presenceEvents.has(input.eventId)) {
           if (!presenceState) throw new Error('presence state missing for duplicate');
-          return { state: structuredClone(presenceState), duplicate: true };
+          return { state: structuredClone(presenceState), duplicate: true, queued: jobs.some((job) => job.dedupeKey === input.notificationJob?.dedupeKey) };
         }
         presenceEvents.add(input.eventId);
         const sameDate = presenceState?.workDate === input.workDate;
@@ -127,7 +127,8 @@ try {
               : {}),
           ...(input.type === 'ARRIVED_HOME' ? { arrivedHomeAt: input.acceptedAt } : {}),
         };
-        return { state: structuredClone(presenceState), duplicate: false };
+        if (input.notificationJob) jobs.push(structuredClone(input.notificationJob));
+        return { state: structuredClone(presenceState), duplicate: false, queued: Boolean(input.notificationJob) };
       },
     },
     jobs: {

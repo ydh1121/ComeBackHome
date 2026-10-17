@@ -1,15 +1,119 @@
 import type { CommitImportReviewAction } from '../contracts/actions';
-import type { ImportRepository, ScheduleRepository } from '../contracts/repositories';
+import type { ApprovedWorkbookImportGateway, ImportRepository, ScheduleRepository } from '../contracts/repositories';
+import type { ImportBatch } from '../../domain/models';
+import { releasePrivateImportImage } from '../services/WorkbookImportFileSelectionAction';
 
 export class CommitImportReview implements CommitImportReviewAction {
   constructor(
     private readonly imports: ImportRepository,
     private readonly schedules: ScheduleRepository,
+    private readonly approvedWorkbook?: ApprovedWorkbookImportGateway,
   ) {}
+
+  private async commitWorkbook(batch: ImportBatch): Promise<void> {
+    if (!this.approvedWorkbook) throw new Error('ATOMIC_WORKBOOK_IMPORT_GATEWAY_REQUIRED');
+    const included = batch.detectedPeople.filter(person => !person.ignored);
+    if (!included.length) throw new Error('Import contains no included people.');
+    const personByRef = new Map(included.map(person => [person.id, person]));
+    const rows = batch.reviewItems.filter(item => personByRef.has(item.detectedPersonId));
+    if (!rows.length || rows.some(item => item.resolution == null)) {
+      throw new Error('Import contains unreviewed schedules.');
+    }
+    if (included.some(person => !person.pendingCreate && !person.matchedPersonId)) {
+      throw new Error('Import contains unresolved people.');
+    }
+    const unique = new Set<string>();
+    for (const item of rows) {
+      if (!item.date) throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
+      const person = personByRef.get(item.detectedPersonId)!;
+      const key = (person.pendingCreate ? 'draft:'+person.id : person.matchedPersonId) + '|' + item.date;
+      if (unique.has(key)) throw new Error('Import contains duplicate person/date.');
+      unique.add(key);
+      if (item.resolution === 'NEW' && item.imported.enabled !== false &&
+          (!item.imported.start || !item.imported.end ||
+           ((batch.structure.weeklyReview ? item.breakReviewRequired : item.recognitionState === 'INCOMPLETE') && item.imported.breakMinutes == null))) {
+        throw new Error('Import contains incomplete schedule times.');
+      }
+    }
+
+    const payload = {
+      requestId: batch.id,
+      approved: true,
+      ...(batch.structure.weeklyReview ? {
+        source: 'WEEKLY_IMAGE',
+        weekStart: batch.structure.weeklyReview.startDate,
+        datesConfirmed: batch.structure.weeklyReview.confirmed,
+      } : {}),
+      people: included.map(person => person.pendingCreate
+        ? { ref: person.id, kind: 'PENDING_NEW', name: person.pendingCreateName ?? person.sourceName }
+        : { ref: person.id, kind: 'EXISTING', personId: person.matchedPersonId }),
+      schedules: rows.map(item => ({
+        personRef: item.detectedPersonId,
+        date: item.date,
+        ...(batch.structure.weeklyReview ? { dayIndex: item.dayIndex, breakReviewRequired: item.breakReviewRequired === true } : {}),
+        resolution: item.resolution,
+        approved: true,
+        enabled: item.imported.enabled !== false,
+        explicitOff: item.imported.enabled === false && item.resolution === 'NEW',
+        start: item.imported.enabled === false ? null : item.imported.start,
+        end: item.imported.enabled === false ? null : item.imported.end,
+        breakMinutes: item.imported.enabled === false ? null : item.imported.breakMinutes ?? null,
+        existing: item.existing
+          ? { enabled: item.existing.enabled, start: item.existing.start, end: item.existing.end,
+              breakMinutes: item.existing.breakMinutes ?? null }
+          : null,
+      })),
+    };
+    // Single server transaction: no client-side people.create/upsertMany.
+    const receipt = await this.approvedWorkbook.commit(payload);
+    if (receipt.requestId !== batch.id || !receipt.applied) {
+      throw new Error('APPROVED_IMPORT_RECEIPT_MISMATCH');
+    }
+    const selected = rows.filter(item => item.resolution === 'NEW');
+    if (receipt.schedules.length !== selected.length) {
+      throw new Error('APPROVED_IMPORT_SCHEDULE_COUNT_MISMATCH');
+    }
+    const mapping = new Map(receipt.people.map(person => [person.ref, person.personId]));
+    for (const item of selected) {
+      const personId = mapping.get(item.detectedPersonId);
+      if (!personId) throw new Error('APPROVED_IMPORT_PERSON_MISSING');
+      if (!item.date) throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
+      const saved = await this.schedules.getByDate(personId, item.date);
+      if (!saved || saved.enabled !== (item.imported.enabled !== false) ||
+          (saved.enabled && (saved.start !== item.imported.start ||
+            saved.end !== item.imported.end ||
+            (saved.breakMinutes ?? null) !== (item.imported.breakMinutes ?? null)))) {
+        throw new Error('APPROVED_IMPORT_PERSISTENCE_READBACK_MISMATCH');
+      }
+    }
+    await this.imports.markCommitted(batch.id);
+    releasePrivateImportImage(batch.id);
+  }
 
   async execute(batchId: string): Promise<void> {
     const batch = await this.imports.getBatch(batchId);
     if (!batch) throw new Error('Import batch was not found.');
+    const weekly = batch.structure.weeklyReview;
+    if (weekly) {
+      if (!weekly.confirmed || !weekly.startDate) throw new Error('WEEKLY_DATES_NOT_CONFIRMED');
+      const start = new Date(weekly.startDate + 'T00:00:00Z');
+      if (!Number.isFinite(start.getTime()) || start.getUTCDay() !== 1 ||
+          start.toISOString().slice(0, 10) !== weekly.startDate) throw new Error('INVALID_WEEKLY_START_DATE');
+      if (batch.reviewItems.some(item => !Number.isInteger(item.dayIndex) ||
+          item.dayIndex! < 0 || item.dayIndex! > 6 || item.date !==
+          new Date(start.getTime() + item.dayIndex! * 86400000).toISOString().slice(0, 10))) {
+        throw new Error('UNCONFIRMED_WEEKLY_DAY');
+      }
+      // Image review joins PR92's single atomic people+schedule gateway.
+      // Never downgrade a weekly image to legacy per-person writes.
+      await this.commitWorkbook(batch);
+      return;
+    }
+    if (batch.files.some(file => file.kind === 'XLSX' && file.status === 'READY') &&
+        this.approvedWorkbook) {
+      await this.commitWorkbook(batch);
+      return;
+    }
 
     const ignoredDetectedIds = new Set(
       batch.detectedPeople.filter((person) => person.ignored === true).map((person) => person.id),
@@ -45,11 +149,24 @@ export class CommitImportReview implements CommitImportReviewAction {
     );
     if (unresolvedRest) throw new Error('Import contains unreviewed break minutes.');
 
+    // A workbook can contain multiple detected names mapped to one employee.
+    // Abort before D1 writes if review edits or matching produce duplicate keys.
+    const uniqueImportedDays=new Set<string>();
+    for(const item of includedItems){
+      if(item.resolution==='KEEP'||item.resolution==='SKIP')continue;
+      const key=item.personId+'|'+item.date;
+      if(uniqueImportedDays.has(key)){
+        throw new Error('Import contains duplicate person/date.');
+      }
+      uniqueImportedDays.add(key);
+    }
+
     const entries = [];
     for (const item of includedItems) {
       if (item.resolution === 'KEEP' || item.resolution === 'SKIP') continue;
       const personId = item.personId;
       if (!personId) continue;
+      if (!item.date) throw new Error('IMPORT_HAS_UNRESOLVED_DATES');
       const current = await this.schedules.getByDate(personId, item.date);
       const enabled = item.imported.enabled !== false;
       const start = item.imported.start ?? current?.start ?? '00:00';

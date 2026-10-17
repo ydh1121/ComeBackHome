@@ -1,0 +1,87 @@
+import assert from 'node:assert/strict';
+import { parseOcrSpaceWeeklyTable } from '../src/providers/import/OcrSpaceWeeklyTable.ts';
+
+const dates = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2097, 11, 30 + i)).toISOString().slice(0, 10));
+const header = ['직원명', ...Array.from({ length: 21 }, (_, i) => ['출근', '퇴근', '쉬는시간'][i % 3])];
+const dateRow = ['', ...dates.flatMap(date => [date, '', ''])];
+const first = ['다른이름B', ...Array.from({ length: 21 }, (_, i) => ['7.25', '18:45', '0.75'][i % 3])];
+first.splice(4, 3, 'OFF', '', '');
+first.splice(7, 3, '', '', '');
+first.splice(10, 3, '??', '19', '1');
+const second = ['다른이름A', ...Array.from({ length: 21 }, (_, i) => ['9', '23.5', '0.5'][i % 3])];
+const page = rows => ({ OCRExitCode: 1, IsErroredOnProcessing: false, ParsedResults: [{
+  FileParseExitCode: 1, ParsedText: rows.map(row => '| ' + row.join(' | ') + ' |').join('\n'),
+}] });
+const parsed = parseOcrSpaceWeeklyTable(page([dateRow, header, first, second]), 'unseen-input');
+assert.equal(parsed.error, null);
+assert.equal(parsed.cells.length, 14);
+assert.equal(parsed.cells[0].employee_name, '다른이름B');
+assert.equal(parsed.cells[7].employee_name, '다른이름A');
+assert.equal(parsed.cells[0].date, dates[0]);
+assert.equal(parsed.cells[6].date, dates[6]);
+assert.equal(parsed.cells[0].clock_in, '07:15');
+assert.equal(parsed.cells[0].clock_out, '18:45');
+assert.equal(parsed.cells[0].break_minutes, 45);
+assert.equal(parsed.cells[1].status, 'OFF_CANDIDATE');
+assert.equal(parsed.cells[2].status, 'BLANK');
+assert.equal(parsed.cells[3].status, 'UNREADABLE');
+assert(parsed.cells.every(cell => cell.review_required === null && cell.evidence_bbox === null));
+assert.equal(parsed.cells[0].original_text.clock_in, '7.25');
+const missingDate = structuredClone(dateRow);
+missingDate[4] = '';
+const missing = parseOcrSpaceWeeklyTable(page([missingDate, header, first]), '2097-12-31-do-not-infer');
+assert.equal(missing.cells[1].date, null);
+assert.equal(missing.cells[1].status, 'UNREADABLE');
+assert.equal(missing.cells[2].date, dates[2]);
+const malformed = structuredClone(first);
+malformed.pop();
+assert.equal(parseOcrSpaceWeeklyTable(page([dateRow, header, malformed]), 'x').error, 'AMBIGUOUS_STAFF_ROWS');
+const uncertainOff = structuredClone(first);
+uncertainOff.splice(1, 3, 'OFF', '18', '0.5');
+assert.equal(parseOcrSpaceWeeklyTable(page([dateRow, header, uncertainOff]), 'x').cells[0].status, 'UNREADABLE');
+const invalidDate = structuredClone(dateRow);
+invalidDate[1] = '2097-02-30';
+assert.equal(parseOcrSpaceWeeklyTable(page([invalidDate, header, first]), 'x').cells[0].date, null);
+assert.equal(parseOcrSpaceWeeklyTable({ OCRExitCode: 2 }, 'x').error, 'PROVIDER_NOT_COMPLETE');
+// OCR.space can merge header cells independently of intact data columns.
+const mergedHeader = [header.slice(1, 4).join(' '), ...header.slice(4)];
+assert.equal(parseOcrSpaceWeeklyTable(page([dateRow, mergedHeader, first]), 'x').cells.length, 7);
+const headerWords = header.slice(1).map((WordText, i) => ({ WordText, Left: 120 + i * 40, Top: 40, Width: 30, Height: 12 }));
+const nameWord = { WordText: first[0], Left: 10, Top: 80, Width: 60, Height: 12 };
+const dataWords = first.slice(1).flatMap((WordText, i) => WordText ? [{ WordText, Left: 120 + i * 40, Top: 80, Width: 25, Height: 12 }] : []);
+const shortRow = first.filter(Boolean);
+const physical = page([dateRow, header.slice(4), shortRow]);
+physical.ParsedResults[0].TextOverlay = { Lines: [{ Words: [...headerWords, nameWord, ...dataWords] }] };
+const positioned = parseOcrSpaceWeeklyTable(physical, 'unseen-geometry');
+assert.equal(positioned.error, null);
+assert.equal(positioned.cells.length, 7);
+assert.equal(positioned.cells[0].clock_in, '07:15');
+assert.equal(positioned.cells[1].status, 'OFF_CANDIDATE');
+assert.equal(positioned.cells[2].status, 'UNREADABLE', 'no OCR tokens cannot establish a blank image');
+assert.equal(positioned.cells[3].status, 'UNREADABLE');
+assert(positioned.cells.every(cell => cell.evidence_bbox != null));
+assert.equal(positioned.cells[4].clock_out, '18:45', 'collapsed blank fields must not shift later dates');
+const missingHeaderEvidence = structuredClone(physical);
+missingHeaderEvidence.ParsedResults[0].TextOverlay.Lines[0].Words.shift();
+assert.notEqual(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x').error, null, 'missing actual header evidence must not be synthesized');
+const pixelMatrix = { rows: [{ nameBounds: { x: 0, y: 75, width: 100, height: 22 },
+  cells: Array.from({ length: 21 }, (_, i) => ({ dayIndex: Math.floor(i / 3), field: ['start', 'end', 'break'][i % 3],
+    bounds: { x: 110 + i * 40, y: 75, width: 40, height: 22 },
+    visual: { occupancy: first[i + 1] === '' ? 'EMPTY' : 'CONTENT' } })) }] };
+const pixelParsed = parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'new-pixels', pixelMatrix);
+assert.equal(pixelParsed.error, null);
+assert.equal(pixelParsed.cells[0].clock_in, '07:15');
+assert.equal(pixelParsed.cells[1].status, 'OFF_CANDIDATE');
+assert.equal(pixelParsed.cells[2].status, 'BLANK', 'only source pixel evidence can establish the omitted blank trio');
+assert.equal(pixelParsed.cells[3].status, 'UNREADABLE');
+const visibleButMissed = structuredClone(pixelMatrix);
+visibleButMissed.rows[0].cells[6].visual.occupancy = 'CONTENT';
+assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', visibleButMissed).cells[2].status, 'UNREADABLE');
+const incompleteText = structuredClone(missingHeaderEvidence);
+incompleteText.ParsedResults[0].ParsedText = incompleteText.ParsedResults[0].ParsedText.replace('7.25', '');
+assert.equal(parseOcrSpaceWeeklyTable(incompleteText, 'x', pixelMatrix).cells[0].status, 'UNREADABLE', 'unread OCR content cannot be shifted to the next occupied cell');
+const falseEmpty = structuredClone(pixelMatrix);
+falseEmpty.rows[0].cells[0].visual.occupancy = 'EMPTY';
+assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', falseEmpty).cells[0].status, 'UNREADABLE', 'a pixel/text disagreement is not repaired');
+assert.equal(parseOcrSpaceWeeklyTable(missingHeaderEvidence, 'x', { rows: [] }).error, 'PHYSICAL_ROW_COUNT_MISMATCH');
+console.log('OCRSPACE_TABLE_CONTRACT_PASS independent_dates_names_rows decimals OFF_BLANK_UNREADABLE missing_evidence_no_repair review_flag_not_fabricated network=0');

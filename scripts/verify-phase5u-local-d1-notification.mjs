@@ -225,7 +225,7 @@ try {
   assert(nextWorkday.state?.jobs?.length === 3, 'next D1 workday pending shift-end job missing');
   const pending = nextWorkday.state.jobs.find((job) => job.status === 'pending');
   assert(pending?.job_type === 'shift-end', 'next D1 workday pending job type mismatch');
-  assert(pending?.scheduled_for === '2026-10-07T09:30:00.000Z', 'next D1 workday shift-end UTC schedule mismatch');
+  assert(pending?.scheduled_for === '2026-10-07T09:20:00.000Z', 'next D1 workday shift-end UTC schedule mismatch');
   assert(nextWorkday.state?.plannerState?.[0]?.eta_baseline_at === '2026-10-07T10:20:00.000Z', 'next D1 workday baseline timestamp mismatch');
   assert(nextWorkday.state?.plannerState?.[0]?.eta_baseline_work_date === '2026-10-07', 'next D1 workday baseline date mismatch');
   assert(nextWorkday.state?.plannerState?.[0]?.last_eta_notification_at === null, 'new D1 workday must reset last ETA notification timestamp');
@@ -233,6 +233,72 @@ try {
   const finalState = await requestJson('/state');
   assert(finalState.jobs?.length === 3, 'final D1 notification job count mismatch');
   assert(finalState.plannerState?.length === 1, 'final D1 planner state row count mismatch');
+
+  // Real SQLite/D1 lease recovery, without simulated/mock job store.
+  const lease = await postJson('/lease-probe', {});
+  assert(lease.syntheticOnly === true, 'D1 lease probe must be isolated synthetic only');
+  assert(lease.initialClaims === 1, 'new due job must be claimed once');
+  assert(lease.immediateClaims === 0, 'parallel second claim must not duplicate active processing lease');
+  assert(lease.withinLeaseClaims === 0, 'active processing job must not be reclaimed before 15-minute expiry');
+  assert(lease.reclaimedClaims === 1, 'abandoned processing job must be recovered after 15 minutes');
+  assert(lease.duplicateClaims === 0, 'immediate second recovery claim must not duplicate lease');
+  assert(lease.afterSentClaims === 0, 'already sent job must never be recovered');
+  assert(lease.staleCompletionIgnored && lease.currentCompletionAccepted,
+    'stale worker completion must not overwrite a reclaimed lease');
+  assert(lease.status === 'sent' && lease.attempts === 2,
+    'reclaimed D1 job must preserve durable delivery status and two attempts');
+
+  console.log('CBH_NONIMAGE_PHASE_F_D1_PROCESSING_LEASE_PASS=' + JSON.stringify(lease));
+
+  const presence = await postJson('/presence-atomic-probe', {});
+  assert(presence.syntheticOnly === true && presence.failed === true,
+    'D1 presence write-failure injection must execute');
+  assert(presence.receiptRolledBack === true && presence.stateRolledBack === true,
+    'event and current presence state MUST both roll back when state write fails');
+  assert(presence.firstAccepted === true && presence.replayIgnored === true,
+    'retried presence event must commit once after a failed transaction');
+  assert(presence.crossPersonIdCollisionBlocked === true,
+    'same event ID must never be claimed by another employee');
+  assert(presence.persistedLeftWorkAt === '2026-10-07T13:00:00.000Z',
+    'D1 presence state changed during invalid replay');
+  console.log('CBH_NONIMAGE_PHASE_F_PRESENCE_ATOMIC_D1_PASS=' + JSON.stringify(presence));
+
+  const presenceOutbox = await postJson('/presence-outbox-atomic-probe', {});
+  for (const check of [
+    'jobInsertFailed', 'jobFailureRolledBack',
+    'constraintFailed', 'constraintRolledBack',
+    'activeCommitted', 'stableReplay',
+    'stateUpdateFailed', 'stateUpdateRolledBack',
+    'recoveryAccepted', 'concurrentOnce',
+    'crossPersonBlocked', 'crossTypeBlocked',
+    'disabledStateOnly', 'legacyGapFailClosed',
+  ]) {
+    assert(presenceOutbox.syntheticOnly && presenceOutbox[check] === true,
+      'Atomic presence/outbox D1 failure case: ' + check);
+  }
+  console.log('PHASE_F_PRESENCE_ATOMICITY_PASS=' + JSON.stringify(presenceOutbox));
+
+  const validity = await postJson('/shift-current-validity-probe', {});
+  for (const field of ['offBlocked', 'changedTimeBlocked', 'correctedClaimed', 'identityAndTimePreserved']) {
+    assert(validity.syntheticOnly && validity[field] === true,
+      'Phase G shift schedule validity D1: ' + field);
+  }
+  console.log('PHASE_G_SHIFT_END_CURRENT_VALIDITY_PASS=' + JSON.stringify(validity));
+
+  const arrivalPolicy = await postJson('/arrival-policy-probe', {});
+  for (const field of ['changedBlocked', 'offBlocked', 'ruleOffBlocked', 'staleBlocked', 'noEtaBlocked', 'claimedOnce', 'sentNotReplayed']) {
+    assert(arrivalPolicy.syntheticOnly && arrivalPolicy[field] === true, 'F08 arrival D1: ' + field);
+  }
+  console.log('F08_ARRIVAL_POLICY_D1_PASS=' + JSON.stringify(arrivalPolicy));
+
+  const rescheduled = await postJson('/pending-reschedule-probe', {});
+  assert(rescheduled.syntheticOnly && rescheduled.originalIdStable,
+    'schedule edit must preserve existing notification job identity');
+  assert(rescheduled.pendingTimeUpdated && rescheduled.pendingPayloadUpdated,
+    'editing a pending shift-end must update its durable delivery time and payload');
+  assert(rescheduled.retryNotReset && rescheduled.sentNotReset,
+    'planner reruns must not reset retry backoff or sent completion');
+  console.log('CBH_NONIMAGE_PHASE_F_PENDING_RESCHEDULE_D1_PASS=' + JSON.stringify(rescheduled));
 
   console.log(JSON.stringify({
     result: 'PASS',

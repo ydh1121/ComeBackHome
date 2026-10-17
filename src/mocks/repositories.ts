@@ -161,18 +161,112 @@ export class MockImportRepository implements ImportRepository {
       batch.committed = false;
     });
   }
+  async addManualPerson(batchId:EntityId,personId:EntityId,name:string):Promise<void> {
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(batch?.structure.weeklyReview?.status!=='MANUAL_RECOVERY_REQUIRED')
+      throw new Error('MANUAL_RECOVERY_NOT_ACTIVE');
+    if(batch.detectedPeople.some(p=>p.matchedPersonId===personId))
+      throw new Error('MANUAL_PERSON_ALREADY_INCLUDED');
+    const id=crypto.randomUUID();
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      if(!target)return;
+      if(target.structure.weeklyReview)target.structure.weeklyReview.confirmed=false;
+      target.detectedPeople.push({id,sourceName:name,matchedPersonId:personId,confidence:0,ignored:false});
+      for(let dayIndex=0;dayIndex<7;dayIndex++)target.reviewItems.push({
+        id:crypto.randomUUID(),detectedPersonId:id,personId,date:null,dayIndex,
+        imported:{enabled:true,start:null,end:null,breakMinutes:null},
+        recognitionState:'UNREADABLE',resolution:null,
+      });
+    });
+  }
+  async setWeeklyStartDate(batchId:EntityId,startDate:ISODate):Promise<void> {
+    const before=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!before?.structure.weeklyReview)throw new Error('WEEKLY_DATE_REVIEW_NOT_ACTIVE');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate))
+      throw new Error('INVALID_WEEK_START_DATE');
+    const start=new Date(startDate+'T00:00:00Z');
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==startDate||
+       start.getUTCDay()!==1)throw new Error('WEEK_START_MUST_BE_MONDAY');
+    if(before.reviewItems.some(item=>item.dayIndex==null||item.dayIndex<0||item.dayIndex>6))
+      throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+    this.store.mutate(state=>{
+      const batch=state.importBatches.find(b=>b.id===batchId);
+      if(!batch?.structure.weeklyReview)return;
+      for(const item of batch.reviewItems){
+        item.date=new Date(start.getTime()+item.dayIndex!*86400000).toISOString().slice(0,10);
+        item.existing=undefined;
+        item.resolution=null;
+      }
+      batch.structure.weeklyReview.startDate=startDate;
+      batch.structure.weeklyReview.confirmed=false;
+    });
+  }
+  async confirmWeeklyDates(batchId:EntityId):Promise<void> {
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!batch?.structure.weeklyReview?.startDate)throw new Error('WEEKLY_START_DATE_REQUIRED');
+    const start=new Date(batch.structure.weeklyReview.startDate+'T00:00:00Z');
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==
+       batch.structure.weeklyReview.startDate||start.getUTCDay()!==1)
+      throw new Error('WEEKLY_START_DATE_INVALID');
+    if(batch.reviewItems.some(item=>item.dayIndex==null||
+       item.date!==new Date(start.getTime()+item.dayIndex*86400000).toISOString().slice(0,10)))
+      throw new Error('WEEKLY_DATE_CONFLICT');
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      if(!target?.structure.weeklyReview)return;
+      target.structure.weeklyReview.confirmed=true;
+      target.reviewItems.forEach(item=>{item.resolution=null;});
+    });
+  }
+  async setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,proposedName:string):Promise<void> {
+    const name=proposedName.normalize('NFKC').trim();
+    if(!/^[\p{L}][\p{L}\p{M}\s·-]*$/u.test(name)||name.length>50)throw new Error('INVALID_NEW_PERSON_NAME');
+    const batch=this.store.read().importBatches.find(b=>b.id===batchId);
+    if(!batch?.structure.weeklyReview)throw new Error('NEW_PERSON_REVIEW_NOT_ACTIVE');
+    this.store.mutate(state=>{
+      const target=state.importBatches.find(b=>b.id===batchId);
+      const person=target?.detectedPeople.find(p=>p.id===detectedPersonId);
+      if(!person||!target)return;
+      person.pendingCreateName=name;
+      person.pendingCreate=true;
+      person.matchedPersonId=null;
+      person.ignored=false;
+      for(const item of target.reviewItems)if(item.detectedPersonId===detectedPersonId){
+        item.personId=null;
+        item.resolution=null;
+        item.existing=undefined;
+      }
+    });
+  }
   async setDetectedPersonMatch(batchId: EntityId, detectedPersonId: EntityId, personId: EntityId | null): Promise<void> {
     this.store.mutate((state) => {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
-      if (person) person.matchedPersonId = personId;
+      const changed = Boolean(person && (person.matchedPersonId !== personId || person.pendingCreate));
+      if (person) { person.matchedPersonId = personId; person.pendingCreate = false; person.pendingCreateName = undefined; person.ignored = false; }
       for (const item of batch?.reviewItems ?? []) {
         if (item.detectedPersonId !== detectedPersonId) continue;
         item.personId = personId;
-        if (personId && item.resolution == null &&
-            batch?.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
-          item.resolution = 'NEW';
-        }
+        if (changed) { item.resolution = null; item.existing = undefined; }
+        // Matching a person never grants review approval; user must reapprove.
+      }
+    });
+  }
+  async setPendingPersonCreate(batchId: EntityId, detectedPersonId: EntityId, pending: boolean): Promise<void> {
+    this.store.mutate(state => {
+      const batch = state.importBatches.find(b => b.id === batchId);
+      const detected = batch?.detectedPeople.find(p => p.id === detectedPersonId);
+      if (!detected || !batch) throw new Error('Detected person not found.');
+      detected.pendingCreate = pending;
+      if (!pending) detected.pendingCreateName = undefined;
+      detected.matchedPersonId = null;
+      detected.ignored = false;
+      for (const item of batch.reviewItems) {
+        if (item.detectedPersonId !== detectedPersonId) continue;
+        item.personId = null;
+        item.existing = undefined;
+        item.resolution = null;
       }
     });
   }
@@ -181,12 +275,13 @@ export class MockImportRepository implements ImportRepository {
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
       const person = batch?.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
       if (!person || !batch) return;
+      const changed = person.ignored !== ignored;
       person.ignored = ignored;
-      if (ignored) person.matchedPersonId = null;
+      if (ignored) { person.matchedPersonId = null; person.pendingCreate = false; person.pendingCreateName = undefined; }
       for (const item of batch.reviewItems) {
         if (item.detectedPersonId !== detectedPersonId) continue;
-        if (ignored) {
-          item.personId = null;
+        if (ignored || changed) {
+          if (ignored) item.personId = null;
           item.resolution = null;
         }
       }
@@ -213,6 +308,25 @@ export class MockImportRepository implements ImportRepository {
       item.resolution = null;
     });
   }
+  async setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: ISODate): Promise<void> {
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+       new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) {
+      throw new Error('INVALID_IMPORT_DATE');
+    }
+    const batch=this.store.read().importBatches.find(candidate=>candidate.id===batchId);
+    const item=batch?.reviewItems.find(candidate=>candidate.id===reviewItemId);
+    if(!batch||!item)throw new Error('Review item not found.');
+    if(batch.reviewItems.some(other=>other.id!==item.id &&
+       other.detectedPersonId===item.detectedPersonId && other.date===date)) {
+      throw new Error('DUPLICATE_PERSON_IMPORT_DATE');
+    }
+    if(item.date===date)return;
+    this.store.mutate(state=>{
+      const review=state.importBatches.find(b=>b.id===batchId)?.reviewItems.find(i=>i.id===reviewItemId);
+      if(review){review.date=date;review.existing=undefined;review.resolution=null;}
+    });
+  }
+
   async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
     if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
       throw new Error('INVALID_BREAK_MINUTES');
@@ -230,9 +344,7 @@ export class MockImportRepository implements ImportRepository {
       if (!item || item.imported[field] === value) return;
       item.imported[field] = value;
       const batch = state.importBatches.find((candidate) => candidate.id === batchId);
-      if (batch?.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = null;
-      }
+      item.resolution = null;
     });
   }
   async markCommitted(batchId: EntityId): Promise<void> {

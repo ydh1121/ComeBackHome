@@ -20,6 +20,11 @@ const textFiles = files.filter((file) => /\.(js|css|html)$/.test(file.pathname))
 const contents = await Promise.all(textFiles.map(async (file) => [file.pathname, await readFile(file, 'utf8')]));
 
 for (const [path, source] of contents) {
+  if (path.endsWith('.js')) {
+    for (const deferredClockAction of ['shortcuts://run-shortcut', 'ComeBackHome-clock-plan.json']) {
+      if (source.includes(deferredClockAction)) failures.push('production bundle contains deferred Clock action ' + deferredClockAction + ' in ' + path);
+    }
+  }
   for (const forbidden of [
     'mock-person-1',
     'mock-import-1',

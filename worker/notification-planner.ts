@@ -1,3 +1,4 @@
+import { activeWorkSchedule, shiftTimes } from '../src/domain/product-time';
 import type {
   NotificationEtaSource,
   NotificationJobStore,
@@ -26,6 +27,7 @@ export interface NotificationPlanResult {
   peopleChecked: number;
   workdays: number;
   shiftEndEnqueued: number;
+  arrivalAdvanceEnqueued: number;
   etaBaselinesInitialized: number;
   etaChangeEnqueued: number;
   skippedNoWork: number;
@@ -46,11 +48,6 @@ function seoulDate(now: Date): string {
   return map.year + '-' + map.month + '-' + map.day;
 }
 
-function seoulLocalIso(date: string, time: string): string {
-  const parsed = Date.parse(date + 'T' + time + ':00+09:00');
-  if (!Number.isFinite(parsed)) throw new Error('Invalid Asia/Seoul schedule timestamp.');
-  return new Date(parsed).toISOString();
-}
 
 function seoulDisplay(iso: string): string {
   const date = new Date(iso);
@@ -84,7 +81,7 @@ function shiftEndPayload(
     : '귀가 예상 확인 필요';
 
   return {
-    title: person.name + ' 퇴근 예정',
+    title: person.name + ' 퇴근 예정 10분 전',
     body: '퇴근 예정 ' + schedule.end + ' · ' + etaText + ' · ' + nextWorkDisplay(nextWork),
     tag: 'cbh:shift-end:' + person.id + ':' + schedule.date,
     path: '/',
@@ -118,9 +115,6 @@ function latestFutureWork(schedules: ScheduleEntry[], currentDate: string): Sche
     )[0] ?? null;
 }
 
-function currentWork(schedules: ScheduleEntry[], currentDate: string): ScheduleEntry | null {
-  return schedules.find((schedule) => schedule.enabled && schedule.date === currentDate) ?? null;
-}
 
 function minuteDifference(laterIso: string, earlierIso: string): number {
   return Math.round((Date.parse(laterIso) - Date.parse(earlierIso)) / 60_000);
@@ -147,6 +141,7 @@ export async function planNotificationJobs(
     peopleChecked: 0,
     workdays: 0,
     shiftEndEnqueued: 0,
+    arrivalAdvanceEnqueued: 0,
     etaBaselinesInitialized: 0,
     etaChangeEnqueued: 0,
     skippedNoWork: 0,
@@ -163,9 +158,10 @@ export async function planNotificationJobs(
   for (const person of people) {
     result.peopleChecked += 1;
     const schedules = await dependencies.schedules.list(person.id);
-    const today = currentWork(schedules, currentDate);
+    const today = activeWorkSchedule(schedules, now);
 
     if (!today) {
+      await dependencies.jobs.setArrivalPlan?.(person.id, currentDate, null, plannedAt);
       result.skippedNoWork += 1;
       continue;
     }
@@ -179,8 +175,27 @@ export async function planNotificationJobs(
       eta = null;
     }
 
+    const validEta = eta?.arrivalAt && eta.confidence !== 'UNKNOWN' && (!eta.workDate || eta.workDate === today.date) && Number.isFinite(Date.parse(eta.arrivalAt))
+      ? eta.arrivalAt : null;
+    await dependencies.jobs.setArrivalPlan?.(person.id, today.date, validEta, plannedAt, today);
+    if (settings.arrivalAdvanceEnabled && validEta) {
+      const scheduledFor = new Date(Date.parse(validEta) - 10 * 60_000).toISOString();
+      // Never send a late reminder after the predicted arrival has passed.
+      if (Date.parse(validEta) > now.getTime()) {
+        await dependencies.jobs.enqueueOnce({
+          id: crypto.randomUUID(), dedupeKey: 'arrival-advance:' + person.id + ':' + today.date,
+          personId: person.id, type: 'arrival-advance', scheduledFor, nextAttemptAt: scheduledFor,
+          payload: { title: person.name + ' 도착 예상 10분 전',
+            body: '도착 예상 ' + seoulDisplay(validEta) + ' · ' + (eta?.earliestArrivalAt && eta?.latestArrivalAt
+              ? seoulDisplay(eta.earliestArrivalAt) + '–' + seoulDisplay(eta.latestArrivalAt) : confidenceLabel(eta?.confidence ?? 'UNKNOWN')) + (eta?.departureBasis === 'ACTUAL' ? ' · 전달받은 퇴근 시각 기준' : ' · 예정 퇴근 기준, 실제 출발 미확인'),
+            tag: 'cbh:arrival-advance:' + person.id + ':' + today.date, path: '/' },
+        });
+        result.arrivalAdvanceEnqueued++;
+      }
+    }
+
     if (settings.shiftEndEnabled) {
-      const scheduledFor = seoulLocalIso(today.date, today.end);
+      const scheduledFor = new Date(shiftTimes(today).end - 10 * 60_000).toISOString();
       const nextWork = latestFutureWork(schedules, currentDate);
       const payload = shiftEndPayload(
         person,
@@ -202,7 +217,7 @@ export async function planNotificationJobs(
       result.shiftEndEnqueued += 1;
     }
 
-    if (!settings.etaChangeEnabled || !eta?.arrivalAt || eta.confidence === 'UNKNOWN') {
+    if (!settings.etaChangeEnabled || !validEta || !eta?.arrivalAt) {
       continue;
     }
 
@@ -213,14 +228,14 @@ export async function planNotificationJobs(
     const baselineAt = state?.etaBaselineAt ?? null;
     const requiresBaseline =
       !baselineAt ||
-      state?.etaBaselineWorkDate !== currentDate ||
+      state?.etaBaselineWorkDate !== today.date ||
       !Number.isFinite(Date.parse(baselineAt));
 
     if (requiresBaseline) {
       await dependencies.plannerState.upsert({
         personId: person.id,
         etaBaselineAt: eta.arrivalAt,
-        etaBaselineWorkDate: currentDate,
+        etaBaselineWorkDate: today.date,
         lastEtaNotificationAt: null,
         updatedAt: plannedAt,
       });
@@ -249,7 +264,7 @@ export async function planNotificationJobs(
     await dependencies.plannerState.upsert({
       personId: person.id,
       etaBaselineAt: eta.arrivalAt,
-      etaBaselineWorkDate: currentDate,
+      etaBaselineWorkDate: today.date,
       lastEtaNotificationAt: plannedAt,
       updatedAt: plannedAt,
     });

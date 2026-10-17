@@ -5,7 +5,7 @@ import type { CommuteOverviewQueryResult } from '../../application/queries/ComeB
 
 export type CommuteOverviewState =
   | { status: 'loading' }
-  | { status: 'ready'; overview: CommuteOverviewQueryResult }
+  | { status: 'ready'; personId: string; overview: CommuteOverviewQueryResult }
   | { status: 'error' };
 
 export type PlaceState =
@@ -34,12 +34,16 @@ export function useCommuteOverview(personId?: string): CommuteOverviewState {
       setState({ status: 'error' });
       return () => { active = false; };
     }
+    setState({ status: 'loading' });
     services.queries.getCommuteOverview(personId)
-      .then((overview) => active && setState({ status: 'ready', overview }))
+      .then((overview) => active && setState({ status: 'ready', personId, overview }))
       .catch(() => active && setState({ status: 'error' }));
     return () => { active = false; };
   }, [services, version, personId]);
 
+  if (state.status === 'ready' && state.personId !== personId) {
+    return { status: 'loading' };
+  }
   return state;
 }
 

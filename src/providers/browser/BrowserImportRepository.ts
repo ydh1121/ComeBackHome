@@ -106,6 +106,91 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async addManualPerson(batchId:EntityId,personId:EntityId,name:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    if(batch.structure.weeklyReview?.status!=='MANUAL_RECOVERY_REQUIRED')
+      throw new Error('MANUAL_RECOVERY_NOT_ACTIVE');
+    if(batch.detectedPeople.some(person=>person.matchedPersonId===personId))
+      throw new Error('MANUAL_PERSON_ALREADY_INCLUDED');
+    batch.structure.weeklyReview.confirmed=false;
+    const id=crypto.randomUUID();
+    batch.detectedPeople.push({
+      id,sourceName:name,matchedPersonId:personId,confidence:0,ignored:false,
+    });
+    for(let dayIndex=0;dayIndex<7;dayIndex++){
+      batch.reviewItems.push({
+        id:crypto.randomUUID(),detectedPersonId:id,personId,
+        date:null,dayIndex,imported:{enabled:true,start:null,end:null,breakMinutes:null},
+        recognitionState:'UNREADABLE',resolution:null,
+      });
+    }
+    this.persist();
+  }
+
+  async setWeeklyStartDate(batchId:EntityId,startDate:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const weekly=batch.structure.weeklyReview;
+    if(!weekly)throw new Error('WEEKLY_DATE_REVIEW_NOT_ACTIVE');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate))
+      throw new Error('INVALID_WEEK_START_DATE');
+    const date=new Date(startDate+'T00:00:00Z');
+    if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==startDate||
+       date.getUTCDay()!==1)throw new Error('WEEK_START_MUST_BE_MONDAY');
+    const monday=date.getTime();
+    for(const item of batch.reviewItems){
+      if(item.dayIndex==null||item.dayIndex<0||item.dayIndex>6)
+        throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+      item.date=new Date(monday+item.dayIndex*86400000).toISOString().slice(0,10);
+      // Previously loaded schedule and previous approval never survive
+      // changing the calendar origin.
+      item.existing=undefined;
+      item.resolution=null;
+    }
+    weekly.startDate=startDate;
+    weekly.confirmed=false;
+    this.persist();
+  }
+
+  async confirmWeeklyDates(batchId:EntityId):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const weekly=batch.structure.weeklyReview;
+    if(!weekly?.startDate)throw new Error('WEEKLY_START_DATE_REQUIRED');
+    const monday=new Date(weekly.startDate+'T00:00:00Z');
+    if(!Number.isFinite(monday.getTime())||monday.toISOString().slice(0,10)!==
+        weekly.startDate||monday.getUTCDay()!==1)
+      throw new Error('WEEKLY_START_DATE_INVALID');
+    for(const item of batch.reviewItems){
+      if(item.dayIndex==null||item.dayIndex<0||item.dayIndex>6)
+        throw new Error('MISSING_WEEKDAY_OWNERSHIP');
+      const expected=new Date(monday.getTime()+item.dayIndex*86400000)
+        .toISOString().slice(0,10);
+      if(item.date!==expected)throw new Error('WEEKLY_DATE_CONFLICT');
+      item.resolution=null;
+    }
+    weekly.confirmed=true;
+    this.persist();
+  }
+
+  async setPendingNewPerson(batchId:EntityId,detectedPersonId:EntityId,proposedName:string):Promise<void> {
+    const batch=this.requireBatch(batchId);
+    if(!batch.structure.weeklyReview)throw new Error('NEW_PERSON_REVIEW_NOT_ACTIVE');
+    const name=proposedName.normalize('NFKC').trim();
+    if(!/^[\p{L}][\p{L}\p{M}\s·-]*$/u.test(name)||name.length>50)throw new Error('INVALID_NEW_PERSON_NAME');
+    const detected=batch.detectedPeople.find(p=>p.id===detectedPersonId);
+    if(!detected)throw new Error('Detected person was not found.');
+    detected.pendingCreateName=name;
+    detected.pendingCreate=true;
+    detected.matchedPersonId=null;
+    detected.ignored=false;
+    for(const item of batch.reviewItems){
+      if(item.detectedPersonId!==detectedPersonId)continue;
+      item.personId=null;
+      item.resolution=null;
+      item.existing=undefined;
+    }
+    this.persist();
+  }
+
   async setDetectedPersonMatch(
     batchId: EntityId,
     detectedPersonId: EntityId,
@@ -114,14 +199,36 @@ export class BrowserImportRepository implements ImportRepository {
     const batch = this.requireBatch(batchId);
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
+    const changed = person.matchedPersonId !== personId || person.pendingCreate === true;
     person.matchedPersonId = personId;
+    person.pendingCreate = false;
+    person.ignored = false;
+    person.pendingCreateName = undefined;
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       item.personId = personId;
-      if (personId && item.resolution == null &&
-          batch.structure.sheet !== 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = 'NEW';
-      }
+      if (changed) { item.resolution = null; item.existing = undefined; }
+        // Matching a person never grants review approval; user must reapprove.
+    }
+    this.persist();
+  }
+
+  async setPendingPersonCreate(
+    batchId: EntityId, detectedPersonId: EntityId, pending: boolean,
+  ): Promise<void> {
+    const batch = this.requireBatch(batchId);
+    const detected = batch.detectedPeople.find(person => person.id === detectedPersonId);
+    if (!detected) throw new Error('Detected person was not found.');
+    if (detected.pendingCreate === pending && detected.matchedPersonId === null && !detected.ignored) return;
+    detected.pendingCreate = pending;
+      if (!pending) detected.pendingCreateName = undefined;
+    detected.matchedPersonId = null;
+    detected.ignored = false;
+    for (const item of batch.reviewItems) {
+      if (item.detectedPersonId !== detectedPersonId) continue;
+      item.personId = null;
+      item.existing = undefined;
+      item.resolution = null;
     }
     this.persist();
   }
@@ -134,8 +241,9 @@ export class BrowserImportRepository implements ImportRepository {
     const batch = this.requireBatch(batchId);
     const person = batch.detectedPeople.find((candidate) => candidate.id === detectedPersonId);
     if (!person) throw new Error('Detected person was not found.');
+    const changed = person.ignored !== ignored;
     person.ignored = ignored;
-    if (ignored) person.matchedPersonId = null;
+    if (ignored) { person.matchedPersonId = null; person.pendingCreate = false; person.pendingCreateName = undefined; }
     for (const item of batch.reviewItems) {
       if (item.detectedPersonId !== detectedPersonId) continue;
       if (ignored) {
@@ -173,6 +281,24 @@ export class BrowserImportRepository implements ImportRepository {
     this.persist();
   }
 
+  async setImportedDate(batchId: EntityId, reviewItemId: EntityId, date: string): Promise<void> {
+    const batch=this.requireBatch(batchId);
+    const item=this.requireReviewItem(batchId,reviewItemId);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+       new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) {
+      throw new Error('INVALID_IMPORT_DATE');
+    }
+    if(batch.reviewItems.some(other=>other.id!==item.id &&
+       other.detectedPersonId===item.detectedPersonId && other.date===date)) {
+      throw new Error('DUPLICATE_PERSON_IMPORT_DATE');
+    }
+    if(item.date===date)return;
+    item.date=date;
+    item.existing=undefined;
+    item.resolution=null;
+    this.persist();
+  }
+
   async setImportedBreakMinutes(batchId: EntityId, reviewItemId: EntityId, minutes: number | null): Promise<void> {
     if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 720)) {
       throw new Error('INVALID_BREAK_MINUTES');
@@ -194,11 +320,8 @@ export class BrowserImportRepository implements ImportRepository {
     const item = this.requireReviewItem(batchId, reviewItemId);
     if (item.imported[field] !== value) {
       item.imported[field] = value;
-      // Weekly image OCR requires fresh approval after *any* time edit.
-      // Existing workbook review semantics are left unchanged.
-      if (batch.structure.sheet === 'weekly 7 day x start/end/break physical matrix') {
-        item.resolution = null;
-      }
+      // Review edits invalidate approval for ALL workbook formats.
+      item.resolution = null;
       this.persist();
     }
   }

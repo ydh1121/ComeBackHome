@@ -1,7 +1,9 @@
+import { TransitIcon } from '../shared/components/TransitIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import type { Coordinate, PlaceKind, SavedCommuteRoute, TransitAccessPoint, TransitMode } from '../domain/models';
+import type { TransitLookupStatus } from '../application/contracts/providers';
 import { useCommuteOverview, usePlace } from '../features/commute/useCommuteWorkflow';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
@@ -43,6 +45,20 @@ function routeAccessIds(
   return [];
 }
 
+function transitErrorMessage(error: unknown): string {
+  const reason = error && typeof error === 'object' && 'reason' in error ? String(error.reason) : '';
+  if (reason === 'AUTH_ERROR') return '교통 API 인증에 실패했습니다. 서비스 설정을 확인해야 합니다.';
+  if (reason === 'QUOTA_EXCEEDED') return '교통 API 호출 한도를 초과했습니다. 나중에 다시 검색해 주세요.';
+  if (reason === 'INVALID_COORDINATE') return '검색 중심 위치가 올바르지 않습니다. 저장된 주소를 확인해 주세요.';
+  if (reason === 'NETWORK_FAILURE') return '교통 제공자와 연결하지 못했습니다. 연결 상태를 확인해 주세요.';
+  return '교통 제공자 조회에 실패했습니다. 다시 시도해 주세요.';
+}
+
+function transitPartialMessage(status: TransitLookupStatus): string | null {
+  return status === 'PARTIAL_PROVIDER_FAILURE'
+    ? '일부 교통 제공자가 응답하지 않았습니다. 현재 표시된 결과는 부분 조회 결과입니다.' : null;
+}
+
 function sameProvider(point: TransitAccessPoint, result: TransitResult): boolean {
   return point.providerId === result.providerId && point.mode === result.mode;
 }
@@ -68,6 +84,9 @@ export function TransitAccessPage() {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [nearbyRetry, setNearbyRetry] = useState(0);
+  const [searchRetry, setSearchRetry] = useState(0);
   // Search center is an ephemeral browsing coordinate, never a saved address.
   const [mapCenter, setMapCenter] = useState<Coordinate | null>(null);
   const discoveryCenter = mapCenter ??
@@ -93,16 +112,21 @@ export function TransitAccessPage() {
 
     setNearbyLoading(true);
     setNearbyError(null);
-    services.actions.transitSearch.nearby(personId, kind, discoveryCenter)
-      .then((items) => {
+    const task = services.actions.transitSearch.nearbyDetailed
+      ? services.actions.transitSearch.nearbyDetailed(personId, kind, discoveryCenter)
+      : services.actions.transitSearch.nearby(personId, kind, discoveryCenter)
+          .then(results => ({ results, status: 'SUCCESS_WITH_RESULTS' as const }));
+    task.then(response => {
         if (!active) return;
-        setNearby(items);
+        setNearby(response.results);
+        setNearbyError(transitPartialMessage(response.status));
         setNearbyLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
+        // Previous center's candidates must not masquerade as current-center nearby.
         setNearby([]);
-        setNearbyError('주변 교통 조회에 실패했습니다. 지도를 움직이거나 다시 시도해 주세요.');
+        setNearbyError(transitErrorMessage(error));
         setNearbyLoading(false);
       });
 
@@ -115,6 +139,7 @@ export function TransitAccessPage() {
     placeState.status === 'ready' ? placeState.place?.id : null,
     discoveryCenter?.x,
     discoveryCenter?.y,
+    nearbyRetry,
   ]);
 
   useEffect(() => {
@@ -122,21 +147,29 @@ export function TransitAccessPage() {
     const trimmed = query.trim();
     if (!trimmed) {
       setSearchResults([]);
+      setSearchError(null);
       setSearchLoading(false);
       return () => { active = false; };
     }
 
+    setSearchResults([]);
+    setSearchError(null);
     setSearchLoading(true);
     const timer = window.setTimeout(() => {
-      services.actions.transitSearch.search(personId, kind, trimmed, discoveryCenter ?? undefined)
-        .then((items) => {
+      const task = services.actions.transitSearch.searchDetailed
+        ? services.actions.transitSearch.searchDetailed(personId, kind, trimmed, discoveryCenter ?? undefined)
+        : services.actions.transitSearch.search(personId, kind, trimmed, discoveryCenter ?? undefined)
+            .then(results => ({ results, status: 'SUCCESS_WITH_RESULTS' as const }));
+      task.then(response => {
           if (!active) return;
-          setSearchResults(items);
+          setSearchResults(response.results);
+          setSearchError(transitPartialMessage(response.status));
           setSearchLoading(false);
         })
-        .catch(() => {
+        .catch((error) => {
           if (!active) return;
           setSearchResults([]);
+          setSearchError(transitErrorMessage(error));
           setSearchLoading(false);
         });
     }, 220);
@@ -145,7 +178,7 @@ export function TransitAccessPage() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [services, personId, kind, query, discoveryCenter?.x, discoveryCenter?.y]);
+  }, [services, personId, kind, query, discoveryCenter?.x, discoveryCenter?.y, searchRetry]);
 
   const searching = query.trim().length > 0;
   const source = searching ? searchResults : nearby;
@@ -470,7 +503,12 @@ export function TransitAccessPage() {
         </div>
       ) : null}
       {actionError ? <div className="search-inline-status" role="alert">{actionError}</div> : null}
-      {!searching && nearbyError ? <div className="search-inline-status" role="alert">{nearbyError}</div> : null}
+      {!searching && nearbyError ? <div className="search-inline-status" role="alert">{nearbyError}
+        <button type="button" className="text-btn" onClick={() => setNearbyRetry(value => value + 1)}>주변 다시 검색</button>
+      </div> : null}
+      {searching && searchError ? <div className="search-inline-status" role="alert">{searchError}
+        <button type="button" className="text-btn" onClick={() => setSearchRetry(value => value + 1)}>검색 다시 시도</button>
+      </div> : null}
       <div className="transit-list">
         {loading ? (
           <div className="transit-empty">
@@ -493,7 +531,7 @@ export function TransitAccessPage() {
                 aria-current={activeMarkerId === point.id ? 'true' : undefined}
                 onClick={() => activateMarker(point.id)}
               >
-              <Icon name={point.mode === 'BUS' ? 'bus' : 'train'} />
+              <TransitIcon mode={point.mode} line={point.line} />
               <span className="transit-copy">
                 <b>{point.name}{point.line ? ' · ' + point.line : ''}</b>
                 <span className="row-sub">
@@ -523,7 +561,8 @@ export function TransitAccessPage() {
         })}
         {!loading && !visible.length ? (
           <div className="transit-empty">
-            {searching ? '검색 결과가 없습니다.' : '이 위치에서 가까운 교통을 찾지 못했습니다.'}
+            {searching ? searchError ? '검색 제공자 상태를 확인해 주세요.' : '검색 결과가 없습니다.'
+              : nearbyError ? '주변 교통 조회 상태를 확인해 주세요.' : '이 위치에서 가까운 교통을 찾지 못했습니다.'}
           </div>
         ) : null}
       </div>

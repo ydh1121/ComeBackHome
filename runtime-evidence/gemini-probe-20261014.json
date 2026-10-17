@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.8-flash",
+  "inference_calls": 0,
+  "private_images": 0,
+  "acceptance": "DIAGNOSTIC_ONLY_NOT_OCR_ACCEPTANCE",
+  "model_get": {
+    "http": 200,
+    "latency_ms": 128,
+    "usage": null,
+    "api_success": true,
+    "response_sha256": "7a8c0bd8943bd89b4559cbffb2279a7be1a386aec0664c971bd5e9ed48204ffe",
+    "model_name_matches": true,
+    "supported_methods": [
+      "generateContent",
+      "countTokens"
+    ],
+    "inputTokenLimit": 1048576,
+    "outputTokenLimit": 65536
+  },
+  "count_tokens": {
+    "http": 200,
+    "latency_ms": 164,
+    "usage": null,
+    "api_success": true,
+    "response_sha256": "be93e95cc610e655a65583d7aed874fef7955e1d45b220915d4c9f66de6588ce",
+    "totalTokens": 1458
+  },
+  "synthetic_images_sent_for_token_count": 1,
+  "head": "fe5d0d0f45723bc8e4d33066316e95574e9bbfa3",
+  "run_id": 38514999336,
+  "job_id": 115691694904
+}

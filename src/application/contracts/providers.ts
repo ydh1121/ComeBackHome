@@ -1,5 +1,5 @@
 import type { ISODate } from '../../domain/common';
-import type { BusRouteOption, CommuteStep, Coordinate, ImportStructure, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
+import type { BusRouteOption, CommuteStep, Coordinate, ImportSourceCellKind, ImportSourceRegion, ImportStructure, TransitMode, WebPushSubscriptionRecord } from '../../domain/models';
 
 export interface PlaceSearchResult { providerId: string; placeName?: string; roadAddress: string; lotAddress?: string; coordinate: Coordinate; category?: string; }
 export interface TransitSearchResult { id: string; providerId: string; mode: TransitMode; name: string; displayCode?: string; line?: string; walkMinutes?: number; distanceM?: number; routeCount?: number; coordinate?: Coordinate; busRoutes?: BusRouteOption[]; }
@@ -8,7 +8,13 @@ export interface TransitBusLeg { stopNames: string[]; routes: BusRouteOption[]; 
 export interface TransitRouteResult { id: string; totalMinutes: number; transferCount: number; walkMinutes?: number; accessMinutes?: number; egressMinutes?: number; fare?: number; steps?: CommuteStep[]; busLegs?: TransitBusLeg[]; }
 export interface PlaceSearchProvider { search(query: string): Promise<PlaceSearchResult[]>; }
 export interface TransitRouteProvider { search(origin: Coordinate, destination: Coordinate): Promise<TransitRouteResult[]>; }
+export type TransitLookupStatus = 'SUCCESS_WITH_RESULTS' | 'SUCCESS_EMPTY' |
+  'PARTIAL_PROVIDER_FAILURE' | 'PROVIDER_UNAVAILABLE' | 'AUTH_ERROR' |
+  'QUOTA_EXCEEDED' | 'INVALID_COORDINATE' | 'NETWORK_FAILURE';
+export interface TransitLookupResult { results: TransitSearchResult[]; status: TransitLookupStatus; }
 export interface TransitAccessSearchProvider {
+  searchDetailed?(query: string, near: Coordinate): Promise<TransitLookupResult>;
+  nearbyDetailed?(near: Coordinate): Promise<TransitLookupResult>;
   search(query: string, near: Coordinate): Promise<TransitSearchResult[]>;
   nearby(near: Coordinate): Promise<TransitSearchResult[]>;
   resolve(result: TransitSearchResult, near: Coordinate): Promise<TransitSearchResult>;
@@ -17,9 +23,9 @@ export interface BusRouteLookupProvider { listByStop(arsId: string): Promise<Bus
 export interface RealtimeBusProvider { arrivals(stopProviderId: string, routeProviderId: string): Promise<Arrival[]>; }
 export interface RealtimeSubwayProvider { arrivals(providerStationId: string, stationName: string, line?: string): Promise<Arrival[]>; }
 export interface ParsedImportPerson { sourceName: string; confidence: number; }
-export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; start: string; end: string; breakMinutes?: number | null; sourceRow: number; confidence: number; }
-export type ImageScheduleCellState = 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
-export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate; start: string | null; end: string | null; breakMinutes?: number | null; sourceRow: number; confidence: number; recognitionState?: ImageScheduleCellState; enabled?: boolean; }
+export interface ParsedScheduleCandidate { sourcePersonName: string; date: ISODate; dayIndex?: number; start: string; end: string; breakMinutes?: number | null; sourceRow: number; sourceRegion?: ImportSourceRegion; sourceCellKind?: ImportSourceCellKind; confidence: number; }
+export type ImageScheduleCellState = 'WORK' | 'INCOMPLETE' | 'OFF' | 'OFF_CANDIDATE' | 'UNREADABLE';
+export interface ParsedScheduleReviewCandidate { sourcePersonName: string; date: ISODate | null; dayIndex?: number; start: string | null; end: string | null; breakMinutes?: number | null; sourceRow: number; sourceRegion?: ImportSourceRegion; sourceCellKind?: ImportSourceCellKind; confidence: number; recognitionState?: ImageScheduleCellState; breakReviewRequired?: boolean; enabled?: boolean; }
 export interface ParsedImport { detectedPeople: ParsedImportPerson[]; scheduleCandidates: ParsedScheduleCandidate[]; reviewCandidates?: ParsedScheduleReviewCandidate[]; structure: ImportStructure; confidence: number; }
 export interface WorkbookParser { parse(data: ArrayBuffer): Promise<ParsedImport>; }
 export interface ImageTextToken { text: string; x: number; y: number; width: number; height: number; confidence: number; }
@@ -42,6 +48,7 @@ export interface ImageTextProbeResult {
   confidence: number;
 }
 export interface RegionalImageTextExtractor extends ImageTextExtractor {
+  releaseResources?(): Promise<void>;
   extractRegions(
     file: File,
     regions: ImageTextProbeRegion[],
