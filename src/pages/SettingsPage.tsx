@@ -11,7 +11,6 @@ export function SettingsPage() {
       <BackButton fallbackTo="/" />
       <h1 className="page-title">설정</h1>
       <div className="settings-list">
-        <button type="button" className="settings-row-button" onClick={() => navigate('/settings/alarms')}><b>iPhone 시계 알람</b><Icon name="chevron-right" /></button>
         <button type="button" className="settings-row-button" onClick={() => navigate('/notifications')}>
           <b>알림</b>
           <Icon name="chevron-right" />
