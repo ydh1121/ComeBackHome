@@ -1,0 +1,43 @@
+name: PR92 owner-authorized production release
+run-name: PR92 production preflight / owner approved 2026-10-17
+
+# The owner explicitly requested MAIN merge and use of the new version.
+# This branch-scoped trigger is used because the connected GitHub interface
+# supports code writes but has no workflow-dispatch operation. It does not
+# trigger on MAIN, on unrelated changes, or on other PR branches.
+on:
+  push:
+    branches: [feat/nonimage-weekly-xlsx-import]
+    paths: [.github/workflows/release-pr92-production.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbh-pr92-production-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.repository == 'ydh1121/ComeBackHome' && github.ref == 'refs/heads/feat/nonimage-weekly-xlsx-import'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - name: Back up and rehearse without mutating production
+        run: node scripts/release-pr92-production.mjs preflight
+      - name: Publish encrypted backup and aggregate evidence only
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbh-pr92-release-preflight
+          path: runtime-evidence/pr92-release/
+          retention-days: 7
+          if-no-files-found: error
