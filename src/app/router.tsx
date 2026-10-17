@@ -46,7 +46,9 @@ function componentFor(path: string) {
   if (path === '/people/:personId/commute/:placeKind/access') return TransitAccessPage;
   if (path === '/people/:personId/commute/:placeKind/access/:accessId/bus-routes') return BusRoutePage;
   if (path === '/notifications') return NotificationPage;
-  if (path === '/settings/alarms') return AlarmPage;
+  // The manual Clock bridge is retained for development/reference testing.
+  // It does not meet the owner's automatic-sync requirement for this release.
+  if (path === '/settings/alarms') return import.meta.env.DEV ? AlarmPage : SettingsPage;
   if (path === '/settings') return SettingsPage;
   if (path === '/settings/presence') return PresenceAutomationPage;
   return ImplementationBoundaryPage;
