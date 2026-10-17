@@ -57,25 +57,9 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
 
   await open('/settings');await page.locator('[data-page="SettingsPage"]').waitFor();
   assert.equal(await page.getByRole('button',{name:'iPhone 시계 알람',exact:true}).count(),0,'deferred manual Clock bridge must not be offered in Settings');
-  // DEV-only reference coverage is preserved; the production bundle gate
-  // independently rejects the manual Clock actions from shipped JavaScript.
-  await open('/settings/alarms');await page.locator('[data-page="AlarmPage"]').waitFor();
-  assert.equal(await page.locator('[data-page="AlarmPage"]').getAttribute('data-device-applied'),'false');
-  assert.equal(await page.getByRole('button',{name:'단축어에서 확인하고 적용'}).isDisabled(),true);
-  // No real shortcut URL is opened: only the generated contract is inspected.
-  const downloadPromise=page.waitForEvent('download');
-  await page.getByRole('button',{name:'알람 데이터 다운로드'}).click();
-  const download=await downloadPromise;assert.equal(download.suggestedFilename(),'ComeBackHome-clock-plan.json');
-  await page.getByText('단축어 설정 방법',{exact:true}).click();
-  const guidePromise=page.waitForEvent('popup');
-  await page.getByRole('link',{name:'단축어 만들기: 액션 순서와 입력값'}).click();
-  const guide=await guidePromise;
-  await guide.getByRole('heading',{name:'iPhone 시계 알람 단축어 만들기',exact:true}).waitFor();
-  await guide.setViewportSize({width:360,height:780});
-  assert.equal(await guide.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'setup guide fits mobile viewport');
-  assert.ok((await guide.locator('body').innerText()).includes('clock-ledger.json'));
-  assert.ok((await guide.locator('body').innerText()).includes('실기기에서 아직 검증하지 않았습니다'));
-  await guide.close();
+  await open('/settings/alarms');
+  await page.locator('[data-page="SettingsPage"]').waitFor();
+  assert.equal(await page.locator('[data-page="AlarmPage"]').count(),0,'production route must not expose deferred Clock actions');
 
   // A real File input cancellation and retry. Delay read without mocking the
   // application action; abort must prevent any late review publication.
@@ -102,5 +86,28 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.equal(await page.getByRole('button',{name:'인식 결과 보기'}).isDisabled(),true,'page exit cancels unfinished import');
   await open('/');
   await page.locator('[data-page="TodayPage"][data-state="WORKING"]').waitFor();
-  return {mobileSvg:true,preferredOnly:true,historyPreserved:true,etaRange:true,arrivalRuleD1:true,alarmContractOnly:true,alarmReceiverGuide:true,cancelAndRetry:true};
+  return {mobileSvg:true,preferredOnly:true,historyPreserved:true,etaRange:true,arrivalRuleD1:true,manualClockExcluded:true,cancelAndRetry:true};
+}
+
+// Reference-only browser coverage runs against Vite DEV with the same isolated D1.
+export async function verifyClockReferenceUi({page,base}) {
+  await page.goto(base+'/settings/alarms',{waitUntil:'domcontentloaded'});await page.locator('[data-page="AlarmPage"]').waitFor();
+  assert.equal(await page.locator('[data-page="AlarmPage"]').getAttribute('data-device-applied'),'false');
+  assert.equal(await page.getByRole('button',{name:'단축어에서 확인하고 적용'}).isDisabled(),true);
+  // No real shortcut URL is opened: only the generated contract is inspected.
+  const downloadPromise=page.waitForEvent('download');
+  await page.getByRole('button',{name:'알람 데이터 다운로드'}).click();
+  const download=await downloadPromise;assert.equal(download.suggestedFilename(),'ComeBackHome-clock-plan.json');
+  await page.getByText('단축어 설정 방법',{exact:true}).click();
+  const guidePromise=page.waitForEvent('popup');
+  await page.getByRole('link',{name:'단축어 만들기: 액션 순서와 입력값'}).click();
+  const guide=await guidePromise;
+  await guide.getByRole('heading',{name:'iPhone 시계 알람 단축어 만들기',exact:true}).waitFor();
+  await guide.setViewportSize({width:360,height:780});
+  assert.equal(await guide.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'setup guide fits mobile viewport');
+  assert.ok((await guide.locator('body').innerText()).includes('clock-ledger.json'));
+  assert.ok((await guide.locator('body').innerText()).includes('실기기에서 아직 검증하지 않았습니다'));
+  await guide.close();
+
+  return {alarmContractOnly:true,alarmReceiverGuide:true};
 }
