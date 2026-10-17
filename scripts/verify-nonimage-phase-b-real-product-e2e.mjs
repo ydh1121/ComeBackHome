@@ -229,6 +229,21 @@ async function browserPass(kind,label,serial){
     work=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
     assert(work?.enabled===true&&work.start==='11:00'&&work.end==='20:00'&&work.breakMinutes===60,
       label+' OFF -> work restoration '+JSON.stringify(work));
+    // Change edit routes without unmounting the form. The destination URL,
+    // not a previous draft's date, must determine both the loaded and saved day.
+    await update(page,'/schedule/'+day+'/edit');
+    await update(page,'/schedule/'+offDate+'/edit');
+    await page.locator('[data-page="ScheduleDayEditPage"][data-date="'+offDate+'"]').waitFor();
+    assert(await page.locator('.schedule-workday-rule').getAttribute('aria-pressed')==='false',
+      label+' direct edit-route switch loads target OFF record');
+    await update(page,'/schedule/'+day+'/edit');
+    await page.locator('[data-page="ScheduleDayEditPage"][data-date="'+day+'"]').waitFor();
+    await page.getByRole('button',{name:'저장',exact:true}).click();
+    await page.waitForURL(/\/schedule$/);
+    const unchangedOff=(await api('/people/'+a+'/schedules/'+offDate)).body.schedule;
+    work=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
+    assert(unchangedOff?.enabled===false&&work?.enabled===true&&work.start==='11:00'&&work.breakMinutes===60,
+      label+' route switch saves only destination day and preserves adjacent OFF');
     // Person selection must switch the current schedule source.
     await update(page,'/people');
     await page.locator('.person-row').filter({hasText:personB}).click();
