@@ -70,8 +70,8 @@ export function ImportPersonMatchPage() {
             <div className="mapping-row" key={detected.id}>
               <div>
                 <b>{detected.sourceName}</b>
-                <div className="row-sub">인식 신뢰도 {Math.round(detected.confidence * 100)}%</div>
-                {batch.structure.weeklyReview && !detected.matchedPersonId ? (
+                
+                {batch.structure.weeklyReview && (detected.pendingCreate || Object.hasOwn(proposedNames,detected.id)) ? (
                   <label className="row-sub">신규 직원 이름 확인
                     <input type="text" maxLength={50}
                       aria-label={detected.sourceName+' 신규 직원 이름'}
@@ -82,6 +82,7 @@ export function ImportPersonMatchPage() {
                       }}/>
                   </label>
                 ):null}
+                {batch.structure.weeklyReview && detected.sourceName.startsWith('인식불가 직원 ') && !Object.hasOwn(proposedNames,detected.id) ? <button type="button" className="review-secondary" onClick={() => setProposedNames(prev => ({...prev,[detected.id]:''}))}>이름 직접 입력</button> : null}
                 {detected.pendingCreateName ? <div className="row-sub">
                   신규 직원 “{detected.pendingCreateName}” — 최종 저장 시 생성 예정
                 </div> : null}
@@ -137,12 +138,12 @@ export function ImportPersonMatchPage() {
       </div>
 
       {matchError ? <p className="import-error" role="alert">{matchError}</p> : null}
-      <div className="mapping-summary">가져올 사람 {includedCount}명 · 신규 직원은 최종 승인 후 생성</div>
+      <div className="mapping-summary">가져올 사람 {includedCount}명</div>
       <button
         type="button"
         className="cta"
         disabled={!allResolved || includedCount === 0}
-        onClick={() => navigate('/import/' + encodeURIComponent(batch.id) + '/structure')}
+        onClick={() => navigate('/import/' + encodeURIComponent(batch.id) + '/review')}
       >
         다음
       </button>
