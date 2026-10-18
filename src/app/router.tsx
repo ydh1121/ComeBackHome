@@ -5,7 +5,6 @@ import { ImplementationBoundaryPage } from '../pages/ImplementationBoundaryPage'
 import { ImportPage } from '../pages/ImportPage';
 import { ImportPersonMatchPage } from '../pages/ImportPersonMatchPage';
 import { ImportReviewPage } from '../pages/ImportReviewPage';
-import { ImportStructurePage } from '../pages/ImportStructurePage';
 import { PeoplePage } from '../pages/PeoplePage';
 import { PersonCreatePage } from '../pages/PersonCreatePage';
 import { PersonDetailPage } from '../pages/PersonDetailPage';
@@ -17,22 +16,22 @@ import { TransitAccessPage } from '../pages/TransitAccessPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
 import { NotificationPage } from '../pages/NotificationPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { PresenceAutomationPage } from '../pages/PresenceAutomationPage';
-import { ScheduleBulkEditPage } from '../pages/ScheduleBulkEditPage';
 import { ScheduleDayEditPage } from '../pages/ScheduleDayEditPage';
 import { SchedulePage } from '../pages/SchedulePage';
+import { ScheduleHistoryPage } from '../pages/ScheduleHistoryPage';
 import { TodayPage } from '../pages/TodayPage';
 import { AppShell } from '../shared/layout/AppShell';
 
 function componentFor(path: string) {
   if (path === '/') return TodayPage;
   if (path === '/schedule') return SchedulePage;
-  if (path === '/schedule/edit') return ScheduleBulkEditPage;
+  if (path === '/schedule/edit') return SchedulePage; // old bookmarks
+  if (path === '/schedule/history') return ScheduleHistoryPage;
   if (path === '/schedule/new') return ScheduleDayEditPage;
   if (path === '/schedule/:date/edit') return ScheduleDayEditPage;
   if (path === '/import') return ImportPage;
   if (path === '/import/:batchId/people') return ImportPersonMatchPage;
-  if (path === '/import/:batchId/structure') return ImportStructurePage;
+  if (path === '/import/:batchId/structure') return ImportReviewPage; // old bookmarks
   if (path === '/import/:batchId/review') return ImportReviewPage;
   if (path === '/people') return PeoplePage;
   if (path === '/people/new') return PersonCreatePage;
@@ -50,7 +49,7 @@ function componentFor(path: string) {
   // It does not meet the owner's automatic-sync requirement for this release.
   if (path === '/settings/alarms') return import.meta.env.DEV ? AlarmPage : SettingsPage;
   if (path === '/settings') return SettingsPage;
-  if (path === '/settings/presence') return PresenceAutomationPage;
+  if (path === '/settings/presence') return SettingsPage; // retired setup entry
   return ImplementationBoundaryPage;
 }
 
