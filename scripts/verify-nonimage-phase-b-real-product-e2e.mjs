@@ -212,7 +212,8 @@ async function browserPass(kind,label,serial){
     await page.getByRole('button',{name:'저장',exact:true}).click();
     await page.waitForURL(/\/schedule$/);
     await page.waitForLoadState('networkidle',{timeout:12000});
-    await page.reload({waitUntil:'networkidle'});
+    await page.waitForLoadState('networkidle');
+  await page.reload({waitUntil:'networkidle'});
     let off=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
     assert(off?.enabled===false&&off.start===''&&off.end===''&&off.breakMinutes===null,
       label+' existing work -> OFF persisted');
@@ -266,7 +267,8 @@ async function browserPass(kind,label,serial){
     await page.getByRole('button',{name:'이전 달',exact:true}).click();
     assert(await page.getByLabel('조회 월').inputValue()==='2099-12',label+' month crosses year boundary');
     await page.getByRole('button',{name:'다음 달',exact:true}).click();
-    await page.reload({waitUntil:'networkidle'});
+    await page.waitForLoadState('networkidle');
+  await page.reload({waitUntil:'networkidle'});
     assert((await api('/people/'+b+'/schedules/2100-01-03')).body.schedule?.breakMinutes===15,label+' history navigation preserves D1');
     // Deliberate SQL middle-batch failure: schedule ID belongs to A.
     const before=(await api('/people/'+b+'/schedules')).body.schedules;
