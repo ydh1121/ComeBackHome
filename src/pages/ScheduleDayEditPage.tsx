@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { formatDateLabel, isIsoDate } from '../features/schedule/date-format';
 import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
@@ -7,22 +7,18 @@ import { BackButton } from '../shared/components/BackButton';
 import { TimeRangeWheelPicker } from '../shared/components/TimeRangeWheelPicker';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import { formErrorMessage } from '../shared/runtime/formErrorMessage';
+import { useSeoulDate } from '../shared/runtime/useSeoulDate';
 import './schedule-page.css';
-
-function currentLocalIsoDate(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return now.getFullYear() + '-' + month + '-' + day;
-}
 
 export function ScheduleDayEditPage() {
   const { date: routeDate = '' } = useParams();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const today = useSeoulDate();
   const services = useApplicationServices();
   const schedule = useSelectedSchedule();
   const creating = !routeDate;
-  const [newDate, setNewDate] = useState(currentLocalIsoDate);
+  const [newDate, setNewDate] = useState(today);
   // React Router may reuse this component across day-edit routes. The URL
   // remains authoritative so a previous draft cannot redirect a later save.
   const selectedDate = routeDate || newDate;
@@ -70,7 +66,9 @@ export function ScheduleDayEditPage() {
         breakMinutes: enabled ? (breakEdited ? (breakDraft === '' ? null : Number(breakDraft)) : undefined) : null,
         expectedPersonId,
       }));
-      navigate('/schedule');
+      const belongsToRoster = !schedule.latestImport || schedule.latestImport.dates.includes(selectedDate);
+      navigate(params.get('from') === 'history' || selectedDate < today || !belongsToRoster
+        ? '/schedule/history?month=' + selectedDate.slice(0,7) : '/schedule');
     } catch {
       // Keep the entered schedule for a subsequent explicit retry.
     }

@@ -43,7 +43,7 @@ const required = [
   'src/mocks/state.ts',
   'src/pages/ImportPage.tsx',
   'src/pages/ImportPersonMatchPage.tsx',
-  'src/pages/ImportStructurePage.tsx',
+  'src/pages/ScheduleHistoryPage.tsx',
   'src/pages/ImportReviewPage.tsx',
   'src/features/commute/useCommuteWorkflow.ts',
   'src/features/notifications/useNotificationSettings.ts',

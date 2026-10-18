@@ -58,26 +58,27 @@ async function browserPass(type,name){
     await page.goto(origin+'/notifications',{waitUntil:'domcontentloaded'});
     await page.locator('[data-page="NotificationSetupPage"]').waitFor();
     const shift=selectRule(page,'예정 퇴근 10분 전에');
-    const eta=selectRule(page,'도착 시간이 크게 바뀔 때');
-    const left=selectRule(page,'퇴근이 직접 기록됐을 때');
-    const home=selectRule(page,'집 도착이 직접 기록됐을 때');
+    const arrival=selectRule(page,'예상 도착 10분 전에');
+    for (const removed of ['도착 시간이 크게 바뀔 때','퇴근이 직접 기록됐을 때','집 도착이 직접 기록됐을 때']) {
+      assert(await selectRule(page,removed).count()===0,name+' retired control remains');
+    }
     await page.waitForFunction(()=>document.querySelector('[data-page="NotificationSetupPage"]')?.getAttribute('data-state')!=='LOADING');
     const initially=(await api()).body.settings;
-    assert(typeof initially.shiftEndEnabled==='boolean'&&typeof initially.etaChangeEnabled==='boolean',
+    assert(typeof initially.shiftEndEnabled==='boolean'&&typeof initially.arrivalAdvanceEnabled==='boolean',
       name+' initial server settings missing');
 
     // Mutating one rule must not replace another's just-saved value.
-    await eta.click();
-    const nextEta=!initially.etaChangeEnabled;
+    await arrival.click();
+    const nextArrival=!initially.arrivalAdvanceEnabled;
     await page.waitForFunction(value =>
-      document.querySelectorAll('.notification-page button.rule')[2]?.getAttribute('aria-pressed')===String(value),nextEta);
-    await assertSaved('etaChangeEnabled',nextEta,name+' ETA toggle missing');
+      document.querySelectorAll('.notification-page button.rule')[0]?.getAttribute('aria-pressed')===String(value),nextArrival);
+    await assertSaved('arrivalAdvanceEnabled',nextArrival,name+' ETA toggle missing');
     await shift.click();
     await page.waitForFunction(value =>
       document.querySelectorAll('.notification-page button.rule')[1]?.getAttribute('aria-pressed')===String(value),!initially.shiftEndEnabled);
     const afterTwo=(await api()).body.settings;
     assert(afterTwo.shiftEndEnabled===!initially.shiftEndEnabled &&
-      afterTwo.etaChangeEnabled===nextEta,
+      afterTwo.arrivalAdvanceEnabled===nextArrival,
       name+' second toggle clobbered prior rule in D1');
 
     // Server failure must be visible, must not optimistically switch UI, and must allow retry.
@@ -90,13 +91,13 @@ async function browserPass(type,name){
       }
       return route.continue();
     });
-    const leftBefore=afterTwo.leftWorkEnabled;
-    await left.click();
+    const shiftBefore=afterTwo.shiftEndEnabled;
+    await shift.click();
     await page.getByRole('alert').filter({hasText:'저장하지 못했습니다.'}).waitFor();
     assert(failures===1,name+' synthetic server failure must be tested');
-    assert((await left.getAttribute('aria-pressed'))===String(leftBefore),
+    assert((await shift.getAttribute('aria-pressed'))===String(shiftBefore),
       name+' failed rule write must not alter UI');
-    await assertSaved('leftWorkEnabled',leftBefore,name+' failed rule write changed D1');
+    await assertSaved('shiftEndEnabled',shiftBefore,name+' failed rule write changed D1');
     await page.unroute('**/api/notifications/settings');
 
     let acceptedPuts=0;
@@ -105,37 +106,32 @@ async function browserPass(type,name){
       await route.continue();
     });
     await page.evaluate(()=>{
-      const rule=document.querySelectorAll('.notification-page button.rule')[3];
+      const rule=document.querySelectorAll('.notification-page button.rule')[1];
       if(!(rule instanceof HTMLButtonElement))throw Error('Rule toggle missing');
       rule.click();
       rule.click();
     });
     await page.waitForFunction(value=>
-      document.querySelectorAll('.notification-page button.rule')[3]?.getAttribute('aria-pressed')===String(value),
-      !leftBefore);
+      document.querySelectorAll('.notification-page button.rule')[1]?.getAttribute('aria-pressed')===String(value),
+      !shiftBefore);
     assert(acceptedPuts===1,name+' same-event double click should result in one PUT');
-    await assertSaved('leftWorkEnabled',!leftBefore,name+' error retry not persisted');
+    await assertSaved('shiftEndEnabled',!shiftBefore,name+' error retry not persisted');
     await page.unroute('**/api/notifications/settings');
 
-    // Independent fourth toggle must retain previous three.
-    const prevHome=(await api()).body.settings.homeArrivalEnabled;
-    await home.click();
-    await page.waitForFunction(value=>
-      document.querySelectorAll('.notification-page button.rule')[4]?.getAttribute('aria-pressed')===String(value),!prevHome);
     const full=(await api()).body.settings;
-    assert(full.shiftEndEnabled===!initially.shiftEndEnabled &&
-      full.etaChangeEnabled===nextEta &&
-      full.leftWorkEnabled===!leftBefore &&
-      full.homeArrivalEnabled===!prevHome,name+' multiple toggles out of sync');
+    assert(full.shiftEndEnabled===!shiftBefore && full.arrivalAdvanceEnabled===nextArrival,
+      name+' independent two reminder rules out of sync');
+    assert(!full.etaChangeEnabled && !full.leftWorkEnabled && !full.homeArrivalEnabled,
+      name+' retired rule flags must be disabled on preference save');
 
     // Physically reload the actual product and read back the same isolated D1.
     await page.reload({waitUntil:'domcontentloaded'});
     await page.locator('[data-page="NotificationSetupPage"]').waitFor();
     await page.waitForFunction(saved=>{
       const buttons=document.querySelectorAll('.notification-page button.rule');
-      return buttons.length===5 && [...buttons].every((button,i)=>
+      return buttons.length===2 && [...buttons].every((button,i)=>
         button.getAttribute('aria-pressed')===String(saved[i]));
-    },[full.arrivalAdvanceEnabled,full.shiftEndEnabled,full.etaChangeEnabled,full.leftWorkEnabled,full.homeArrivalEnabled]);
+    },[full.arrivalAdvanceEnabled,full.shiftEndEnabled]);
     assert(pageErrors.length===0,name+' uncaught notification UI errors: '+pageErrors.join('; '));
 
     // Reject invalid rule payload before it can change any stored setting.

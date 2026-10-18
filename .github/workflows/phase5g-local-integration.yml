@@ -312,7 +312,7 @@ jobs:
         run: node scripts/verify-nonimage-phase-c-place-real-product-e2e.mjs
 
   nonimage-phase-b-product-e2e:
-    name: NONIMAGE_PHASE_B_PRODUCT_E2E / people, OFF, breaks, bulk, isolation / Chromium WebKit local D1
+    name: NONIMAGE_PHASE_B_PRODUCT_E2E / people, roster, monthly history, OFF, isolation / Chromium WebKit local D1
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container:
@@ -330,6 +330,15 @@ jobs:
           npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
       - name: Real people and schedule browser acceptance with local D1
         run: node scripts/verify-nonimage-phase-b-real-product-e2e.mjs
+
+      - name: Preserve synthetic mobile UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schedule-refresh-synthetic-ui
+          path: .artifacts/ux-refresh/
+          if-no-files-found: ignore
+          retention-days: 7
 
   nonimage-xlsx-product-e2e:
     name: NONIMAGE_XLSX_PRODUCT_E2E / native binary + Chromium WebKit + isolated D1

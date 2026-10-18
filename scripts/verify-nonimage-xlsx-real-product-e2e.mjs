@@ -90,72 +90,41 @@ async function testEngine(browserType,label,firstName,secondName,monday){
       label+' parsed source roster order mismatch');
     assert((await firstRow.locator('select').inputValue())===originalPersonId,
       label+' existing employee must auto-match');
-    assert((await secondRow.locator('select').inputValue())==='',
+    assert((await secondRow.locator('select').inputValue())==='__ignore__',
       label+' missing employee must not auto-create');
     const before=await json('/api/people');
     assert(!before.body?.people?.some(x=>x.name===secondName),
       label+' draft creation must produce ZERO server people writes');
     await secondRow.locator('select').selectOption('__create__');
     await page.getByRole('button',{name:'다음',exact:true}).click();
-    await page.locator('[data-page="ImportStructurePage"]').waitFor();
-    await page.getByRole('button',{name:'계속',exact:true}).click();
     const review=page.locator('[data-page="ImportReviewPage"]');
     await review.waitFor();
     const rows=review.locator('.import-review-item');
     assert((await rows.count())===14,label+' expected 14 weekly review cells');
+    // Safe proposals are checked; unknown cells stay excluded. No approval is
+    // written until the final Save, even after adjusting a proposed time.
     for(let i=0;i<14;i++){
       const row=rows.nth(i);
-      if(i===0||i===7){
-        await row.locator('.review-choice-list button').last().click();
-      }else if(i===8){
-        await row.getByRole('button',{name:/휴무로 변경/}).click();
-        await row.locator('.review-choice-list button').last().click();
-      }else{
-        await row.locator('.review-choice-list button').first().click();
+      const checkbox=row.locator('.review-row input');
+      if(i===0||i===7) assert(await checkbox.isChecked(),label+' complete shift defaults selected');
+      else if(await checkbox.isChecked()) {
+        await checkbox.click();
+        await row.locator('.review-row input:not(:checked)').waitFor();
       }
     }
-    // All asynchronous row approvals must settle BEFORE editing/re-approving.
-    // Otherwise the global Save may still be disabled by a different row and
-    // a quick second click may toggle the first shift NEW back to SKIP.
-    await page.waitForFunction(() => {
-      const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
-      return save instanceof HTMLButtonElement && save.disabled === false;
-    },null,{timeout:15_000});
-    // Edit an approved shift -> approval must be revoked -> reapprove.
+    const newOffRow=rows.nth(8);
+    await newOffRow.locator('.review-edit > summary').click();
+    await newOffRow.getByRole('checkbox',{name:'휴무로 변경',exact:true}).click();
+    await newOffRow.locator('.review-row input:checked').waitFor();
     const firstShift=rows.nth(0);
-    const timeSelectors=firstShift.locator('.review-time-editor');
-    assert((await timeSelectors.count())===1,label+' weekly time editor missing');
+    await firstShift.locator('.review-edit > summary').click();
     await firstShift.locator('input[aria-label="쉬는시간 분 단위 수정"]').fill('45');
-    await firstShift.locator('.review-choice-list button').last()
-      .locator('xpath=self::*[@aria-pressed="false"]').waitFor();
     await page.waitForFunction(() => {
-      const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
-      return save instanceof HTMLButtonElement && save.disabled === true;
-    },null,{timeout:12_000});
-    assert(await page.getByRole('button',{name:'저장',exact:true}).isDisabled(),
-      label+' editing approved break minutes must invalidate prior approval');
-    await firstShift.locator('.review-choice-list button').last().click();
-    await firstShift.locator('.review-choice-list button[aria-pressed="true"]').last().waitFor();
-    // Store mutation emits a version signal, then useImportWorkflow asynchronously
-    // reloads the draft; do not evaluate button state in the same event tick.
-    await page.waitForFunction(() => {
-      const save=document.querySelector('[data-page="ImportReviewPage"] button.cta');
-      return save instanceof HTMLButtonElement && save.disabled === false;
-    },null,{timeout:12_000}).catch(()=>undefined);
-    const saveEnabled=await page.getByRole('button',{name:'저장',exact:true}).isEnabled();
-    if(!saveEnabled) {
-      const reviewDetails=await page.evaluate(()=>{
-        const batch=JSON.parse(localStorage.getItem('cbh:import-batches:v2')||'{}').batches?.[0];
-        return {
-          people:batch?.detectedPeople?.map(p=>({name:p.sourceName,pending:p.pendingCreate,id:p.matchedPersonId,ignored:p.ignored})),
-          rows:batch?.reviewItems?.map((x,i)=>({i,date:x.date,resolution:x.resolution,
-            enabled:x.imported.enabled,start:x.imported.start,end:x.imported.end,
-            breakMinutes:x.imported.breakMinutes,recognitionState:x.recognitionState,
-            personId:x.personId})),
-        };
-      });
-      throw Error(label+' corrected break must be explicitly reapproved: '+JSON.stringify(reviewDetails));
-    }
+      const batch=JSON.parse(localStorage.getItem('cbh:import-batches:v2')||'{}').batches?.[0];
+      return batch?.reviewItems.some(row => row.imported.breakMinutes===45 && row.resolution===null);
+    });
+    assert(await firstShift.locator('.review-row input').isChecked(),label+' corrected shift remains a visible proposal');
+    await page.locator('[data-page="ImportReviewPage"] button.cta:enabled').waitFor();
     const beforeSave=await json('/api/people');
     assert(!beforeSave.body?.people?.some(x=>x.name===secondName),
       label+' review-before-submit MUST remain D1-write-free');

@@ -12,18 +12,10 @@ const matchSource = await read('../src/pages/ImportPersonMatchPage.tsx');
 const commitSource = await read('../src/application/use-cases/commitImportReview.ts');
 
 for (const text of [
-  'visibleReviewItems.map',
-  'const allReviewed',
-  "item.resolution === 'SKIP'",
-  "item.resolution === 'NEW' && importedTimeComplete(item)",
-  'exactDuplicate',
-  "item.resolution === 'NEW' ? 'SKIP' : 'NEW'",
-  "disabled={!allReviewed || saveState === 'saving'}",
-  "batch.detectedPeople.some(",
-  "person.pendingCreate",
-  "|| !importedComplete",
-  'services.actions.importReview.setImportedTime',
-  'TimeRangeWheelPicker',
+  'items.map', 'const allReviewed', 'reviewSelection(item)',
+  "event.target.checked ? 'NEW' : 'SKIP'", 'disabled={!allReviewed || busy}',
+  'person.pendingCreate', 'canImportReviewItem',
+  'services.actions.importReview.setImportedTime', 'TimeRangeWheelPicker',
 ]) {
   expect(reviewSource.includes(text), 'multi-item review UI missing ' + text);
 }
@@ -48,6 +40,18 @@ const vite = await createViteServer({
 });
 
 try {
+  const {reviewSelection,canImportReviewItem}=await vite.ssrLoadModule('/src/features/import/review-selection.ts');
+  const candidate={id:'draft',date:'2026-10-19',detectedPersonId:'p',personId:'p',resolution:null,imported:{enabled:true,start:'09:30',end:'18:30',breakMinutes:30},recognitionState:'WORK',sourceCellKind:'SHIFT'};
+  expect(reviewSelection(candidate)==='NEW' && candidate.resolution===null,'safe selected proposal is not repository approval');
+  for (const kind of ['BLANK','UNREADABLE']) {
+    expect(reviewSelection({...candidate,sourceCellKind:kind,recognitionState:'UNREADABLE',imported:{enabled:true,start:null,end:null}})==='SKIP','unknown source must be excluded: '+kind);
+  }
+  expect(reviewSelection({...candidate,sourceCellKind:'EXPLICIT_OFF',imported:{enabled:false,start:null,end:null}})==='NEW','explicit OFF proposal selected');
+  expect(!canImportReviewItem({...candidate,imported:{enabled:true,start:'09:00',end:'09:00',breakMinutes:0}}),'zero duration rejected');
+  expect(!canImportReviewItem({...candidate,imported:{enabled:true,start:'09:00',end:'10:00',breakMinutes:60}}),'break cannot consume whole shift');
+  expect(!canImportReviewItem({...candidate,breakReviewRequired:true,imported:{enabled:true,start:'09:00',end:'18:00',breakMinutes:null}}),'unreadable rest cannot be silently dropped');
+  expect(canImportReviewItem({...candidate,imported:{enabled:true,start:'22:00',end:'06:00',breakMinutes:60}}),'overnight shift remains valid');
+  expect(reviewSelection({...candidate,resolution:'SKIP'})==='SKIP','user opt-out preserved');
   const commitModule = await vite.ssrLoadModule('/src/application/use-cases/commitImportReview.ts');
   const selectionModule = await vite.ssrLoadModule('/src/application/services/WorkbookImportFileSelectionAction.ts');
   const reposModule = await vite.ssrLoadModule('/src/mocks/repositories.ts');

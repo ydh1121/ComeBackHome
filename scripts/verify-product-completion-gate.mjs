@@ -45,7 +45,6 @@ const [
   importPage,
   importPeople,
   importCommit,
-  presencePage,
   workerApi,
   today,
   appShell,
@@ -65,7 +64,6 @@ const [
   read('../src/pages/ImportPage.tsx'),
   read('../src/pages/ImportPersonMatchPage.tsx'),
   read('../src/application/use-cases/commitImportReview.ts'),
-  read('../src/pages/PresenceAutomationPage.tsx'),
   read('../worker/api.ts'),
   read('../src/pages/TodayPage.tsx'),
   read('../src/shared/layout/AppShell.tsx'),
@@ -139,12 +137,6 @@ expect(importCommit.includes('this.approvedWorkbook.commit(payload)'), 'XLSX fin
 expect(importCommit.includes('await this.schedules.upsertMany(entries)'), 'legacy image multi-person batch boundary must remain');
 expect(importCommit.includes('ignoredDetectedIds'), 'ignored roster people are not excluded from import commit');
 
-for (const token of [
-  '퇴근 · 귀가 자동화',
-  'PRESENCE_EVENT_INGEST_TOKEN',
-  'LEFT_WORK',
-  'ARRIVED_HOME',
-]) expect(presencePage.includes(token), 'presence setup flow missing: ' + token);
 for (const token of [
   "segments[2] === 'status'",
   "segments[2] === 'validate'",

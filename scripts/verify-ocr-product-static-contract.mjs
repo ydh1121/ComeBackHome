@@ -37,7 +37,7 @@ assert.match(prepare,/WEEKLY_PADDLE_STAGED_HASH_MISMATCH/);
 assert.match(packageJson.scripts.prebuild,/prepare:weekly-paddle-assets/,
   'Actual production build must stage the pinned weekly Paddle runtime');
 assert.match(selection,/breakMinutes/);
-assert.match(review,/weekly3ColumnReview \|\| !exactDuplicate\(item\)/);
+assert.doesNotMatch(review,/!exactDuplicate\(item\)/, 'all included weekly rows remain reviewable');
 assert.match(review,/setImportedBreakMinutes/);
 assert.match(api,/optionalScheduleBreakMinutes/);
 assert.match(d1,/break_minutes/);

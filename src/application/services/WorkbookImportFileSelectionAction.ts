@@ -174,9 +174,8 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
             sourceName: person.sourceName,
             matchedPersonId: matched?.id ?? null,
             confidence: person.confidence,
-            // Unlike legacy imports, a weekly OCR row with no DB match
-            // must stay visible and block continuation until manually mapped.
-            ignored: weeklyRequiresPerCellApproval ? false : !matched,
+            // Only existing matched people are included by default.
+            ignored: !matched,
           });
         } else {
           existing.confidence = Math.max(existing.confidence, person.confidence);
@@ -332,7 +331,8 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
         ...(existing ? { existing: { enabled: existing.enabled, start: existing.start, end: existing.end,
           breakMinutes: existing.breakMinutes ?? null } } : {}),
         imported: {
-          enabled: candidate.enabled,
+          // Explicit OFF is a review proposal; resolution remains null until approval.
+          enabled: candidate.sourceCellKind === 'EXPLICIT_OFF' ? false : candidate.enabled,
           start: candidate.start,
           end: candidate.end,
           ...(candidate.breakMinutes !== undefined ? {breakMinutes:candidate.breakMinutes}:{}),

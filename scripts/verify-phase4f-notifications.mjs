@@ -11,7 +11,7 @@ const manifest = await read('../src/application/route-manifest.ts');
 const providers = await read('../src/mocks/providers.ts');
 const css = await read('../src/pages/notification-page.css');
 
-for (const text of ['알림','예정 퇴근 10분 전에','도착 시간이 크게 바뀔 때','퇴근이 직접 기록됐을 때','집 도착이 직접 기록됐을 때','테스트 알림','requestPermissionFromUserGesture','updateRules','sendTestNotification']) {
+for (const text of ['알림','예정 퇴근 10분 전에','예상 도착 10분 전에','테스트 알림','requestPermissionFromUserGesture','updateRules','sendTestNotification']) {
   if (!page.includes(text)) failures.push('notification page missing ' + text);
 }
 for (const text of ['PERMISSION_DEFAULT','PERMISSION_DENIED','PERMISSION_GRANTED','SUBSCRIBED','PERMISSION_ERROR']) {
@@ -36,6 +36,7 @@ for (const [name, source] of [['notification', page], ['settings', settings]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
   if (source.includes('contracts/repositories')) failures.push(name + ' imports repositories');
 }
+for (const text of ['도착 시간이 크게 바뀔 때','퇴근이 직접 기록됐을 때','집 도착이 직접 기록됐을 때']) { if (page.includes(text)) failures.push('retired notification remains ' + text); }
 if (page.includes('serviceWorker') || page.includes('PushManager') || page.includes('.subscribe(')) failures.push('live PWA/push scope leaked into notification page');
 
 if (failures.length) {

@@ -50,7 +50,7 @@ export function NotificationPage() {
     }
   };
 
-  const updateRule = async (key: 'shiftEnd' | 'etaChange' | 'leftWork' | 'homeArrival' | 'arrivalAdvance', value: boolean) => {
+  const updateRule = async (key: 'shiftEnd' | 'arrivalAdvance', value: boolean) => {
     if (ruleSaveLock.current) return;
     ruleSaveLock.current = true;
     setRuleSaving(true);
@@ -58,6 +58,7 @@ export function NotificationPage() {
     try {
       await services.actions.notifications.updateRules({
         ...settings.rules,
+        etaChange: false, leftWork: false, homeArrival: false,
         [key]: value,
       });
     } catch {
@@ -114,7 +115,6 @@ export function NotificationPage() {
       ) : null}
 
       {ruleError ? <div className="notification-test-status error" role="alert">{ruleError}</div> : null}
-      <p className="row-sub">이 iPhone에서 알림을 받습니다. 상대방의 위치나 퇴근을 자동 감지하지 않습니다.</p>
       <div className="settings-list" aria-busy={ruleSaving}>
         <button type="button" className="rule" disabled={ruleSaving}
           aria-pressed={settings.rules.arrivalAdvance ?? false}
@@ -130,36 +130,6 @@ export function NotificationPage() {
         >
           <b>예정 퇴근 10분 전에</b>
           <span className={'switch' + (settings.rules.shiftEnd ? ' on' : '')} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="rule"
-          disabled={ruleSaving}
-          aria-pressed={settings.rules.etaChange}
-          onClick={() => updateRule('etaChange', !settings.rules.etaChange)}
-        >
-          <b>도착 시간이 크게 바뀔 때</b>
-          <span className={'switch' + (settings.rules.etaChange ? ' on' : '')} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="rule"
-          disabled={ruleSaving}
-          aria-pressed={settings.rules.leftWork}
-          onClick={() => updateRule('leftWork', !settings.rules.leftWork)}
-        >
-          <b>퇴근이 직접 기록됐을 때</b>
-          <span className={'switch' + (settings.rules.leftWork ? ' on' : '')} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="rule"
-          disabled={ruleSaving}
-          aria-pressed={settings.rules.homeArrival}
-          onClick={() => updateRule('homeArrival', !settings.rules.homeArrival)}
-        >
-          <b>집 도착이 직접 기록됐을 때</b>
-          <span className={'switch' + (settings.rules.homeArrival ? ' on' : '')} aria-hidden="true" />
         </button>
       </div>
 

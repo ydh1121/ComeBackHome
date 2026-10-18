@@ -1,7 +1,7 @@
-import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, PresenceState, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../../domain/models';
+import type { ImportBatch, ImportFileRecord, ImportResolution, NotificationRules, NotificationSettings, Person, Place, PlaceKind, PresenceState, RouteCandidate, RoutePreference, SavedCommuteRoute, ScheduleEntry, ScheduleImportSummary, TodaySnapshot, TransitAccessPoint, WebPushSubscriptionRecord } from '../../domain/models';
 import type { EntityId, ISODate } from '../../domain/common';
 export interface PersonRepository { list(): Promise<Person[]>; get(id: EntityId): Promise<Person | null>; create(input: Omit<Person,'id'>): Promise<Person>; update(id: EntityId, patch: Partial<Omit<Person,'id'>>): Promise<Person>; }
-export interface ScheduleRepository { list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; upsertMany(entries: ScheduleEntry[]): Promise<void>; }
+export interface ScheduleRepository { getLatestImport?(personId: EntityId): Promise<ScheduleImportSummary | null>; list(personId: EntityId): Promise<ScheduleEntry[]>; getByDate(personId: EntityId, date: ISODate): Promise<ScheduleEntry | null>; upsert(entry: ScheduleEntry): Promise<void>; upsertMany(entries: ScheduleEntry[]): Promise<void>; }
 export interface PlaceRepository { get(personId: EntityId, kind: PlaceKind): Promise<Place | null>; save(place: Place): Promise<void>; }
 export type RouteSearchSource = 'ROUTE_ACCESS' | 'SELECTED_ACCESS' | 'PLACE';
 export type RouteProviderErrorCategory = 'NONE' | 'AUTH' | 'HTTP' | 'NO_RESULT' | 'INVALID_COORDINATE' | 'QUOTA' | 'UNKNOWN';

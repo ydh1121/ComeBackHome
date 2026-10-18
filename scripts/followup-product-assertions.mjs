@@ -28,11 +28,12 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   const historyDate=new Date(Date.parse(todayKst+'T00:00:00Z')-86400000).toISOString().slice(0,10);
   const prior=(await api('/people/'+id+'/schedules')).body.schedules;
   await api('/people/'+id+'/schedules','PUT',{schedules:[{id:crypto.randomUUID(),personId:id,date:historyDate,enabled:true,start:'03:10',end:'04:20'}]});
-  await open('/schedule');await page.locator('[data-page="SchedulePage"] .schedule-history-toggle').waitFor();
+  await open('/schedule');await page.locator('[data-page="SchedulePage"] .roster-heading').waitFor();
   assert.equal(await page.locator('.schedule-day-card').filter({hasText:'03:10'}).count(),0);
-  await page.getByRole('button',{name:'과거 일정 보기',exact:true}).click();
-  await page.locator('.schedule-day-card').filter({hasText:'03:10'}).waitFor();
-  await page.getByRole('button',{name:'과거 일정 숨기기',exact:true}).click();
+  await page.getByRole('button',{name:'월별 이력',exact:false}).click();
+  await page.getByLabel('조회 월').fill(historyDate.slice(0,7));
+  await page.locator('.schedule-cell[data-date="'+historyDate+'"][data-schedule-state="WORK"]').waitFor();
+  assert.ok((await page.locator('.schedule-cell[data-date="'+historyDate+'"]').innerText()).includes('03:10'));
   assert.ok((await api('/people/'+id+'/schedules')).body.schedules.some(row=>row.date===historyDate),'history must remain in D1');
   assert.ok(prior.length,'baseline schedule missing');
   const midnightContext = await page.context().browser().newContext({storageState:await page.context().storageState(),serviceWorkers:'block'});
