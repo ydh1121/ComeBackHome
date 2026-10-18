@@ -8,7 +8,6 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 
 const apiSource = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
 const ingestSource = await readFile(new URL('../worker/presence-event-ingest.ts', import.meta.url), 'utf8');
-const pageSource = await readFile(new URL('../src/pages/PresenceAutomationPage.tsx', import.meta.url), 'utf8');
 const gatewaySource = await readFile(new URL('../src/providers/http/HttpPresenceAutomationGateway.ts', import.meta.url), 'utf8');
 const routerSource = await readFile(new URL('../src/app/router.tsx', import.meta.url), 'utf8');
 const settingsSource = await readFile(new URL('../src/pages/SettingsPage.tsx', import.meta.url), 'utf8');
@@ -37,13 +36,10 @@ expect(
 for (const text of ["segments[2] === 'status'", "segments[2] === 'validate'", 'valid: true']) {
   expect(apiSource.includes(text), 'presence setup API missing ' + text);
 }
-for (const text of ['퇴근 · 귀가 자동화','PRESENCE_EVENT_INGEST_TOKEN','LEFT_WORK','ARRIVED_HOME','Authorization 헤더 값']) {
-  expect(pageSource.includes(text), 'presence setup page missing ' + text);
-}
 expect(gatewaySource.includes('/presence-events/status'), 'presence setup status gateway missing');
 expect(gatewaySource.includes('/presence-events/validate'), 'presence setup token validation gateway missing');
 expect(routerSource.includes("path === '/settings/presence'"), 'presence setup route missing');
-expect(settingsSource.includes("navigate('/settings/presence')"), 'settings presence setup navigation missing');
+expect(!settingsSource.includes("navigate('/settings/presence')"), 'retired presence menu must stay hidden');
 
 const vite = await createViteServer({
   root,
