@@ -17,6 +17,7 @@ import type {
   RoutePreference,
   SavedCommuteRoute,
   ScheduleEntry,
+  ScheduleImportSummary,
   TransitAccessPoint,
   WebPushSubscriptionRecord,
 } from '../../domain/models';
@@ -49,6 +50,13 @@ export class HttpPersonRepository implements PersonRepository {
 
 export class HttpScheduleRepository implements ScheduleRepository {
   constructor(private readonly client: HttpJsonClient) {}
+
+  async getLatestImport(personId: EntityId): Promise<ScheduleImportSummary | null> {
+    return (await this.client.get<{ latestImport: ScheduleImportSummary | null }>(
+      '/people/' + encodeURIComponent(personId) + '/schedules/latest-import',
+    )).latestImport;
+  }
+
 
   async list(personId: EntityId): Promise<ScheduleEntry[]> {
     return (await this.client.get<{ schedules: ScheduleEntry[] }>(
