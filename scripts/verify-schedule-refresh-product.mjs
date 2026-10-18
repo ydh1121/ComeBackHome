@@ -37,7 +37,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
     const blank=page.locator('.import-review-item').last();
     assert.equal(await blank.locator('.review-row input').isChecked(),false,'blank is never silently OFF');
     await blank.locator('.review-edit > summary').click();
-    await blank.getByRole('checkbox',{name:'휴무로 변경',exact:true}).check();
+    await blank.getByRole('checkbox',{name:'휴무로 변경',exact:true}).click();
     await page.waitForFunction(()=>document.querySelectorAll('.review-row input:checked').length===7);
     await blank.locator('.review-edit > summary').click();
     await page.locator('button.cta:enabled').waitFor();
@@ -85,6 +85,11 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   assert.equal(await page.locator('[data-date="2026-10-25"]').getAttribute('data-schedule-state'),'OFF');
   assert.equal(await page.locator('[data-date="2026-10-01"]').getAttribute('data-schedule-state'),'UNREGISTERED');
   await shot('history');
+  await page.locator('.schedule-cell[data-date="2026-10-19"]').click();
+  await page.locator('[data-page="ScheduleDayEditPage"]').waitFor();
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await page.waitForURL(/\/schedule\/history\?month=2026-10$/);
+  assert.equal(await page.getByLabel('조회 월').inputValue(),'2026-10','history edit returns to the same month');
   await page.clock.setFixedTime(new Date('2026-10-27T12:00:00+09:00'));
   await open('/schedule/history');
   assert.equal(await page.locator('[data-date="2026-10-19"]').getAttribute('data-schedule-state'),'WORK','past work does not become OFF');
