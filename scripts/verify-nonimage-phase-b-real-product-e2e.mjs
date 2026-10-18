@@ -4,6 +4,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium,webkit} from 'playwright';
+import {verifyScheduleRefresh} from './verify-schedule-refresh-product.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const wrangler=resolve(root,'node_modules/.bin/wrangler');
 const config=resolve(root,'wrangler.local.jsonc');
@@ -256,36 +257,17 @@ async function browserPass(kind,label,serial){
     await createDay(page,'2100-01-03',{breakMinutes:15});
     assert((await api('/people/'+a+'/schedules/2100-01-03')).body.schedule===null,
       label+' A must not receive B save');
-    await update(page,'/schedule/edit');
-    await page.locator('.range-accordion').click();
-    await page.getByRole('button',{name:'직접 입력'}).click();
-    await page.locator('.range-direct-v13 input').first().fill('2100-01-04');
-    await page.locator('.range-direct-v13 input').last().fill('2100-01-11');
-    await page.getByRole('button',{name:'기간 적용',exact:true}).click();
-    const chosenRange=await page.locator('.range-date-pair').innerText();
-    assert(chosenRange.includes('1/4') && chosenRange.includes('1/11'),
-      label+' direct range must preserve both exact endpoints, got '+chosenRange);
-    await page.locator('.range-accordion').click();
-    await page.getByRole('button',{name:'화',exact:true}).click();
-    await chooseClock(page,'출근','08','00');
-    await chooseClock(page,'퇴근','17','00');
-    await page.getByRole('button',{name:'적용',exact:true}).click();
-    await page.waitForURL(/\/schedule$/,{timeout:8000}).catch(async()=>{
-      throw Error('BULK_UI_SAVE_DID_NOT_NAVIGATE '+JSON.stringify({
-        browser:label,route:page.url(),
-        alerts:await page.locator('[role="alert"]').allTextContents(),
-        range:await page.locator('.range-direct-v13 input').evaluateAll(inputs=>inputs.map(input=>input.value)),
-        status:await page.locator('[data-page="ScheduleBulkEditPage"]').getAttribute('data-state'),
-        selectedEmployee:b,
-        before:await api('/people/'+b+'/schedules'),
-      }));
-    });
-    const bulk=(await api('/people/'+b+'/schedules')).body.schedules;
-    assert(bulk.some(x=>x.date==='2100-01-05'&&x.start==='08:00')&&
-      !bulk.some(x=>x.date==='2100-01-06'),label+' weekday range persisted only matching day');
-    await page.reload();
-    assert((await api('/people/'+b+'/schedules')).body.schedules.length===bulk.length,
-      label+' bulk survives reload');
+    // The retired bulk page is a safe bookmark fallback. Monthly history
+    // preserves registered work/OFF and never manufactures OFF for missing days.
+    await update(page,'/schedule/history');
+    await page.getByLabel('조회 월').fill('2100-01');
+    await page.locator('.schedule-cell[data-date="2100-01-03"][data-schedule-state="WORK"]').waitFor();
+    assert(await page.locator('.schedule-cell[data-date="2100-01-04"]').getAttribute('data-schedule-state')==='UNREGISTERED',label+' missing date is not OFF');
+    await page.getByRole('button',{name:'이전 달',exact:true}).click();
+    assert(await page.getByLabel('조회 월').inputValue()==='2099-12',label+' month crosses year boundary');
+    await page.getByRole('button',{name:'다음 달',exact:true}).click();
+    await page.reload({waitUntil:'networkidle'});
+    assert((await api('/people/'+b+'/schedules/2100-01-03')).body.schedule?.breakMinutes===15,label+' history navigation preserves D1');
     // Deliberate SQL middle-batch failure: schedule ID belongs to A.
     const before=(await api('/people/'+b+'/schedules')).body.schedules;
     const invalid=await api('/people/'+b+'/schedules','PUT',{schedules:[
@@ -295,13 +277,14 @@ async function browserPass(kind,label,serial){
     assert(invalid.status>=400,label+' invalid bulk must be rejected');
     const after=(await api('/people/'+b+'/schedules')).body.schedules;
     assert(JSON.stringify(before)===JSON.stringify(after),label+' SQL batch must rollback every row');
+    const refresh=await verifyScheduleRefresh({page,api,origin,engine:label});
     assert(failures.length===0,label+' uncaught browser errors: '+failures.join('; '));
     assert(webkitAbortedLocalReads.length<=2,
       label+' excessive abandoned local GETs during test reload: '+webkitAbortedLocalReads.join('; '));
-    return {engine:label,peopleCreateEdit:true,duplicate409:true,errorUI:true,
+    return {engine:label,refresh,peopleCreateEdit:true,duplicate409:true,errorUI:true,
       error503Retry:true,duplicateSaveClickGuard:true,
       dayCreateEdit:true,breakPreserveUpdateClear:true,workOffRoundtrip:true,
-      newOff:true,staffIsolation:true,bulkWeekday:true,d1Persistence:true,sqlRollback:true,
+      newOff:true,staffIsolation:true,monthlyHistory:true,d1Persistence:true,sqlRollback:true,
       webkitAbortedLocalGetsDuringReload:webkitAbortedLocalReads.length};
   }finally{await context.close();await browser.close()}
 }
