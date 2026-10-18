@@ -1,0 +1,86 @@
+name: Canonical UI deployment read-only verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - worker/api.ts
+      - .github/workflows/verify-ui-deployment.yml
+permissions:
+  contents: read
+concurrency:
+  group: canonical-ui-readonly
+  cancel-in-progress: true
+jobs:
+  verify-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.58.2
+      - name: Wait for exact canonical revision and verify screens without mutations
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {mkdirSync,writeFileSync} from 'node:fs';
+          import {chromium,webkit} from 'playwright';
+          const origin='https://come-back-home.pages.dev';
+          let deployed=false;
+          for(let i=0;i<90;i++){
+            try{
+              const r=await fetch(origin+'/api/health',{cache:'no-store'}),h=await r.json();
+              if(r.ok&&h.ok===true&&h.commitSha===process.env.GITHUB_SHA){deployed=true;break;}
+            }catch{}
+            await new Promise(resolve=>setTimeout(resolve,10000));
+          }
+          assert.ok(deployed,'Canonical deployment must serve this exact MAIN commit');
+          const results=[];
+          for(const [name,type] of [['Chromium',chromium],['WebKit',webkit]]){
+            const browser=await type.launch({headless:true});
+            try{
+              const context=await browser.newContext({viewport:{width:390,height:844},locale:'ko-KR',timezoneId:'Asia/Seoul',serviceWorkers:'block'});
+              const writes=[],errors=[];
+              await context.route('**/api/**',async route=>{
+                if(!['GET','HEAD','OPTIONS'].includes(route.request().method())){writes.push(route.request().method());return route.abort();}
+                return route.continue();
+              });
+              const page=await context.newPage();page.on('pageerror',error=>errors.push(error.name));
+              const open=async path=>{await page.goto(origin+path,{waitUntil:'networkidle'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');};
+              await open('/schedule');
+              await page.locator('[data-page="SchedulePage"][data-state="VIEW_DAY"], [data-page="SchedulePage"][data-state="EMPTY"]').waitFor();
+              assert.equal(await page.getByRole('button',{name:'일괄 입력',exact:true}).count(),0);
+              await page.getByRole('button',{name:'월별 이력',exact:false}).click();
+              await page.locator('[data-page="ScheduleHistoryPage"][data-state="READY"]').waitFor();
+              assert.ok(await page.locator('.schedule-cell').count()>=28);
+              await open('/notifications');
+              await page.locator('[data-page="NotificationSetupPage"] button.rule').first().waitFor();
+              assert.equal(await page.locator('[data-page="NotificationSetupPage"] button.rule').count(),2);
+              await open('/settings');
+              assert.equal(await page.getByRole('button',{name:'퇴근 · 귀가 기록 연결',exact:true}).count(),0);
+              assert.equal(await page.getByRole('button',{name:'iPhone 시계 알람',exact:true}).count(),0);
+              await open('/import');
+              await page.locator('input[accept=".xlsx"]').waitFor({state:'attached'});
+              assert.ok(await page.locator('input[type="file"]').count()>=2);
+              assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
+              results.push({browser:name,schedule:true,monthlyHistory:true,twoNotificationRules:true,retiredMenusAbsent:true,imageAndXlsxInputs:true,mobileFits:true,appWrites:0,errors:0});
+              await context.close();
+            }finally{await browser.close();}
+          }
+          mkdirSync('runtime-evidence/ui-deploy',{recursive:true});
+          const evidence={commitSha:process.env.GITHUB_SHA,canonicalOrigin:origin,results,privateDataExported:false,testNotificationsSent:0};
+          writeFileSync('runtime-evidence/ui-deploy/readonly.json',JSON.stringify(evidence,null,2));
+          console.log(JSON.stringify(evidence));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-ui-readonly
+          path: runtime-evidence/ui-deploy/
+          retention-days: 7
+          if-no-files-found: error
