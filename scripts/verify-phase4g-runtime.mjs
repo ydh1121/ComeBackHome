@@ -30,7 +30,7 @@ for (const forbidden of [
 for (const text of ['상태 점검','오늘 · 도착 시간 상태','일정 · 보기 상태','근처 교통 · 필터 상태','Application boundary']) {
   if (!stateMatrix.includes(text)) failures.push('state matrix missing ' + text);
 }
-for (const text of ['화면 흐름','일정 → 일괄 입력','가져오기 → 사람 연결 → 구조 확인 → 검토','사람 → 추가/수정/상세','설정 → 알림 권한/규칙/테스트','설정 → 퇴근·귀가 단축어 자동화']) {
+for (const text of ['화면 흐름','일정 → 최근 근무표 / 월별 이력','가져오기 → 사람 연결 → 검토·저장','사람 → 추가/수정/상세','설정 → 알림 권한/규칙/테스트']) {
   if (!flow.includes(text)) failures.push('flow map missing ' + text);
 }
 for (const text of ['여기에 놓기','엑셀 · 이미지 · 여러 파일','desktop-drop-active','ImportPage']) {
@@ -47,7 +47,6 @@ const files = {};
 for (const path of [
   '../src/pages/TodayPage.tsx',
   '../src/pages/SchedulePage.tsx',
-  '../src/pages/ScheduleBulkEditPage.tsx',
   '../src/pages/ScheduleDayEditPage.tsx',
   '../src/pages/ImportPage.tsx',
   '../src/pages/ImportReviewPage.tsx',
@@ -64,7 +63,7 @@ for (const path of [
 for (const path of ['../src/pages/TodayPage.tsx','../src/pages/PlaceEditPage.tsx']) {
   if (!files[path].includes('OFFLINE')) failures.push('offline state missing ' + path);
 }
-for (const path of ['../src/pages/ScheduleBulkEditPage.tsx','../src/pages/ScheduleDayEditPage.tsx','../src/pages/PersonCreatePage.tsx','../src/pages/PersonEditPage.tsx','../src/pages/PlaceEditPage.tsx']) {
+for (const path of ['../src/pages/ScheduleDayEditPage.tsx','../src/pages/PersonCreatePage.tsx','../src/pages/PersonEditPage.tsx','../src/pages/PlaceEditPage.tsx']) {
   if (!files[path].includes('useFormRuntimeState')) failures.push('form runtime hook missing ' + path);
 }
 for (const path of ['../src/pages/SchedulePage.tsx','../src/pages/CommuteRoutePage.tsx','../src/pages/TransitAccessPage.tsx','../src/pages/BusRoutePage.tsx','../src/pages/PeoplePage.tsx','../src/pages/ImportReviewPage.tsx']) {
