@@ -10,13 +10,6 @@ import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import { useSeoulDate } from '../shared/runtime/useSeoulDate';
 import './schedule-page.css';
 
-function currentLocalIsoDate(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return now.getFullYear() + '-' + month + '-' + day;
-}
-
 export function ScheduleDayEditPage() {
   const { date: routeDate = '' } = useParams();
   const navigate = useNavigate();
@@ -25,7 +18,7 @@ export function ScheduleDayEditPage() {
   const services = useApplicationServices();
   const schedule = useSelectedSchedule();
   const creating = !routeDate;
-  const [newDate, setNewDate] = useState(currentLocalIsoDate);
+  const [newDate, setNewDate] = useState(today);
   // React Router may reuse this component across day-edit routes. The URL
   // remains authoritative so a previous draft cannot redirect a later save.
   const selectedDate = routeDate || newDate;
