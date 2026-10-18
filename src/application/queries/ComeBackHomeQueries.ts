@@ -6,7 +6,7 @@ import type { RouteSearchDiagnostics } from '../contracts/repositories';
 import { rankRouteCandidates, selectNextShift, selectVisibleAccessPoints } from '../selectors';
 
 export interface PersonDetailQueryResult { person: Person | null; origin: Place | null; destination: Place | null; routePreference: RoutePreference | null; savedRoutes: SavedCommuteRoute[]; originAccessPoints: TransitAccessPoint[]; destinationAccessPoints: TransitAccessPoint[]; routeCandidates: RouteCandidate[]; preferredRouteCandidateId: EntityId | null; routeDiagnostics?: RouteSearchDiagnostics; }
-export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftEnd: string | null; leftWorkAt: string | null; arrivedHomeAt: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
+export interface TodayOverviewQueryResult { people: Person[]; person: Person | null; eta: EtaSnapshot | null; shiftStart: string | null; shiftEnd: string | null; leftWorkAt: string | null; arrivedHomeAt: string | null; nextShiftLabel: string | null; route: RouteCandidate | null; }
 export interface CommuteOverviewQueryResult extends PersonDetailQueryResult { preferredRouteCandidateId: EntityId | null; }
 
 function formatNextShiftLabel(referenceDate: ISODate, shift: ScheduleEntry | null): string | null {
@@ -26,6 +26,7 @@ export class ComeBackHomeQueries {
   getPerson(personId: EntityId): Promise<Person | null> { return this.repositories.people.get(personId); }
   getPlace(personId: EntityId, kind: PlaceKind): Promise<Place | null> { return this.repositories.places.get(personId, kind); }
   listSchedule(personId: EntityId): Promise<ScheduleEntry[]> { return this.repositories.schedules.list(personId); }
+  getLatestScheduleImport(personId: EntityId) { return this.repositories.schedules.getLatestImport?.(personId) ?? Promise.resolve(null); }
   getCurrentImportBatch(): Promise<ImportBatch | null> { return this.repositories.imports.getCurrentBatch(); }
   getImportReview(batchId: EntityId): Promise<ImportBatch | null> { return this.repositories.imports.getBatch(batchId); }
   getNotificationSettings(): Promise<NotificationSettings> { return this.repositories.notifications.getSettings(); }
@@ -35,7 +36,7 @@ export class ComeBackHomeQueries {
   async getTodayOverview(referenceDate: ISODate): Promise<TodayOverviewQueryResult> {
     const people = await this.repositories.people.list();
     const selectedId = this.selection.getSelectedPersonId() ?? people[0]?.id ?? null;
-    if (!selectedId) return { people, person: null, eta: null, shiftEnd: null, leftWorkAt: null, arrivedHomeAt: null, nextShiftLabel: null, route: null };
+    if (!selectedId) return { people, person: null, eta: null, shiftStart: null, shiftEnd: null, leftWorkAt: null, arrivedHomeAt: null, nextShiftLabel: null, route: null };
 
     const [person, today, schedule] = await Promise.all([
       this.repositories.people.get(selectedId),
@@ -70,6 +71,7 @@ export class ComeBackHomeQueries {
       people,
       person,
       eta: today?.eta ?? null,
+      shiftStart: schedule.find(entry => entry.date === referenceDate && entry.enabled)?.start ?? null,
       shiftEnd: today?.shiftEnd ?? null,
       leftWorkAt: today?.leftWorkAt ?? null,
       arrivedHomeAt: today?.arrivedHomeAt ?? null,
