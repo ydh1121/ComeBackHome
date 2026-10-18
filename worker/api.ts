@@ -782,6 +782,24 @@ export async function handleApiRequest(
           return json({ schedules: await schedules.list(personId) });
         }
 
+        if (segments.length === 5 && segments[4] === 'latest-import' && request.method === 'GET') {
+          // Reuse the atomic approval ledger: aborted or unapproved uploads
+          // cannot become the latest roster. No new schema or client-only cache.
+          const row = await env.DB.prepare(`
+            SELECT r.request_id AS id, r.created_at AS importedAt,
+              json_group_array(json_extract(s.value, '$.date')) AS dates
+            FROM approved_workbook_import_receipts r,
+              json_each(r.receipt_json, '$.people') p,
+              json_each(r.receipt_json, '$.schedules') s
+            WHERE json_extract(p.value, '$.personId') = ?1
+              AND json_extract(s.value, '$.personRef') = json_extract(p.value, '$.ref')
+            GROUP BY r.request_id
+            ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1
+          `).bind(personId).first<{id:string; importedAt:string; dates:string}>();
+          return json({latestImport: row ? {...row, dates: [...new Set(JSON.parse(row.dates) as string[])].sort()} : null});
+        }
+
+
         if (segments.length === 4 && request.method === 'PUT') {
           const body = await readObject(request);
           const rawSchedules = Array.isArray(body.schedules) ? body.schedules : [];
