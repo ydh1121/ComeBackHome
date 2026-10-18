@@ -5,6 +5,7 @@ export interface Coordinate { x: number; y: number; }
 export type PlaceKind = 'origin' | 'destination';
 export interface Place { id: EntityId; personId: EntityId; kind: PlaceKind; label: string; address: Address; coordinate?: Coordinate; providerPlaceId?: string; }
 export interface ScheduleEntry { id: EntityId; personId: EntityId; date: ISODate; enabled: boolean; start: string; end: string; breakMinutes?: number | null; }
+export interface ScheduleImportSummary { id: EntityId; importedAt: ISODateTime; dates: ISODate[]; }
 export type TransitMode = 'BUS' | 'SUBWAY';
 export type CommuteLegMode = 'WALK' | 'BUS' | 'SUBWAY' | 'TRANSFER';
 export type CommuteStepType = 'WALKING' | 'BUS' | 'SUBWAY' | 'TRANSFER';
