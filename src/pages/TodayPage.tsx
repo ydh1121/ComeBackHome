@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApplicationServices, useApplicationVersion } from '../app/ApplicationServicesContext';
 import type { TodayOverviewQueryResult } from '../application/queries/ComeBackHomeQueries';
-import type { CommuteStepType } from '../domain/models';
-import { Icon, type IconName } from '../shared/components/Icon';
+import { Icon } from '../shared/components/Icon';
 import { useOnlineStatus } from '../shared/runtime/useOnlineStatus';
 import './today-page.css';
 
@@ -14,10 +13,6 @@ type LoadState =
   | { status: 'ready'; data: TodayOverviewQueryResult }
   | { status: 'error' };
 
-
-function stepIcon(type: CommuteStepType): IconName {
-  return type === 'BUS' ? 'bus' : 'train';
-}
 
 function kstTimeFromIso(value: string | null): string | null {
   if (!value) return null;
@@ -132,11 +127,12 @@ export function TodayPage() {
           ))}
         </div>
         <div className="today-meta-row">
+          <div className="today-meta"><span>오늘 출근</span><b>{data.shiftStart ?? '—'}</b></div>
           <div className="today-meta">
             <span>{actualLeftWork ? '실제 퇴근' : '예정 퇴근'}</span>
             <b>{actualLeftWork ?? data.shiftEnd ?? '—'}</b>
           </div>
-          <div className="today-meta"><span>다음 출근</span><b>{data.nextShiftLabel ?? '—'}</b></div>
+          <div className="today-meta today-next-shift"><span>다음 출근</span><b>{data.nextShiftLabel ?? '—'}</b></div>
         </div>
         {actualLeftWork || actualHomeArrival ? (
           <div className="presence-status-row" aria-label="오늘 이동 상태">
