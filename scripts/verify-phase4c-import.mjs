@@ -4,7 +4,6 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
 const root = await read('../src/pages/ImportPage.tsx');
 const people = await read('../src/pages/ImportPersonMatchPage.tsx');
-const structure = await read('../src/pages/ImportStructurePage.tsx');
 const review = await read('../src/pages/ImportReviewPage.tsx');
 const css = await read('../src/pages/import-page.css');
 const router = await read('../src/app/router.tsx');
@@ -17,18 +16,16 @@ const browserImports = await read('../src/providers/browser/BrowserImportReposit
 for (const text of ['type="file"','근무표 이미지 추가','엑셀 파일 가져오기','인식 결과 보기','services.actions.importFiles.accept']) {
   if (!root.includes(text)) failures.push('root missing ' + text);
 }
-for (const text of ['사람 연결','인식 신뢰도','연결 안 됨','승인 후 새 사람 등록','가져오지 않음','setPendingPersonCreate','setPersonIgnored','setPersonMatch']) {
+for (const text of ['사람 연결','연결 안 됨','승인 후 새 사람 등록','가져오지 않음','setPendingPersonCreate','setPersonIgnored','setPersonMatch']) {
   if (!people.includes(text)) failures.push('people missing ' + text);
 }
 if (people.includes('services.actions.people.create')) failures.push('new person must not be created before final approval');
 if (!commit.includes('this.approvedWorkbook.commit(payload)')) failures.push('reviewed XLSX must use atomic backend commit');
 if (!composition.includes('new HttpApprovedWorkbookImportGateway(client)')) failures.push('approved XLSX transaction transport not composed');
-for (const text of ['표 구조 확인','머리글 행','근무시간 열','자동 인식이 확실하지 않을 때만']) {
-  if (!structure.includes(text)) failures.push('structure missing ' + text);
-}
-for (const text of ['일정 확인','가져오기','visibleReviewItems.map','allReviewed','exactDuplicate','SKIP','services.actions.importReview.setResolution','commitImportReview.execute']) {
+for (const text of ['일정 확인','가져오기','items.map','allReviewed','reviewSelection','SKIP','services.actions.importReview.setResolution','commitImportReview.execute']) {
   if (!review.includes(text)) failures.push('review missing ' + text);
 }
+if (people.includes("+ '/structure'")) failures.push('removed structure step remains in import flow');
 for (const path of ['/import', '/import/:batchId/people', '/import/:batchId/structure', '/import/:batchId/review']) {
   if (!router.includes("'" + path + "'")) failures.push('route missing ' + path);
 }
@@ -58,7 +55,7 @@ if (!schedulePage.includes("navigate('/import')") || !schedulePage.includes('근
 if (!commit.includes('await this.schedules.upsertMany(entries)')) failures.push('multi-person schedule atomic batch boundary missing');
 if (!commit.includes('Import contains unresolved people.')) failures.push('unresolved-person commit guard missing');
 if (!commit.includes('ignoredDetectedIds') || !commit.includes('includedItems')) failures.push('ignored roster people must be excluded from commit');
-if (!review.includes('visibleReviewItems') || !review.includes('ignoredDetectedIds')) failures.push('ignored roster people must be excluded from review');
+if (!review.includes('includedIds.has(item.detectedPersonId)')) failures.push('ignored roster people must be excluded from review');
 if (!commit.includes("item.resolution === 'KEEP'") || !commit.includes("item.resolution === 'SKIP'")) failures.push('KEEP/SKIP commit rule missing');
 if (!commit.includes('item.imported.start')) failures.push('NEW commit rule missing');
 if (!composition.includes('new ReadExcelWorkbookParser()'))
@@ -67,7 +64,7 @@ if (!commit.includes('Import contains unreviewed schedules.'))
   failures.push('unreviewed image cell must never reach schedule storage');
 if (!commit.includes('Import contains unreviewed break minutes.'))
   failures.push('unreadable non-empty break must require manual correction');
-if (!review.includes('weekly3ColumnReview || !exactDuplicate(item)'))
+if (review.includes('!exactDuplicate(item)'))
   failures.push('weekly OCR rows may not be hidden as duplicates before review');
 if (!review.includes('setImportedBreakMinutes'))
   failures.push('weekly break correction action missing');
@@ -77,7 +74,7 @@ if (!css.includes('.import-page .upload')) failures.push('upload style missing')
 if (!css.includes('.import-page .review-choice')) failures.push('review style missing');
 if (!root.includes('import-file-diagnostic')) failures.push('failed OCR diagnostic rendering missing');
 
-for (const [name, source] of [['root', root], ['people', people], ['structure', structure], ['review', review]]) {
+for (const [name, source] of [['root', root], ['people', people], ['review', review]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
   if (source.includes('contracts/repositories')) failures.push(name + ' imports repositories');
 }
