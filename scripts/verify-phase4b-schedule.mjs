@@ -7,45 +7,34 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 const overview = await read('../src/pages/SchedulePage.tsx');
-const bulk = await read('../src/pages/ScheduleBulkEditPage.tsx');
+const history = await read('../src/pages/ScheduleHistoryPage.tsx');
 const day = await read('../src/pages/ScheduleDayEditPage.tsx');
-const range = await read('../src/features/schedule/ScheduleRangePicker.tsx');
+const calendar = await read('../src/features/schedule/ScheduleCalendar.tsx');
 const timeWheel = await read('../src/shared/components/TimeRangeWheelPicker.tsx');
 const css = await read('../src/pages/schedule-page.css');
 const router = await read('../src/app/router.tsx');
 const actions = await read('../src/application/services/ApplicationActions.ts');
 
-for (const text of ['1일','1주','2주','1개월','일괄 입력','일정 편집','1일 일정 추가']) {
-  if (!overview.includes(text)) failures.push('overview missing ' + text);
+for (const text of ['최근 가져온 근무표','월별 이력','일정 직접 추가','latestImport','latestDates.has(entry.date)']) {
+  if (!overview.includes(text)) failures.push('roster missing ' + text);
 }
-for (const text of ['일정 일괄 입력','기간 내 적용 요일','출근','퇴근','적용']) {
-  if (!bulk.includes(text)) failures.push('bulk missing ' + text);
-}
+expect(!overview.includes('.slice(0, 3)'), 'roster must show every upcoming imported date');
+expect(history.includes('ScheduleCalendar') && history.includes('type="month"'), 'separate full-month history missing');
+expect(calendar.includes('UNREGISTERED') && calendar.includes('OFF') && calendar.includes('WORK'), 'calendar must distinguish missing/OFF/WORK');
 for (const text of ['일정 수정','1일 일정 추가','근무일','출근','퇴근','저장','type="date"']) {
   if (!day.includes(text)) failures.push('day missing ' + text);
 }
-for (const text of ['스크롤로 선택','직접 입력','달력에서 선택']) {
-  if (!range.includes(text)) failures.push('range missing ' + text);
-}
-
 if (!actions.includes('class ScheduleService')) failures.push('ScheduleService missing');
 if (!actions.includes('saveDay(') || !actions.includes('applyBulk(')) failures.push('schedule mutations missing');
 if (!actions.includes('enumerateScheduleDates')) failures.push('bulk schedule date materialization missing');
-if (!bulk.includes('currentLocalIsoDate')) failures.push('empty schedule date fallback missing');
-if (!bulk.includes('!canApply')) failures.push('bulk empty-input apply guard missing');
-if (!range.includes("useState<Mode>('wheel')") || !range.includes('buildWheelDates')) failures.push('schedule range wheel must work without existing schedules');
 if (!router.includes("path === '/schedule'")) failures.push('schedule route missing');
 if (!router.includes("path === '/schedule/edit'")) failures.push('bulk route missing');
 if (!router.includes("path === '/schedule/new'")) failures.push('single-day creation route missing');
 if (!router.includes("path === '/schedule/:date/edit'")) failures.push('day route missing');
-if (!css.includes('.schedule-page .segment')) failures.push('segment style missing');
-if (!css.includes('.schedule-page .weekday-grid')) failures.push('weekday style missing');
-if (!css.includes('.schedule-page .range-picker-v13')) failures.push('range style missing');
-if (!bulk.includes('TimeRangeWheelPicker') || !day.includes('TimeRangeWheelPicker')) failures.push('schedule start/end must use shared wheel picker');
-if (bulk.includes('type="time"') || day.includes('type="time"')) failures.push('native schedule time inputs must be removed for iPhone parity');
+if (day.includes('type="time"')) failures.push('native schedule time inputs must be removed for iPhone parity');
 for (const text of ['time-wheel-scroll','useLayoutEffect','scrollTop','minuteStep']) if (!timeWheel.includes(text)) failures.push('shared time wheel missing deterministic local centering: ' + text);
 
-for (const [name, source] of [['overview', overview], ['bulk', bulk], ['day', day]]) {
+for (const [name, source] of [['overview', overview], ['history', history], ['day', day]]) {
   if (source.includes('/mocks/') || source.includes('/providers/')) failures.push(name + ' imports infrastructure');
   if (source.includes('contracts/repositories')) failures.push(name + ' imports repositories');
 }
