@@ -73,6 +73,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   assert.equal(posts,1,'one explicit gesture batch despite duplicate click');
   await page.unroute('**/api/workbooks/approved-import');
   assert.deepEqual((await latest()).dates,nextWeek);
+  await page.waitForLoadState('networkidle');
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.roster-row').nth(6).waitFor();
   assert.deepEqual(await page.locator('.roster-row').evaluateAll(rows=>rows.map(row=>row.dataset.date)),nextWeek);
