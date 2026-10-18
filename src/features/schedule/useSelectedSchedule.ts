@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useApplicationServices, useApplicationVersion } from '../../app/ApplicationServicesContext';
-import type { ScheduleEntry } from '../../domain/models';
+import type { ScheduleEntry, ScheduleImportSummary } from '../../domain/models';
 import { sortSchedule } from './date-format';
 
 export type ScheduleLoadState =
   | { status: 'loading' }
-  | { status: 'ready'; personId: string | null; entries: ScheduleEntry[] }
+  | { status: 'ready'; personId: string | null; entries: ScheduleEntry[]; latestImport: ScheduleImportSummary | null }
   | { status: 'error' };
 
 export function useSelectedSchedule(): ScheduleLoadState {
@@ -18,13 +18,13 @@ export function useSelectedSchedule(): ScheduleLoadState {
     setState({ status: 'loading' });
     const personId = services.actions.personSelection.getSelectedPersonId();
     if (!personId) {
-      setState({ status: 'ready', personId: null, entries: [] });
+      setState({ status: 'ready', personId: null, entries: [], latestImport: null });
       return () => { active = false; };
     }
 
-    services.queries.listSchedule(personId)
-      .then((entries) => {
-        if (active) setState({ status: 'ready', personId, entries: sortSchedule(entries) });
+    Promise.all([services.queries.listSchedule(personId), services.queries.getLatestScheduleImport(personId)])
+      .then(([entries, latestImport]) => {
+        if (active) setState({ status: 'ready', personId, entries: sortSchedule(entries), latestImport });
       })
       .catch(() => {
         if (active) setState({ status: 'error' });
