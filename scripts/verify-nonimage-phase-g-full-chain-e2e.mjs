@@ -128,9 +128,12 @@ async function engineTest(engine, label) {
       if (i === 0 || i === 7) assert(await checkbox.isChecked(),label + ' valid shift default');
       else if (i === 8) {
         await row.locator('.review-edit > summary').click();
-        await row.getByRole('checkbox', { name: '휴무로 변경', exact: true }).check();
+        await row.getByRole('checkbox', { name: '휴무로 변경', exact: true }).click();
         await row.locator('.review-row input:checked').waitFor();
-      } else if (await checkbox.isChecked()) await checkbox.uncheck();
+      } else if (await checkbox.isChecked()) {
+        await checkbox.click();
+        await row.locator('.review-row input:not(:checked)').waitFor();
+      }
     }
     await page.waitForFunction(() => {
       const save = document.querySelector('[data-page="ImportReviewPage"] button.cta');
