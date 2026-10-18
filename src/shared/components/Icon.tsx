@@ -18,7 +18,7 @@ export function Icon({ name, className }: IconProps) {
     case 'people':
       return <svg {...common}><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.6-4 2.4-6 5.5-6s4.9 2 5.5 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M15 15c3.2-.2 5.1 1.5 5.5 4.5"/></svg>;
     case 'settings':
-      return <svg {...common}><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.8-1.8.9-1.9-2.2-2.1-1.8 1-1.9-.8L10.5 2h-3l-.7 2.2-1.8.8-1.9-1L1 6.1 2 8l-.8 1.8-2 .7v3l2 .7L2 16l-1 1.9L3.1 20 5 19l1.8.8.7 2.2h3l.7-2.2 1.9-.8 1.8 1 2.2-2.1-1-1.9.8-1.8z" transform="translate(3 -1) scale(.75)"/></svg>;
+      return <svg {...common}><path d="M4 6h4m4 0h8M4 12h9m4 0h3M4 18h2m4 0h10"/><circle cx="10" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg>;
     case 'chevron-left':
       return <svg {...common}><path d="m15 18-6-6 6-6"/></svg>;
     case 'chevron-right':
