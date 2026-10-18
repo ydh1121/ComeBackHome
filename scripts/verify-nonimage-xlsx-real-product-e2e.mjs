@@ -107,11 +107,14 @@ async function testEngine(browserType,label,firstName,secondName,monday){
       const row=rows.nth(i);
       const checkbox=row.locator('.review-row input');
       if(i===0||i===7) assert(await checkbox.isChecked(),label+' complete shift defaults selected');
-      else if(await checkbox.isChecked()) await checkbox.uncheck();
+      else if(await checkbox.isChecked()) {
+        await checkbox.click();
+        await row.locator('.review-row input:not(:checked)').waitFor();
+      }
     }
     const newOffRow=rows.nth(8);
     await newOffRow.locator('.review-edit > summary').click();
-    await newOffRow.getByRole('checkbox',{name:'휴무로 변경',exact:true}).check();
+    await newOffRow.getByRole('checkbox',{name:'휴무로 변경',exact:true}).click();
     await newOffRow.locator('.review-row input:checked').waitFor();
     const firstShift=rows.nth(0);
     await firstShift.locator('.review-edit > summary').click();
