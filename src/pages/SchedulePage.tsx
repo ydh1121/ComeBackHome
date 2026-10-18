@@ -1,97 +1,31 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ScheduleCalendar } from '../features/schedule/ScheduleCalendar';
-import { formatDateLabel, formatMonthLabel } from '../features/schedule/date-format';
+import { formatDateLabel } from '../features/schedule/date-format';
 import { useSelectedSchedule } from '../features/schedule/useSelectedSchedule';
 import { Icon } from '../shared/components/Icon';
 import { useSeoulDate } from '../shared/runtime/useSeoulDate';
 import './schedule-page.css';
 
-type ScheduleView = 'day' | 'week' | '2week' | 'month';
-
 export function SchedulePage() {
   const navigate = useNavigate();
   const schedule = useSelectedSchedule();
-  const [view, setView] = useState<ScheduleView>('day');
-  const [showHistory, setShowHistory] = useState(false);
   const today = useSeoulDate();
-
-  if (schedule.status === 'loading') {
-    return <section className="schedule-page" data-page="SchedulePage" data-state="LOADING"><div className="schedule-message">일정을 불러오는 중</div></section>;
-  }
-  if (schedule.status === 'error') {
-    return <section className="schedule-page" data-page="SchedulePage" data-state="ERROR"><div className="schedule-message">일정을 불러오지 못했습니다.</div></section>;
-  }
-
-  const entries = showHistory ? schedule.entries : schedule.entries.filter(entry => entry.date >= today);
-  const openDay = (date: string) => navigate('/schedule/' + date + '/edit');
-  const rangeLabel = (items: typeof entries) => items.length ? formatDateLabel(items[0].date) + ' - ' + formatDateLabel(items[items.length - 1].date) : '—';
-
+  if (schedule.status !== 'ready') return <section className="schedule-page" data-page="SchedulePage" data-state={schedule.status === 'loading' ? 'LOADING' : 'ERROR'}><div className="schedule-message">{schedule.status === 'error' ? '일정을 불러오지 못했습니다.' : '일정을 불러오는 중'}</div></section>;
+  const latestDates = schedule.latestImport ? new Set(schedule.latestImport.dates) : null;
+  const entries = schedule.entries.filter(entry => entry.date >= today && (!latestDates || latestDates.has(entry.date)));
+  const allRosterDates = schedule.latestImport?.dates ?? entries.map(entry => entry.date);
+  const range = allRosterDates.length ? formatDateLabel(allRosterDates[0]) + ' — ' + formatDateLabel(allRosterDates.at(-1)!) : null;
   return (
-    <section className="schedule-page" data-route="/schedule" data-page="SchedulePage" data-state={entries.length ? 'VIEW_' + view.toUpperCase() : 'EMPTY'}>
-      <div className="page-head-inline">
-        <h1 className="page-title">일정</h1>
-        <button type="button" className="text-btn schedule-bulk-link" onClick={() => navigate('/schedule/edit')}>일괄 입력</button>
-      </div>
-
-      <button type="button" className="text-btn schedule-history-toggle" aria-pressed={showHistory} onClick={() => setShowHistory(value => !value)}>{showHistory ? '과거 일정 숨기기' : '과거 일정 보기'}</button>
-      {!entries.length ? <div className="schedule-message" data-state="EMPTY">{schedule.entries.length ? '오늘 이후 일정이 없습니다.' : '등록된 일정이 없습니다.'}</div> : null}
-
-      <div className="segment">
-        {([['day','1일'],['week','1주'],['2week','2주'],['month','1개월']] as const).map(([value,label]) => (
-          <button key={value} type="button" className={view === value ? 'active' : ''} onClick={() => setView(value)}>{label}</button>
-        ))}
-      </div>
-
-      {view === 'day' ? <div className="schedule-day-list">
-        {entries.slice(0, 3).map((entry) => (
-          <button key={entry.date} type="button" className="schedule-day-card" data-date={entry.date} onClick={() => openDay(entry.date)}>
-            <div className="day">
-              <div className="day-head"><span className="day-date">{formatDateLabel(entry.date)}</span><span className={'switch' + (entry.enabled ? ' on' : '')} aria-hidden="true" /></div>
-              <div className="timepair">
-                <div className="timeinput"><span>출근</span><b>{entry.start}</b></div>
-                <div className="timeinput"><span>퇴근</span><b>{entry.end}</b></div>
-              </div>
-            </div>
-          </button>
-        ))}
-      </div> : null}
-
-      {view === 'week' ? <>
-        <div className="schedule-view-head"><span className="schedule-range-label">{rangeLabel(entries.slice(0,7))}</span></div>
-        <div className="schedule-week-list">
-          {entries.slice(0,7).map((entry) => (
-            <button key={entry.date} type="button" className="schedule-week-row" onClick={() => openDay(entry.date)}>
-              <span className="schedule-week-date">{formatDateLabel(entry.date)}</span>
-              <span className={'schedule-week-time' + (entry.enabled ? '' : ' off')}>{entry.enabled ? entry.start + ' - ' + entry.end : '휴무'}</span>
-              <Icon name="chevron-right" />
-            </button>
-          ))}
-        </div>
-      </> : null}
-
-      {view === '2week' ? <>
-        <div className="schedule-view-head"><span className="schedule-range-label">{rangeLabel(entries.slice(0,14))}</span></div>
-        <div className="schedule-2week-block">
-          <ScheduleCalendar entries={entries.slice(0,7)} onSelect={openDay} />
-          <ScheduleCalendar entries={entries.slice(7,14)} onSelect={openDay} />
-        </div>
-      </> : null}
-
-      {view === 'month' ? <>
-        <div className="schedule-view-head"><span className="schedule-range-label">{formatMonthLabel(entries[0]?.date ?? '')}</span></div>
-        <ScheduleCalendar entries={entries} monthMode onSelect={openDay} />
-      </> : null}
-
-      <div className="schedule-primary-actions">
-        <button type="button" className="cta secondary schedule-day-add-cta" onClick={() => navigate('/schedule/new')}>
-          1일 일정 추가
-        </button>
-        <button type="button" className="cta schedule-import-cta" onClick={() => navigate('/import')}>
-          <Icon name="upload" /> 근무표 이미지 가져오기
-        </button>
-        <button type="button" className="cta secondary schedule-edit-cta" onClick={() => navigate('/schedule/edit')}>직접 일정 편집</button>
-      </div>
+    <section className="schedule-page roster-page" data-route="/schedule" data-page="SchedulePage" data-state={entries.length ? 'VIEW_DAY' : 'EMPTY'} data-import-id={schedule.latestImport?.id ?? ''}>
+      <div className="page-head-inline"><h1 className="page-title">일정</h1><button className="text-btn" type="button" onClick={() => navigate('/schedule/history')}>월별 이력 <Icon name="chevron-right" /></button></div>
+      <div className="roster-heading"><span>{schedule.latestImport ? '최근 가져온 근무표' : '등록된 일정'}</span>{range ? <h2>{range}</h2> : null}</div>
+      {entries.length ? <div className="roster-list">
+        {entries.map(entry => <button type="button" className={'roster-row schedule-day-card' + (entry.date === today ? ' is-today' : '')} key={entry.date} data-date={entry.date} onClick={() => navigate('/schedule/' + entry.date + '/edit')}>
+          <span className="roster-date"><b>{formatDateLabel(entry.date)}</b>{entry.date === today ? <small>오늘</small> : null}</span>
+          <span className={'roster-hours' + (entry.enabled ? '' : ' is-off')}><b>{entry.enabled ? entry.start + '–' + entry.end : '휴무'}</b>{entry.enabled && entry.breakMinutes != null ? <small>휴게 {entry.breakMinutes}분</small> : null}</span>
+          <Icon name="chevron-right" />
+        </button>)}
+      </div> : <div className="roster-empty"><Icon name="calendar" /><h2>{schedule.latestImport ? '이 근무표의 일정이 모두 지났어요' : '아직 등록된 일정이 없어요'}</h2><p>{schedule.latestImport ? '지난 일정은 월별 이력에서 볼 수 있습니다.' : '근무표를 가져오면 이곳에서 한눈에 볼 수 있습니다.'}</p><button type="button" className="cta" onClick={() => navigate('/import')}>근무표 이미지 가져오기</button></div>}
+      <div className="roster-footer"><button type="button" className="text-btn" onClick={() => navigate('/schedule/new')}><Icon name="plus" /> 일정 직접 추가</button></div>
     </section>
   );
 }
