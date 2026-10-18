@@ -112,25 +112,25 @@ async function engineTest(engine, label) {
     const mapRows = mapping.locator('.mapping-row');
     assert((await mapRows.nth(0).locator('select').inputValue()) === id,
       label + ' existing employee XLSX mapping failed');
-    assert((await mapRows.nth(1).locator('select').inputValue()) === '',
+    assert((await mapRows.nth(1).locator('select').inputValue()) === '__ignore__',
       label + ' new employee must require approval');
     const before = await api('/people');
     assert(!before.body.people.some(p => p.name === secondName), label + ' preapproval staff write');
     await mapRows.nth(1).locator('select').selectOption('__create__');
     await page.getByRole('button', { name: '다음', exact: true }).click();
-    await page.locator('[data-page="ImportStructurePage"]').waitFor();
-    await page.getByRole('button', { name: '계속', exact: true }).click();
     const review = page.locator('[data-page="ImportReviewPage"]');
     await review.waitFor();
     const rows = review.locator('.import-review-item');
     assert(await rows.count() === 14, label + ' expected 14 XLSX review rows');
     for (let i = 0; i < 14; i++) {
       const row = rows.nth(i);
-      if (i === 0 || i === 7) await row.locator('.review-choice-list button').last().click();
+      const checkbox = row.locator('.review-row input');
+      if (i === 0 || i === 7) assert(await checkbox.isChecked(),label + ' valid shift default');
       else if (i === 8) {
-        await row.getByRole('button', { name: /휴무로 변경/ }).click();
-        await row.locator('.review-choice-list button').last().click();
-      } else await row.locator('.review-choice-list button').first().click();
+        await row.locator('.review-edit > summary').click();
+        await row.getByRole('checkbox', { name: '휴무로 변경', exact: true }).check();
+        await row.locator('.review-row input:checked').waitFor();
+      } else if (await checkbox.isChecked()) await checkbox.uncheck();
     }
     await page.waitForFunction(() => {
       const save = document.querySelector('[data-page="ImportReviewPage"] button.cta');
