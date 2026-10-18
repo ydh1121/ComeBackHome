@@ -855,8 +855,6 @@ try{
         await viewButton.click();
         await page.locator('[data-page="ImportPersonMatchPage"]').waitFor();
         await page.getByRole('button',{name:'다음'}).click();
-        await page.locator('[data-page="ImportStructurePage"]').waitFor();
-        await page.getByRole('button',{name:'계속',exact:true}).click();
         await page.locator('[data-page="ImportReviewPage"]').waitFor();
         console.log('CBH_OCR_TRACE: DOM_REVIEW '+browserName);
         const beforeSave=await page.locator('button.cta').isDisabled();
@@ -864,34 +862,27 @@ try{
         if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom)
           throw Error('REAL_UI_PREAPPROVAL_WRITE');
         const dateField=page.getByLabel('주간 시작일');
-        if(await dateField.inputValue()!=='2026-10-12')
+        if(await dateField.inputValue()!=='2026-10-12'){
+          await page.getByText('시작일 수정',{exact:true}).click();
           await dateField.fill('2026-10-12');
+        }
         await page.getByRole('button',{name:'7일 날짜 확인 및 확정'}).click();
         await page.locator('[data-state="WEEK_DATES_CONFIRMED"]').waitFor();
         const items=page.locator('.import-review-item');
         const n=await items.count();
         if(n!==14)throw Error('REAL_UI_REVIEW_ROWS_NOT_14:'+n);
         await page.getByText('원본 근무표와 대조',{exact:true}).click();
-        await page.locator('.import-cell-preview').first().waitFor();
+        await page.locator('.import-cell-preview').first().waitFor({state:'attached'});
         if(await page.locator('.import-cell-preview').count()!==14)
           throw Error('REAL_UI_SOURCE_CELL_ASSOCIATION_MISSING');
-        await page.locator('.import-cell-preview summary').first().click();
+        await items.first().locator('.review-edit > summary').click();
         await page.getByRole('img',{name:'원본 출근·퇴근·휴게 세 칸'}).first().waitFor({state:'visible'});
-        let approvedOff=0;
-        for(let i=0;i<n;i++){
-          const item=items.nth(i);
-          const state=await item.locator('.review-recognition-state').innerText();
-          if(state.includes('휴무 후보')||state.includes('빈칸·휴무 후보')){
-            await item.getByRole('button',{name:/휴무로 변경/}).click();
-            approvedOff++;
-          }
-          const choice=item.locator('.review-choice-list button').filter({has:page.locator('.review-choice-label')});
-          await choice.click();
-          // A click starts the repository action. The visible query refresh
-          // also loads people over HTTP, so wait for its committed UI state.
-          await item.locator('.review-choice-list button[aria-pressed="true"] .review-choice-label').waitFor();
-        }
-        if(approvedOff!==2)throw Error('REAL_UI_OFF_CANDIDATE_NOT_TWO:'+approvedOff);
+        const blankAction=page.getByRole('button',{name:/빈칸 .*일을 휴무로 가져오기/});
+        if(await blankAction.count()) await blankAction.click();
+        await page.waitForFunction(() => [...document.querySelectorAll('.review-row input')].every(input=>input.checked));
+        const approvedOff=await items.filter({has:page.locator('.review-hours strong').filter({hasText:/^휴무$/})}).count();
+        if(approvedOff!==2)throw Error('REAL_UI_OFF_NOT_TWO:'+approvedOff);
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom)throw Error('REAL_UI_DEFAULTS_MUST_NOT_WRITE');
         await page.locator('button.cta:enabled').waitFor();
         console.log('CBH_OCR_TRACE: DOM_APPROVED '+browserName);
         await page.locator('button.cta').click();
