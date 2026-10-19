@@ -11,7 +11,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   await page.evaluate(id=>localStorage.setItem('cbh:selected-person-id',id),person.id);
   await page.clock.setFixedTime(new Date('2026-10-19T12:00:00+09:00'));
   await mkdir('.artifacts/ux-refresh',{recursive:true});
-  const shot=async name=>page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-'+name+'.png',fullPage:true});
+  const shot=async name=>{await page.locator('.page-reveal[aria-busy="false"]').waitFor();await page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-'+name+'.png',fullPage:true,animations:'disabled'});};
   const open=async path=>{await page.waitForLoadState('networkidle');await page.goto(origin+path,{waitUntil:'networkidle'});};
   const dates=start=>Array.from({length:7},(_,i)=>new Date(Date.parse(start+'T00:00:00Z')+86400000*i).toISOString().slice(0,10));
   const latest=async()=>(await api('/people/'+person.id+'/schedules/latest-import')).body.latestImport;
