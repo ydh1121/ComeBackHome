@@ -73,6 +73,11 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   assert.equal(posts,1,'one explicit gesture batch despite duplicate click');
   await page.unroute('**/api/workbooks/approved-import');
   assert.deepEqual((await latest()).dates,nextWeek);
+  const newest=await latest();
+  await upload(firstWeek);
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await page.waitForURL(/\/schedule$/);
+  assert.equal((await latest()).id,newest.id,'older upload does not replace newer work dates');
   await page.waitForLoadState('networkidle');
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.roster-row').nth(6).waitFor();
@@ -101,7 +106,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   await page.locator('.today-meta').first().waitFor();
   assert.ok((await page.locator('.today-meta').first().innerText()).includes('09:30'),'today start visible');
   const sizes=await page.locator('.today-meta b').evaluateAll(nodes=>nodes.map(node=>parseFloat(getComputedStyle(node).fontSize)));
-  assert.ok(sizes.every(size=>size>=24),'today end and next start readable');
+  assert.ok(sizes.every(size=>size>=24),'today start/end and next dates remain readable in two columns');
   assert.ok((await page.getByRole('button',{name:'설정',exact:true}).locator('svg').boundingBox()).width>=26,'settings icon visible');
   await shot('today');
   await open('/notifications');
