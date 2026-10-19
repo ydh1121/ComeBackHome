@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useRef, useState } from 'react';
 import { categorizePushError, PUSH_FAILURE_MESSAGES, type PushFailureReason } from '../features/notifications/pushErrors';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -5,6 +6,8 @@ import { notificationPermissionView, useNotificationSettings } from '../features
 import { BackButton } from '../shared/components/BackButton';
 import { Icon } from '../shared/components/Icon';
 import './notification-page.css';
+import type { NotificationRules } from '../domain/models';
+import { BIRTHDAY_REMINDER_DAYS } from '../domain/birthday';
 
 type TestStatus = 'idle' | 'sending' | 'sent' | 'error';
 
@@ -19,7 +22,7 @@ export function NotificationPage() {
   const ruleSaveLock = useRef(false);
 
   if (state.status === 'loading') {
-    return <section className="notification-page" data-page="NotificationSetupPage" data-state="LOADING"><div className="notification-message">알림 설정을 불러오는 중</div></section>;
+    return <section className="notification-page" data-page="NotificationSetupPage" data-state="LOADING"><PageSkeleton /></section>;
   }
   if (state.status === 'error') {
     return <section className="notification-page" data-page="NotificationSetupPage" data-state="ERROR"><div className="notification-message">알림 설정을 불러오지 못했습니다.</div></section>;
@@ -50,7 +53,7 @@ export function NotificationPage() {
     }
   };
 
-  const updateRule = async (key: 'shiftEnd' | 'arrivalAdvance', value: boolean) => {
+  const saveRules = async (patch: Partial<NotificationRules>) => {
     if (ruleSaveLock.current) return;
     ruleSaveLock.current = true;
     setRuleSaving(true);
@@ -59,7 +62,7 @@ export function NotificationPage() {
       await services.actions.notifications.updateRules({
         ...settings.rules,
         etaChange: false, leftWork: false, homeArrival: false,
-        [key]: value,
+        ...patch,
       });
     } catch {
       // The server remains authoritative; no optimistic toggle is shown.
@@ -69,6 +72,7 @@ export function NotificationPage() {
       setRuleSaving(false);
     }
   };
+  const updateRule = (key:'shiftEnd'|'arrivalAdvance',value:boolean) => saveRules({[key]:value});
 
   const sendTest = async () => {
     if (!permissionView.enabled || testStatus === 'sending') return;
@@ -133,6 +137,14 @@ export function NotificationPage() {
         </button>
       </div>
 
+      <section className="birthday-notifications" aria-label="생일 알림">
+        <div className="birthday-notification-heading"><h2>생일 알림</h2><span>오전 9시</span></div>
+        <div className="birthday-reminders">{BIRTHDAY_REMINDER_DAYS.map(days => <button type="button" key={days} disabled={ruleSaving}
+          aria-pressed={settings.rules.birthdayDays?.includes(days)??false}
+          onClick={()=>void saveRules({birthdayDays:settings.rules.birthdayDays?.includes(days)?settings.rules.birthdayDays.filter(day=>day!==days):[...(settings.rules.birthdayDays??[]),days]})}>
+          {days===7?'일주일 전':days===0?'당일':days===1?'하루 전':days+'일 전'}<span className={'switch'+(settings.rules.birthdayDays?.includes(days)?' on':'')} aria-hidden="true" />
+        </button>)}</div>
+      </section>
       <button type="button" className="cta secondary" disabled={!permissionView.enabled || testStatus === 'sending'} onClick={sendTest}>
         {testStatus === 'sending' ? '테스트 알림 보내는 중' : '테스트 알림'}
       </button>
