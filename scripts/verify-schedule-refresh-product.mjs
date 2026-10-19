@@ -4,7 +4,7 @@ import {makeWeeklyXlsx} from '../test/fixtures/import/anonymous-weekly-xlsx-buil
 
 // Invoked by the existing Phase B runner: real product, isolated local D1,
 // synthetic staff only. No external OCR calls or private-image artifacts.
-export async function verifyScheduleRefresh({page,api,origin,engine}) {
+export async function verifyScheduleRefresh({page,api,origin,engine,settleReads}) {
   const created=await api('/people','POST',{name:'화면검증'+engine,relation:'합성'});
   assert.equal(created.status,201);
   const person=created.body.person;
@@ -12,7 +12,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   await page.clock.setFixedTime(new Date('2026-10-19T12:00:00+09:00'));
   await mkdir('.artifacts/ux-refresh',{recursive:true});
   const shot=async name=>{await page.locator('.page-reveal[aria-busy="false"]').waitFor();await page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-'+name+'.png',fullPage:true,animations:'disabled'});};
-  const open=async path=>{await page.waitForLoadState('networkidle');await page.goto(origin+path,{waitUntil:'networkidle'});};
+  const open=async path=>{await settleReads();await page.goto(origin+path,{waitUntil:'networkidle'});await settleReads();};
   const dates=start=>Array.from({length:7},(_,i)=>new Date(Date.parse(start+'T00:00:00Z')+86400000*i).toISOString().slice(0,10));
   const latest=async()=>(await api('/people/'+person.id+'/schedules/latest-import')).body.latestImport;
   const firstWeek=dates('2026-10-19'),nextWeek=dates('2026-10-26');
@@ -79,7 +79,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   await page.waitForURL(/\/schedule$/);
   assert.equal((await latest()).id,newest.id,'older upload does not replace newer work dates');
   await page.waitForLoadState('networkidle');
-  await page.reload({waitUntil:'networkidle'});
+  await settleReads();await page.reload({waitUntil:'networkidle'});await settleReads();
   await page.locator('.roster-row').nth(6).waitFor();
   assert.deepEqual(await page.locator('.roster-row').evaluateAll(rows=>rows.map(row=>row.dataset.date)),nextWeek);
   assert.equal(await page.locator('.roster-row[data-date="2026-11-20"]').count(),0,'manual date outside latest upload stays in history');
