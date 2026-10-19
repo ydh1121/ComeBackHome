@@ -6,6 +6,7 @@ import { D1CommuteRepository } from './repositories/D1CommuteRepository';
 import { D1NotificationJobStore } from './repositories/D1NotificationJobStore';
 import { D1NotificationSettingsStore } from './repositories/D1NotificationSettingsStore';
 import { D1PersonRepository } from './repositories/D1PersonRepository';
+import { parseBirthday, parsePhone, parseBirthdayDays } from '../src/domain/birthday';
 import { D1PlaceRepository } from './repositories/D1PlaceRepository';
 import { D1PresenceRepository } from './repositories/D1PresenceRepository';
 import { D1ScheduleRepository } from './repositories/D1ScheduleRepository';
@@ -746,6 +747,7 @@ export async function handleApiRequest(
         const person = await people.create({
           name: asString(body.name, 'name'),
           relation: typeof body.relation === 'string' ? body.relation.trim() : '',
+          phone: parsePhone(body.phone), birthday: parseBirthday(body.birthday),
         });
         return json({ person }, 201);
       }
@@ -765,6 +767,8 @@ export async function handleApiRequest(
           const person = await people.update(personId, {
             ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
             ...(typeof body.relation === 'string' ? { relation: body.relation.trim() } : {}),
+            ...(body.phone === undefined ? {} : {phone:parsePhone(body.phone)}),
+            ...(body.birthday === undefined ? {} : {birthday:parseBirthday(body.birthday)}),
           });
           return json({ person });
         }
@@ -794,9 +798,21 @@ export async function handleApiRequest(
             WHERE json_extract(p.value, '$.personId') = ?1
               AND json_extract(s.value, '$.personRef') = json_extract(p.value, '$.ref')
             GROUP BY r.request_id
-            ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1
+            ORDER BY MAX(json_extract(s.value, '$.date')) DESC, r.created_at DESC, r.rowid DESC LIMIT 1
           `).bind(personId).first<{id:string; importedAt:string; dates:string}>();
           return json({latestImport: row ? {...row, dates: [...new Set(JSON.parse(row.dates) as string[])].sort()} : null});
+        }
+
+        if (segments.length === 5 && segments[4] === 'range' && request.method === 'DELETE') {
+          const body = await readObject(request);
+          if (body.confirmation !== 'DELETE_SCHEDULES') return json({error:'삭제할 기간을 확인해 주세요.'},400);
+          const from = asString(body.from, 'from'), to = asString(body.to, 'to');
+          const expectedCount = body.expectedCount;
+          if (!Number.isInteger(expectedCount) || Number(expectedCount) < 1)
+            return json({error:'삭제할 일정이 없습니다.'},400);
+          const deleted = await schedules.removeRange(personId, from, to, Number(expectedCount));
+          if (deleted !== expectedCount) return json({error:'일정이 변경됐습니다. 목록을 새로 확인해 주세요.'},409);
+          return json({deleted});
         }
 
 
@@ -1040,6 +1056,7 @@ export async function handleApiRequest(
       if (request.method === 'PUT') {
         const body = await readObject(request);
         const updated = await settings.updateRules({
+          ...(body.birthdayDays === undefined ? {} : {birthdayDays:parseBirthdayDays(body.birthdayDays)}),
           ...(body.arrivalAdvanceEnabled === undefined ? {} : { arrivalAdvanceEnabled: asBoolean(body.arrivalAdvanceEnabled, 'arrivalAdvanceEnabled') }),
           shiftEndEnabled: asBoolean(body.shiftEndEnabled, 'shiftEndEnabled'),
           etaChangeEnabled: asBoolean(body.etaChangeEnabled, 'etaChangeEnabled'),
