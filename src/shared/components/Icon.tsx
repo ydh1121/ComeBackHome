@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip';
+export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip' | 'phone';
 
 interface IconProps {
   name: IconName;
@@ -9,6 +9,8 @@ export function Icon({ name, className }: IconProps) {
   const common = { className: ['svg', className].filter(Boolean).join(' '), viewBox: '0 0 24 24', 'aria-hidden': true } as const;
 
   switch (name) {
+    case 'phone':
+      return <svg {...common}><path d="M6 3h3l2 5-2.5 2a16 16 0 0 0 5.5 5.5l2-2.5 5 2v3a3 3 0 0 1-3.4 3A19 19 0 0 1 3 6.4 3 3 0 0 1 6 3Z"/></svg>;
     case 'home':
       return <svg {...common}><path d="M3.5 10.5 12 3l8.5 7.5"/><path d="M5.5 9.5V21h13V9.5"/><path d="M9.5 21v-6h5v6"/></svg>;
     case 'calendar':
