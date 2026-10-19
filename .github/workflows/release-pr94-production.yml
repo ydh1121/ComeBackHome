@@ -18,13 +18,16 @@ jobs:
     if: github.repository == 'ydh1121/ComeBackHome' && github.ref == 'refs/heads/feat/daily-life-and-multi-image-20261018'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: write
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      RELEASE_PHASE: preflight
-      EXPECTED_CORE_SHA: ''
-      BACKUP_DRIVE_ID: ''
-      BACKUP_ENCRYPTED_SHA: ''
+      RELEASE_PHASE: migrate
+      EXPECTED_CORE_SHA: 4c5f1688e0a85e0204bc1f464046a561b58737497eefd462f9f578921528b253
+      BACKUP_DRIVE_ID: 1qULyRi-UmPwseaRW_Ace1RUMjt7XfWhK
+      BACKUP_ENCRYPTED_SHA: fd8203ed5df1453f65c51ef4b964d46820364611e416335eac7b505e3c09d075
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,6 +64,23 @@ jobs:
           NODE
       - name: Run guarded release phase
         run: node scripts/release-pr94-production.mjs "$RELEASE_PHASE"
+      - name: Remove temporary encrypted artifact after verified private Drive backup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const base='https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY;
+          const headers={Authorization:'Bearer '+process.env.GITHUB_TOKEN,Accept:'application/vnd.github+json'};
+          const path=base+'/actions/artifacts/12197165016';
+          const response=await fetch(path,{headers});
+          if(response.status===404) process.exit(0);
+          if(!response.ok) throw new Error('Cannot verify temporary backup artifact');
+          const artifact=await response.json();
+          if(artifact.name!=='cbh-pr94-release-preflight'||artifact.workflow_run?.head_sha!=='67f9b4a4727f0fb625d4ee6609dddd16a96ab6cf') throw new Error('Backup artifact identity mismatch');
+          const removed=await fetch(path,{method:'DELETE',headers});
+          if(removed.status!==204) throw new Error('Temporary backup artifact cleanup failed');
+          console.log('Temporary encrypted backup artifact removed; owner-only Drive backup retained');
+          NODE
       - uses: actions/upload-artifact@v4
         with:
           name: cbh-pr94-release-${{ env.RELEASE_PHASE }}
