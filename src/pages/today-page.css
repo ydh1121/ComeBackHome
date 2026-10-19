@@ -11,6 +11,7 @@
 .today-page .person-picker-handle { width: 38px; height: 5px; border-radius: 999px; background: #d0d5dd; margin: 2px auto 12px; }
 .today-page .person-picker-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
 .today-page .person-picker-head h2 { font-size: 17px; margin: 0; }
+.today-page .person-picker-head .text-btn { min-width:44px;min-height:44px;padding:8px;color:#475467; }
 .today-page .person-picker-list { display: grid; gap: 4px; }
 .today-page .person-picker-row,
 .today-page .person-picker-manage { width: 100%; min-height: 58px; border: 0; background: transparent; border-radius: 14px; display: grid; align-items: center; text-align: left; padding: 8px 10px; }
