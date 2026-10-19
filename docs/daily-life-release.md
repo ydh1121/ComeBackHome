@@ -1,6 +1,6 @@
 # PR #94 release preparation
 
-Status: prepared, NOT executed. Current production MAIN is `d4dcf1abb802e419e85bb9769e5a8b0ad3d96010`. This release requires the owner's approval for the new `0011` schema and PR #94 rollout. Prior PR #92 / #93 approval is not reused as a fresh migration authorization.
+Status: owner approved production deployment on 2026-10-19 ("운영 배포까지 진행해줘"). Accepted application source: `a3daf894b4512153614cb97bfb5348468c9aedf9`, required CI `39224106646` 12/12 SUCCESS. The guarded PR #94 release workflow records fresh backup, migration and read-only deployment evidence. The four durable SSOT documents record the actual execution outcome. Baseline production MAIN: `d4dcf1abb802e419e85bb9769e5a8b0ad3d96010`.
 
 ## Exact change to approve
 
