@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { TransitIcon } from '../shared/components/TransitIcon';
 import { useSeoulDate } from '../shared/runtime/useSeoulDate';
@@ -93,7 +94,7 @@ export function TodayPage() {
         </span> : null}
       </div>
 
-      <div className="person-picker-layer" hidden={!pickerOpen}>
+      {createPortal(<div className="today-page person-picker-portal"><div className="person-picker-layer" hidden={!pickerOpen}>
         <button type="button" className="person-picker-backdrop" onClick={() => setPickerOpen(false)} aria-label="사람 선택 닫기" />
         <div className="person-picker-sheet" role="dialog" aria-modal="true" aria-label="사람 선택">
           <div className="person-picker-handle" />
@@ -119,7 +120,7 @@ export function TodayPage() {
           </div>
           <button type="button" className="person-picker-manage" onClick={() => navigate('/people')}><span>사람 관리</span><Icon name="chevron-right" /></button>
         </div>
-      </div>
+      </div></div>,document.body)}
 
       <div className="hero anti-ai-hero" data-component="TodayStatus">
         <div className="today-statusline">{online ? freshnessLabel(data) : '오프라인 · 마지막 정보'}</div>
