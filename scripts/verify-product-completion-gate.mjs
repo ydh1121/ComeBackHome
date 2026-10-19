@@ -175,6 +175,7 @@ const expectedMigrations = [
   '0008_weekly_ocr_break_minutes.sql',
   '0009_approved_workbook_import_receipts.sql',
   '0010_arrival_advance_notification.sql',
+  '0011_person_birthdays.sql',
 ];
 expect(
   JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),
