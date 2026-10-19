@@ -4,7 +4,7 @@ import type { ImportBatch, Person } from '../../domain/models';
 
 export type ImportWorkflowLoadState =
   | { status: 'loading' }
-  | { status: 'ready'; batch: ImportBatch | null; people: Person[] }
+  | { status: 'ready'; batch: ImportBatch | null; people: Person[]; queue: ImportBatch[] }
   | { status: 'error' };
 
 export function useImportWorkflow(batchId?: string): ImportWorkflowLoadState {
@@ -18,9 +18,9 @@ export function useImportWorkflow(batchId?: string): ImportWorkflowLoadState {
       ? services.queries.getImportReview(batchId)
       : services.queries.getCurrentImportBatch();
 
-    Promise.all([batchPromise, services.queries.listPeople()])
-      .then(([batch, people]) => {
-        if (active) setState({ status: 'ready', batch, people });
+    Promise.all([batchPromise, services.queries.listPeople(), services.queries.getImportQueue()])
+      .then(([batch, people, queue]) => {
+        if (active) setState({ status: 'ready', batch, people, queue });
       })
       .catch(() => {
         if (active) setState({ status: 'error' });
