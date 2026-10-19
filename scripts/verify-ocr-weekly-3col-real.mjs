@@ -890,7 +890,7 @@ try{
         if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+1)throw Error('MULTI_IMAGE_FIRST_APPROVAL_NOT_ATOMIC');
         await page.getByRole('button',{name:'다음'}).click();
         await page.locator('[data-page="ImportReviewPage"]').waitFor();
-        if(!(await page.locator('.import-queue-progress').innerText()).includes('2/2'))throw Error('MULTI_IMAGE_QUEUE_POSITION');
+        if(!/2\s*\/\s*2/.test(await page.locator('.import-queue-progress').innerText()))throw Error('MULTI_IMAGE_QUEUE_POSITION');
         if(!await page.locator('button.cta').isDisabled())throw Error('MULTI_IMAGE_SECOND_AUTOMATICALLY_APPROVED');
         const secondDate=page.getByLabel('주간 시작일');
         if(await secondDate.inputValue()!=='2026-10-12'){await page.getByText('시작일 수정',{exact:true}).click();await secondDate.fill('2026-10-12');}
