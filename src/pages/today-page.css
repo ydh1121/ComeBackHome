@@ -11,6 +11,7 @@
 .today-page .person-picker-handle { width: 38px; height: 5px; border-radius: 999px; background: #d0d5dd; margin: 2px auto 12px; }
 .today-page .person-picker-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
 .today-page .person-picker-head h2 { font-size: 17px; margin: 0; }
+.today-page .person-picker-head .text-btn { min-width:44px;min-height:44px;padding:8px;color:#475467; }
 .today-page .person-picker-list { display: grid; gap: 4px; }
 .today-page .person-picker-row,
 .today-page .person-picker-manage { width: 100%; min-height: 58px; border: 0; background: transparent; border-radius: 14px; display: grid; align-items: center; text-align: left; padding: 8px 10px; }
@@ -56,7 +57,12 @@
 .today-page .presence-status-row span{font-size:11px;font-weight:800;color:#214dc2;background:#e7efff;border-radius:999px;padding:6px 9px}
 
 .today-page .big-time{font-size:clamp(32px,10vw,48px);white-space:nowrap}
-.today-page .departure-estimate{font-size:13px;line-height:1.5;color:#667085;margin:8px 0 18px}
 
 .today-page .today-next-shift { grid-column: 1 / -1; border-top: 1px solid #dfe7f4; padding-top: 16px; }
 .today-page .today-next-shift b { font-size: 25px; }
+.today-page .today-next-shift,.today-page .today-next-off{grid-column:auto;border-top:1px solid #dfe7f4;padding-top:14px}
+.today-page .today-next-shift b,.today-page .today-next-off b{font-size:clamp(24px,5.8vw,25px)}
+.today-birthday{display:flex;align-items:center;gap:5px;font-size:12px;color:#667085;white-space:nowrap}.today-birthday b{font-size:11px;color:#3567d8;margin-left:2px}
+.today-page .action-card{text-decoration:none;cursor:pointer}.today-app-notice{font-size:12px;line-height:1.5;color:#667085}
+
+.today-page.person-picker-portal{position:fixed;inset:0;z-index:80;pointer-events:none;padding:0}.person-picker-portal .person-picker-layer{pointer-events:auto}.person-picker-portal .person-picker-sheet{max-width:430px;margin:0 auto;max-height:85dvh;overflow:auto}

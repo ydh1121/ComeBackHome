@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -49,7 +50,7 @@ export function ScheduleDayEditPage() {
     setHydratedKey(sourceKey);
   }, [sourceKey, schedule.status]);
 
-  if (schedule.status === 'loading') return <section className="schedule-page"><div className="schedule-message">일정을 불러오는 중</div></section>;
+  if (schedule.status === 'loading') return <section className="schedule-page"><PageSkeleton /></section>;
   if (schedule.status === 'error') return <section className="schedule-page"><div className="schedule-message">일정을 불러오지 못했습니다.</div></section>;
   if (hydratedKey !== sourceKey) return <section className="schedule-page" data-state="HYDRATING"><div className="schedule-message">일정 입력값을 준비하는 중</div></section>;
 

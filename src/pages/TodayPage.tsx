@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { TransitIcon } from '../shared/components/TransitIcon';
 import { useSeoulDate } from '../shared/runtime/useSeoulDate';
 import { useEffect, useState } from 'react';
@@ -7,6 +9,7 @@ import type { TodayOverviewQueryResult } from '../application/queries/ComeBackHo
 import { Icon } from '../shared/components/Icon';
 import { useOnlineStatus } from '../shared/runtime/useOnlineStatus';
 import './today-page.css';
+import { nextBirthday, birthdayLabel } from '../domain/birthday';
 
 type LoadState =
   | { status: 'loading' }
@@ -42,6 +45,7 @@ export function TodayPage() {
   const version = useApplicationVersion();
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [appNotice,setAppNotice] = useState('');
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const online = useOnlineStatus();
   const currentDate = useSeoulDate();
@@ -57,7 +61,7 @@ export function TodayPage() {
   }, [services, version, currentDate]);
 
   if (loadState.status === 'loading') {
-    return <section className="today-page" data-route="/" data-page="TodayPage" data-state="LOADING"><div className="today-loading" aria-live="polite">오늘 정보를 불러오는 중</div></section>;
+    return <section className="today-page" data-route="/" data-page="TodayPage" data-state="LOADING"><PageSkeleton /></section>;
   }
 
   if (loadState.status === 'error') {
@@ -65,6 +69,8 @@ export function TodayPage() {
   }
 
   const data = loadState.data;
+  const birthday = nextBirthday(data.person?.birthday,currentDate);
+  const appleDevice = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
   const nonWalkingSteps = data.route?.steps?.filter((step) => step.type !== 'WALKING') ?? [];
   const actualLeftWork = kstTimeFromIso(data.leftWorkAt);
   const actualHomeArrival = kstTimeFromIso(data.arrivedHomeAt);
@@ -83,13 +89,16 @@ export function TodayPage() {
           {data.person?.name ?? '사람 선택'}
           <span className={`person-select-chevron${pickerOpen ? ' open' : ''}`}><Icon name="chevron-down" /></span>
         </button>
+        {birthday && data.person?.birthday ? <span className="today-birthday" title={birthdayLabel(data.person.birthday)} aria-label={birthdayLabel(data.person.birthday)+' · '+birthday.date}>
+          <span aria-hidden="true">🎂</span> {Number(birthday.date.slice(5,7))}/{Number(birthday.date.slice(8,10))}<b>{birthday.days===0?'오늘!':'D-'+birthday.days}</b>
+        </span> : null}
       </div>
 
-      <div className="person-picker-layer" hidden={!pickerOpen}>
-        <button type="button" className="person-picker-backdrop" onClick={() => setPickerOpen(false)} aria-label="사람 선택 닫기" />
+      {createPortal(<div className="today-page person-picker-portal"><div className="person-picker-layer" hidden={!pickerOpen}>
+        <button type="button" className="person-picker-backdrop" onClick={() => setPickerOpen(false)} aria-label="사람 선택 배경 닫기" />
         <div className="person-picker-sheet" role="dialog" aria-modal="true" aria-label="사람 선택">
           <div className="person-picker-handle" />
-          <div className="person-picker-head"><h2>사람 선택</h2></div>
+          <div className="person-picker-head"><h2>사람 선택</h2><button type="button" className="text-btn" aria-label="사람 선택 닫기" onClick={() => setPickerOpen(false)}>닫기</button></div>
           <div className="person-picker-list">
             {data.people.map((person) => {
               const selected = person.id === data.person?.id;
@@ -111,13 +120,13 @@ export function TodayPage() {
           </div>
           <button type="button" className="person-picker-manage" onClick={() => navigate('/people')}><span>사람 관리</span><Icon name="chevron-right" /></button>
         </div>
-      </div>
+      </div></div>,document.body)}
 
       <div className="hero anti-ai-hero" data-component="TodayStatus">
         <div className="today-statusline">{online ? freshnessLabel(data) : '오프라인 · 마지막 정보'}</div>
         <div className="time-label">{actualHomeArrival ? '집 도착' : '집 도착 예상 범위'}</div>
-        <div className="big-time">{actualHomeArrival ?? (data.eta?.earliestArrivalAt && data.eta?.latestArrivalAt ? kstTimeFromIso(data.eta.earliestArrivalAt) + '–' + kstTimeFromIso(data.eta.latestArrivalAt) : data.eta?.arrivalTime ?? '—')}</div>
-        {!actualHomeArrival && data.shiftEnd && !actualLeftWork ? <p className="departure-estimate">{data.eta?.departureUnconfirmed ? '예정 퇴근 시간이 지났습니다. 실제 출발은 확인되지 않았습니다.' : '예정 퇴근 ±10분 기준 · 실제 출발 미확인'}</p> : null}
+        <div className="big-time">{actualHomeArrival ?? (data.eta?.earliestArrivalAt && data.eta?.latestArrivalAt ? kstTimeFromIso(data.eta.earliestArrivalAt) + ' ~ ' + kstTimeFromIso(data.eta.latestArrivalAt) : data.eta?.arrivalTime ?? '—')}</div>
+
         <div className="commute-simple">
           {nonWalkingSteps.map((step, index) => (
             <div className="commute-simple-row" key={`${step.type}-${index}`}>
@@ -133,6 +142,7 @@ export function TodayPage() {
             <b>{actualLeftWork ?? data.shiftEnd ?? '—'}</b>
           </div>
           <div className="today-meta today-next-shift"><span>다음 출근</span><b>{data.nextShiftLabel ?? '—'}</b></div>
+          <div className="today-meta today-next-off"><span>다음 휴무</span><b>{data.nextOffLabel ?? '—'}</b></div>
         </div>
         {actualLeftWork || actualHomeArrival ? (
           <div className="presence-status-row" aria-label="오늘 이동 상태">
@@ -143,9 +153,13 @@ export function TodayPage() {
       </div>
 
       <div className="action-row anti-ai-actions">
-        <button type="button" className="action-card" onClick={() => navigate('/schedule')}><Icon name="calendar" /><span>일정</span></button>
-        <button type="button" className="action-card" disabled={!data.person} onClick={() => data.person && navigate(`/people/${encodeURIComponent(data.person.id)}`)}><Icon name="map" /><span>이동 경로</span></button>
+        <a className="action-card" href={appleDevice?'findmy://':undefined} role={appleDevice?undefined:'button'} tabIndex={0}
+          onClick={()=>setAppNotice(appleDevice?'앱이 열리지 않으면 iPhone에서 나의 찾기를 직접 열어 주세요.':'나의 찾기는 iPhone에서 열 수 있습니다.')}
+          onKeyDown={event=>{if(!appleDevice&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setAppNotice('나의 찾기는 iPhone에서 열 수 있습니다.');}}}><Icon name="map" /><span>나의 찾기</span></a>
+        {data.person?.phone ? <a className="action-card" href={'tel:'+data.person.phone}><Icon name="phone" /><span>전화 걸기</span></a>
+          : <button type="button" className="action-card" disabled={!data.person} onClick={()=>data.person&&navigate('/people/'+encodeURIComponent(data.person.id)+'/edit')}><Icon name="phone"/><span>연락처 등록</span></button>}
       </div>
+      {appNotice ? <p className="today-app-notice" role="status">{appNotice}</p> : null}
     </section>
   );
 }

@@ -51,6 +51,11 @@ export class HttpPersonRepository implements PersonRepository {
 export class HttpScheduleRepository implements ScheduleRepository {
   constructor(private readonly client: HttpJsonClient) {}
 
+  async removeRange(personId: EntityId, from: ISODate, to: ISODate, expectedCount: number): Promise<number> {
+    return (await this.client.delete<{deleted:number}>('/people/' + encodeURIComponent(personId) + '/schedules/range',
+      {from,to,expectedCount,confirmation:'DELETE_SCHEDULES'})).deleted;
+  }
+
   async getLatestImport(personId: EntityId): Promise<ScheduleImportSummary | null> {
     return (await this.client.get<{ latestImport: ScheduleImportSummary | null }>(
       '/people/' + encodeURIComponent(personId) + '/schedules/latest-import',
@@ -204,6 +209,7 @@ export class HttpCommuteRepository implements CommuteRepository {
 }
 
 interface ServerNotificationSettings {
+  birthdayDays?: number[];
   arrivalAdvanceEnabled?: boolean;
   shiftEndEnabled: boolean;
   etaChangeEnabled: boolean;
@@ -230,6 +236,7 @@ export class HttpNotificationRepository implements NotificationRepository {
       permission: this.permission,
       subscription: this.subscription,
       rules: {
+        birthdayDays: settings.birthdayDays ?? [],
         arrivalAdvance: settings.arrivalAdvanceEnabled ?? false,
         shiftEnd: settings.shiftEndEnabled,
         etaChange: settings.etaChangeEnabled,
@@ -241,6 +248,7 @@ export class HttpNotificationRepository implements NotificationRepository {
 
   async setRules(rules: NotificationRules): Promise<void> {
     await this.client.put('/notifications/settings', {
+      birthdayDays:rules.birthdayDays ?? [],
       arrivalAdvanceEnabled: rules.arrivalAdvance ?? false,
       shiftEndEnabled: rules.shiftEnd,
       etaChangeEnabled: rules.etaChange,

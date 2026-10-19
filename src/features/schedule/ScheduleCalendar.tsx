@@ -1,5 +1,6 @@
 import type { ScheduleEntry } from '../../domain/models';
 import { formatDateLabel } from './date-format';
+import { calendarDayClass, holidayName } from '../../domain/korean-holidays';
 
 export function ScheduleCalendar({ entries, month, today, onSelect }: {
   entries: ScheduleEntry[]; month: string; today: string; onSelect(date: string): void;
@@ -20,7 +21,7 @@ export function ScheduleCalendar({ entries, month, today, onSelect }: {
           className={'schedule-cell ' + state.toLowerCase() + (date === today ? ' today' : '')}
           aria-label={formatDateLabel(date) + ' ' + (!entry ? '미등록' : entry.enabled ? entry.start + ' 출근 ' + entry.end + ' 퇴근' : '휴무')}
           onClick={() => onSelect(date)}>
-          <span className="dnum">{i+1}</span>
+          <span className={'dnum '+calendarDayClass(date)} title={holidayName(date)??undefined}>{i+1}</span>
           {entry?.enabled ? <span className="calendar-times"><b>{entry.start}</b><span>{entry.end}</span></span> : <span className="calendar-status">{entry ? '휴무' : '—'}</span>}
         </button>;
       })}

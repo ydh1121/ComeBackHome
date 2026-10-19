@@ -29,6 +29,22 @@ function toSchedule(row: ScheduleRow): ScheduleEntry {
 export class D1ScheduleRepository implements ScheduleRepository {
   constructor(private readonly db: D1DatabaseLike) {}
 
+  async removeRange(personId: EntityId, from: ISODate, to: ISODate, expectedCount: number): Promise<number> {
+    for (const date of [from,to]) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date + 'T00:00:00Z')) ||
+          new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('INVALID_SCHEDULE_DATE');
+    }
+    if (from > to || !Number.isInteger(expectedCount) || expectedCount < 1) throw new Error('INVALID_DELETE_RANGE');
+    // Count guard and deletion execute in the same SQLite statement. Other
+    // people, import receipts and notification delivery history stay intact.
+    // Outbox claim-time schedule guards reject reminders for deleted workdays.
+    const result = await this.db.prepare(`DELETE FROM schedules
+      WHERE person_id=?1 AND schedule_date BETWEEN ?2 AND ?3
+        AND (SELECT COUNT(*) FROM schedules WHERE person_id=?1 AND schedule_date BETWEEN ?2 AND ?3)=?4
+      RETURNING id`).bind(personId,from,to,expectedCount).all<{id:string}>();
+    return result.results.length;
+  }
+
   async list(personId: EntityId): Promise<ScheduleEntry[]> {
     const result = await this.db.prepare(
       'SELECT id, person_id, schedule_date, enabled, start_time, end_time, break_minutes FROM schedules WHERE person_id = ?1 ORDER BY schedule_date ASC',

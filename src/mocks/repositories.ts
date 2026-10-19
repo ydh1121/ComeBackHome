@@ -128,11 +128,13 @@ export class MockTodayRepository implements TodayRepository {
 
 export class MockImportRepository implements ImportRepository {
   constructor(private readonly store: MockStateStore) {}
-  async getCurrentBatch() { return clone([...this.store.read().importBatches].reverse().find((batch) => !batch.committed) ?? null); }
+  async getCurrentBatch() { const drafts=this.store.read().importBatches.filter(batch=>!batch.committed);return clone(drafts.find(batch=>batch.files.some(file=>file.status==='READY'))??drafts[0]??null); }
+  async listBatches() { return clone(this.store.read().importBatches); }
+  async discardDrafts() { this.store.mutate(state=>{state.importBatches=state.importBatches.filter(batch=>batch.committed);}); }
   async getBatch(batchId: EntityId) { return clone(this.store.read().importBatches.find((batch) => batch.id === batchId) ?? null); }
-  async createBatch() {
+  async createBatch(options?: {append?: boolean}) {
     this.store.mutate((state) => {
-      state.importBatches = [];
+      if (!options?.append) state.importBatches = [];
     });
     const batch = {
       id: crypto.randomUUID(),

@@ -16,6 +16,7 @@ export function SettingsPage() {
           <Icon name="chevron-right" />
         </button>
 
+        <button type="button" className="settings-row-button" onClick={() => navigate('/settings/cache')}><b>로컬 캐시</b><Icon name="chevron-right" /></button>
       </div>
     </section>
   );

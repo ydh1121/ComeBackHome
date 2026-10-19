@@ -1,3 +1,5 @@
+import { syncShellCache } from './localCache';
+
 const SERVICE_WORKER_URL = '/sw.js';
 
 async function register(): Promise<void> {
@@ -15,6 +17,7 @@ async function register(): Promise<void> {
     updateViaCache: 'none',
   });
   await registration.update();
+  void navigator.serviceWorker.ready.then(() => syncShellCache()).catch(() => undefined);
 }
 
 export function registerPwaServiceWorker(): void {

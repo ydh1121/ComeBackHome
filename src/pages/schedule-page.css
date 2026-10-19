@@ -48,11 +48,11 @@
 /* Roster overview and monthly history. Day editing keeps the shared controls. */
 .roster-page .page-head-inline .text-btn { display:flex;align-items:center;gap:2px;padding-right:0;color:#667085;font-size:13px;white-space:nowrap; }
 .roster-page .text-btn .svg { width:17px;height:17px; }
-.roster-heading { margin:0 0 20px; }
+.roster-heading { margin:0 0 14px; }
 .roster-heading > span { font-size:12px;color:#667085; }
 .roster-heading h2 { margin:6px 0 0;font-size:19px;letter-spacing:-.035em; }
 .roster-list { border-top:1px solid #e4e7ec; }
-.roster-page .roster-row { width:100%;display:grid;grid-template-columns:minmax(72px,1fr) minmax(0,1.7fr) 18px;align-items:center;gap:10px;min-height:74px;border:0;border-bottom:1px solid #edf0f4;background:white;text-align:left;padding:14px 4px;color:#172033; }
+.roster-page .roster-row { width:100%;display:grid;grid-template-columns:minmax(72px,1fr) minmax(0,1.7fr) 18px;align-items:center;gap:10px;min-height:clamp(54px,8dvh,68px);border:0;border-bottom:1px solid #edf0f4;background:white;text-align:left;padding:10px 4px;color:#172033; }
 .roster-page .roster-row.is-today { background:#f4f7ff; }
 .roster-date,.roster-hours { display:grid;gap:5px; }
 .roster-date b { font-size:16px; }
@@ -62,7 +62,7 @@
 .roster-hours small { font-size:12px;color:#667085; }
 .roster-hours.is-off b { font-size:17px;color:#667085;font-weight:600; }
 .roster-row > .svg { width:16px;height:16px;color:#98a2b3; }
-.roster-footer { padding-top:16px;display:flex;justify-content:flex-end; }
+.roster-footer { padding-top:16px;display:flex;justify-content:center; }
 .roster-footer .text-btn { display:flex;align-items:center;gap:6px;font-size:13px;color:#667085; }
 .roster-empty { padding:30px 12px;text-align:center;background:#f8fafc;border-radius:18px; }
 .roster-empty > .svg { width:32px;height:32px;margin:0 auto 18px;color:#98a2b3; }
@@ -77,7 +77,7 @@
 .schedule-calendar .schedule-weekdays,.schedule-calendar .schedule-grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px; }
 .schedule-weekdays { margin-bottom:8px; }
 .schedule-weekdays span { text-align:center;color:#667085;font-size:12px; }
-.schedule-calendar .schedule-cell { min-height:92px;min-width:0;border:1px solid #e4e7ec;border-radius:10px;padding:8px 2px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:9px;color:#172033;font-variant-numeric:tabular-nums; }
+.schedule-calendar .schedule-cell { min-height:clamp(58px,calc((100dvh - 330px - env(safe-area-inset-top) - env(safe-area-inset-bottom))/6),86px);min-width:0;border:1px solid #e4e7ec;border-radius:10px;padding:8px 2px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:5px;color:#172033;font-variant-numeric:tabular-nums; }
 .schedule-cell .dnum { font-size:13px;font-weight:700; }
 .schedule-cell.today { border:2px solid #255cff; }
 .schedule-cell.work { background:#f1f5ff; }
@@ -87,3 +87,22 @@
 .calendar-times span { color:#475467; }
 .calendar-status { font-size:11px;color:#667085; }
 @media (max-width:360px) { .roster-hours b { font-size:18px; } .schedule-calendar .schedule-weekdays,.schedule-calendar .schedule-grid { gap:2px; } .calendar-times { font-size:10px; } }
+.history-title{display:flex;align-items:center;gap:4px;margin-bottom:12px}
+.history-title .page-title{margin:0;font-size:22px}
+.history-title .back{margin-bottom:0}
+.history-title .text-btn{margin-left:auto;font-size:12px;color:#667085}
+.schedule-delete-dialog{width:min(360px,calc(100% - 32px));border:0;border-radius:24px;padding:24px;color:#172033;box-shadow:0 24px 80px #17203333}
+.schedule-delete-dialog::backdrop{background:#17203355;backdrop-filter:blur(5px)}
+.schedule-delete-dialog h2{margin:0 0 20px;font-size:21px}
+.schedule-delete-dialog p{font-size:14px;line-height:1.7}
+.delete-modes,.delete-actions{display:flex;gap:8px}
+.delete-modes button,.delete-actions button{flex:1;min-height:44px;border:0;border-radius:12px;background:#f1f4f8;color:#475467;font-weight:700}
+.delete-modes button[aria-pressed=true]{background:#eaf0ff;color:#255cff}
+.delete-actions{margin-top:22px}.delete-actions .danger{background:#d92d20;color:white}
+.delete-actions button:disabled{opacity:.4}.delete-help{color:#667085}
+.delete-range{display:grid;gap:12px;margin-top:18px}.delete-range label{display:grid;gap:6px;font-size:12px}
+.delete-range input{min-height:44px;border:1px solid #e4e7ec;border-radius:10px;padding:10px;width:100%}
+.import-queue-progress{font-size:12px;color:#667085;overflow-wrap:anywhere}
+.schedule-page .day-holiday,.schedule-weekdays span:first-child{color:#d44545}.schedule-page .day-saturday,.schedule-weekdays span:last-child{color:#3567d8}
+
+.roster-page,.schedule-history-page{padding-bottom:14px}

@@ -96,6 +96,7 @@ async function engineTest(engine, label) {
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"arrivals":[]}' }));
   await ctx.route('https://dapi.kakao.com/**', route => { stats.remoteCalls++; return route.abort(); });
   const page = await ctx.newPage();
+  await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
   page.setDefaultTimeout(20000);
   page.on('pageerror', error => errors.push(error.message));
   try {
@@ -198,6 +199,7 @@ async function engineTest(engine, label) {
 
     if (referenceBase) {
       const referencePage = await ctx.newPage();
+  await referencePage.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
       try {
         await referencePage.addInitScript(personId => localStorage.setItem('cbh:selected-person-id',personId),id);
         Object.assign(followup, await (await import('./followup-product-assertions.mjs')).verifyClockReferenceUi({page:referencePage,base:referenceBase}));

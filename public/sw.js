@@ -1,5 +1,26 @@
 const CACHE_PREFIX = 'cbh-shell-';
-const CACHE_NAME = CACHE_PREFIX + 'v3';
+const CACHE_NAME = CACHE_PREFIX + 'v4';
+const CONFIG_CACHE = 'cbh-cache-preference-v1';
+const CONFIG_URL = '/__cbh_cache_preference__';
+let cacheGeneration = 0;
+let enabledPromise = caches.open(CONFIG_CACHE).then(cache => cache.match(CONFIG_URL)).then(response => response ? response.json() : true).catch(() => false);
+async function clearShellCaches() {
+  cacheGeneration++;
+  const keys = await caches.keys();
+  await Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX)).map(key => caches.delete(key)));
+}
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'CBH_CACHE' || typeof event.data.enabled !== 'boolean') return;
+  event.waitUntil((async () => {
+    try {
+      enabledPromise = Promise.resolve(event.data.enabled);
+      const config = await caches.open(CONFIG_CACHE);
+      await config.put(CONFIG_URL, new Response(JSON.stringify(event.data.enabled)));
+      if (!event.data.enabled || event.data.clear) await clearShellCaches();
+      event.ports[0]?.postMessage({ ok: true });
+    } catch { event.ports[0]?.postMessage({ ok: false }); }
+  })());
+});
 const SHELL_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -10,8 +31,7 @@ const SHELL_URLS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(SHELL_URLS))
+    enabledPromise.then(enabled => enabled ? caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS)) : undefined)
       .then(() => self.skipWaiting()),
   );
 });
@@ -29,12 +49,15 @@ self.addEventListener('activate', (event) => {
 });
 
 async function handleNavigation(request) {
+  if (!await enabledPromise) return fetch(request);
+  const generation = cacheGeneration;
   const cache = await caches.open(CACHE_NAME);
   try {
     const response = await fetch(request);
-    if (response.ok) await cache.put('/', response.clone());
+    if (response.ok && generation === cacheGeneration && await enabledPromise) await cache.put('/', response.clone());
     return response;
   } catch {
+    if (generation !== cacheGeneration || !await enabledPromise) return new Response('ComeBackHome is offline.', {status:503});
     return (await cache.match(request))
       || (await cache.match('/'))
       || new Response('ComeBackHome is offline.', {
@@ -45,13 +68,15 @@ async function handleNavigation(request) {
 }
 
 async function handleStaticAsset(request) {
+  if (!await enabledPromise) return fetch(request);
+  const generation = cacheGeneration;
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
-  if (cached) return cached;
+  if (cached && generation === cacheGeneration && await enabledPromise) return cached;
 
   try {
     const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
+    if (response.ok && generation === cacheGeneration && await enabledPromise) await cache.put(request, response.clone());
     return response;
   } catch {
     return new Response('', { status: 504, statusText: 'Offline' });

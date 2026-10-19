@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -16,7 +17,7 @@ export function ImportPersonMatchPage() {
   const [proposedNames,setProposedNames]=useState<Record<string,string>>({});
 
   if (workflow.status === 'loading') {
-    return <section className="import-page"><div className="import-message">사람 연결 정보를 불러오는 중</div></section>;
+    return <section className="import-page"><PageSkeleton /></section>;
   }
   if (workflow.status === 'error' || !workflow.batch) {
     return <section className="import-page"><div className="import-message">가져오기 정보를 찾지 못했습니다.</div></section>;

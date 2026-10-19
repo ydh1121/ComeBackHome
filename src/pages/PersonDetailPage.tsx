@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { TransitIcon } from '../shared/components/TransitIcon';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -7,6 +8,7 @@ import { usePersonDetail } from '../features/people/usePeople';
 import { BackButton } from '../shared/components/BackButton';
 import { Icon, type IconName } from '../shared/components/Icon';
 import './people-page.css';
+import { birthdayLabel } from '../domain/birthday';
 
 function modeIcon(mode: string): IconName {
   if (mode === 'BUS') return 'bus';
@@ -82,7 +84,7 @@ export function PersonDetailPage() {
   }, [services, personId]);
 
   if (state.status === 'loading') {
-    return <section className="people-page"><div className="people-message">사람 상세를 불러오는 중</div></section>;
+    return <section className="people-page"><PageSkeleton /></section>;
   }
   if (state.status === 'error' || !state.detail.person) {
     return <section className="people-page"><div className="people-message">사람 정보를 찾지 못했습니다.</div></section>;
@@ -110,6 +112,10 @@ export function PersonDetailPage() {
         </div>
       </div>
 
+      {person.birthday || person.phone ? <div className="person-profile-summary">
+        {person.birthday ? <span>🎂 {birthdayLabel(person.birthday)}</span> : null}
+        {person.phone ? <a href={'tel:'+person.phone}>{person.phone}</a> : null}
+      </div> : null}
       <div className="location-stack">
         <LocationGroup personId={person.id} kind="origin" place={origin} accessPoints={originAccessPoints} onNavigate={(path) => navigate(path)} />
         <LocationGroup personId={person.id} kind="destination" place={destination} accessPoints={destinationAccessPoints} onNavigate={navigate} />

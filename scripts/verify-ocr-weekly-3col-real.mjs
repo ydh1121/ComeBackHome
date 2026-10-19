@@ -833,11 +833,11 @@ try{
           {waitUntil:'domcontentloaded'});
         await page.locator('[data-page="ImportPage"]').waitFor();
         const imageInput=page.locator('input.import-file-input[accept="image/*"]');
-        await imageInput.setInputFiles({
-          name:'generated-ui-acceptance.png',
-          mimeType:fixture.type,
+        await imageInput.setInputFiles(['first','second'].map(name=>({
+          name:'generated-ui-'+name+'.png',mimeType:fixture.type,
           buffer:Buffer.from(fixture.base64,'base64'),
-        });
+        })));
+        if(await imageInput.getAttribute('multiple')===null)throw Error('MULTI_IMAGE_INPUT_MISSING');
         const viewButton=page.getByRole('button',{name:'인식 결과 보기'});
         await viewButton.waitFor();
         await page.waitForFunction(()=>document.querySelector(
@@ -886,8 +886,24 @@ try{
         await page.locator('button.cta:enabled').waitFor();
         console.log('CBH_OCR_TRACE: DOM_APPROVED '+browserName);
         await page.locator('button.cta').click();
+        await page.locator('[data-page="ImportPersonMatchPage"]').waitFor();
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+1)throw Error('MULTI_IMAGE_FIRST_APPROVAL_NOT_ATOMIC');
+        await page.getByRole('button',{name:'다음'}).click();
+        await page.locator('[data-page="ImportReviewPage"]').waitFor();
+        if(!/2\s*\/\s*2/.test(await page.locator('.import-queue-progress').innerText()))throw Error('MULTI_IMAGE_QUEUE_POSITION');
+        if(!await page.locator('button.cta').isDisabled())throw Error('MULTI_IMAGE_SECOND_AUTOMATICALLY_APPROVED');
+        const secondDate=page.getByLabel('주간 시작일');
+        if(await secondDate.inputValue()!=='2026-10-12'){await page.getByText('시작일 수정',{exact:true}).click();await secondDate.fill('2026-10-12');}
+        await page.getByRole('button',{name:'7일 날짜 확인 및 확정'}).click();
+        await page.locator('[data-state="WEEK_DATES_CONFIRMED"]').waitFor();
+        await page.getByText('원본 근무표와 대조',{exact:true}).click();
+        if(await page.locator('.import-cell-preview').count()!==14)throw Error('MULTI_IMAGE_SECOND_ORIGINAL_MISSING');
+        const secondBlank=page.getByRole('button',{name:/빈칸 .*일을 휴무로 가져오기/});
+        if(await secondBlank.count())await secondBlank.click();
+        await page.locator('button.cta:enabled').waitFor();
+        await page.locator('button.cta').click();
         await page.waitForURL(/\/schedule$/);
-        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+1)
+        if(realLocalHttpD1.stats.atomicImports!==writesBeforeDom+2)
           throw Error('REAL_UI_APPROVAL_NOT_SINGLE_ATOMIC_REQUEST');
         const readback=await page.evaluate(async()=>{
           const people=await fetch('/api/people').then(r=>r.json());
@@ -908,7 +924,7 @@ try{
         });
         if(readback.length!==14||reloaded!==14)
           throw Error('REAL_UI_D1_RELOAD_READBACK_MISMATCH');
-        productDomFlow={browser:browserName,uploadedRealEngine:true,
+        productDomFlow={browser:browserName,uploadedRealEngine:true,multiImageCount:2,separateExplicitApproval:true,
           reviewRows:n,explicitOff:approvedOff,approvalBeforeWrite:true,
           storedAfterClick:readback.length,storedAfterReload:reloaded,
           productionD1Writes:0};

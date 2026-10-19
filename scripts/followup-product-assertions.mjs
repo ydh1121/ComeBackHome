@@ -15,8 +15,15 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.ok(await page.locator('[data-transit-mode="WALKING"]').count());
   assert.equal(await page.getByRole('region',{name:'도착지',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(164, 157, 135)','official RGB Line 9 color');
   assert.equal(await page.getByRole('region',{name:'주로 오는 길',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(102, 112, 133)','unknown line fallback');
-  const width = await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));
-  assert.ok(width.scroll<=width.viewport,'mobile UI overflow');
+  const width = await page.evaluate(async()=>{
+    let scroll=document.documentElement.scrollWidth;
+    for(let frame=0;frame<24;frame++){
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      scroll=Math.max(scroll,document.documentElement.scrollWidth);
+    }
+    return {scroll,viewport:innerWidth};
+  });
+  assert.ok(width.scroll<=width.viewport,'mobile UI overflow during route reveal '+JSON.stringify(width));
   const before=(await api('/people/'+id+'/commute?kind=origin')).body.preferredRouteCandidateId;
   assert.ok(before);
   await api('/people/'+id+'/commute/preferred-route','PUT',{routeCandidateId:'nonexistent-synthetic-route'});
@@ -43,11 +50,13 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   await midnight.goto(base+'/schedule',{waitUntil:'domcontentloaded'});
   await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').waitFor();
   await midnight.clock.runFor(2200);
+  await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').waitFor({state:'detached'});
   assert.equal(await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').count(),0,'KST midnight hides yesterday without deleting');
   await midnightContext.close();
 
-  await open('/');await page.locator('.departure-estimate').waitFor();
-  assert.ok((await page.locator('.big-time').innerText()).includes('–'),'ETA range is missing');
+  await open('/');await page.locator('.big-time').waitFor();
+  assert.equal(await page.locator('.departure-estimate').count(),0,'retired explanatory text');
+  assert.ok((await page.locator('.big-time').innerText()).includes(' ~ '),'ETA range is missing');
   assert.equal(await page.locator('[data-page="TodayPage"]').getAttribute('data-state'),'WORKING','no fabricated departure');
   await open('/notifications');
   const reminder=page.getByRole('button',{name:'예상 도착 10분 전에',exact:true});await reminder.waitFor();

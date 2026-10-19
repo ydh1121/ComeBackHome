@@ -1,8 +1,10 @@
 import type { NotificationSettingsRecord, NotificationSettingsStore } from '../contracts';
 import type { D1DatabaseLike } from '../runtime-types';
 import { asBoolean, asInteger, utcNow } from './d1-helpers';
+import { parseBirthdayDays } from '../../src/domain/birthday';
 
 interface NotificationSettingsRow {
+  birthday_days_json: string;
   arrival_advance_enabled: number;
   shift_end_enabled: number;
   eta_change_enabled: number;
@@ -14,6 +16,7 @@ interface NotificationSettingsRow {
 
 function toRecord(row: NotificationSettingsRow): NotificationSettingsRecord {
   return {
+    birthdayDays:parseBirthdayDays(JSON.parse(row.birthday_days_json ?? '[]')),
     arrivalAdvanceEnabled: asBoolean(row.arrival_advance_enabled),
     shiftEndEnabled: asBoolean(row.shift_end_enabled),
     etaChangeEnabled: asBoolean(row.eta_change_enabled),
@@ -30,6 +33,7 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
   async get(): Promise<NotificationSettingsRecord> {
     const row = await this.db.prepare(
       `SELECT
+        birthday_days_json,
         arrival_advance_enabled,
         shift_end_enabled,
         eta_change_enabled,
@@ -46,7 +50,7 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
     return toRecord(row);
   }
 
-  async updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled' | 'arrivalAdvanceEnabled'>): Promise<NotificationSettingsRecord> {
+  async updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled' | 'arrivalAdvanceEnabled' | 'birthdayDays'>): Promise<NotificationSettingsRecord> {
     const now = utcNow();
     await this.db.prepare(
       `UPDATE notification_settings
@@ -56,7 +60,8 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
         left_work_enabled = ?3,
         home_arrival_enabled = ?4,
         updated_at = ?5,
-        arrival_advance_enabled = COALESCE(?6, arrival_advance_enabled)
+        arrival_advance_enabled = COALESCE(?6, arrival_advance_enabled),
+        birthday_days_json = COALESCE(?7, birthday_days_json)
       WHERE id = 'default'`,
     ).bind(
       asInteger(input.shiftEndEnabled),
@@ -65,6 +70,7 @@ export class D1NotificationSettingsStore implements NotificationSettingsStore {
       asInteger(input.homeArrivalEnabled),
       now,
       input.arrivalAdvanceEnabled === undefined ? null : asInteger(input.arrivalAdvanceEnabled),
+      input.birthdayDays === undefined ? null : JSON.stringify(parseBirthdayDays(input.birthdayDays)),
     ).run();
 
     return this.get();

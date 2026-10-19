@@ -16,6 +16,7 @@ import { TransitAccessPage } from '../pages/TransitAccessPage';
 import { BusRoutePage } from '../pages/BusRoutePage';
 import { NotificationPage } from '../pages/NotificationPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { CacheSettingsPage } from '../pages/CacheSettingsPage';
 import { ScheduleDayEditPage } from '../pages/ScheduleDayEditPage';
 import { SchedulePage } from '../pages/SchedulePage';
 import { ScheduleHistoryPage } from '../pages/ScheduleHistoryPage';
@@ -49,6 +50,7 @@ function componentFor(path: string) {
   // It does not meet the owner's automatic-sync requirement for this release.
   if (path === '/settings/alarms') return import.meta.env.DEV ? AlarmPage : SettingsPage;
   if (path === '/settings') return SettingsPage;
+  if (path === '/settings/cache') return CacheSettingsPage;
   if (path === '/settings/presence') return SettingsPage; // retired setup entry
   return ImplementationBoundaryPage;
 }

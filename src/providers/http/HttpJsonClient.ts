@@ -1,3 +1,5 @@
+import { cachedRead, invalidateLocalReads } from '../../pwa/localCache';
+
 export class HttpApiError extends Error {
   constructor(message: string, readonly status: number, readonly reason: string | null) {
     super(message);
@@ -12,7 +14,7 @@ export class HttpJsonClient {
   ) {}
 
   get<T>(path: string): Promise<T> {
-    return this.request<T>(path, { method: 'GET' });
+    return cachedRead(this.basePath + path, path, () => this.request<T>(path, { method: 'GET' }));
   }
 
   post<T>(path: string, body: unknown): Promise<T> {
@@ -54,7 +56,7 @@ export class HttpJsonClient {
       throw new HttpApiError(message, response.status, reason);
     }
 
-    if ((init.method ?? 'GET') !== 'GET') this.onMutation();
+    if ((init.method ?? 'GET') !== 'GET') { invalidateLocalReads(); this.onMutation(); }
     return payload as T;
   }
 }

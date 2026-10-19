@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -6,6 +7,8 @@ import { BackButton } from '../shared/components/BackButton';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import './people-page.css';
+import { PersonProfileFields } from '../features/people/PersonProfileFields';
+import { parseBirthday, parsePhone, type Birthday } from '../domain/birthday';
 
 export function PersonEditPage() {
   const { personId = '' } = useParams();
@@ -14,16 +17,19 @@ export function PersonEditPage() {
   const state = usePerson(personId);
   const [name, setName] = useState('');
   const [relation, setRelation] = useState('');
+  const [phone,setPhone] = useState('');
+  const [birthday,setBirthday] = useState<Birthday|null>(null);
   const form = useFormRuntimeState();
 
   useEffect(() => {
     if (state.status !== 'ready' || !state.person) return;
     setName(state.person.name);
     setRelation(state.person.relation);
+    setPhone(state.person.phone??'');setBirthday(state.person.birthday??null);
   }, [state.status, state.status === 'ready' ? state.person?.id : null]);
 
   if (state.status === 'loading') {
-    return <section className="people-page"><div className="people-message">사람 정보를 불러오는 중</div></section>;
+    return <section className="people-page"><PageSkeleton /></section>;
   }
   if (state.status === 'error' || !state.person) {
     return <section className="people-page"><div className="people-message">사람 정보를 찾지 못했습니다.</div></section>;
@@ -32,7 +38,7 @@ export function PersonEditPage() {
   const save = async () => {
     if (form.state === 'SAVING') return;
     try {
-      await form.save(() => services.actions.people.update(personId, { name, relation }));
+      await form.save(() => services.actions.people.update(personId, { name, relation,phone:parsePhone(phone),birthday:parseBirthday(birthday) }));
       navigate('/people/' + encodeURIComponent(personId), { replace: true });
     } catch {
       // Preserve entered fields for retry and display the recoverable error.
@@ -53,6 +59,7 @@ export function PersonEditPage() {
           <span className="form-label">관계</span>
           <input className="input" value={relation} onChange={(event) => { setRelation(event.target.value); form.markDirty(); }} />
         </label>
+        <PersonProfileFields phone={phone} birthday={birthday} onPhone={value=>{setPhone(value);form.markDirty();}} onBirthday={value=>{setBirthday(value);form.markDirty();}} />
       </div>
 
       {form.error ? <p className="form-error" role="alert">{formErrorMessage(form.error)}</p> : null}

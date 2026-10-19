@@ -4,15 +4,15 @@ import {makeWeeklyXlsx} from '../test/fixtures/import/anonymous-weekly-xlsx-buil
 
 // Invoked by the existing Phase B runner: real product, isolated local D1,
 // synthetic staff only. No external OCR calls or private-image artifacts.
-export async function verifyScheduleRefresh({page,api,origin,engine}) {
+export async function verifyScheduleRefresh({page,api,origin,engine,settleReads}) {
   const created=await api('/people','POST',{name:'화면검증'+engine,relation:'합성'});
   assert.equal(created.status,201);
   const person=created.body.person;
   await page.evaluate(id=>localStorage.setItem('cbh:selected-person-id',id),person.id);
   await page.clock.setFixedTime(new Date('2026-10-19T12:00:00+09:00'));
   await mkdir('.artifacts/ux-refresh',{recursive:true});
-  const shot=async name=>page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-'+name+'.png',fullPage:true});
-  const open=async path=>{await page.waitForLoadState('networkidle');await page.goto(origin+path,{waitUntil:'networkidle'});};
+  const shot=async name=>{await page.locator('.page-reveal[aria-busy="false"]').waitFor();await page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-'+name+'.png',fullPage:true,animations:'disabled'});};
+  const open=async path=>{await settleReads();await page.goto(origin+path,{waitUntil:'networkidle'});await settleReads();};
   const dates=start=>Array.from({length:7},(_,i)=>new Date(Date.parse(start+'T00:00:00Z')+86400000*i).toISOString().slice(0,10));
   const latest=async()=>(await api('/people/'+person.id+'/schedules/latest-import')).body.latestImport;
   const firstWeek=dates('2026-10-19'),nextWeek=dates('2026-10-26');
@@ -73,8 +73,13 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   assert.equal(posts,1,'one explicit gesture batch despite duplicate click');
   await page.unroute('**/api/workbooks/approved-import');
   assert.deepEqual((await latest()).dates,nextWeek);
+  const newest=await latest();
+  await upload(firstWeek);
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await page.waitForURL(/\/schedule$/);
+  assert.equal((await latest()).id,newest.id,'older upload does not replace newer work dates');
   await page.waitForLoadState('networkidle');
-  await page.reload({waitUntil:'networkidle'});
+  await settleReads();await page.reload({waitUntil:'networkidle'});await settleReads();
   await page.locator('.roster-row').nth(6).waitFor();
   assert.deepEqual(await page.locator('.roster-row').evaluateAll(rows=>rows.map(row=>row.dataset.date)),nextWeek);
   assert.equal(await page.locator('.roster-row[data-date="2026-11-20"]').count(),0,'manual date outside latest upload stays in history');
@@ -101,7 +106,7 @@ export async function verifyScheduleRefresh({page,api,origin,engine}) {
   await page.locator('.today-meta').first().waitFor();
   assert.ok((await page.locator('.today-meta').first().innerText()).includes('09:30'),'today start visible');
   const sizes=await page.locator('.today-meta b').evaluateAll(nodes=>nodes.map(node=>parseFloat(getComputedStyle(node).fontSize)));
-  assert.ok(sizes.every(size=>size>=24),'today end and next start readable');
+  assert.ok(sizes.every(size=>size>=24),'today start/end and next dates remain readable in two columns');
   assert.ok((await page.getByRole('button',{name:'설정',exact:true}).locator('svg').boundingBox()).width>=26,'settings icon visible');
   await shot('today');
   await open('/notifications');

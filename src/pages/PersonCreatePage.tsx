@@ -5,18 +5,22 @@ import { BackButton } from '../shared/components/BackButton';
 import { useFormRuntimeState } from '../shared/runtime/useFormRuntimeState';
 import { formErrorMessage } from '../shared/runtime/formErrorMessage';
 import './people-page.css';
+import { PersonProfileFields } from '../features/people/PersonProfileFields';
+import { parseBirthday, parsePhone, type Birthday } from '../domain/birthday';
 
 export function PersonCreatePage() {
   const navigate = useNavigate();
   const services = useApplicationServices();
   const [name, setName] = useState('');
   const [relation, setRelation] = useState('');
+  const [phone,setPhone] = useState('');
+  const [birthday,setBirthday] = useState<Birthday|null>(null);
   const form = useFormRuntimeState();
 
   const save = async () => {
     if (!name.trim() || form.state === 'SAVING') return;
     try {
-      const person = await form.save(() => services.actions.people.create({ name, relation }));
+      const person = await form.save(() => services.actions.people.create({ name, relation,phone:parsePhone(phone),birthday:parseBirthday(birthday) }));
       navigate('/people/' + encodeURIComponent(person.id), { replace: true });
     } catch {
       // The form owns an actionable error and retains the user's input.
@@ -37,6 +41,7 @@ export function PersonCreatePage() {
           <span className="form-label">관계</span>
           <input className="input" value={relation} onChange={(event) => { setRelation(event.target.value); form.markDirty(); }} placeholder="예: 연인, 가족" />
         </label>
+        <PersonProfileFields phone={phone} birthday={birthday} onPhone={value=>{setPhone(value);form.markDirty();}} onBirthday={value=>{setBirthday(value);form.markDirty();}} />
       </div>
 
       {form.error ? <p className="form-error" role="alert">{formErrorMessage(form.error)}</p> : null}

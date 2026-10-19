@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { TransitIcon } from '../shared/components/TransitIcon';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -101,7 +102,7 @@ export function CommuteRoutePage() {
     setRouteMessage(null);
   }, [personId]);
 
-  if (state.status === 'loading') return <section className="commute-page"><div className="commute-message">경로를 불러오는 중</div></section>;
+  if (state.status === 'loading') return <section className="commute-page"><PageSkeleton /></section>;
   if (state.status === 'error' || !state.overview.person) return <section className="commute-page"><div className="commute-message">경로를 불러오지 못했습니다.</div></section>;
 
   const { overview } = state;

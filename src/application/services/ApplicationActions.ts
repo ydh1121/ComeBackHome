@@ -25,7 +25,7 @@ export class PersonService implements PersonActions {
   async create(input: PersonInput) {
     const name = input.name.normalize('NFKC').trim().replace(/\s+/g, ' ');
     if (!name) throw new Error('Person name is required.');
-    const person = await this.people.create({ name, relation: input.relation.trim() });
+    const person = await this.people.create({ ...input, name, relation: input.relation.trim() });
     this.selection.select(person.id);
     return person;
   }
@@ -34,6 +34,8 @@ export class PersonService implements PersonActions {
     const current = await this.people.get(personId);
     if (!current) throw new Error('Person was not found.');
     return this.people.update(personId, {
+      ...(input.phone === undefined ? {} : {phone:input.phone}),
+      ...(input.birthday === undefined ? {} : {birthday:input.birthday}),
       name: input.name.normalize('NFKC').trim().replace(/\s+/g, ' ') || current.name,
       relation: input.relation.trim() || current.relation,
     });
@@ -77,6 +79,12 @@ export class ScheduleService implements ScheduleActions {
     private readonly schedules: ScheduleRepository,
     private readonly selection: PersonSelectionActions,
   ) {}
+
+  async removeRange(from: string, to: string, expectedCount: number, expectedPersonId: string): Promise<number> {
+    if (this.selection.getSelectedPersonId() !== expectedPersonId) throw new Error('SELECTED_PERSON_CHANGED');
+    if (!this.schedules.removeRange) throw new Error('일정 삭제를 지원하지 않는 저장소입니다.');
+    return this.schedules.removeRange(expectedPersonId,from,to,expectedCount);
+  }
 
   async saveDay(date: string, input: ScheduleDayInput): Promise<void> {
     const personId = this.selection.getSelectedPersonId();
