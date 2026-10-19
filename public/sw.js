@@ -57,6 +57,7 @@ async function handleNavigation(request) {
     if (response.ok && generation === cacheGeneration && await enabledPromise) await cache.put('/', response.clone());
     return response;
   } catch {
+    if (generation !== cacheGeneration || !await enabledPromise) return new Response('ComeBackHome is offline.', {status:503});
     return (await cache.match(request))
       || (await cache.match('/'))
       || new Response('ComeBackHome is offline.', {
@@ -71,7 +72,7 @@ async function handleStaticAsset(request) {
   const generation = cacheGeneration;
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
-  if (cached) return cached;
+  if (cached && generation === cacheGeneration && await enabledPromise) return cached;
 
   try {
     const response = await fetch(request);
