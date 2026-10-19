@@ -43,11 +43,13 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   await midnight.goto(base+'/schedule',{waitUntil:'domcontentloaded'});
   await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').waitFor();
   await midnight.clock.runFor(2200);
+  await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').waitFor({state:'detached'});
   assert.equal(await midnight.locator('.schedule-day-card[data-date="'+todayKst+'"]').count(),0,'KST midnight hides yesterday without deleting');
   await midnightContext.close();
 
-  await open('/');await page.locator('.departure-estimate').waitFor();
-  assert.ok((await page.locator('.big-time').innerText()).includes('–'),'ETA range is missing');
+  await open('/');await page.locator('.big-time').waitFor();
+  assert.equal(await page.locator('.departure-estimate').count(),0,'retired explanatory text');
+  assert.ok((await page.locator('.big-time').innerText()).includes(' ~ '),'ETA range is missing');
   assert.equal(await page.locator('[data-page="TodayPage"]').getAttribute('data-state'),'WORKING','no fabricated departure');
   await open('/notifications');
   const reminder=page.getByRole('button',{name:'예상 도착 10분 전에',exact:true});await reminder.waitFor();
