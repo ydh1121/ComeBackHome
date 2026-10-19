@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -35,14 +36,14 @@ export function ImportPage() {
   }, []);
 
   if (workflow.status === 'loading') {
-    return <section className="import-page" data-page="ImportPage" data-state="LOADING"><div className="import-message">가져오기 정보를 불러오는 중</div></section>;
+    return <section className="import-page" data-page="ImportPage" data-state="LOADING"><PageSkeleton /></section>;
   }
   if (workflow.status === 'error') {
     return <section className="import-page" data-page="ImportPage" data-state="ERROR"><div className="import-message">가져오기 정보를 불러오지 못했습니다.</div></section>;
   }
 
   const batch = workflow.batch;
-  const files = batch?.files ?? [];
+  const files = workflow.queue.length ? workflow.queue.filter(item => !item.committed).flatMap(item => item.files) : batch?.files ?? [];
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -75,13 +76,14 @@ export function ImportPage() {
 
       <button type="button" className="upload" onClick={() => imageInputRef.current?.click()}>
         <Icon name="upload" />
-        <span><b>근무표 이미지 추가</b><span className="meta">한 주의 사진 · 스크린샷 한 장</span></span>
+        <span><b>근무표 이미지 추가</b><span className="meta">사진 · 스크린샷 여러 장 선택 · 최대 10장</span></span>
       </button>
       <input
         ref={imageInputRef}
         className="import-file-input"
         type="file"
         accept="image/*"
+        multiple
         onChange={(event) => onFiles(event.target.files)}
       />
 
@@ -109,8 +111,8 @@ export function ImportPage() {
               {file.status === 'PARSING' ? (
                 <div className="progress"><i style={{ width: Math.max(0, Math.min(100, file.progress)) + '%' }} /></div>
               ) : <div className="small">{file.status === 'READY' && file.kind === 'IMAGE'
-                ? batch?.structure.weeklyReview?.status === 'MANUAL_RECOVERY_REQUIRED'
-                  ? '수동 입력 필요' : batch?.structure.weeklyReview?.status === 'PARTIAL_REVIEW_REQUIRED'
+                ? workflow.queue.find(item => item.files.some(candidate => candidate.id === file.id))?.structure.weeklyReview?.status === 'MANUAL_RECOVERY_REQUIRED'
+                  ? '수동 입력 필요' : workflow.queue.find(item => item.files.some(candidate => candidate.id === file.id))?.structure.weeklyReview?.status === 'PARTIAL_REVIEW_REQUIRED'
                     ? '일부 인식 · 직접 확인 필요' : '인식 결과 · 최종 검토 필요'
                 : statusLabel(file.status)}</div>}
               {file.status === 'ERROR' && file.message ? (
