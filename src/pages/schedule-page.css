@@ -77,7 +77,7 @@
 .schedule-calendar .schedule-weekdays,.schedule-calendar .schedule-grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px; }
 .schedule-weekdays { margin-bottom:8px; }
 .schedule-weekdays span { text-align:center;color:#667085;font-size:12px; }
-.schedule-calendar .schedule-cell { min-height:clamp(58px,calc((100dvh - 290px)/6),86px);min-width:0;border:1px solid #e4e7ec;border-radius:10px;padding:8px 2px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:5px;color:#172033;font-variant-numeric:tabular-nums; }
+.schedule-calendar .schedule-cell { min-height:clamp(58px,calc((100dvh - 330px - env(safe-area-inset-top) - env(safe-area-inset-bottom))/6),86px);min-width:0;border:1px solid #e4e7ec;border-radius:10px;padding:8px 2px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:5px;color:#172033;font-variant-numeric:tabular-nums; }
 .schedule-cell .dnum { font-size:13px;font-weight:700; }
 .schedule-cell.today { border:2px solid #255cff; }
 .schedule-cell.work { background:#f1f5ff; }
