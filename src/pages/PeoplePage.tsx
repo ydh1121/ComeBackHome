@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useNavigate } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
 import { usePeopleList } from '../features/people/usePeople';
@@ -10,7 +11,7 @@ export function PeoplePage() {
   const state = usePeopleList();
 
   if (state.status === 'loading') {
-    return <section className="people-page" data-page="PeoplePage" data-state="LOADING"><div className="people-message">사람 정보를 불러오는 중</div></section>;
+    return <section className="people-page" data-page="PeoplePage" data-state="LOADING"><PageSkeleton /></section>;
   }
   if (state.status === 'error') {
     return <section className="people-page" data-page="PeoplePage" data-state="ERROR"><div className="people-message">사람 정보를 불러오지 못했습니다.</div></section>;
