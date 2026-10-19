@@ -14,10 +14,11 @@ function formatNextShiftLabel(referenceDate: ISODate, shift: ScheduleEntry | nul
   const from = Date.parse(`${referenceDate}T00:00:00Z`);
   const to = Date.parse(`${shift.date}T00:00:00Z`);
   const diff = Math.round((to - from) / 86_400_000);
-  if (diff === 0) return `오늘 ${shift.start}`;
-  if (diff === 1) return `내일 ${shift.start}`;
+  const time = shift.enabled ? ` ${shift.start}` : '';
+  if (diff === 0) return `오늘${time}`;
+  if (diff === 1) return `내일${time}`;
   const [, month, day] = shift.date.split('-');
-  return `${Number(month)}/${Number(day)} ${shift.start}`;
+  return `${Number(month)}/${Number(day)}${time}`;
 }
 
 export class ComeBackHomeQueries {
