@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -63,7 +64,7 @@ export function BusRoutePage() {
     ? '/people/' + encodeURIComponent(personId) + '/commute/routes/' + encodeURIComponent(routeId)
     : '/people/' + encodeURIComponent(personId) + '/commute/' + kind + '/access';
 
-  if (state.status === 'loading') return <section className="commute-page"><div className="commute-message">버스 정보를 불러오는 중</div></section>;
+  if (state.status === 'loading') return <section className="commute-page"><PageSkeleton /></section>;
   if (state.status === 'error' || !state.point || state.point.mode !== 'BUS') return <section className="commute-page"><div className="commute-message">버스 정보를 찾지 못했습니다.</div></section>;
 
   const point = state.point;
