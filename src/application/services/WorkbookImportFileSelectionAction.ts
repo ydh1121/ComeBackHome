@@ -47,8 +47,46 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
 
   private generation = 0;
   private cancelPrevious: (() => void) | null = null;
+  private cancelSelection: (() => void) | null = null;
 
   async accept(files: ImportInputFile[], signal?: AbortSignal): Promise<string> {
+    this.cancelSelection?.();
+    const controller = new AbortController();
+    const cancel = () => {
+      controller.abort();
+      releasePrivateImportImage();
+      void this.imports.discardDrafts?.();
+    };
+    this.cancelSelection = cancel;
+    signal?.addEventListener('abort', cancel, { once: true });
+    if (signal?.aborted) cancel();
+    try {
+      if (files.length > 10) throw new Error('한 번에 파일 10개까지 선택할 수 있습니다.');
+      // Each image keeps its own calendar anchor, original and approval boundary.
+      // Sequential recognition bounds mobile WASM memory; never merge dayIndex
+      // values from different weeks into one weekly review.
+      const groups = this.imageRecognizer && files.some(file => file.kind === 'IMAGE') ? files.map(file => [file]) : [files];
+      let firstReady = '';
+      let failure: unknown;
+      for (let index = 0; index < groups.length; index++) {
+        if (controller.signal.aborted) throw new DOMException('가져오기를 취소했습니다.', 'AbortError');
+        try {
+          const id = await this.acceptBatch(groups[index], controller.signal, index > 0);
+          firstReady ||= id;
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          failure = error;
+        }
+      }
+      if (!firstReady) throw failure ?? new Error('선택한 파일에서 일정을 인식하지 못했습니다.');
+      return firstReady;
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+      if (this.cancelSelection === cancel) this.cancelSelection = null;
+    }
+  }
+
+  private async acceptBatch(files: ImportInputFile[], signal: AbortSignal, append: boolean): Promise<string> {
     this.cancelPrevious?.();
     const generation = ++this.generation;
     files = [...files];
@@ -61,7 +99,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
       throw new Error('엑셀 가져오기는 .xlsx 파일만 지원합니다. .xls 파일은 .xlsx로 저장해 주세요.');
     }
 
-    const batch = await this.imports.createBatch();
+    const batch = await this.imports.createBatch({ append });
     const cancel = () => {
       releasePrivateImportImage(batch.id);
       void this.imports.replaceFiles(batch.id, []).catch(() => undefined);
@@ -72,7 +110,7 @@ export class WorkbookImportFileSelectionAction implements ImportFileSelectionAct
     let reviewPublished = false;
     try {
     assertActive();
-    releasePrivateImportImage();
+    if (!append) releasePrivateImportImage();
     const firstImage=files.find(item=>item.kind==='IMAGE');
     if(firstImage && firstImage.file instanceof Blob && typeof URL.createObjectURL==='function')
       privateImageUrls.set(batch.id,URL.createObjectURL(firstImage.file));
