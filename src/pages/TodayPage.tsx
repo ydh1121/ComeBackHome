@@ -95,10 +95,10 @@ export function TodayPage() {
       </div>
 
       {createPortal(<div className="today-page person-picker-portal"><div className="person-picker-layer" hidden={!pickerOpen}>
-        <button type="button" className="person-picker-backdrop" onClick={() => setPickerOpen(false)} aria-label="사람 선택 닫기" />
+        <button type="button" className="person-picker-backdrop" onClick={() => setPickerOpen(false)} aria-label="사람 선택 배경 닫기" />
         <div className="person-picker-sheet" role="dialog" aria-modal="true" aria-label="사람 선택">
           <div className="person-picker-handle" />
-          <div className="person-picker-head"><h2>사람 선택</h2></div>
+          <div className="person-picker-head"><h2>사람 선택</h2><button type="button" className="text-btn" aria-label="사람 선택 닫기" onClick={() => setPickerOpen(false)}>닫기</button></div>
           <div className="person-picker-list">
             {data.people.map((person) => {
               const selected = person.id === data.person?.id;
