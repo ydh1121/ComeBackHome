@@ -55,19 +55,27 @@ export class BrowserImportRepository implements ImportRepository {
   }
 
   async getCurrentBatch(): Promise<ImportBatch | null> {
-    const current = [...this.state.batches].reverse().find((batch) => !batch.committed) ?? null;
+    const drafts = this.state.batches.filter(batch => !batch.committed);
+    const current = drafts.find(batch => batch.files.some(file => file.status === 'READY')) ?? drafts[0] ?? null;
     return clone(current);
+  }
+
+  async listBatches(): Promise<ImportBatch[]> { return clone(this.state.batches); }
+
+  async discardDrafts(): Promise<void> {
+    this.state.batches = this.state.batches.filter(batch => batch.committed);
+    this.persist();
   }
 
   async getBatch(batchId: EntityId): Promise<ImportBatch | null> {
     return clone(this.state.batches.find((batch) => batch.id === batchId) ?? null);
   }
 
-  async createBatch(): Promise<ImportBatch> {
+  async createBatch(options?: { append?: boolean }): Promise<ImportBatch> {
     // A new file selection starts a new draft. Keeping an older unfinished
     // draft as "current" caused subsequent uploads to surface stale OCR data
     // until localStorage was manually cleared.
-    this.state.batches = [];
+    if (!options?.append) this.state.batches = [];
     const batch: ImportBatch = {
       id: crypto.randomUUID(),
       files: [],
