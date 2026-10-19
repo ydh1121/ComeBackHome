@@ -1,5 +1,6 @@
 import type { EntityId, ISODate, ISODateTime, PermissionState } from './common';
-export interface Person { id: EntityId; name: string; relation: string; }
+import type { Birthday } from './birthday';
+export interface Person { id: EntityId; name: string; relation: string; phone?: string | null; birthday?: Birthday | null; }
 export interface Address { road: string; lot?: string; detail?: string; }
 export interface Coordinate { x: number; y: number; }
 export type PlaceKind = 'origin' | 'destination';
@@ -37,7 +38,7 @@ export interface ImportBatch {
   reviewItems: ImportReviewItem[];
   committed: boolean;
 }
-export interface NotificationRules { arrivalAdvance?: boolean; shiftEnd: boolean; etaChange: boolean; leftWork: boolean; homeArrival: boolean; }
+export interface NotificationRules { birthdayDays?: number[]; arrivalAdvance?: boolean; shiftEnd: boolean; etaChange: boolean; leftWork: boolean; homeArrival: boolean; }
 export interface WebPushSubscriptionRecord {
   endpoint: string;
   expirationTime: number | null;
