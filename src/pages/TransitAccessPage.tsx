@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { TransitIcon } from '../shared/components/TransitIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -387,7 +388,7 @@ export function TransitAccessPage() {
   };
 
   if (placeState.status === 'loading') {
-    return <section className="commute-page"><div className="commute-message">{kindLabel} 정보를 불러오는 중</div></section>;
+    return <section className="commute-page"><PageSkeleton /></section>;
   }
   if (placeState.status === 'error') {
     return <section className="commute-page"><div className="commute-message">{kindLabel} 정보를 불러오지 못했습니다.</div></section>;
