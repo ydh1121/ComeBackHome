@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -79,7 +80,7 @@ function PlaceEditContent({ kind }: { kind: PlaceKind }) {
     return () => { active = false; window.clearTimeout(timer); };
   }, [services, query, selected, online, searchNonce]);
 
-  if (placeState.status === 'loading') return <section className="commute-page"><div className="commute-message">장소 정보를 불러오는 중</div></section>;
+  if (placeState.status === 'loading') return <section className="commute-page"><PageSkeleton /></section>;
   if (placeState.status === 'error') return <section className="commute-page"><div className="commute-message">장소 정보를 불러오지 못했습니다.</div></section>;
 
   const current = placeState.place;
