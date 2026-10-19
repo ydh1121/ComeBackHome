@@ -84,4 +84,4 @@ export async function clearLocalCache() {
   invalidateLocalReads();
   await syncShellCache(true);
 }
-export function localCacheSize(): number { return new Blob([JSON.stringify(entries)]).size; }
+export function localCacheSize(): number { return Object.keys(entries).length ? new Blob([JSON.stringify(entries)]).size : 0; }
