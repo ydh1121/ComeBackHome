@@ -162,6 +162,7 @@ async function execute(engine,label,tag){
     contentType:'application/json',body:JSON.stringify({resolved:{}})}));
   await ctx.route('https://dapi.kakao.com/**',r=>{stats.remoteCalls++;return r.abort()});
   const page=await ctx.newPage();
+  await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
   page.setDefaultTimeout(18000);
   page.on('pageerror',error=>problems.push(error.message));
   try{
@@ -312,6 +313,7 @@ async function execute(engine,label,tag){
       await fallback.route('**/api/providers/transit-resolve?*',r=>r.fulfill({status:200,
         contentType:'application/json',body:JSON.stringify({resolved:{}})}));
       const blank=await fallback.newPage();
+  await blank.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
       await blank.goto(origin+url(b)+'/commute/destination/access',{waitUntil:'domcontentloaded'});
       await blank.locator('[data-map-state="error"]').waitFor();
       await clickSelect(blank,stops[1].name);
