@@ -34,6 +34,7 @@ export interface NotificationPayload {
   body: string;
   tag: string;
   path: string;
+  birthday?: { source: string; date: string; days: number };
 }
 
 export interface NotificationJob {
@@ -51,6 +52,7 @@ export interface NotificationJob {
 }
 
 export interface NotificationSettingsRecord {
+  birthdayDays?: number[];
   arrivalAdvanceEnabled?: boolean;
   shiftEndEnabled: boolean;
   etaChangeEnabled: boolean;
@@ -62,7 +64,7 @@ export interface NotificationSettingsRecord {
 
 export interface NotificationSettingsStore {
   get(): Promise<NotificationSettingsRecord>;
-  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled' | 'arrivalAdvanceEnabled'>): Promise<NotificationSettingsRecord>;
+  updateRules(input: Pick<NotificationSettingsRecord, 'shiftEndEnabled' | 'etaChangeEnabled' | 'leftWorkEnabled' | 'homeArrivalEnabled' | 'arrivalAdvanceEnabled' | 'birthdayDays'>): Promise<NotificationSettingsRecord>;
 }
 
 export interface SubscriptionStore {
