@@ -33,7 +33,7 @@ export async function verifyDailyLifeProduct({page,api,origin,engine}){
  await page.locator('.person-select').click();await page.getByRole('button',{name:'사람 선택 닫기',exact:true}).click();
  assert.equal(await page.getByRole('link',{name:'나의 찾기',exact:true}).getAttribute('href'),'findmy://');
  await mkdir('.artifacts/ux-refresh',{recursive:true});
- const shot=async name=>{await page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-daily-'+name+'.png',fullPage:true});};
+ const shot=async name=>{if(name!=='skeleton')await page.locator('.page-reveal[aria-busy="false"]').waitFor();await page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-daily-'+name+'.png',fullPage:true,animations:'disabled'});};
  await shot('today');
  await open('/notifications');
  const original=(await api('/notifications/settings')).body.settings;
@@ -62,8 +62,10 @@ export async function verifyDailyLifeProduct({page,api,origin,engine}){
  assert.equal(await page.locator('[data-date="2026-08-22"] .dnum').getAttribute('class'),'dnum day-saturday');
  for(const viewport of [{width:390,height:844},{width:375,height:812},{width:360,height:740}]){
    await page.setViewportSize(viewport);
-   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'horizontal overflow '+engine);
-   assert.equal(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+2),true,'six-week history fits '+JSON.stringify(viewport));
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   const dimensions=await page.evaluate(()=>({width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,viewport:innerHeight}));
+   assert.equal(dimensions.width<=viewport.width,true,'horizontal overflow '+engine);
+   assert.equal(dimensions.height<=dimensions.viewport+2,true,'six-week history fits '+JSON.stringify({viewport,dimensions}));
  }
  await shot('history-six-weeks');
  // A deliberately delayed local GET makes the real loading boundary observable.
