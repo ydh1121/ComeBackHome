@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useEffect, useState } from 'react';
 import { useApplicationServices, useApplicationVersion } from '../app/ApplicationServicesContext';
 import type { TodayOverviewQueryResult } from '../application/queries/ComeBackHomeQueries';
@@ -40,7 +41,7 @@ export function QaStateMatrixPage() {
     return () => { active = false; };
   }, [services, version]);
 
-  if (state.status === 'loading') return <section className="qa-page"><div className="qa-message">상태 점검 정보를 불러오는 중</div></section>;
+  if (state.status === 'loading') return <section className="qa-page"><PageSkeleton /></section>;
   if (state.status === 'error') return <section className="qa-page"><div className="qa-message">상태 점검 정보를 불러오지 못했습니다.</div></section>;
 
   const origin = state.access ?? [];
