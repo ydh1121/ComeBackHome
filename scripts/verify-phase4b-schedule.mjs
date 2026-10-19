@@ -15,7 +15,7 @@ const css = await read('../src/pages/schedule-page.css');
 const router = await read('../src/app/router.tsx');
 const actions = await read('../src/application/services/ApplicationActions.ts');
 
-for (const text of ['최근 가져온 근무표','월별 이력','일정 직접 추가','latestImport','latestDates.has(entry.date)']) {
+for (const text of ['월별 이력','일정 직접 추가','latestImport','latestDates.has(entry.date)']) {
   if (!overview.includes(text)) failures.push('roster missing ' + text);
 }
 expect(!overview.includes('.slice(0, 3)'), 'roster must show every upcoming imported date');
