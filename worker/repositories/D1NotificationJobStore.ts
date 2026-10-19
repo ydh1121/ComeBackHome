@@ -133,6 +133,13 @@ export class D1NotificationJobStore implements NotificationJobStore {
     ))`;
     const enabledRule = `(notification_jobs.job_type <> 'shift-end' OR EXISTS (
       SELECT 1 FROM notification_settings WHERE id='default' AND shift_end_enabled=1))`;
+    const birthdayValid = `(notification_jobs.job_type <> 'birthday' OR EXISTS (
+      SELECT 1 FROM people p, notification_settings ns, json_each(ns.birthday_days_json) enabled
+      WHERE p.id=notification_jobs.person_id AND ns.id='default'
+        AND p.birthday_json=json_extract(notification_jobs.payload_json,'$.birthday.source')
+        AND enabled.value=json_extract(notification_jobs.payload_json,'$.birthday.days')
+        AND CAST(strftime('%s',?1) AS INTEGER) <= CAST(strftime('%s',notification_jobs.scheduled_for) AS INTEGER)+3600
+    ))`;
     const result = await this.db.prepare(
       `UPDATE notification_jobs
       SET status = 'processing',
@@ -145,13 +152,13 @@ export class D1NotificationJobStore implements NotificationJobStore {
                OR (status = 'processing' AND updated_at <= ?3))
           AND next_attempt_at <= ?1
           AND scheduled_for <= ?1
-          AND ${currentShift} AND ${arrivalValid} AND ${enabledRule}
+          AND ${currentShift} AND ${arrivalValid} AND ${enabledRule} AND ${birthdayValid}
         ORDER BY scheduled_for ASC, id ASC
         LIMIT ?2
       )
       AND (status IN ('pending', 'retry')
            OR (status = 'processing' AND updated_at <= ?3))
-      AND ${currentShift} AND ${arrivalValid} AND ${enabledRule}
+      AND ${currentShift} AND ${arrivalValid} AND ${enabledRule} AND ${birthdayValid}
       RETURNING
         id, dedupe_key, person_id, job_type, scheduled_for, next_attempt_at,
         status, attempts, payload_json, sent_at, last_error`,
