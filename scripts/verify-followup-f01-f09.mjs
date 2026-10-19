@@ -108,8 +108,8 @@ try {
   await began;controller.abort();
   finish({detectedPeople:[],scheduleCandidates:[],structure:{sheet:'fixture',needsReview:false},confidence:1});
   assert.equal((await outcome).name,'AbortError');
-  assert.equal((await imports.getCurrentBatch()).reviewItems.length,0,'cancelled parse cannot publish review');
-  assert.equal((await imports.getCurrentBatch()).files.length,0,'cancel releases parsing records');
+  assert.equal(await imports.getCurrentBatch(),null,'cancelled parse removes its draft and cannot publish review');
+  assert.equal((await imports.listBatches()).filter(batch=>!batch.committed).length,0,'cancel releases all parsing records');
 
   const { planNotificationJobs }=await load('worker/notification-planner.ts');
   const jobs=new Map();const plans=[];
