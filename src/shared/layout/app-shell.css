@@ -180,6 +180,9 @@
 .bottomnav .t-tabs-pill{top:6px;height:56px;border-radius:29px;background:linear-gradient(135deg,#fff,#eaf1ffed);box-shadow:0 3px 12px #16357218,inset 0 1px 1px #fff;border:1px solid #fff;z-index:2;opacity:0}
 .bottomnav .nav-btn{z-index:3;position:relative;height:56px;min-height:56px;padding:5px 2px;border-radius:28px;gap:4px;color:#657184}
 .bottomnav .nav-btn.active{color:#2358e8}
+/* Keep the horizontal entrance motion inside the viewport; vertical content
+   and scrolling remain visible. Otherwise an early frame adds an 8px gutter. */
+.route-reveal{overflow-x:clip}
 .route-reveal .t-page{position:relative;inset:auto;will-change:auto}
 .page-reveal > .t-skel-content{position:relative;inset:auto}
 .page-reveal > .t-skel-skeleton{pointer-events:none}
