@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 // Real product UI + isolated D1. Native links are inspected, never followed.
-export async function verifyDailyLifeProduct({page,api,origin,engine}){
- const open=async path=>{await page.waitForLoadState('networkidle');await page.goto(origin+path,{waitUntil:'networkidle'});};
+export async function verifyDailyLifeProduct({page,api,origin,engine,settleReads}){
+ const open=async path=>{await settleReads();await page.goto(origin+path,{waitUntil:'networkidle'});await settleReads();};
  await page.clock.setFixedTime(new Date('2026-10-19T12:00:00+09:00'));
  await page.setViewportSize({width:390,height:844});
  await open('/people/new');
