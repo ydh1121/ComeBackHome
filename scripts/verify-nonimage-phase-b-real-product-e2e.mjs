@@ -263,6 +263,10 @@ async function browserPass(kind,label,serial){
     // The retired bulk page is a safe bookmark fallback. Monthly history
     // preserves registered work/OFF and never manufactures OFF for missing days.
     await update(page,'/schedule/history');
+    // Native fill can set an inert control before React's loading overlay has
+    // released it. A real user can only edit this after the schedule is ready.
+    await page.locator('[data-page="ScheduleHistoryPage"][data-state="READY"]').waitFor();
+    await page.locator('.page-reveal[aria-busy="false"] .t-skel-content:not([inert])').waitFor();
     await page.getByLabel('조회 월').fill('2100-01');
     await page.locator('.schedule-cell[data-date="2100-01-03"][data-schedule-state="WORK"]').waitFor();
     assert(await page.locator('.schedule-cell[data-date="2100-01-04"]').getAttribute('data-schedule-state')==='UNREGISTERED',label+' missing date is not OFF');
