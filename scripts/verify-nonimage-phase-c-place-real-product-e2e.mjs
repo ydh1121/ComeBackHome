@@ -117,6 +117,7 @@ async function browserPass(engine,label,serial){
     return route.abort();
   });
   const page=await context.newPage();
+  await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
   page.setDefaultTimeout(18000);
   page.on('pageerror',error=>pageErrors.push(error.message));
   try{
@@ -213,6 +214,7 @@ async function browserPass(engine,label,serial){
       await fallback.route('**/api/providers/place-search?*',route=>route.fulfill({status:200,
         contentType:'application/json',body:JSON.stringify({results:fixtures})}));
       const blank=await fallback.newPage();
+  await blank.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
       await blank.goto(origin+edit(employeeB,'destination'),{waitUntil:'domcontentloaded'});
       await blank.locator('[data-page="PlaceEditPage"]').waitFor();
       await blank.getByRole('textbox',{name:'주소 또는 장소 검색'}).fill('합성 목적');
