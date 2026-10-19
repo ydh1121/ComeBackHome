@@ -4,6 +4,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium,webkit} from 'playwright';
+import {verifyDailyLifeProduct} from './verify-daily-life-product.mjs';
 import {verifyScheduleRefresh} from './verify-schedule-refresh-product.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const wrangler=resolve(root,'node_modules/.bin/wrangler');
@@ -54,6 +55,7 @@ const update=async(page,route)=>{
     location.pathname === nextRoute &&
     document.querySelector('[data-route]')?.getAttribute('data-route') === nextRoute,
     route,{timeout:15000});
+  await page.waitForLoadState('networkidle');
 };
 async function enterPerson(page,name,relation){
   await update(page,'/people/new');
@@ -106,6 +108,7 @@ async function browserPass(kind,label,serial){
   const browser=await kind.launch({headless:true});
   const context=await browser.newContext({serviceWorkers:'block'});
   const page=await context.newPage();
+  await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
   page.setDefaultTimeout(18000);
   const failures=[];
   const webkitAbortedLocalReads=[];
@@ -212,8 +215,7 @@ async function browserPass(kind,label,serial){
     await page.getByRole('button',{name:'저장',exact:true}).click();
     await page.waitForURL(/\/schedule$/);
     await page.waitForLoadState('networkidle',{timeout:12000});
-    await page.waitForLoadState('networkidle');
-  await page.reload({waitUntil:'networkidle'});
+    await page.reload({waitUntil:'networkidle'});
     let off=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
     assert(off?.enabled===false&&off.start===''&&off.end===''&&off.breakMinutes===null,
       label+' existing work -> OFF persisted');
@@ -268,7 +270,7 @@ async function browserPass(kind,label,serial){
     assert(await page.getByLabel('조회 월').inputValue()==='2099-12',label+' month crosses year boundary');
     await page.getByRole('button',{name:'다음 달',exact:true}).click();
     await page.waitForLoadState('networkidle');
-  await page.reload({waitUntil:'networkidle'});
+    await page.reload({waitUntil:'networkidle'});
     assert((await api('/people/'+b+'/schedules/2100-01-03')).body.schedule?.breakMinutes===15,label+' history navigation preserves D1');
     // Deliberate SQL middle-batch failure: schedule ID belongs to A.
     const before=(await api('/people/'+b+'/schedules')).body.schedules;
@@ -279,11 +281,15 @@ async function browserPass(kind,label,serial){
     assert(invalid.status>=400,label+' invalid bulk must be rejected');
     const after=(await api('/people/'+b+'/schedules')).body.schedules;
     assert(JSON.stringify(before)===JSON.stringify(after),label+' SQL batch must rollback every row');
+    await page.waitForLoadState('networkidle');
     const refresh=await verifyScheduleRefresh({page,api,origin,engine:label});
+    await page.waitForLoadState('networkidle');
+    const dailyLife=await verifyDailyLifeProduct({page,api,origin,engine:label});
+    await page.waitForLoadState('networkidle');
     assert(failures.length===0,label+' uncaught browser errors: '+failures.join('; '));
     assert(webkitAbortedLocalReads.length<=2,
       label+' excessive abandoned local GETs during test reload: '+webkitAbortedLocalReads.join('; '));
-    return {engine:label,refresh,peopleCreateEdit:true,duplicate409:true,errorUI:true,
+    return {engine:label,refresh,dailyLife,peopleCreateEdit:true,duplicate409:true,errorUI:true,
       error503Retry:true,duplicateSaveClickGuard:true,
       dayCreateEdit:true,breakPreserveUpdateClear:true,workOffRoundtrip:true,
       newOff:true,staffIsolation:true,monthlyHistory:true,d1Persistence:true,sqlRollback:true,
