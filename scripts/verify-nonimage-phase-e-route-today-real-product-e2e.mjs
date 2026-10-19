@@ -119,7 +119,8 @@ async function browserPass(engine,label,suffix){
     status:200,contentType:'application/json',body:'{"arrivals":[]}',
   }));
   await context.route('https://dapi.kakao.com/**',route=>{stats.realCalls++;return route.abort();});
-  const page=await context.newPage();page.setDefaultTimeout(18000);
+  const page=await context.newPage();
+  await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});page.setDefaultTimeout(18000);
   page.on('pageerror',error=>errors.push(error.message));
   try{
     const a=await seed('A-'+suffix);
