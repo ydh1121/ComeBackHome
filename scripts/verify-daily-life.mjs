@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile,readdir} from 'node:fs/promises';
 import {createServer} from 'vite';
+import {verifyShellCache} from './verify-shell-cache.mjs';
 const vite=await createServer({appType:'custom',logLevel:'error',server:{middlewareMode:true}});
 const load=path=>vite.ssrLoadModule('/'+path);
 const memory=new Map();
@@ -87,6 +88,15 @@ try{
  memory.set('cbh:import-batches:v2','draft-sentinel');memory.set('push-sentinel','subscription');
  await cache.clearLocalCache();assert.equal(memory.get('cbh:import-batches:v2'),'draft-sentinel');assert.equal(memory.get('push-sentinel'),'subscription');
  await cache.setLocalCacheEnabled(false);await cache.cachedRead('/api/people','/people',read);await cache.cachedRead('/api/people','/people',read);assert.equal(reads,4,'disabled cache uses network every time');
+ await cache.setLocalCacheEnabled(true);await cache.cachedRead('/api/people','/people',read);
+ const NativeDate=globalThis.Date,expiredTime=new NativeDate().getTime()+60_001;
+ try{
+   globalThis.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[expiredTime]));}};
+   await assert.rejects(()=>cache.cachedRead('/api/people','/people',async()=>{throw Error('offline');}),/offline/,'expired schedule must not silently become an offline result');
+   assert.equal((await cache.cachedRead('/api/people','/people',read)).n,6,'expiry requires a fresh network response');
+ }finally{globalThis.Date=NativeDate;}
+ await cache.clearLocalCache();assert.equal(cache.localCacheSize(),0);
+ await verifyShellCache();
  const {BrowserImportRepository}=await load('src/providers/browser/BrowserImportRepository.ts');
  const {WorkbookImportFileSelectionAction,getPrivateImportImageUrl,releasePrivateImportImage}=await load('src/application/services/WorkbookImportFileSelectionAction.ts');
  memory.delete('cbh:import-batches:v2');const imports=new BrowserImportRepository();let writes=0,active=0,maxActive=0;
