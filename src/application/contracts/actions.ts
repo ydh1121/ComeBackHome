@@ -37,7 +37,7 @@ export interface PersonSelectionActions {
   getSelectedPersonId(): EntityId | null;
   select(personId: EntityId): void;
 }
-export interface PersonInput { name: string; relation: string; }
+export type PersonInput = Omit<Person,'id'>;
 export interface PersonActions {
   create(input: PersonInput): Promise<Person>;
   update(personId: EntityId, input: PersonInput): Promise<Person>;
@@ -58,6 +58,7 @@ export interface ScheduleBulkRule {
   expectedPersonId?: EntityId;
 }
 export interface ScheduleActions {
+  removeRange(from: ISODate, to: ISODate, expectedCount: number, expectedPersonId: EntityId): Promise<number>;
   saveDay(date: ISODate, input: ScheduleDayInput): Promise<void>;
   applyBulk(rule: ScheduleBulkRule): Promise<void>;
 }
