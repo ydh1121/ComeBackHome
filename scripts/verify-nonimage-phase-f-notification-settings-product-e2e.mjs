@@ -51,6 +51,7 @@ async function browserPass(type,name){
   const browser=await type.launch({headless:true});
   const context=await browser.newContext({serviceWorkers:'block'});
   const page=await context.newPage();
+  await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
   page.setDefaultTimeout(18000);
   const pageErrors=[];
   page.on('pageerror',e=>pageErrors.push(e.message));
