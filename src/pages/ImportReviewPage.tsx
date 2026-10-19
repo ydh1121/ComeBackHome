@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useApplicationServices } from '../app/ApplicationServicesContext';
@@ -29,7 +30,7 @@ export function ImportReviewPage() {
     finally { locked.current = false; setBusy(false); setSaving(false); }
   };
 
-  if (workflow.status === 'loading') return <section className="import-page"><div className="import-message">일정을 불러오는 중</div></section>;
+  if (workflow.status === 'loading') return <section className="import-page"><PageSkeleton /></section>;
   if (workflow.status === 'error' || !workflow.batch) return <section className="import-page"><div className="import-message">가져오기 정보를 찾지 못했습니다.</div></section>;
   const batch = workflow.batch;
   const weekly = batch.structure.weeklyReview;
@@ -57,12 +58,14 @@ export function ImportReviewPage() {
       await services.actions.importReview.setResolution(batch.id, item.id, choice);
     }
     await services.actions.commitImportReview.execute(batch.id);
-    navigate('/schedule');
+    const next = (await services.queries.getImportQueue()).find(item => !item.committed && item.id !== batch.id && item.files.some(file => file.status === 'READY'));
+    navigate(next ? '/import/' + encodeURIComponent(next.id) + '/people' : '/schedule');
   });
 
   return <section className="import-page compact-review" data-route={'/import/' + batchId + '/review'} data-page="ImportReviewPage" data-state="REVIEW_REQUIRED CONFLICT_RESOLUTION">
     <BackButton fallbackTo={'/import/' + encodeURIComponent(batch.id) + '/people'} />
     <h1 className="page-title">일정 확인</h1>
+    {workflow.queue.length > 1 ? <p className="import-queue-progress">근무표 {workflow.queue.findIndex(item => item.id === batch.id) + 1} / {workflow.queue.length} · {batch.files[0]?.name}</p> : null}
     {weekly ? <section className="import-review-dates" data-state={weekly.confirmed ? 'WEEK_DATES_CONFIRMED' : 'WEEK_DATES_REVIEW_REQUIRED'}>
       <div className="review-week-heading"><strong>{weekStart && endDate ? formatDateLabel(weekStart) + ' – ' + formatDateLabel(endDate) : '주간 날짜를 입력해 주세요'}</strong><span>{weekly.confirmed ? '확인 완료' : '날짜 확인'}</span></div>
       <details className="review-date-edit"><summary>시작일 수정</summary><label>월요일 시작일<input type="date" aria-label="주간 시작일" value={weekStart} disabled={busy} onChange={event => void run(() => services.actions.importReview.setWeeklyStartDate(batch.id,event.target.value))} /></label></details>
