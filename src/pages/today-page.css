@@ -63,3 +63,5 @@
 .today-page .today-next-shift b,.today-page .today-next-off b{font-size:clamp(24px,5.8vw,25px)}
 .today-birthday{display:flex;align-items:center;gap:5px;font-size:12px;color:#667085;white-space:nowrap}.today-birthday b{font-size:11px;color:#3567d8;margin-left:2px}
 .today-page .action-card{text-decoration:none;cursor:pointer}.today-app-notice{font-size:12px;line-height:1.5;color:#667085}
+
+.today-page.person-picker-portal{position:fixed;inset:0;z-index:80;pointer-events:none;padding:0}.person-picker-portal .person-picker-layer{pointer-events:auto}.person-picker-portal .person-picker-sheet{max-width:430px;margin:0 auto;max-height:85dvh;overflow:auto}
