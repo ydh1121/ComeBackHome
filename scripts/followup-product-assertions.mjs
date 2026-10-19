@@ -15,8 +15,15 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   assert.ok(await page.locator('[data-transit-mode="WALKING"]').count());
   assert.equal(await page.getByRole('region',{name:'도착지',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(164, 157, 135)','official RGB Line 9 color');
   assert.equal(await page.getByRole('region',{name:'주로 오는 길',exact:true}).locator('[data-transit-mode="SUBWAY"] svg').evaluate(el=>getComputedStyle(el).color),'rgb(102, 112, 133)','unknown line fallback');
-  const width = await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));
-  assert.ok(width.scroll<=width.viewport,'mobile UI overflow');
+  const width = await page.evaluate(async()=>{
+    let scroll=document.documentElement.scrollWidth;
+    for(let frame=0;frame<24;frame++){
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      scroll=Math.max(scroll,document.documentElement.scrollWidth);
+    }
+    return {scroll,viewport:innerWidth};
+  });
+  assert.ok(width.scroll<=width.viewport,'mobile UI overflow during route reveal '+JSON.stringify(width));
   const before=(await api('/people/'+id+'/commute?kind=origin')).body.preferredRouteCandidateId;
   assert.ok(before);
   await api('/people/'+id+'/commute/preferred-route','PUT',{routeCandidateId:'nonexistent-synthetic-route'});
