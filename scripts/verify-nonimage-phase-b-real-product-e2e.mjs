@@ -40,9 +40,37 @@ async function ready(){
 }
 // Allow route-owned same-origin reads to finish before destroying the page.
 // WebKit otherwise reports abandoned in-flight fetches as access-control errors.
+// Playwright's networkidle load state is sticky after SPA navigation, so it
+// cannot prove that a later schedule/latest-import request has completed.
+const readBarriers=new WeakMap();
+function observeApiReads(page){
+  const pending=new Set();let lastActivity=Date.now();
+  page.on('request',request=>{
+    if(request.method()==='GET'&&request.url().startsWith(origin+'/api/')){
+      pending.add(request);lastActivity=Date.now();
+    }
+  });
+  const finish=request=>{if(pending.delete(request))lastActivity=Date.now();};
+  page.on('requestfinished',finish);page.on('requestfailed',finish);
+  return async()=>{
+    const deadline=Date.now()+18000;
+    // Flush React's loading effects before deciding that there are no reads.
+    if(page.url().startsWith(origin)){
+      await page.waitForFunction(()=>!document.querySelector('.page-reveal[aria-busy="true"]'));
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    }
+    while(pending.size||Date.now()-lastActivity<100){
+      if(Date.now()>deadline)throw Error('Outstanding local API reads before navigation: '+pending.size);
+      await new Promise(resolve=>setTimeout(resolve,20));
+    }
+  };
+}
+const settleReads=page=>readBarriers.get(page)();
 const update=async(page,route)=>{
+  await settleReads(page);
   if (!page.url().startsWith(origin)) {
     await page.goto(origin+route,{waitUntil:'networkidle'});
+    await settleReads(page);
     return;
   }
   // Navigate within the real React Router document; force-reloading every
@@ -56,6 +84,7 @@ const update=async(page,route)=>{
     document.querySelector('[data-route]')?.getAttribute('data-route') === nextRoute,
     route,{timeout:15000});
   await page.waitForLoadState('networkidle');
+  await settleReads(page);
 };
 async function enterPerson(page,name,relation){
   await update(page,'/people/new');
@@ -108,6 +137,7 @@ async function browserPass(kind,label,serial){
   const browser=await kind.launch({headless:true});
   const context=await browser.newContext({serviceWorkers:'block'});
   const page=await context.newPage();
+  readBarriers.set(page,observeApiReads(page));
   await page.addInitScript(()=>{if(localStorage.getItem('cbh.cache-enabled.v1')===null)localStorage.setItem('cbh.cache-enabled.v1','false');});
   page.setDefaultTimeout(18000);
   const failures=[];
@@ -215,7 +245,7 @@ async function browserPass(kind,label,serial){
     await page.getByRole('button',{name:'저장',exact:true}).click();
     await page.waitForURL(/\/schedule$/);
     await page.waitForLoadState('networkidle',{timeout:12000});
-    await page.reload({waitUntil:'networkidle'});
+    await settleReads(page);await page.reload({waitUntil:'networkidle'});await settleReads(page);
     let off=(await api('/people/'+a+'/schedules/'+day)).body.schedule;
     assert(off?.enabled===false&&off.start===''&&off.end===''&&off.breakMinutes===null,
       label+' existing work -> OFF persisted');
@@ -274,7 +304,7 @@ async function browserPass(kind,label,serial){
     assert(await page.getByLabel('조회 월').inputValue()==='2099-12',label+' month crosses year boundary');
     await page.getByRole('button',{name:'다음 달',exact:true}).click();
     await page.waitForLoadState('networkidle');
-    await page.reload({waitUntil:'networkidle'});
+    await settleReads(page);await page.reload({waitUntil:'networkidle'});await settleReads(page);
     assert((await api('/people/'+b+'/schedules/2100-01-03')).body.schedule?.breakMinutes===15,label+' history navigation preserves D1');
     // Deliberate SQL middle-batch failure: schedule ID belongs to A.
     const before=(await api('/people/'+b+'/schedules')).body.schedules;
@@ -286,10 +316,11 @@ async function browserPass(kind,label,serial){
     const after=(await api('/people/'+b+'/schedules')).body.schedules;
     assert(JSON.stringify(before)===JSON.stringify(after),label+' SQL batch must rollback every row');
     await page.waitForLoadState('networkidle');
-    const refresh=await verifyScheduleRefresh({page,api,origin,engine:label});
+    const refresh=await verifyScheduleRefresh({page,api,origin,engine:label,settleReads:()=>settleReads(page)});
     await page.waitForLoadState('networkidle');
-    const dailyLife=await verifyDailyLifeProduct({page,api,origin,engine:label});
+    const dailyLife=await verifyDailyLifeProduct({page,api,origin,engine:label,settleReads:()=>settleReads(page)});
     await page.waitForLoadState('networkidle');
+    await settleReads(page);
     assert(failures.length===0,label+' uncaught browser errors: '+failures.join('; '));
     assert(webkitAbortedLocalReads.length<=2,
       label+' excessive abandoned local GETs during test reload: '+webkitAbortedLocalReads.join('; '));
