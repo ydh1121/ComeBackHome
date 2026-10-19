@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+// Real product UI + isolated D1. Native links are inspected, never followed.
+export async function verifyDailyLifeProduct({page,api,origin,engine}){
+ const open=async path=>{await page.waitForLoadState('networkidle');await page.goto(origin+path,{waitUntil:'networkidle'});};
+ await page.clock.setFixedTime(new Date('2026-10-19T12:00:00+09:00'));
+ await page.setViewportSize({width:390,height:844});
+ await open('/people/new');
+ await page.locator('.person-form input').nth(0).fill('생일화면'+engine);
+ await page.locator('input[type="tel"]').fill('010-0000-0000');
+ await page.getByRole('button',{name:'생일 추가',exact:true}).click();
+ await page.getByLabel('생일 월',{exact:true}).selectOption('10');await page.getByLabel('생일 일',{exact:true}).selectOption('20');
+ await page.getByRole('button',{name:'저장',exact:true}).click();await page.waitForURL(/\/people\/[^/]+$/);
+ const id=new URL(page.url()).pathname.split('/').at(-1);
+ let person=(await api('/people/'+id)).body.person;
+ assert.equal(person.phone,'01000000000');assert.deepEqual(person.birthday,{calendar:'solar',month:10,day:20,leapMonth:false});
+ await page.getByRole('link',{name:'01000000000',exact:true}).waitFor();
+ await open('/people/'+id+'/edit');await page.getByLabel('생일 달력').selectOption('lunar');
+ await page.getByRole('checkbox',{name:'윤달',exact:true}).check();await page.getByRole('button',{name:'저장',exact:true}).click();await page.waitForURL(/\/people\/[^/]+$/);
+ person=(await api('/people/'+id)).body.person;assert.equal(person.birthday.calendar,'lunar');assert.equal(person.birthday.leapMonth,true);
+ await open('/people/'+id+'/edit');await page.getByLabel('생일 달력').selectOption('solar');await page.getByRole('button',{name:'저장',exact:true}).click();await page.waitForURL(/\/people\/[^/]+$/);
+ const entries=['2026-10-01','2026-10-18','2026-10-19','2026-10-20','2026-10-21'].map(date=>({id:crypto.randomUUID(),date,enabled:date!=='2026-10-20',start:'09:00',end:'18:00',breakMinutes:30}));
+ assert.equal((await api('/people/'+id+'/schedules','PUT',{schedules:entries})).status,200);
+ await page.evaluate(id=>localStorage.setItem('cbh:selected-person-id',id),id);
+ await open('/');await page.locator('.today-birthday').waitFor();assert.ok((await page.locator('.today-birthday').innerText()).includes('D-1'));
+ assert.ok((await page.locator('.today-next-off').innerText()).includes('10/20')||(await page.locator('.today-next-off').innerText()).includes('내일'));
+ assert.equal(await page.getByRole('link',{name:'전화 걸기',exact:true}).getAttribute('href'),'tel:01000000000');
+ assert.equal(await page.locator('.departure-estimate').count(),0);
+ // iPhone UA builds the requested app link; no native action is executed.
+ await page.evaluate(()=>Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',configurable:true}));
+ await page.locator('.person-select').click();await page.getByRole('button',{name:'사람 선택 닫기',exact:true}).click();
+ assert.equal(await page.getByRole('link',{name:'나의 찾기',exact:true}).getAttribute('href'),'findmy://');
+ await mkdir('.artifacts/ux-refresh',{recursive:true});
+ const shot=async name=>{await page.screenshot({path:'.artifacts/ux-refresh/'+engine+'-daily-'+name+'.png',fullPage:true});};
+ await shot('today');
+ await open('/notifications');
+ const original=(await api('/notifications/settings')).body.settings;
+ const birthday=page.getByRole('region',{name:'생일 알림',exact:true});
+ assert.equal(await birthday.getByRole('button').count(),4);
+ for(const name of ['일주일 전','3일 전','하루 전','당일']){
+   const button=birthday.getByRole('button',{name,exact:true});
+   await button.click();await page.waitForFunction(label=>[...document.querySelectorAll('.birthday-reminders button')].find(b=>b.textContent===label)?.getAttribute('aria-pressed')==='true',name);
+ }
+ assert.deepEqual((await api('/notifications/settings')).body.settings.birthdayDays,[7,3,1,0]);
+ await shot('notifications');
+ await api('/notifications/settings','PUT',{...original,birthdayDays:[]});
+ await open('/schedule/history');await page.getByRole('button',{name:'일정 삭제',exact:true}).click();
+ await page.getByRole('dialog').waitFor();assert.ok((await page.getByRole('dialog').innerText()).includes('2일'));
+ await page.getByRole('button',{name:'삭제할 일정 확인',exact:true}).click();
+ assert.equal((await api('/people/'+id+'/schedules')).body.schedules.length,5,'preview never deletes');
+ await page.getByRole('button',{name:'취소',exact:true}).click();assert.equal((await api('/people/'+id+'/schedules')).body.schedules.length,5);
+ await page.getByRole('button',{name:'일정 삭제',exact:true}).click();await page.getByRole('button',{name:'삭제할 일정 확인',exact:true}).click();await page.getByRole('button',{name:'삭제',exact:true}).click();
+ await page.getByRole('dialog').waitFor({state:'detached'});assert.equal((await api('/people/'+id+'/schedules')).body.schedules.length,3);
+ await page.getByRole('button',{name:'일정 삭제',exact:true}).click();await page.getByRole('button',{name:'기간 선택',exact:true}).click();
+ await page.getByLabel('시작일',{exact:true}).fill('2026-10-20');await page.getByLabel('종료일',{exact:true}).fill('2026-10-21');
+ await page.getByRole('button',{name:'삭제할 일정 확인',exact:true}).click();await page.getByRole('button',{name:'삭제',exact:true}).click();await page.getByRole('dialog').waitFor({state:'detached'});
+ assert.deepEqual((await api('/people/'+id+'/schedules')).body.schedules.map(e=>e.date),['2026-10-19']);
+ await page.getByLabel('조회 월').fill('2026-08');
+ assert.equal(await page.locator('[data-date="2026-08-17"] .dnum').getAttribute('class'),'dnum day-holiday');
+ assert.equal(await page.locator('[data-date="2026-08-22"] .dnum').getAttribute('class'),'dnum day-saturday');
+ for(const viewport of [{width:390,height:844},{width:375,height:812},{width:360,height:740}]){
+   await page.setViewportSize(viewport);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'horizontal overflow '+engine);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+2),true,'six-week history fits '+JSON.stringify(viewport));
+ }
+ await shot('history-six-weeks');
+ // A deliberately delayed local GET makes the real loading boundary observable.
+ await page.route('**/api/people',async route=>{await new Promise(resolve=>setTimeout(resolve,700));await route.continue();});
+ await page.getByRole('link',{name:'사람',exact:true}).click();
+ await page.locator('.page-reveal[aria-busy="true"] .page-skeleton').waitFor({state:'visible'});
+ assert.equal(await page.locator('.page-reveal[aria-busy="true"] .t-skel-content').getAttribute('inert'),'');await shot('skeleton');
+ await page.locator('[data-page="PeoplePage"][data-state="LIST"]').waitFor();
+ await page.waitForFunction(()=>document.querySelector('.page-reveal')?.getAttribute('aria-busy')==='false');await page.unroute('**/api/people');
+ await page.getByRole('link',{name:'일정',exact:true}).click();await page.locator('[data-page="SchedulePage"] .roster-heading').waitFor();
+ await page.waitForTimeout(650);
+ const chip=await page.locator('.bottomnav').evaluate(nav=>{const active=nav.querySelector('.active').getBoundingClientRect(),pill=nav.querySelector('.t-tabs-pill').getBoundingClientRect();return{diff:Math.abs(active.x-pill.x),width:Math.abs(active.width-pill.width),z:getComputedStyle(nav.querySelector('.t-tabs-pill')).zIndex,bottom:nav.getBoundingClientRect().bottom};});
+ assert.ok(chip.diff<1&&chip.width<1,'active floating chip aligns');assert.ok(Number(chip.z)>0);assert.ok(chip.bottom<740);
+ await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('link',{name:'사람',exact:true}).click();
+ assert.equal(await page.locator('.t-page').evaluate(el=>getComputedStyle(el).transitionDuration),'0s');await page.emulateMedia({reducedMotion:'no-preference'});
+ await open('/settings');await page.getByRole('button',{name:'로컬 캐시',exact:true}).click();
+ const toggle=page.getByRole('button',{name:'이 기기에 임시 보관',exact:false});assert.equal(await toggle.getAttribute('aria-pressed'),'false');
+ await toggle.click();await page.getByRole('status').filter({hasText:'로컬 캐시를 켰습니다.'}).waitFor();
+ let peopleGets=0;const track=request=>{if(request.method()==='GET'&&new URL(request.url()).pathname==='/api/people')peopleGets++;};page.on('request',track);
+ await page.getByRole('link',{name:'사람',exact:true}).click();await page.locator('[data-state="LIST"]').waitFor();
+ await page.getByRole('link',{name:'일정',exact:true}).click();await page.locator('[data-page="SchedulePage"] .roster-heading').waitFor();
+ await page.getByRole('link',{name:'사람',exact:true}).click();await page.locator('[data-state="LIST"]').waitFor();
+ assert.equal(peopleGets,1,'same read is cached across routes');
+ await page.getByRole('button',{name:'생일화면'+engine,exact:false}).click();await page.locator('[data-page="PersonDetailPage"][data-state="DETAIL"]').waitFor();
+ await open('/people/'+id+'/edit');await page.locator('input[type="tel"]').fill('010-1111-2222');await page.getByRole('button',{name:'저장',exact:true}).click();await page.waitForURL(/\/people\/[^/]+$/);await page.getByRole('link',{name:'01011112222',exact:true}).waitFor();
+ assert.equal((await api('/people/'+id)).body.person.phone,'01011112222','mutation refreshes cached data');
+ await open('/settings/cache');await page.evaluate(()=>{localStorage.setItem('cbh:test-preserve','sentinel');});
+ await page.getByRole('button',{name:'캐시 비우기',exact:true}).click();await page.getByRole('status').filter({hasText:'비웠습니다'}).waitFor();
+ assert.equal(await page.evaluate(()=>localStorage.getItem('cbh:test-preserve')),'sentinel');assert.equal((await api('/people/'+id+'/schedules')).body.schedules.length,1);
+ await toggle.click();await page.getByRole('status').filter({hasText:'끄고'}).waitFor();
+ page.off('request',track);await shot('cache');
+ return {profileBirthdayPhone:true,lunarRoundtrip:true,todayBirthdayOffContact:true,birthdayFourRules:true,deleteCancelConfirmRange:true,holidays:true,sixWeekFits:true,skeletonReveal:true,glassChip:true,reducedMotion:true,cacheHitsMutationClearOff:true,nativeCallsExecuted:0};
+}
