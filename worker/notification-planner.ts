@@ -1,4 +1,5 @@
 import { activeWorkSchedule, shiftTimes } from '../src/domain/product-time';
+import { nextBirthday } from '../src/domain/birthday';
 import type {
   NotificationEtaSource,
   NotificationJobStore,
@@ -31,6 +32,7 @@ export interface NotificationPlanResult {
   etaBaselinesInitialized: number;
   etaChangeEnqueued: number;
   skippedNoWork: number;
+  birthdayEnqueued: number;
 }
 
 const ETA_CHANGE_THRESHOLD_MINUTES = 10;
@@ -145,6 +147,7 @@ export async function planNotificationJobs(
     etaBaselinesInitialized: 0,
     etaChangeEnqueued: 0,
     skippedNoWork: 0,
+    birthdayEnqueued: 0,
   };
 
   if (settings.timezone !== PRODUCT_TIMEZONE) {
@@ -157,6 +160,25 @@ export async function planNotificationJobs(
 
   for (const person of people) {
     result.peopleChecked += 1;
+    const birthday = nextBirthday(person.birthday,currentDate);
+    if (person.birthday && birthday) {
+      for (const days of settings.birthdayDays ?? []) {
+        const when = Date.parse(birthday.date+'T09:00:00+09:00') - days*86400000;
+        // Morning reminders expire after one hour; enabling a rule at night
+        // must not produce a burst of overdue birthday notifications.
+        if (when < scheduledTime - 3600000) continue;
+        const scheduledFor = new Date(when).toISOString();
+        await dependencies.jobs.enqueueOnce({
+          id:crypto.randomUUID(),dedupeKey:`birthday:${person.id}:${birthday.date}:${days}`,
+          personId:person.id,type:'birthday',scheduledFor,nextAttemptAt:scheduledFor,
+          payload:{title:days ? `${person.name} 생일 ${days}일 전` : `${person.name}의 생일이에요 🎂`,
+            body:`${Number(birthday.date.slice(5,7))}월 ${Number(birthday.date.slice(8,10))}일 생일을 챙겨 주세요.`,
+            tag:`cbh:birthday:${person.id}:${birthday.date}:${days}`,path:'/',
+            birthday:{source:JSON.stringify(person.birthday),date:birthday.date,days}},
+        });
+        result.birthdayEnqueued++;
+      }
+    }
     const schedules = await dependencies.schedules.list(person.id);
     const today = activeWorkSchedule(schedules, now);
 
