@@ -10,7 +10,8 @@ export async function verifyDailyLifeProduct({page,api,origin,engine}){
  await page.locator('input[type="tel"]').fill('010-0000-0000');
  await page.getByRole('button',{name:'생일 추가',exact:true}).click();
  await page.getByLabel('생일 월',{exact:true}).selectOption('10');await page.getByLabel('생일 일',{exact:true}).selectOption('20');
- await page.getByRole('button',{name:'저장',exact:true}).click();await page.waitForURL(/\/people\/[^/]+$/);
+ await page.getByRole('button',{name:'저장',exact:true}).click();await page.waitForURL(url=>/^\/people\/[^/]+$/.test(url.pathname)&&url.pathname!=='/people/new');
+ await page.locator('[data-page="PersonDetailPage"][data-state="DETAIL"]').waitFor();
  const id=new URL(page.url()).pathname.split('/').at(-1);
  let person=(await api('/people/'+id)).body.person;
  assert.equal(person.phone,'01000000000');assert.deepEqual(person.birthday,{calendar:'solar',month:10,day:20,leapMonth:false});
@@ -24,6 +25,7 @@ export async function verifyDailyLifeProduct({page,api,origin,engine}){
  await page.evaluate(id=>localStorage.setItem('cbh:selected-person-id',id),id);
  await open('/');await page.locator('.today-birthday').waitFor();assert.ok((await page.locator('.today-birthday').innerText()).includes('D-1'));
  assert.ok((await page.locator('.today-next-off').innerText()).includes('10/20')||(await page.locator('.today-next-off').innerText()).includes('내일'));
+ assert.ok(!/\d{2}:\d{2}/.test(await page.locator('.today-next-off').innerText()),'OFF displays a date, never a midnight work time');
  assert.equal(await page.getByRole('link',{name:'전화 걸기',exact:true}).getAttribute('href'),'tel:01000000000');
  assert.equal(await page.locator('.departure-estimate').count(),0);
  // iPhone UA builds the requested app link; no native action is executed.
