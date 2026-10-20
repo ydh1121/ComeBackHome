@@ -62,6 +62,24 @@ for (const [name, type] of [['Chromium', chromium], ['WebKit', webkit]]) {
     await open('/settings');
     assert.equal(await page.getByRole('button', { name: '퇴근 · 귀가 기록 연결', exact: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'iPhone 시계 알람', exact: true }).count(), 0);
+    for (const [label, mode] of [['다크','dark'], ['화이트','light']]) {
+      await open('/settings');
+      await page.getByRole('radio', {name:label,exact:true}).check();
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), mode);
+      for (const path of ['/','/schedule','/import']) {
+        await open(path);
+        await page.locator('.page-reveal[aria-busy="false"]').waitFor();
+        assert.equal(await page.locator('.page-skeleton').count(),0);
+        assert.equal(await page.locator('.t-skel-content').evaluate(el => getComputedStyle(el).filter),'none');
+      }
+    }
+    await page.setViewportSize({width:1440,height:960});
+    await open('/schedule');
+    const nav = await page.locator('.bottomnav').evaluate(el => { const r=el.getBoundingClientRect(); const s=document.querySelector('.app-shell').getBoundingClientRect(); return {center:r.x+r.width/2,shellCenter:s.x+s.width/2,bottom:r.bottom}; });
+    assert.ok(Math.abs(nav.center-nav.shellCenter)<1 && Math.abs(nav.bottom-928)<1,'desktop floating navigation');
+    await page.setViewportSize({width:390,height:844});
+    await open('/settings');
+    await page.getByRole('radio',{name:'시스템',exact:true}).check();
     await open('/settings/cache');
     await page.locator('[data-page="CacheSettingsPage"][data-state="READY"]').waitFor();
     assert.equal(await page.locator('button.rule[aria-pressed]').count(), 1);
@@ -71,7 +89,7 @@ for (const [name, type] of [['Chromium', chromium], ['WebKit', webkit]]) {
     assert.deepEqual(writes, [], 'No application mutations may be attempted');
     assert.deepEqual(errors, [], 'No JavaScript errors');
     assert.deepEqual(failedReads, [], 'No failed production API reads');
-    results.push({ browser: name, today: true, schedule: true, monthlyHistory: true, people: true, twoCommuteRules: true, fourBirthdayRules: true, localCacheSettings: true, multipleImageInput: true, xlsxInput: true, mobileFits: true, appWrites: 0, nativeActions: 0, testNotificationsSent: 0, providerRequestsBlocked, externalProviderAcceptance: 'NOT_TESTED', privateDataExported: false });
+    results.push({ browser: name, today: true, schedule: true, monthlyHistory: true, people: true, twoCommuteRules: true, fourBirthdayRules: true, localCacheSettings: true, multipleImageInput: true, xlsxInput: true, mobileFits: true, systemLightDark: true, noStaleSkeletonOrBlur: true, desktopNav: true, appWrites: 0, nativeActions: 0, testNotificationsSent: 0, providerRequestsBlocked, externalProviderAcceptance: 'NOT_TESTED', privateDataExported: false });
     await context.close();
   } finally { await browser.close(); }
 }
