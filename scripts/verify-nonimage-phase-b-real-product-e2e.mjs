@@ -4,6 +4,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium,webkit} from 'playwright';
+import {verifyVisualTheme} from './verify-visual-theme-product.mjs';
 import {verifyDailyLifeProduct} from './verify-daily-life-product.mjs';
 import {verifyScheduleRefresh} from './verify-schedule-refresh-product.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -321,10 +322,12 @@ async function browserPass(kind,label,serial){
     const dailyLife=await verifyDailyLifeProduct({page,api,origin,engine:label,settleReads:()=>settleReads(page)});
     await page.waitForLoadState('networkidle');
     await settleReads(page);
+    const visualTheme=await verifyVisualTheme({page,api,origin,engine:label,settleReads:()=>settleReads(page)});
+    await settleReads(page);
     assert(failures.length===0,label+' uncaught browser errors: '+failures.join('; '));
     assert(webkitAbortedLocalReads.length<=2,
       label+' excessive abandoned local GETs during test reload: '+webkitAbortedLocalReads.join('; '));
-    return {engine:label,refresh,dailyLife,peopleCreateEdit:true,duplicate409:true,errorUI:true,
+    return {engine:label,refresh,dailyLife,visualTheme,peopleCreateEdit:true,duplicate409:true,errorUI:true,
       error503Retry:true,duplicateSaveClickGuard:true,
       dayCreateEdit:true,breakPreserveUpdateClear:true,workOffRoundtrip:true,
       newOff:true,staffIsolation:true,monthlyHistory:true,d1Persistence:true,sqlRollback:true,
