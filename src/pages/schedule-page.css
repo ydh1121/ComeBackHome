@@ -119,4 +119,5 @@
    Keep all seven roster rows and the 44px add control inside the safe viewport. */
 @media (max-width:600px) and (orientation:portrait) {
   .app-shell[data-ios-standalone="true"] .roster-footer { padding-top:8px; }
+  .app-shell[data-ios-standalone="true"] .roster-page { padding-bottom:6px; }
 }
