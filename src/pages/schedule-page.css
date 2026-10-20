@@ -114,3 +114,9 @@
 .schedule-delete-dialog { background:var(--cbh-paper); }
 
 .roster-page .roster-row { min-height:clamp(54px,calc((100dvh - 318px - var(--cbh-safe-top) - var(--cbh-safe-bottom))/var(--roster-rows,7)),76px); }
+
+/* Reclaim a little footer whitespace when portrait iOS uses top clearance.
+   Keep all seven roster rows and the 44px add control inside the safe viewport. */
+@media (max-width:600px) and (orientation:portrait) {
+  .app-shell[data-ios-standalone="true"] .roster-footer { padding-top:8px; }
+}
