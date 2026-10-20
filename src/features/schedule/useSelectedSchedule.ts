@@ -15,8 +15,9 @@ export function useSelectedSchedule(): ScheduleLoadState {
 
   useEffect(() => {
     let active = true;
-    setState({ status: 'loading' });
     const personId = services.actions.personSelection.getSelectedPersonId();
+    // Same-person refreshes keep usable content; selection changes stay fail-closed.
+    setState(previous => previous.status === 'ready' && previous.personId === personId ? previous : { status: 'loading' });
     if (!personId) {
       setState({ status: 'ready', personId: null, entries: [], latestImport: null });
       return () => { active = false; };
