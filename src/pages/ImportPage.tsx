@@ -71,11 +71,12 @@ export function ImportPage() {
   };
 
   return (
-    <section className="import-page" data-route="/import" data-page="ImportPage" data-state="FILES_SELECTED">
+    <section className={"import-page import-upload-page"+(files.length ? " has-files" : "")} data-route="/import" data-page="ImportPage" data-state="FILES_SELECTED">
       <h1 className="page-title">가져오기</h1>
 
+      <div className="import-upload-options">
       <button type="button" className="upload" onClick={() => imageInputRef.current?.click()}>
-        <Icon name="upload" />
+        <span className="upload-art"><Icon name="image" /><i><Icon name="plus" /></i></span>
         <span><b>근무표 이미지 추가</b><span className="meta">사진 · 스크린샷 여러 장 선택 · 최대 10장</span></span>
       </button>
       <input
@@ -88,7 +89,7 @@ export function ImportPage() {
       />
 
       <button type="button" className="import-workbook-button" onClick={() => workbookInputRef.current?.click()}>
-        엑셀 파일 가져오기
+        <Icon name="file" />엑셀 파일 가져오기<Icon name="chevron-right" />
       </button>
       <input
         ref={workbookInputRef}
@@ -98,6 +99,8 @@ export function ImportPage() {
         multiple
         onChange={(event) => onFiles(event.target.files)}
       />
+
+      </div>
 
       {importError ? <div className="import-error" role="alert">{importError}</div> : null}
       {parsing ? <button type="button" className="import-workbook-button" onClick={() => { request.current?.abort(); request.current = null; setParsing(false); setImportError('가져오기를 취소했습니다. 파일을 다시 선택해 주세요.'); }}>가져오기 취소</button> : null}
