@@ -115,7 +115,7 @@
 
 .roster-page .roster-row { min-height:clamp(54px,calc((100dvh - 318px - var(--cbh-safe-top) - var(--cbh-safe-bottom))/var(--roster-rows,7)),76px); }
 
-/* Reclaim a little footer whitespace when portrait iOS uses top clearance.
+/* Account for the portrait iOS status-bar and home-indicator safe insets.
    Keep all seven roster rows and the 44px add control inside the safe viewport. */
 @media (max-width:600px) and (orientation:portrait) {
   /* Explicit line boxes keep Korean fallback fonts from enlarging work rows

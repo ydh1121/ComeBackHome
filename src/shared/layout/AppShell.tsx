@@ -29,5 +29,5 @@ export function AppShell() {
   useRouteScrollRestoration();
   const showTopUtility = location.pathname === '/';
 
-  return <div className="app-shell" data-ui="app-shell" data-version="daily-life-v1" data-ios-standalone={iosStandalone}><div className="app-shell__app">{showTopUtility ? <TopUtility /> : null}<main className="app-shell__main"><RouteReveal key={location.pathname}><Outlet /></RouteReveal></main><BottomNavigation /></div></div>;
+  return <div className="app-shell" data-ui="app-shell" data-version="daily-life-v1" data-ios-standalone={iosStandalone}>{iosStandalone ? <div className="app-shell__status-background" aria-hidden="true" /> : null}<div className="app-shell__app">{showTopUtility ? <TopUtility /> : null}<main className="app-shell__main"><RouteReveal key={location.pathname}><Outlet /></RouteReveal></main><BottomNavigation /></div></div>;
 }
