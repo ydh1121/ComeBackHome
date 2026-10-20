@@ -118,6 +118,9 @@
 /* Reclaim a little footer whitespace when portrait iOS uses top clearance.
    Keep all seven roster rows and the 44px add control inside the safe viewport. */
 @media (max-width:600px) and (orientation:portrait) {
+  /* Explicit line boxes keep Korean fallback fonts from enlarging work rows
+     beyond the viewport-based minimum on WebKit. Touch targets stay >=54px. */
+  .app-shell[data-ios-standalone="true"] .roster-row { padding-block:8px;line-height:1.25; }
   .app-shell[data-ios-standalone="true"] .roster-footer { padding-top:8px; }
   .app-shell[data-ios-standalone="true"] .roster-page { padding-bottom:6px; }
 }
