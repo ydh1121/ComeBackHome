@@ -1,7 +1,34 @@
+/* Shared semantic palette: surfaces, text and solid actions stay independent. */
+:root {
+  --cbh-bg:#f4f4f2; --cbh-paper:#fff; --cbh-ink:#171717; --cbh-heading:#172033;
+  --cbh-text:#475467; --cbh-muted:#667085; --cbh-faint:#68768b;
+  --cbh-line:#e4e7ec; --cbh-line-strong:#c9d0db;
+  --cbh-surface:#f5f7fa; --cbh-raised:#edf1f6; --cbh-skeleton:#e9eef4;
+  --cbh-accent:#2554d9; --cbh-blue:#255cff; --cbh-on-action:#fff;
+  --cbh-accent-soft:#f0f5ff; --cbh-accent-border:#d8e3fa;
+  --cbh-error:#b42318; --cbh-holiday:#c93e47; --cbh-warning-bg:#fffaeb; --cbh-warning-text:#805012;
+  --cbh-glass:linear-gradient(145deg,#fffffff0,#edf2f9dd);
+  --cbh-glass-border:#ffffffee; --cbh-highlight:#ffffff;
+  --cbh-nav-chip:linear-gradient(145deg,#edf3ff,#dbe7ff); --cbh-nav-chip-border:#c6d6f5;
+  --cbh-shadow:#24354f1f; --cbh-shell:430px;
+}
+:root[data-theme="dark"] {
+  --cbh-bg:#0d121c; --cbh-paper:#141b27; --cbh-ink:#eef2f8; --cbh-heading:#f0f4fc;
+  --cbh-text:#c7d1e0; --cbh-muted:#aab7ca; --cbh-faint:#9baac0;
+  --cbh-line:#354156; --cbh-line-strong:#526179;
+  --cbh-surface:#202a3a; --cbh-raised:#2a3547; --cbh-skeleton:#2d3a50;
+  --cbh-accent:#a2beff; --cbh-blue:#315fe8;
+  --cbh-accent-soft:#1e2e4b; --cbh-accent-border:#3d5378;
+  --cbh-error:#ffaaa2; --cbh-holiday:#ff9ba3; --cbh-warning-bg:#382d19; --cbh-warning-text:#f1cd86;
+  --cbh-glass:linear-gradient(145deg,#263247f2,#1b2639ed);
+  --cbh-glass-border:#4d5b72; --cbh-highlight:#ffffff18;
+  --cbh-nav-chip:linear-gradient(145deg,#405677,#314665); --cbh-nav-chip-border:#6c84a8;
+  --cbh-shadow:#00000040;
+}
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", Pretendard, "Segoe UI", sans-serif;
-  color: #171717;
-  background: #f4f4f2;
+  color: var(--cbh-ink);
+  background: var(--cbh-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -19,3 +46,12 @@ button { color: inherit; cursor: pointer; }
   margin: 0 auto;
   padding: 48px 0;
 }
+
+input, textarea, select { color:var(--cbh-heading); background-color:var(--cbh-paper); }
+input::placeholder, textarea::placeholder { color:var(--cbh-faint); opacity:1; }
+input, textarea, select { accent-color:var(--cbh-blue); }
+:focus-visible { outline:2px solid var(--cbh-accent); outline-offset:3px; }
+::selection { background:var(--cbh-accent-border); color:var(--cbh-heading); }
+
+#root { display:flow-root;min-height:100dvh; }
+.form-error { color:var(--cbh-error);font-size:13px;line-height:1.6; }
