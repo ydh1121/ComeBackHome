@@ -38,8 +38,8 @@ export async function verifyShellCache(){
  let resolveFetch,started;const start=new Promise(resolve=>{started=resolve;});
  fetcher=()=>{started();return new Promise(resolve=>{resolveFetch=resolve;});};
  const pending=get(request('/late.js'));await start;await message(true,true);resolveFetch(new Response('late'));await pending;
- assert.equal(await (await caches.open('cbh-shell-v4')).match(request('/late.js')),undefined,'clear prevents in-flight response from refilling cache');
- await (await caches.open('cbh-shell-v4')).put('/',new Response('old-shell'));
+ assert.equal(await (await caches.open('cbh-shell-v5')).match(request('/late.js')),undefined,'clear prevents in-flight response from refilling cache');
+ await (await caches.open('cbh-shell-v5')).put('/',new Response('old-shell'));
  let rejectFetch,begin;const beginning=new Promise(resolve=>{begin=resolve;});
  fetcher=()=>{begin();return new Promise((_,reject)=>{rejectFetch=reject;});};
  const navigation=get(request('/schedule','navigate'));await beginning;await message(false);rejectFetch(Error('offline'));

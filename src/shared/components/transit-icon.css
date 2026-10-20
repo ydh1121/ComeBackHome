@@ -2,3 +2,6 @@
 .transit-icon .svg{width:23px!important;height:23px!important;color:inherit!important;stroke-width:1.8}
 .transit-line-dots{display:flex;gap:2px;position:absolute;bottom:-2px}
 .transit-line-dots i{display:block;width:7px;height:3px;border-radius:2px}
+
+:root[data-theme="dark"] .transit-icon[data-transit-mode="SUBWAY"] > span:first-child,
+:root[data-theme="dark"] .transit-icon[data-transit-mode="TRANSFER"] > span:first-child { background:#f4f7fc;border-radius:6px;padding:2px; }

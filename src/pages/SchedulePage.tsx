@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { useNavigate } from 'react-router';
 import { formatDateLabel } from '../features/schedule/date-format';
@@ -20,7 +21,7 @@ export function SchedulePage() {
     <section className="schedule-page roster-page" data-route="/schedule" data-page="SchedulePage" data-state={entries.length ? 'VIEW_DAY' : 'EMPTY'} data-import-id={schedule.latestImport?.id ?? ''}>
       <div className="page-head-inline"><h1 className="page-title">일정</h1><button className="text-btn" type="button" onClick={() => navigate('/schedule/history')}>월별 이력 <Icon name="chevron-right" /></button></div>
       <div className="roster-heading">{range ? <h2>{range}</h2> : null}</div>
-      {entries.length ? <div className="roster-list">
+      {entries.length ? <div className="roster-list" style={{'--roster-rows': Math.min(7, entries.length)} as CSSProperties}>
         {entries.map(entry => <button type="button" className={'roster-row schedule-day-card' + (entry.date === today ? ' is-today' : '')} key={entry.date} data-date={entry.date} onClick={() => navigate('/schedule/' + entry.date + '/edit')}>
           <span className="roster-date"><b className={calendarDayClass(entry.date)} title={holidayName(entry.date)??undefined}>{formatDateLabel(entry.date)}</b>{entry.date === today ? <small>오늘</small> : null}</span>
           <span className={'roster-hours' + (entry.enabled ? '' : ' is-off')}><b>{entry.enabled ? entry.start + ' ~ ' + entry.end : '휴무'}</b>{entry.enabled && entry.breakMinutes != null ? <small>휴게 {entry.breakMinutes}분</small> : null}</span>

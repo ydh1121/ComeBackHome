@@ -1,4 +1,4 @@
-import { createPortal } from 'react-dom';
+import { PersonPickerSheet } from '../shared/components/PersonPickerSheet';
 import { PageSkeleton } from '../shared/components/PageSkeleton';
 import { TransitIcon } from '../shared/components/TransitIcon';
 import { useSeoulDate } from '../shared/runtime/useSeoulDate';
@@ -90,15 +90,11 @@ export function TodayPage() {
           <span className={`person-select-chevron${pickerOpen ? ' open' : ''}`}><Icon name="chevron-down" /></span>
         </button>
         {birthday && data.person?.birthday ? <span className="today-birthday" title={birthdayLabel(data.person.birthday)} aria-label={birthdayLabel(data.person.birthday)+' · '+birthday.date}>
-          <span aria-hidden="true">🎂</span> {Number(birthday.date.slice(5,7))}/{Number(birthday.date.slice(8,10))}<b>{birthday.days===0?'오늘!':'D-'+birthday.days}</b>
+          <Icon name="cake" /> {Number(birthday.date.slice(5,7))}/{Number(birthday.date.slice(8,10))}<b>{birthday.days===0?'오늘!':'D-'+birthday.days}</b>
         </span> : null}
       </div>
 
-      {createPortal(<div className="today-page person-picker-portal"><div className="person-picker-layer" hidden={!pickerOpen}>
-        <button type="button" className="person-picker-backdrop" onClick={() => setPickerOpen(false)} aria-label="사람 선택 배경 닫기" />
-        <div className="person-picker-sheet" role="dialog" aria-modal="true" aria-label="사람 선택">
-          <div className="person-picker-handle" />
-          <div className="person-picker-head"><h2>사람 선택</h2><button type="button" className="text-btn" aria-label="사람 선택 닫기" onClick={() => setPickerOpen(false)}>닫기</button></div>
+      {pickerOpen ? <PersonPickerSheet onClose={() => setPickerOpen(false)}>
           <div className="person-picker-list">
             {data.people.map((person) => {
               const selected = person.id === data.person?.id;
@@ -119,8 +115,7 @@ export function TodayPage() {
             })}
           </div>
           <button type="button" className="person-picker-manage" onClick={() => navigate('/people')}><span>사람 관리</span><Icon name="chevron-right" /></button>
-        </div>
-      </div></div>,document.body)}
+      </PersonPickerSheet> : null}
 
       <div className="hero anti-ai-hero" data-component="TodayStatus">
         <div className="today-statusline">{online ? freshnessLabel(data) : '오프라인 · 마지막 정보'}</div>

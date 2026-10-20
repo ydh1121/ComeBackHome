@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
 const page = await read('../src/pages/TodayPage.tsx');
+const sheet = await read('../src/shared/components/PersonPickerSheet.tsx');
 const css = await read('../src/pages/today-page.css');
 const router = await read('../src/app/router.tsx');
 const query = await read('../src/application/queries/ComeBackHomeQueries.ts');
@@ -30,19 +31,20 @@ const requiredPageFragments = [
   "navigate('/people')",
   "step.type !== 'WALKING'",
   'services.actions.personSelection.select',
-  'aria-label="사람 선택 닫기"',
+  '<PersonPickerSheet',
 ];
 
 for (const fragment of requiredPageFragments) {
   if (!page.includes(fragment)) failures.push(`TodayPage contract missing: ${fragment}`);
 }
 
+if (!sheet.includes('aria-label="사람 선택 닫기"') || !sheet.includes('<Icon name="close" />') || !sheet.includes('node.showModal()')) failures.push('native person picker close contract missing');
 if (!router.includes("if (path === '/') return TodayPage")) failures.push('root route is not wired to TodayPage');
 if (!query.includes('getTodayOverview(referenceDate: ISODate)')) failures.push('Today overview query missing');
 if (!query.includes('this.repositories.today.get(selectedId)')) failures.push('TodayPage data must cross TodayRepository boundary');
 if (!css.includes('.today-page { padding: 0 18px 28px; }')) failures.push('Today page 18px horizontal padding missing');
 if (!css.includes('.today-page .anti-ai-hero')) failures.push('Today hero must be page-scoped');
-if (!css.includes('background: #f3f7ff;')) failures.push('Today hero surface mismatch');
+if (!css.includes('background: var(--cbh-accent-soft);')) failures.push('Today hero surface mismatch');
 if (!css.includes('.today-page .big-time { font-size: 46px;')) failures.push('Today big-time size mismatch');
 if (!css.includes('grid-template-columns: 1fr 1fr;')) failures.push('Today two-column metadata contract missing');
 if (!css.includes('.today-page .action-card { min-height: 60px;')) failures.push('Today action touch/height contract missing');

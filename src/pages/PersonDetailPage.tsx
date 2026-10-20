@@ -6,15 +6,9 @@ import { useApplicationServices } from '../app/ApplicationServicesContext';
 import type { Place, TransitAccessPoint } from '../domain/models';
 import { usePersonDetail } from '../features/people/usePeople';
 import { BackButton } from '../shared/components/BackButton';
-import { Icon, type IconName } from '../shared/components/Icon';
+import { Icon } from '../shared/components/Icon';
 import './people-page.css';
 import { birthdayLabel } from '../domain/birthday';
-
-function modeIcon(mode: string): IconName {
-  if (mode === 'BUS') return 'bus';
-  if (mode === 'SUBWAY') return 'train';
-  return 'walk';
-}
 
 function placeAddress(place: Place | null): string {
   return [place?.address.road, place?.address.detail].filter(Boolean).join(' ');
@@ -55,7 +49,7 @@ function LocationGroup({ personId, kind, place, accessPoints, onNavigate }: Loca
       <div className="transport-list">
         {selected.map((point) => (
           <div className="transport-row" key={point.id}>
-            <TransitIcon mode={point.mode} line={point.line} />
+            <TransitIcon mode={point.mode} line={point.line || point.name} />
             <span>{point.userLabel || point.name}{point.line ? ' · ' + point.line : ''}</span>
           </div>
         ))}
@@ -113,7 +107,7 @@ export function PersonDetailPage() {
       </div>
 
       {person.birthday || person.phone ? <div className="person-profile-summary">
-        {person.birthday ? <span>🎂 {birthdayLabel(person.birthday)}</span> : null}
+        {person.birthday ? <span><Icon name="cake" />{birthdayLabel(person.birthday)}</span> : null}
         {person.phone ? <a href={'tel:'+person.phone}>{person.phone}</a> : null}
       </div> : null}
       <div className="location-stack">
