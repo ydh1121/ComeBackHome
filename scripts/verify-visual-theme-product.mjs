@@ -49,7 +49,7 @@ export async function verifyVisualTheme({page,api,origin,engine,settleReads}) {
     assert.ok(layout.clean,'title ancestors have no blur '+name);assert.equal(layout.skeletons,0,'no stale skeleton '+name);
     assert.ok(layout.scrollWidth<=layout.width,'no horizontal overflow '+name);
     if(fit)assert.ok(layout.scrollHeight<=layout.height+2,'screen fits '+name+' '+JSON.stringify(layout));
-    assert.ok(Math.abs(layout.nav.center-layout.width/2)<1,'nav centered '+name);
+    assert.ok(Math.abs(layout.nav.center-(layout.shell.left+layout.shell.right)/2)<1,'nav centered '+name);
     assert.ok(layout.nav.left>=layout.shell.left&&layout.nav.right<=layout.shell.right,'nav stays in app '+name);
     assert.ok(layout.nav.bottom<layout.height-10,'floating nav margin '+name);
     if(layout.width>600)assert.ok(layout.nav.bottom<=layout.shell.bottom-15,'desktop nav inside frame '+name);
@@ -59,6 +59,13 @@ export async function verifyVisualTheme({page,api,origin,engine,settleReads}) {
   const routes=[['today','/'],['schedule','/schedule'],['history','/schedule/history'],['import','/import'],['people','/people'],['detail','/people/'+id],['person-edit','/people/'+id+'/edit'],['schedule-edit','/schedule/2026-10-19/edit'],['notifications','/notifications'],['cache','/settings/cache'],['settings','/settings'],['place','/people/'+id+'/place/origin'],['route','/people/'+id+'/commute']];
   for(const mode of ['light','dark']){
     await open('/settings');await choose(mode==='dark'?'다크':'화이트',mode);
+    const contrasts=await page.evaluate(()=>{
+      const style=getComputedStyle(document.documentElement),token=name=>style.getPropertyValue('--cbh-'+name).trim();
+      const luminance=color=>{if(/^#[0-9a-f]{3}$/i.test(color))color='#'+color.slice(1).split('').map(c=>c+c).join('');const c=color.startsWith('#')?[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)):color.match(/[\d.]+/g).slice(0,3).map(Number);return c.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);};
+      const ratio=(fg,bg)=>{const a=luminance(fg),b=luminance(bg);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);};
+      return [['heading','paper'],['text','surface'],['muted','surface'],['faint','surface'],['accent','accent-soft'],['on-action','blue'],['error','paper'],['holiday','surface']].map(([fg,bg])=>({fg,bg,ratio:ratio(token(fg),token(bg))}));
+    });
+    assert.ok(contrasts.every(pair=>pair.ratio>=4.5),'AA text palette '+mode+' '+JSON.stringify(contrasts));
     for(const viewport of [{width:390,height:844},{width:1440,height:960}]){
       await page.setViewportSize(viewport);
       for(const [name,path] of routes){
