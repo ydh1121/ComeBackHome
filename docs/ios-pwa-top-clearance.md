@@ -1,29 +1,61 @@
-# iPhone home-screen top clearance
+# iPhone status-bar background and original title position
 
-The owner's October 20 physical-iPhone captures still show a horizontal blur
-band across the tops of People, Import and Schedule titles and the Today
-settings icon after PR #95. The owner accepted the other changes. Keep that
-acceptance; the previous desktop-WebKit result did not establish native iOS
-status-bar acceptance. Private screenshots are not committed or sent to CI.
+The owner accepted the other PR #95 UI changes but still observed a horizontal
+blur band across the tops of headings/settings on the physical iPhone. PR #96
+added 24px of portrait clearance. Its layout tests passed, but the owner rejected
+the lower title position. That workaround is removed in this same work order.
+The Today Find My / call action groups remain centered.
 
-There is no application blur overlay in that top region. The screenshots are
-consistent with a native status-bar treatment extending below the safe inset.
-This is an inference, not a confirmed Apple diagnosis. A similar first-hand
-report exists on [Apple Developer Forums](https://developer.apple.com/forums/thread/848733).
-[WebKit's safe-area guidance](https://webkit.org/blog/7929/designing-websites-for-iphone-x/)
-also distinguishes safe insets from the additional margins content needs.
+## Original position, separate status background
 
-In portrait iOS home-screen mode only, reserve 24 CSS pixels above the content.
-Identify that mode using Apple's navigator.standalone property; ordinary
-browser tabs, desktop and landscape retain the accepted layout. Reallocate
-24 pixels from the existing generous bottom content spacer, preserving the
-page-height budget and keeping the floating navigation and its safe inset.
-The application does not attempt to override native compositing or ask the
-owner to change iOS accessibility settings.
+The shell once again uses only the top safe inset, with its original main
+padding. No extra title offset or compensating bottom-padding subtraction remains.
+In iOS home-screen mode (navigator.standalone), an opaque, viewport-fixed
+background covers exactly the existing top safe inset. It is outside the route
+transition, follows the light/dark paper color, ignores pointer events, and has no
+filter, gradient, translucency or layout footprint. A zero top inset means zero
+height. Ordinary browser tabs have no such element. The compact roster line-height
+fix and safe-inset sizing remain, including 54px row/44px control minimums.
 
-The Phase B Chromium/WebKit tests emulate standalone and top insets of 47/59
-pixels plus a 34-pixel bottom inset. They check painted title/icon bounds,
-five affected routes in both themes, viewport fit and navigation clearance,
-and unchanged ordinary-browser/desktop/landscape geometry. These are layout
-checks, not a reproduction of the native iPhone blur. Only the owner's next
-physical-iPhone check can close that remaining acceptance item.
+This targets WebKit's edge-color treatment, rather than shifting text away from
+it. WebKit's [296485 commit](https://commits.webkit.org/296485@main) explains that
+a qualifying viewport-constrained element near an edge causes solid inset color
+to be used instead of the native scroll-edge blur. The
+[fixedContainerEdges implementation](https://github.com/WebKit/WebKit/blob/d3afea7d89fd2b062ef39b644c3f026dc4904070/Source/WebCore/page/LocalFrameView.cpp)
+samples near the edge, checks fixed/sticky containers spanning most of its width,
+and distinguishes opaque backgrounds from backdrop filters. The full-width status
+background is visible to that sampling even with pointer events disabled.
+
+The screenshot pattern is consistent with this native treatment, but it is not
+an Apple-confirmed diagnosis of this device. Desktop WebKit does not expose the
+native iOS compositor. Software geometry success must not be called physical
+iPhone blur acceptance.
+
+## Horizontal edge swipe
+
+The owner's capture shows the native interactive back/forward transition: the
+rounded snapshot of the entire web view, including the floating bar, moves.
+CSS fixed positioning anchors a web element inside that view; it cannot pin the
+element outside a native history snapshot. Apple's
+[back/forward navigation gesture setting](https://developer.apple.com/documentation/webkit/wkwebview/allowsbackforwardnavigationgestures)
+belongs to the native WKWebView host, not PWA JavaScript.
+
+Normal in-app tab navigation keeps the same navigation element fixed and moves
+the selection pill. Preserve native back navigation, browser history, accessibility
+and scrolling; do not intercept all touch events or silently replace tab history.
+No custom content-swipe feature is added to imitate the system gesture.
+
+## Evidence and remaining device check
+
+Phase B checks Chromium and WebKit with top insets 47/59, bottom inset 34,
+five routes and both themes. Painted heading/icon bounds must equal the accepted
+ordinary-browser position plus the safe inset, with no extra 24px. It also checks
+opaque coverage without heading overlap, zero layout contribution, compact-page
+fit, centered Today actions, bar/edge persistence across SPA navigation/history,
+scroll anchoring, and desktop/landscape zero-inset behavior. Private captures never
+enter the repository or CI; all browser fixtures are synthetic and D1 is local.
+
+After deployment, the owner needs only to reopen the existing PWA and check the
+original title position and sharp top of the letters. No reinstall, accessibility
+setting change, alarm action or data reset is required. Physical blur and native
+gesture acceptance remain separate from automated browser evidence.
