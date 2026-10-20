@@ -20,11 +20,14 @@ function RouteReveal({ children }: { children: ReactNode }) {
 
 export function AppShell() {
   const location = useLocation();
+  // iOS exposes standalone on home-screen apps (including desktop-UA iPads).
+  // Ordinary Safari/desktop/Android retain the already accepted layout.
+  const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
   useEffect(() => {
     if (!/^\/import(?:\/|$)/.test(location.pathname)) releasePrivateImportImage();
   }, [location.pathname]);
   useRouteScrollRestoration();
   const showTopUtility = location.pathname === '/';
 
-  return <div className="app-shell" data-ui="app-shell" data-version="daily-life-v1"><div className="app-shell__app">{showTopUtility ? <TopUtility /> : null}<main className="app-shell__main"><RouteReveal key={location.pathname}><Outlet /></RouteReveal></main><BottomNavigation /></div></div>;
+  return <div className="app-shell" data-ui="app-shell" data-version="daily-life-v1" data-ios-standalone={iosStandalone}><div className="app-shell__app">{showTopUtility ? <TopUtility /> : null}<main className="app-shell__main"><RouteReveal key={location.pathname}><Outlet /></RouteReveal></main><BottomNavigation /></div></div>;
 }

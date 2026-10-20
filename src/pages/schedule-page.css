@@ -77,7 +77,7 @@
 .schedule-calendar .schedule-weekdays,.schedule-calendar .schedule-grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px; }
 .schedule-weekdays { margin-bottom:8px; }
 .schedule-weekdays span { text-align:center;color:var(--cbh-muted);font-size:12px; }
-.schedule-calendar .schedule-cell { min-height:clamp(58px,calc((100dvh - 360px - env(safe-area-inset-top) - env(safe-area-inset-bottom))/6),86px);min-width:0;border:1px solid var(--cbh-line);border-radius:10px;padding:8px 2px;background:var(--cbh-paper);display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--cbh-heading);font-variant-numeric:tabular-nums; }
+.schedule-calendar .schedule-cell { min-height:clamp(58px,calc((100dvh - 360px - var(--cbh-safe-top) - var(--cbh-safe-bottom))/6),86px);min-width:0;border:1px solid var(--cbh-line);border-radius:10px;padding:8px 2px;background:var(--cbh-paper);display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--cbh-heading);font-variant-numeric:tabular-nums; }
 .schedule-cell .dnum { font-size:13px;font-weight:700; }
 .schedule-cell.today { border:2px solid var(--cbh-accent); }
 .schedule-cell.work { background:var(--cbh-accent-soft); }
@@ -113,4 +113,14 @@
 
 .schedule-delete-dialog { background:var(--cbh-paper); }
 
-.roster-page .roster-row { min-height:clamp(54px,calc((100dvh - 318px - env(safe-area-inset-top) - env(safe-area-inset-bottom))/var(--roster-rows,7)),76px); }
+.roster-page .roster-row { min-height:clamp(54px,calc((100dvh - 318px - var(--cbh-safe-top) - var(--cbh-safe-bottom))/var(--roster-rows,7)),76px); }
+
+/* Reclaim a little footer whitespace when portrait iOS uses top clearance.
+   Keep all seven roster rows and the 44px add control inside the safe viewport. */
+@media (max-width:600px) and (orientation:portrait) {
+  /* Explicit line boxes keep Korean fallback fonts from enlarging work rows
+     beyond the viewport-based minimum on WebKit. Touch targets stay >=54px. */
+  .app-shell[data-ios-standalone="true"] .roster-row { padding-block:8px;line-height:1.25; }
+  .app-shell[data-ios-standalone="true"] .roster-footer { padding-top:8px; }
+  .app-shell[data-ios-standalone="true"] .roster-page { padding-bottom:6px; }
+}

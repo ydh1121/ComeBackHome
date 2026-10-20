@@ -10,7 +10,7 @@
 .skeleton-heading { width: 42%; height: 31px; margin: 10px 0 18px; }
 .skeleton-subheading { width: 64%; height: 23px; margin: clamp(18px,3.5dvh,32px) 0 16px; }
 .skeleton-roster .page-skeleton { gap: 0; }
-.skeleton-roster-row { display: flex; align-items: center; justify-content: space-between; min-height: clamp(54px,calc((100dvh - 318px - env(safe-area-inset-top) - env(safe-area-inset-bottom))/7),76px); border-bottom: 1px solid var(--cbh-line); padding: 10px 4px; }
+.skeleton-roster-row { display: flex; align-items: center; justify-content: space-between; min-height: clamp(54px,calc((100dvh - 318px - var(--cbh-safe-top) - var(--cbh-safe-bottom))/7),76px); border-bottom: 1px solid var(--cbh-line); padding: 10px 4px; }
 .skeleton-roster-row i:first-child { width: 25%; height: 20px; }
 .skeleton-roster-row i:last-child { width: 46%; height: 24px; }
 .skeleton-list-row { height: 66px; border-radius: 16px !important; }
