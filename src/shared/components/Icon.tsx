@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip' | 'phone';
+export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip' | 'phone' | 'close' | 'cake' | 'image' | 'file' | 'sun' | 'moon' | 'monitor';
 
 interface IconProps {
   name: IconName;
@@ -9,6 +9,20 @@ export function Icon({ name, className }: IconProps) {
   const common = { className: ['svg', className].filter(Boolean).join(' '), viewBox: '0 0 24 24', 'aria-hidden': true } as const;
 
   switch (name) {
+    case 'close':
+      return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
+    case 'cake':
+      return <svg {...common}><path d="M4 14v7h16v-7M3 21h18M12 8V5M8 9h8a4 4 0 0 1 4 4v1c-1.3 2-2.7 2-4 0-1.3 2-2.7 2-4 0-1.3 2-2.7 2-4 0-1.3 2-2.7 2-4 0v-1a4 4 0 0 1 4-4Z"/><path d="M12 5c-2 0-2-2 0-4 2 2 2 4 0 4Z"/></svg>;
+    case 'image':
+      return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></svg>;
+    case 'file':
+      return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M8 13h8M8 17h8"/></svg>;
+    case 'sun':
+      return <svg {...common}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>;
+    case 'moon':
+      return <svg {...common}><path d="M20.5 14.2A9 9 0 0 1 9.8 3.5a9 9 0 1 0 10.7 10.7Z"/></svg>;
+    case 'monitor':
+      return <svg {...common}><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>;
     case 'phone':
       return <svg {...common}><path d="M6 3h3l2 5-2.5 2a16 16 0 0 0 5.5 5.5l2-2.5 5 2v3a3 3 0 0 1-3.4 3A19 19 0 0 1 3 6.4 3 3 0 0 1 6 3Z"/></svg>;
     case 'home':
