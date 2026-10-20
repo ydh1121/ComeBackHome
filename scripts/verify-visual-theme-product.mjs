@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {makeWeeklyXlsx} from '../test/fixtures/import/anonymous-weekly-xlsx-builder.mjs';
+import {verifyIOSTopClearance} from './verify-ios-top-clearance.mjs';
 
 // Synthetic data and isolated D1 only; shared Phase B runner owns the server.
 export async function verifyVisualTheme({page,api,origin,engine,settleReads}) {
@@ -116,6 +117,7 @@ export async function verifyVisualTheme({page,api,origin,engine,settleReads}) {
   await page.locator('.review-edit > summary').first().click();await page.locator('.time-wheel-trigger').first().click();await capture('dark-review-wheel');
   assert.equal((await api('/people/'+id+'/schedules')).body.schedules.length,7,'preview never writes D1');
   await open('/settings');await choose('시스템','light');
+  const iosTop=await verifyIOSTopClearance({page,origin,engine,settleReads,dir});
   await writeFile(dir+'/'+engine+'-theme-report.json',JSON.stringify({screens,themePersistence:true,systemChange:true,beforeReact:true,sheetCloseBackdropEscapeDrag:true,loadingDelayWarmCache:true,officialColorsNameFallback:true,previewNoWrites:true},null,2));
-  return {screens:screens.length,themePersistence:true,systemChange:true,beforeReact:true,sheetCloseBackdropEscapeDrag:true,loadingDelayWarmCache:true,officialColorsNameFallback:true,previewNoWrites:true};
+  return {screens:screens.length,themePersistence:true,systemChange:true,beforeReact:true,sheetCloseBackdropEscapeDrag:true,loadingDelayWarmCache:true,officialColorsNameFallback:true,previewNoWrites:true,iosTop};
 }
