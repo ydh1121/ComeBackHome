@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'cbh-shell-';
-const CACHE_NAME = CACHE_PREFIX + 'v4';
+const CACHE_NAME = CACHE_PREFIX + 'v5';
 const CONFIG_CACHE = 'cbh-cache-preference-v1';
 const CONFIG_URL = '/__cbh_cache_preference__';
 let cacheGeneration = 0;
@@ -24,6 +24,7 @@ self.addEventListener('message', event => {
 const SHELL_URLS = [
   '/',
   '/manifest.webmanifest',
+  '/theme.js',
   '/icons/icon-180.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
