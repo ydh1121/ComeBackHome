@@ -5,7 +5,7 @@ import {writeFile} from 'node:fs/promises';
 // status-bar material; physical-device acceptance must remain separate.
 export async function verifyIOSTopClearance({page,origin,engine,settleReads,dir}) {
   const open=async path=>{await settleReads();await page.goto(origin+path,{waitUntil:'networkidle'});await settleReads();};
-  const results=[];
+  const results=[],fitFailures=[];
   await page.addInitScript(()=>Object.defineProperty(navigator,'standalone',{
     configurable:true,get:()=>sessionStorage.getItem('test:ios-display-mode')!=='browser',
   }));
@@ -35,13 +35,14 @@ export async function verifyIOSTopClearance({page,origin,engine,settleReads,dir}
         const nav=document.querySelector('.bottomnav').getBoundingClientRect();
         return {installed:shell.dataset.iosStandalone,clearance:parseFloat(style.getPropertyValue('--cbh-top-clearance')),
           painted,width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,
-          scrollHeight:document.documentElement.scrollHeight,navBottom:nav.bottom};
+          scrollHeight:document.documentElement.scrollHeight,navBottom:nav.bottom,
+          rosterRows:[...document.querySelectorAll('.roster-row')].map(row=>({height:row.getBoundingClientRect().height,minHeight:getComputedStyle(row).minHeight,lineHeight:getComputedStyle(row).lineHeight}))};
       },selectors);
       assert.equal(layout.installed,'true');assert.equal(layout.clearance,24);
       assert.ok(layout.painted.length>=selectors.length,'protected header nodes exist '+name);
       assert.ok(layout.painted.every(item=>item.top>=top+40),'header paint stays below native edge band '+JSON.stringify({mode,top,name,layout}));
       assert.ok(layout.scrollWidth<=layout.width,'no horizontal overflow');
-      if(['schedule','history','import'].includes(name))assert.ok(layout.scrollHeight<=layout.height+2,'safe-area screen fits '+JSON.stringify({mode,top,name,layout}));
+      if(['schedule','history','import'].includes(name)&&layout.scrollHeight>layout.height+2)fitFailures.push({mode,top,name,layout});
       assert.equal(Math.round(layout.navBottom),810,'bottom safe area retained');
       await page.screenshot({path:`${dir}/${engine}-ios-top-${mode}-${top}-${name}.png`,fullPage:true,animations:'disabled'});
       results.push({mode,top,name,...layout});
@@ -62,5 +63,6 @@ export async function verifyIOSTopClearance({page,origin,engine,settleReads,dir}
   await page.getByRole('radio',{name:'시스템',exact:true}).check();
   const report={results,ordinaryBrowserUnchanged:true,desktopUnchanged:true,landscapeUnchanged:true,nativeIOSBlurAcceptance:'OWNER_RECHECK_REQUIRED'};
   await writeFile(`${dir}/${engine}-ios-top-report.json`,JSON.stringify(report,null,2));
+  assert.deepEqual(fitFailures,[],'safe-area screens fit; all failed cases are included for diagnosis');
   return {screens:results.length,geometry:true,nativeIOSBlurAcceptance:report.nativeIOSBlurAcceptance};
 }
