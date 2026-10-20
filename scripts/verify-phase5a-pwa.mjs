@@ -49,11 +49,36 @@ if (!main.includes("import { registerPwaServiceWorker } from './pwa/registerServ
   failures.push('main service-worker bootstrap missing');
 }
 
-for (const text of ["self.addEventListener('install'","self.addEventListener('activate'","self.addEventListener('fetch'","cache.addAll(SHELL_URLS)","request.mode === 'navigate'","cache.match('/')","url.pathname.startsWith('/api/')","cbh-shell-'","v4"]) {
+for (const text of ["self.addEventListener('install'","self.addEventListener('activate'","self.addEventListener('fetch'","cache.addAll(SHELL_URLS)","request.mode === 'navigate'","cache.match('/')","url.pathname.startsWith('/api/')","cbh-shell-'","v5", "'/theme.js'"]) {
   if (!sw.includes(text)) failures.push('service worker shell behavior missing ' + text);
 }
+if (!html.includes('<script src="/theme.js"></script>') || html.indexOf('/theme.js') > html.indexOf('/src/main.tsx')) failures.push('appearance must initialize before React');
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
 console.log('phase 5A PWA shell verification passed');
+
+// Execute the actual early bootstrap with unavailable storage and OS changes.
+const {runInNewContext} = await import('node:vm');
+const {default:assert} = await import('node:assert/strict');
+const themeSource = await readText('../public/theme.js');
+function themeHarness(saved, dark=false, blocked=false) {
+  const listeners={}, root={dataset:{},style:{}}, values={}; let changed;
+  const media={matches:dark,addEventListener:(_,fn)=>{changed=fn;}};
+  const meta={setAttribute(key,value){this[key]=value;}};
+  runInNewContext(themeSource,{
+    document:{documentElement:root,querySelector:()=>meta},matchMedia:()=>media,
+    Event:class{constructor(type){this.type=type;}},
+    window:{addEventListener:(type,fn)=>{listeners[type]=fn;},dispatchEvent:()=>{}},
+    localStorage:{getItem:()=>{if(blocked)throw Error('denied');return saved;},setItem:(key,value)=>{if(blocked)throw Error('denied');values[key]=value;}},
+  });
+  return {root,meta,values,set:value=>listeners['cbh:theme-preference']({detail:value}),os:value=>{media.matches=value;changed();},storage:value=>listeners.storage({key:'cbh:theme',newValue:value})};
+}
+let appearance=themeHarness(null,true);
+assert.equal(appearance.root.dataset.theme,'dark');appearance.os(false);assert.equal(appearance.root.dataset.theme,'light');
+appearance.set('dark');appearance.os(false);assert.equal(appearance.root.dataset.theme,'dark');assert.equal(appearance.values['cbh:theme'],'dark');
+appearance.storage('light');assert.equal(appearance.root.dataset.theme,'light');
+appearance=themeHarness('invalid',true);assert.equal(appearance.root.dataset.themePreference,'system');
+appearance=themeHarness(null,true,true);appearance.set('light');assert.equal(appearance.root.dataset.theme,'light');assert.equal(appearance.meta.content,'#ffffff');
+console.log('theme startup, system changes, override, cross-tab and unavailable storage passed');
