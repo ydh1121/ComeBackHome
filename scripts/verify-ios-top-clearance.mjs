@@ -35,8 +35,8 @@ export async function verifyIOSTopClearance({page,origin,engine,settleReads,dir}
       rosterRows:[...document.querySelectorAll('.roster-row')].map(row=>({height:row.getBoundingClientRect().height,minHeight:getComputedStyle(row).minHeight,lineHeight:getComputedStyle(row).lineHeight}))};
   },selectors);
   const checkEdge=(layout,top)=>{
-    assert.deepEqual(layout.edge,{top:0,left:0,right:layout.width,height:top,background:layout.paper,opacity:'1',
-      position:'fixed',pointerEvents:'none',filter:'none',backdrop:'none',ariaHidden:'true',insideRoute:false},'opaque status background covers only the safe inset');
+    assert.deepEqual(layout.edge,{top:0,left:0,right:layout.width,height:Math.max(12,top),background:layout.paper,opacity:'1',
+      position:'fixed',pointerEvents:'none',filter:'none',backdrop:'none',ariaHidden:'true',insideRoute:false},'opaque edge remains visible even when the native status area is outside the web viewport');
     assert.equal(layout.paddingTop,top,'no extra title displacement');
   };
   await page.setViewportSize({width:390,height:844});
@@ -53,7 +53,11 @@ export async function verifyIOSTopClearance({page,origin,engine,settleReads,dir}
       original.set(name,baseline.painted);baselines.push({mode,name,painted:baseline.painted});
     }
     await page.evaluate(()=>sessionStorage.removeItem('test:ios-display-mode'));
-    for(const top of [47,59])for(const [name,path,selectors] of routes){
+    // iOS can place its status bar outside the web viewport, reporting zero
+    // top inset and a correspondingly shorter viewport. Do not use that inset
+    // as the sole visibility condition for the opaque edge background.
+    for(const {top,height} of [{top:0,height:797},{top:47,height:844},{top:59,height:844}])for(const [name,path,selectors] of routes){
+      await page.setViewportSize({width:390,height});
       await open(path);await insets(top);
       const layout=await measure(selectors),baseline=original.get(name);
       assert.equal(layout.installed,'true');checkEdge(layout,top);
@@ -62,10 +66,10 @@ export async function verifyIOSTopClearance({page,origin,engine,settleReads,dir}
       for(let i=0;i<baseline.length;i++)for(const bound of ['top','bottom']){
         assert.ok(Math.abs(layout.painted[i][bound]-baseline[i][bound]-top)<1,'original title/icon position plus safe inset '+JSON.stringify({mode,top,name,bound,layout}));
       }
-      assert.ok(layout.painted.every(item=>item.top>=top),'status background never covers a heading');
+      assert.ok(layout.painted.every(item=>item.top>=layout.edge.height),'status background never covers a heading or icon, including zero inset');
       assert.ok(layout.scrollWidth<=layout.width,'no horizontal overflow');
       if(['schedule','history','import'].includes(name)&&layout.scrollHeight>layout.height+2)fitFailures.push({mode,top,name,layout});
-      assert.equal(Math.round(layout.navBottom),810,'bottom safe area retained');
+      assert.equal(Math.round(layout.navBottom),height-34,'bottom safe area retained');
       if(name==='today'){
         const offsets=await page.locator('.action-card').evaluateAll(cards=>cards.map(card=>{
           const box=card.getBoundingClientRect(),children=[...card.children].map(child=>child.getBoundingClientRect());
