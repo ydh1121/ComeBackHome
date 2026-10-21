@@ -101,6 +101,13 @@ expect(
   'canonical D1 id must be non-placeholder',
 );
 
+// Deploy-time probes must never process live notification jobs. Runtime auth and
+// scheduling remain covered through the existing isolated local D1 contract.
+const deployWorkflow = await readFile(new URL('../.github/workflows/deploy-backend-worker.yml', import.meta.url), 'utf8');
+expect(!deployWorkflow.includes('/api/internal/scheduler-tick'), 'deployment verification must not invoke the live scheduler');
+expect(!deployWorkflow.includes("method: 'POST'"), 'deployment verification must not write production data');
+expect(deployWorkflow.includes("method: 'GET'") && deployWorkflow.includes("'/api/health'"), 'deployment verification must use read-only health');
+
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
