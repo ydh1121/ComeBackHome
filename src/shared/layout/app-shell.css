@@ -18,14 +18,16 @@
 
 /* Give WebKit an opaque, viewport-fixed top edge for its status-bar color
    extension instead of sampling scrolling text into the native edge effect.
-   This covers only the existing safe inset: it adds no space to the layout.
+   Some iOS standalone viewports exclude the native status area and report a
+   zero safe inset. Keep 12px in the existing blank top gutter in that case:
+   WebKit ignores edge-color boxes <=10px high. This adds no layout space.
    Keep it outside route animation and free of filters/translucency. */
 .app-shell__status-background {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: var(--cbh-safe-top);
+  height: max(12px, var(--cbh-safe-top));
   background: var(--cbh-paper);
   pointer-events: none;
   z-index: 30;
