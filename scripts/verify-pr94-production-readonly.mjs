@@ -4,12 +4,14 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium, webkit } from 'playwright';
 
 const origin = 'https://come-back-home.pages.dev';
+const expectedSha = process.env.CBH_EXPECTED_DEPLOY_SHA ?? process.env.GITHUB_SHA;
+assert.match(expectedSha ?? '', /^[a-f0-9]{40}$/, 'Exact deployment commit is required');
 let deployed = false;
 for (let attempt = 0; attempt < 90; attempt++) {
   try {
     const response = await fetch(origin + '/api/health', { cache: 'no-store' });
     const health = await response.json();
-    if (response.ok && health.ok === true && health.commitSha === process.env.GITHUB_SHA) { deployed = true; break; }
+    if (response.ok && health.ok === true && health.commitSha === expectedSha) { deployed = true; break; }
   } catch {}
   await new Promise(resolve => setTimeout(resolve, 10000));
 }
@@ -94,6 +96,6 @@ for (const [name, type] of [['Chromium', chromium], ['WebKit', webkit]]) {
   } finally { await browser.close(); }
 }
 mkdirSync('runtime-evidence/ui-deploy', { recursive: true });
-const evidence = { commitSha: process.env.GITHUB_SHA, canonicalOrigin: origin, results };
+const evidence = { commitSha: expectedSha, canonicalOrigin: origin, results };
 writeFileSync('runtime-evidence/ui-deploy/readonly.json', JSON.stringify(evidence, null, 2));
 console.log(JSON.stringify(evidence));

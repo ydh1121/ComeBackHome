@@ -9,6 +9,10 @@ on:
       # not deploy, merge or mutate production D1.
       - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
+      - "scripts/deploy-canonical-pages.mjs"
+      - ".github/workflows/deploy-canonical-pages.yml"
+      - ".github/workflows/deploy-backend-worker.yml"
+      - ".github/workflows/verify-ui-deployment.yml"
       - "packages/**"
       - "test/portable-*.json"
       - "scripts/lib/**"
@@ -105,6 +109,10 @@ on:
     branches:
       - main
     paths:
+      - "scripts/deploy-canonical-pages.mjs"
+      - ".github/workflows/deploy-canonical-pages.yml"
+      - ".github/workflows/deploy-backend-worker.yml"
+      - ".github/workflows/verify-ui-deployment.yml"
       - "packages/**"
       - "test/portable-*.json"
       - "scripts/lib/**"

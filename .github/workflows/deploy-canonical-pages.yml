@@ -1,0 +1,42 @@
+name: Deploy canonical Pages after required CI
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - worker/**
+      - functions/**
+      - packages/**
+      - public/**
+      - package.json
+      - package-lock.json
+      - vite.config.ts
+      - index.html
+      - tsconfig*.json
+      - scripts/prepare-*.mjs
+      - scripts/generate-build-revision.mjs
+      - scripts/deploy-canonical-pages.mjs
+      - .github/workflows/deploy-canonical-pages.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: comebackhome-canonical-source-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'ydh1121/ComeBackHome' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Deploy only the accepted MAIN commit to the existing Pages project
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/deploy-canonical-pages.mjs
