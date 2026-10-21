@@ -1,0 +1,56 @@
+{
+  "name": "@comebackhome/portable",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent source modules extracted from ComeBackHome; no application imports or service credentials.",
+  "exports": {
+    "./core": "./core/index.ts",
+    "./http": "./http/index.ts",
+    "./browser": "./browser/index.ts",
+    "./react": "./react/index.ts",
+    "./d1": "./d1/index.ts",
+    "./calendar": "./calendar/index.ts",
+    "./ocr": "./ocr/index.ts",
+    "./web-push": "./web-push/index.ts",
+    "./web-push/server": "./web-push/server.ts",
+    "./web-push/browser": "./web-push/browser.ts",
+    "./web-push/permission": "./web-push/permission.ts",
+    "./ocr/ctc": "./ocr/ctc.js",
+    "./ocr/paddle-raster": "./ocr/paddle-raster.js",
+    "./react/time-wheel.css": "./react/time-wheel.css",
+    "./react/icons.css": "./react/icons.css",
+    "./browser/theme.js": "./browser/theme.js"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tesseract.js": "7.0.0",
+    "onnxruntime-web": "1.23.2",
+    "korean-lunar-calendar": "0.4.0",
+    "@block65/webcrypto-web-push": "2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "tesseract.js": {
+      "optional": true
+    },
+    "onnxruntime-web": {
+      "optional": true
+    },
+    "korean-lunar-calendar": {
+      "optional": true
+    },
+    "@block65/webcrypto-web-push": {
+      "optional": true
+    }
+  }
+}

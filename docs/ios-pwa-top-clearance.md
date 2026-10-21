@@ -1,5 +1,7 @@
 # iPhone status-bar background and original title position
 
+**Owner acceptance, 2026-10-21:** the owner confirmed normal operation after PR #98 (MAIN `04a7d47e4a444dba85840b22adad56454064eb25`). The physical blur work order is closed. The history below preserves why earlier fixes were rejected; it is not a new pending device request.
+
 The owner accepted the other PR #95 UI changes but still observed a horizontal
 blur band across the tops of headings/settings on the physical iPhone. PR #96
 added 24px of portrait clearance. Its layout tests passed, but the owner rejected
@@ -61,7 +63,7 @@ the selection pill. Preserve native back navigation, browser history, accessibil
 and scrolling; do not intercept all touch events or silently replace tab history.
 No custom content-swipe feature is added to imitate the system gesture.
 
-## Evidence and remaining device check
+## Evidence and completed owner check
 
 Phase B checks Chromium and WebKit with top insets 0/47/59, bottom inset 34,
 five routes and both themes (30 cases per engine). The zero-inset case uses a
@@ -73,7 +75,7 @@ scroll anchoring, and desktop/landscape zero-inset behavior. The 12px fallback
 must remain visible without covering painted text or changing layout. Private captures never
 enter the repository or CI; all browser fixtures are synthetic and D1 is local.
 
-After deployment, the owner needs only to reopen the existing PWA and check the
-original title position and sharp top of the letters. No reinstall, accessibility
-setting change, alarm action or data reset is required. Physical blur and native
-gesture acceptance remain separate from automated browser evidence.
+After deployment, the owner reopened the PWA and confirmed normal operation.
+No reinstall, accessibility setting change, alarm action or data reset was required.
+This owner acceptance is recorded separately from automated browser evidence;
+the native history gesture limitation above remains unchanged.

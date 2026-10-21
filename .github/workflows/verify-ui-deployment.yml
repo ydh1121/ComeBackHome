@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
     paths:
+      - "packages/**"
+      - "test/portable-*.json"
+      - "scripts/lib/**"
+      - "scripts/export-portable-modules.mjs"
+      - "scripts/prepare-theme.mjs"
       - src/**
       - worker/api.ts
       - .github/workflows/verify-ui-deployment.yml

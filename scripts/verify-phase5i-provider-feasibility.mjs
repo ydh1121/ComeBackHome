@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -7,7 +8,7 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 const contracts = await read('../worker/providers/contracts.ts');
 const plan = await read('../worker/providers/source-plan.ts');
 const docs = await read('../docs/provider-feasibility.md');
-const workerApi = await read('../worker/api.ts');
+const workerApi = await readImplementationSource('worker/api.ts');
 const wranglerLocal = JSON.parse(await read('../wrangler.local.jsonc'));
 
 for (const name of [

@@ -1,0 +1,9 @@
+{
+  "storageKey": "cbh:theme",
+  "changeEvent": "cbh:theme-change",
+  "preferenceEvent": "cbh:theme-preference",
+  "colors": {
+    "light": "#ffffff",
+    "dark": "#141b27"
+  }
+}

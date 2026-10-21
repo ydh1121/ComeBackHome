@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { relative } from 'node:path';
 
@@ -64,7 +65,7 @@ const [
   read('../src/pages/ImportPage.tsx'),
   read('../src/pages/ImportPersonMatchPage.tsx'),
   read('../src/application/use-cases/commitImportReview.ts'),
-  read('../worker/api.ts'),
+  readImplementationSource('worker/api.ts'),
   read('../src/pages/TodayPage.tsx'),
   read('../src/shared/layout/AppShell.tsx'),
   read('../src/app/useRouteScrollRestoration.ts'),

@@ -1,17 +1,7 @@
-/** Product dates are Korean calendar dates regardless of the device timezone. */
-export function seoulDate(now = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-export function seoulTime(now: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).format(now);
-}
+import { calendarDate, clockTime } from '../../packages/portable/calendar/time-zone';
+/** Product dates stay Korean calendar dates regardless of the device timezone. */
+export function seoulDate(now = new Date()): string { return calendarDate(now, 'Asia/Seoul'); }
+export function seoulTime(now: Date): string { return clockTime(now, 'Asia/Seoul'); }
 
 export function shiftTimes(entry: { date: string; start: string; end: string }): { start: number; end: number } {
   const start = Date.parse(`${entry.date}T${entry.start}:00+09:00`);

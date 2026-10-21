@@ -1,8 +1,9 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
-const contracts = await read('../worker/contracts.ts');
+const contracts = await readImplementationSource('worker/contracts.ts');
 const schema = await read('../db/migrations/0001_initial.sql');
 const architecture = await read('../docs/backend-architecture.md');
 const pagesFunction = await read('../functions/api/_middleware.ts');

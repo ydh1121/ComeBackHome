@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { createECDH, randomBytes } from 'node:crypto';
@@ -8,10 +9,7 @@ import { createServer as createViteServer } from 'vite';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
-const source = await readFile(
-  new URL('../worker/push/WebPushDeliveryGateway.ts', import.meta.url),
-  'utf8',
-);
+const source = await readImplementationSource(new URL('../worker/push/WebPushDeliveryGateway.ts', import.meta.url));
 
 for (const text of [
   "import { buildPushPayload } from '@block65/webcrypto-web-push'",

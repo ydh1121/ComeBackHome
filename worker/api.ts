@@ -25,38 +25,7 @@ import { PushDeliveryError } from './contracts';
 import { classifyPushProviderFailure, pushSubscriptionKeyShapeValid } from './push/WebPushDeliveryGateway';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
 
-type JsonObject = Record<string, unknown>;
-
-function json(body: unknown, status = 200): Response {
-  return Response.json(body, {
-    status,
-    headers: { 'Cache-Control': 'no-store' },
-  });
-}
-
-function isObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-async function readObject(request: Request): Promise<JsonObject> {
-  const body = await request.json();
-  if (!isObject(body)) throw new Error('JSON object body is required.');
-  return body;
-}
-
-function asString(value: unknown, name: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(name + ' is required.');
-  return value.trim();
-}
-
-function asOptionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function asBoolean(value: unknown, name: string): boolean {
-  if (typeof value !== 'boolean') throw new Error(name + ' must be boolean.');
-  return value;
-}
+import { json, isObject, readObject, asString, asOptionalString, asBoolean, type JsonObject } from '../packages/portable/http/server';
 
 function optionalScheduleBreakMinutes(object: JsonObject): number | null | undefined {
   if (!Object.prototype.hasOwnProperty.call(object, 'breakMinutes')) return undefined;

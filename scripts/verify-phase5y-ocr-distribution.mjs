@@ -213,7 +213,7 @@ try {
   );
   assert(
     packageJson.scripts?.prebuild ===
-      'npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs',
+      'npm run prepare:theme && npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs',
     'Production build must stage both same-origin Tesseract and pinned weekly Paddle assets',
   );
   assert(
