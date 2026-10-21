@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
@@ -8,7 +9,7 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 
 const workerEntry = await readFile(new URL('../worker/index.ts', import.meta.url), 'utf8');
 const schedulerSource = await readFile(new URL('../worker/scheduler.ts', import.meta.url), 'utf8');
-const apiSource = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
+const apiSource = await readImplementationSource(new URL('../worker/api.ts', import.meta.url));
 const schedulerConfig = JSON.parse(await readFile(new URL('../wrangler.scheduler.jsonc', import.meta.url), 'utf8'));
 
 for (const text of ['invokePagesScheduler', '/api/internal/scheduler-tick', 'PRESENCE_EVENT_INGEST_TOKEN', 'Authorization']) {

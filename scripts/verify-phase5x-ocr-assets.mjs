@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { createHash } from 'node:crypto';
 import { access, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -89,10 +90,7 @@ try {
     totalBytes += file.bytes;
   }
 
-  const source = await readFile(
-    resolve(root, 'src/providers/import/TesseractScheduleImageTextExtractor.ts'),
-    'utf8',
-  );
+  const source = await readImplementationSource('src/providers/import/TesseractScheduleImageTextExtractor.ts');
   const runtimeConfig = await readFile(
     resolve(root, 'src/providers/import/ocrRuntimeConfig.ts'),
     'utf8',
@@ -121,7 +119,7 @@ try {
   assert(composition.includes('BrowserScheduleTableStructureDetector'), 'Production pixel table structure detector must be active');
   assert(
     packageJson.scripts?.prebuild ===
-      'npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs',
+      'npm run prepare:theme && npm run prepare:ocr-assets && npm run prepare:weekly-paddle-assets && node scripts/generate-build-revision.mjs',
     'Production prebuild must stage BOTH same-origin Tesseract and SHA-pinned Paddle assets before Vite build',
   );
   assert(

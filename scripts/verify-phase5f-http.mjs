@@ -1,15 +1,16 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
 
 const runtimeConfig = await read('../src/config/runtime.ts');
-const httpClient = await read('../src/providers/http/HttpJsonClient.ts');
+const httpClient = await readImplementationSource('src/providers/http/HttpJsonClient.ts');
 const httpRepositories = await read('../src/providers/http/HttpRepositories.ts');
 const composition = await read('../src/app/composition.ts');
 const runtimeContracts = await read('../src/application/contracts/runtime.ts');
 const scheduleService = await read('../src/application/services/ApplicationActions.ts');
-const workerApi = await read('../worker/api.ts');
+const workerApi = await readImplementationSource('worker/api.ts');
 const main = await read('../src/main.tsx');
 const today = await read('../src/pages/TodayPage.tsx');
 const qa = await read('../src/pages/QaStateMatrixPage.tsx');

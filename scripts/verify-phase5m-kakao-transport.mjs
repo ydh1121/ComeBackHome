@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
@@ -9,7 +10,7 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 
 const networkSource = await readFile(new URL('../worker/providers/network-transport.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../worker/providers/runtime.ts', import.meta.url), 'utf8');
-const workerApi = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
+const workerApi = await readImplementationSource(new URL('../worker/api.ts', import.meta.url));
 const pagesEntry = await readFile(new URL('../functions/api/_middleware.ts', import.meta.url), 'utf8');
 const localConfig = JSON.parse(await readFile(new URL('../wrangler.local.jsonc', import.meta.url), 'utf8'));
 

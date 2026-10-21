@@ -9,6 +9,11 @@ on:
       # not deploy, merge or mutate production D1.
       - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
+      - "packages/**"
+      - "test/portable-*.json"
+      - "scripts/lib/**"
+      - "scripts/export-portable-modules.mjs"
+      - "scripts/prepare-theme.mjs"
       - ".github/workflows/phase5g-local-integration.yml"
       - ".github/workflows/ocr-generic-diagnostic.yml"
       - "wrangler.local.jsonc"
@@ -100,6 +105,11 @@ on:
     branches:
       - main
     paths:
+      - "packages/**"
+      - "test/portable-*.json"
+      - "scripts/lib/**"
+      - "scripts/export-portable-modules.mjs"
+      - "scripts/prepare-theme.mjs"
       - ".github/workflows/phase5g-local-integration.yml"
       - ".github/workflows/ocr-generic-diagnostic.yml"
       - "wrangler.jsonc"

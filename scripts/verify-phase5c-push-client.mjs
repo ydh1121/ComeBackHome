@@ -1,10 +1,11 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
 
 const config = await read('../src/config/webPush.ts');
-const browser = await read('../src/providers/browser/BrowserPushSubscriptionProvider.ts');
+const browser = await readImplementationSource('src/providers/browser/BrowserPushSubscriptionProvider.ts');
 const providers = await read('../src/application/contracts/providers.ts');
 const composition = await read('../src/app/composition.ts');
 const mockComposition = await read('../src/app/mockComposition.ts');

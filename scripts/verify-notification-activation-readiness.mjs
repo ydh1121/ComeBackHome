@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
@@ -6,7 +7,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 const pagesEntry = await readFile(new URL('../functions/api/_middleware.ts', import.meta.url), 'utf8');
-const apiSource = await readFile(new URL('../worker/api.ts', import.meta.url), 'utf8');
+const apiSource = await readImplementationSource(new URL('../worker/api.ts', import.meta.url));
 const readinessSource = await readFile(
   new URL('../worker/notification-activation-readiness.ts', import.meta.url),
   'utf8',

@@ -1,9 +1,10 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
 
-const models = await read('../src/domain/models.ts');
+const models = await readImplementationSource('src/domain/models.ts');
 const providers = await read('../src/application/contracts/providers.ts');
 const repositories = await read('../src/application/contracts/repositories.ts');
 const actions = await read('../src/application/contracts/actions.ts');

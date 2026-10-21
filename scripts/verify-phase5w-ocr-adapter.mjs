@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { createServer as createViteServer } from 'vite';
@@ -6,10 +7,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 
-const extractorSource = await readFile(
-  new URL('../src/providers/import/TesseractScheduleImageTextExtractor.ts', import.meta.url),
-  'utf8',
-);
+const extractorSource = await readImplementationSource(new URL('../src/providers/import/TesseractScheduleImageTextExtractor.ts', import.meta.url));
 const compositionSource = await readFile(
   new URL('../src/app/composition.ts', import.meta.url),
   'utf8',

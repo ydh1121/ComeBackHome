@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
@@ -7,14 +8,14 @@ const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
-const permissionSource = await read('../src/providers/browser/BrowserNotificationPermissionProvider.ts');
+const permissionSource = await readImplementationSource('src/providers/browser/BrowserNotificationPermissionProvider.ts');
 const runtimeSource = await read('../src/app/browserNotificationRuntime.ts');
 const compositionSource = await read('../src/app/composition.ts');
 const serviceSource = await read('../src/application/services/ApplicationActions.ts');
 const testGatewaySource = await read('../src/providers/http/HttpNotificationTestGateway.ts');
 const hookSource = await read('../src/features/notifications/useNotificationSettings.ts');
 const pwaSource = await read('../src/pwa/registerServiceWorker.ts');
-const apiSource = await read('../worker/api.ts');
+const apiSource = await readImplementationSource('worker/api.ts');
 
 for (const text of [
   'class BrowserNotificationPermissionProvider',

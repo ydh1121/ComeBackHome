@@ -82,21 +82,7 @@ export interface NotificationJobStore {
   markFailed(jobId: string, error: string, claimAttempts?: number): Promise<boolean | void>;
 }
 
-export type PushDeliveryErrorKind = 'transient' | 'terminal-subscription' | 'permanent';
-export type PushDeliveryFailureStage = 'SUBSCRIPTION' | 'PREPARE' | 'HEADERS' | 'FETCH' | 'PROVIDER';
-
-export class PushDeliveryError extends Error {
-  constructor(
-    message: string,
-    readonly kind: PushDeliveryErrorKind,
-    /** Upstream push provider HTTP status, if present. Never an endpoint or response body. */
-    readonly providerStatus: number | null = null,
-    readonly failureStage: PushDeliveryFailureStage | null = null,
-  ) {
-    super(message);
-    this.name = 'PushDeliveryError';
-  }
-}
+export { PushDeliveryError, type PushDeliveryErrorKind, type PushDeliveryFailureStage } from '../packages/portable/web-push/contracts';
 
 export interface PushDeliveryGateway {
   send(subscription: StoredPushSubscription, payload: NotificationPayload): Promise<void>;

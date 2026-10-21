@@ -39,11 +39,8 @@ export interface ImportBatch {
   committed: boolean;
 }
 export interface NotificationRules { birthdayDays?: number[]; arrivalAdvance?: boolean; shiftEnd: boolean; etaChange: boolean; leftWork: boolean; homeArrival: boolean; }
-export interface WebPushSubscriptionRecord {
-  endpoint: string;
-  expirationTime: number | null;
-  keys: { p256dh: string; auth: string };
-}
+export type { WebPushSubscriptionRecord } from '../../packages/portable/web-push/contracts';
+import type { WebPushSubscriptionRecord } from '../../packages/portable/web-push/contracts';
 export interface NotificationSettings { permission: PermissionState; rules: NotificationRules; subscription?: WebPushSubscriptionRecord | null; }
 export interface PresenceState {
   personId: EntityId;

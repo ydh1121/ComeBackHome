@@ -1,3 +1,5 @@
+import { decodeCtc } from '../../../packages/portable/ocr/ctc.js';
+import { preprocessBitmapRegion } from '../../../packages/portable/ocr/paddle-raster.js';
 import * as ort from 'onnxruntime-web/wasm';
 import { parseScheduleImageClock } from './StructuredTableImageScheduleRecognizer.ts';
 
@@ -31,91 +33,6 @@ async function preprocess(text) {
   for(let y=0;y<48;y++)for(let x=0;x<sw;x++){
     const k=(y*sw+x)*4;
     for(let c=0;c<3;c++)chw[c*48*320+y*320+x]=(rgba[k+(2-c)]/255-.5)/.5;
-  }
-  return new ort.Tensor('float32',chw,[1,3,48,320]);
-}
-
-function decodeCtc(output, alphabet) {
-  const shape=output.dims;
-  if(shape.length!==3||shape[0]!==1)throw Error('Unexpected ONNX tensor shape: '+shape);
-  const time=shape[1],classes=shape[2],data=output.data;
-  if(classes!==alphabet.length+1)throw Error(
-    'CTC alphabet mismatch: '+classes+' outputs vs '+alphabet.length+' characters');
-  let last=-1,text='',confidences=[],rawScores=[];
-  for(let t=0;t<time;t++){
-    let best=-Infinity,index=-1;
-    const offset=t*classes;
-    for(let c=0;c<classes;c++){
-      const score=Number(data[offset+c]);
-      if(score>best){best=score;index=c;}
-    }
-    let rawSum=0,allUnit=true;
-    for(let c=0;c<classes;c++){
-      const value=Number(data[offset+c]);
-      rawSum+=value;
-      if(value<0||value>1)allUnit=false;
-    }
-    // Official PP-OCRv5 ONNX often emits probabilities, not logits.
-    // Applying softmax to a probability vector collapses near-certain
-    // classes to ~1/11947 and invalidates confidence gating.
-    let probability=0;
-    if(allUnit&&Math.abs(rawSum-1)<.02){
-      probability=Math.max(0,Math.min(1,best));
-    }else{
-      let sum=0;
-      for(let c=0;c<classes;c++)sum+=Math.exp(Number(data[offset+c])-best);
-      probability=sum>0?1/sum:0;
-    }
-    if(index!==0&&index!==last){
-      text+=alphabet[index-1];
-      confidences.push(probability);
-      rawScores.push(best);
-    }
-    last=index;
-  }
-  const confidence=confidences.length
-    ? confidences.reduce((a,b)=>a+b,0)/confidences.length : 0;
-  return {text,confidence,rawScores};
-}
-
-function clampRegion(region, width, height) {
-  const x=Math.max(0,Math.min(width-1,Math.floor(region.x)));
-  const y=Math.max(0,Math.min(height-1,Math.floor(region.y)));
-  const right=Math.max(x+1,Math.min(width,Math.ceil(region.x+region.width)));
-  const bottom=Math.max(y+1,Math.min(height,Math.ceil(region.y+region.height)));
-  return {x,y,width:right-x,height:bottom-y};
-}
-
-function preprocessBitmapRegion(bitmap, region, mode='DEFAULT') {
-  // Every mode operates strictly INSIDE the SAME detected physical cell.
-  // No neighbor/time/weekday/OCR truth may enter a recognition retry.
-  const safe=clampRegion(region,bitmap.width,bitmap.height);
-  const ratio=safe.width/Math.max(1,safe.height);
-  const padding=mode==='DEFAULT'?0:mode==='CRISP'?7:12;
-  const resizedWidth=Math.max(1,Math.min(320-padding,Math.ceil(48*ratio)));
-  const canvas=document.createElement('canvas');
-  canvas.width=320;canvas.height=48;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true,alpha:false});
-  if(!ctx)throw Error('Paddle region canvas unavailable');
-  ctx.fillStyle='black';ctx.fillRect(0,0,320,48);
-  if(mode!=='DEFAULT'){
-    // A white in-image margin separates weak leading digits from
-    // a neighboring black table border. Right ONNX padding remains zero.
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,padding,48);
-  }
-  ctx.drawImage(bitmap,safe.x,safe.y,safe.width,safe.height,
-    padding,0,resizedWidth,48);
-  const span=resizedWidth+padding;
-  const rgba=ctx.getImageData(0,0,span,48).data;
-  const chw=new Float32Array(3*48*320);
-  const contrast=mode==='DEFAULT'?1:mode==='CRISP'?1.55:1.35;
-  for(let y=0;y<48;y++)for(let x=0;x<span;x++){
-    const k=(y*span+x)*4;
-    for(let channel=0;channel<3;channel++){
-      const unadjusted=rgba[k+(2-channel)];
-      const adjusted=Math.max(0,Math.min(255,(unadjusted-127.5)*contrast+127.5));
-      chw[channel*48*320+y*320+x]=(adjusted/255-.5)/.5;
-    }
   }
   return new ort.Tensor('float32',chw,[1,3,48,320]);
 }

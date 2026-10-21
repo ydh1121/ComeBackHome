@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -6,9 +7,9 @@ const failures = [];
 const repositories = await read('../src/application/contracts/repositories.ts');
 const importCommit = await read('../src/application/use-cases/commitImportReview.ts');
 const mocks = await read('../src/mocks/repositories.ts');
-const runtimeTypes = await read('../worker/runtime-types.ts');
+const runtimeTypes = await readImplementationSource('worker/runtime-types.ts');
 const pagesEntry = await read('../functions/api/_middleware.ts');
-const api = await read('../worker/api.ts');
+const api = await readImplementationSource('worker/api.ts');
 const person = await read('../worker/repositories/D1PersonRepository.ts');
 const schedule = await read('../worker/repositories/D1ScheduleRepository.ts');
 const place = await read('../worker/repositories/D1PlaceRepository.ts');

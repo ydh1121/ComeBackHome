@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -16,7 +17,7 @@ const manifest = await read('../src/application/route-manifest.ts');
 const css = await read('../src/pages/commute-page.css');
 const providerRuntime = await read('../src/providers/runtime/ProviderRuntimeRepositories.ts');
 const selectors = await read('../src/application/selectors/index.ts');
-const workerApi = await read('../worker/api.ts');
+const workerApi = await readImplementationSource('worker/api.ts');
 const migration = await read('../db/migrations/0007_multi_access_route_sets.sql');
 
 for (const text of ['장소 이름','도로명·지번·건물·매장·장소 검색','상세주소','onCompositionStart','250','actions.places.save']) if (!place.includes(text)) failures.push('place missing ' + text);

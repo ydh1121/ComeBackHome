@@ -7,6 +7,11 @@ on:
       - "feat/**"
       - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
+      - "packages/**"
+      - "test/portable-*.json"
+      - "scripts/lib/**"
+      - "scripts/export-portable-modules.mjs"
+      - "scripts/prepare-theme.mjs"
       - ".github/workflows/ocr-generic-diagnostic.yml"
       - ".github/workflows/phase5g-local-integration.yml"
       - "scripts/verify-ocr-product-static-contract.mjs"
@@ -20,6 +25,11 @@ on:
     branches:
       - main
     paths:
+      - "packages/**"
+      - "test/portable-*.json"
+      - "scripts/lib/**"
+      - "scripts/export-portable-modules.mjs"
+      - "scripts/prepare-theme.mjs"
       - ".github/workflows/ocr-generic-diagnostic.yml"
       - ".github/workflows/phase5g-local-integration.yml"
       - "scripts/verify-ocr-product-static-contract.mjs"

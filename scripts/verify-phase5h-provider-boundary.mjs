@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -11,8 +12,8 @@ const runtimeContracts = await read('../src/application/contracts/runtime.ts');
 const httpProviders = await read('../src/providers/http/HttpDataProviders.ts');
 const composition = await read('../src/app/composition.ts');
 const main = await read('../src/main.tsx');
-const workerTypes = await read('../worker/runtime-types.ts');
-const workerApi = await read('../worker/api.ts');
+const workerTypes = await readImplementationSource('worker/runtime-types.ts');
+const workerApi = await readImplementationSource('worker/api.ts');
 const wranglerLocal = JSON.parse(await read('../wrangler.local.jsonc'));
 const docs = await read('../docs/provider-runtime.md');
 const normalizedDocs = docs.replaceAll('`', '');

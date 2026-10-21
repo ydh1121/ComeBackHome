@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +11,7 @@ const overview = await read('../src/pages/SchedulePage.tsx');
 const history = await read('../src/pages/ScheduleHistoryPage.tsx');
 const day = await read('../src/pages/ScheduleDayEditPage.tsx');
 const calendar = await read('../src/features/schedule/ScheduleCalendar.tsx');
-const timeWheel = await read('../src/shared/components/TimeRangeWheelPicker.tsx');
+const timeWheel = await readImplementationSource('src/shared/components/TimeRangeWheelPicker.tsx');
 const css = await read('../src/pages/schedule-page.css');
 const router = await read('../src/app/router.tsx');
 const actions = await read('../src/application/services/ApplicationActions.ts');

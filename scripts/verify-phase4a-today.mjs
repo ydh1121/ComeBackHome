@@ -1,9 +1,10 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const failures = [];
 const page = await read('../src/pages/TodayPage.tsx');
-const sheet = await read('../src/shared/components/PersonPickerSheet.tsx');
+const sheet = await readImplementationSource('src/shared/components/PersonPickerSheet.tsx');
 const css = await read('../src/pages/today-page.css');
 const router = await read('../src/app/router.tsx');
 const query = await read('../src/application/queries/ComeBackHomeQueries.ts');
@@ -38,7 +39,7 @@ for (const fragment of requiredPageFragments) {
   if (!page.includes(fragment)) failures.push(`TodayPage contract missing: ${fragment}`);
 }
 
-if (!sheet.includes('aria-label="사람 선택 닫기"') || !sheet.includes('<Icon name="close" />') || !sheet.includes('node.showModal()')) failures.push('native person picker close contract missing');
+if ((!sheet.includes('closeLabel="사람 선택 닫기"') || !sheet.includes('aria-label={closeLabel}')) || !sheet.includes('<Icon name="close" />') || !sheet.includes('node.showModal()')) failures.push('native person picker close contract missing');
 if (!router.includes("if (path === '/') return TodayPage")) failures.push('root route is not wired to TodayPage');
 if (!query.includes('getTodayOverview(referenceDate: ISODate)')) failures.push('Today overview query missing');
 if (!query.includes('this.repositories.today.get(selectedId)')) failures.push('TodayPage data must cross TodayRepository boundary');

@@ -1,3 +1,4 @@
+import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -8,8 +9,8 @@ const stateMatrix = await read('../src/pages/QaStateMatrixPage.tsx');
 const flow = await read('../src/pages/QaFlowMapPage.tsx');
 const desktopDrop = await read('../src/pages/QaDesktopDropPage.tsx');
 const qaCss = await read('../src/pages/qa-page.css');
-const onlineHook = await read('../src/shared/runtime/useOnlineStatus.ts');
-const formHook = await read('../src/shared/runtime/useFormRuntimeState.ts');
+const onlineHook = await readImplementationSource('src/shared/runtime/useOnlineStatus.ts');
+const formHook = await readImplementationSource('src/shared/runtime/useFormRuntimeState.ts');
 
 for (const path of ['/__qa/states','/__qa/flow','/__qa/desktop-drop']) {
   if (!manifest.includes("'" + path + "'")) failures.push('qa manifest missing ' + path);

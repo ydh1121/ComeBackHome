@@ -1,0 +1,77 @@
+{
+  "src/app/changeSignal.ts": [
+    "packages/portable/core/change-signal.ts"
+  ],
+  "worker/notification-retry-policy.ts": [
+    "packages/portable/core/retry.ts"
+  ],
+  "worker/runtime-types.ts": [
+    "packages/portable/d1/types.ts"
+  ],
+  "worker/repositories/d1-helpers.ts": [
+    "packages/portable/d1/batch.ts"
+  ],
+  "src/domain/birthday.ts": [
+    "packages/portable/calendar/birthday.ts"
+  ],
+  "worker/contracts.ts": [
+    "packages/portable/web-push/contracts.ts"
+  ],
+  "worker/push/WebPushDeliveryGateway.ts": [
+    "packages/portable/web-push/server.ts"
+  ],
+  "src/providers/browser/BrowserPushSubscriptionProvider.ts": [
+    "packages/portable/web-push/browser.ts"
+  ],
+  "src/providers/browser/BrowserNotificationPermissionProvider.ts": [
+    "packages/portable/web-push/permission.ts"
+  ],
+  "src/shared/runtime/useOnlineStatus.ts": [
+    "packages/portable/react/useOnlineStatus.ts"
+  ],
+  "src/shared/components/Icon.tsx": [
+    "packages/portable/react/Icon.tsx"
+  ],
+  "src/shared/runtime/useFormRuntimeState.ts": [
+    "packages/portable/react/useFormRuntimeState.ts"
+  ],
+  "src/providers/import/ScheduleTableStructureDetector.ts": [
+    "packages/portable/ocr/pixel-table.ts"
+  ],
+  "src/providers/import/PaddleOnnxRegionalExtractor.js": [
+    "packages/portable/ocr/ctc.js",
+    "packages/portable/ocr/paddle-raster.js"
+  ],
+  "src/providers/import/TesseractScheduleImageTextExtractor.ts": [
+    "packages/portable/ocr/tesseract-worker.ts",
+    "packages/portable/ocr/contracts.ts"
+  ],
+  "src/pwa/localCache.ts": [
+    "packages/portable/browser/read-cache.ts",
+    "packages/portable/browser/worker-message.ts"
+  ],
+  "src/providers/http/HttpJsonClient.ts": [
+    "packages/portable/http/json-client.ts"
+  ],
+  "src/domain/product-time.ts": [
+    "packages/portable/calendar/time-zone.ts"
+  ],
+  "src/shared/components/PersonPickerSheet.tsx": [
+    "packages/portable/react/DismissibleSheet.tsx"
+  ],
+  "src/shared/components/TimeRangeWheelPicker.tsx": [
+    "packages/portable/react/TimeRangeWheelPicker.tsx"
+  ],
+  "src/shared/components/PageSkeleton.tsx": [
+    "packages/portable/react/loading.tsx"
+  ],
+  "src/shared/runtime/theme.ts": [
+    "packages/portable/react/theme.ts"
+  ],
+  "worker/api.ts": [
+    "packages/portable/http/server.ts"
+  ],
+  "src/domain/models.ts": [
+    "packages/portable/web-push/contracts.ts"
+  ]
+}
