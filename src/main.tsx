@@ -25,8 +25,9 @@ function LegacyApplication(){
   const [services,setServices]=useState<Awaited<ReturnType<typeof createApplicationServices>>|null>(null);
   const [error,setError]=useState('');
   useEffect(()=>{let active=true;
-    const runtimeMode=resolveRuntimeMode(),providerMode=resolveProviderRuntimeMode();
-    const initialize=async()=>import.meta.env.DEV&&runtimeMode==='mock'
+    const runtimeMode = resolveRuntimeMode();
+    const providerMode = resolveProviderRuntimeMode();
+    const initialize=async()=>import.meta.env.DEV && runtimeMode === 'mock'
       ? (await import('./app/mockComposition')).createMockApplicationServices()
       : createApplicationServices(runtimeMode,providerMode);
     void initialize().then(value=>{if(active)setServices(value);}).catch(()=>{if(active)setError('시작하지 못했습니다. 연결 상태를 확인한 뒤 새로고침해 주세요.');});

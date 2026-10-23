@@ -32,7 +32,8 @@ export async function handleProductRequest(
     assertSameOrigin(request);
     if (
       !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
-      env.MUTATIONS_ENABLED === "0"
+      env.MUTATIONS_ENABLED === "0" &&
+      !path.startsWith("/api/auth/")
     )
       throw new PrivateError(503, "WRITES_DISABLED");
     if (path.startsWith("/api/auth/"))
@@ -71,8 +72,17 @@ export async function handleProductRequest(
       headers,
     });
   } catch (error) {
-    if (error instanceof PrivateError)
-      return privateJson({ error: error.code }, error.status);
+    if (error instanceof PrivateError) {
+      if (error.code === "LOGIN_REQUIRED")
+        await authAudit(env.DB, null, "unauthorized-access", "denied").catch(
+          () => {},
+        );
+      return privateJson(
+        { error: error.code },
+        error.status,
+        error.code === "LOGIN_REQUIRED" ? { "X-CBH-Session": "invalid" } : {},
+      );
+    }
     // Never reflect SQL, file names, credentials or provider response bodies.
     return privateJson({ error: "PRIVATE_SERVICE_UNAVAILABLE" }, 503);
   }

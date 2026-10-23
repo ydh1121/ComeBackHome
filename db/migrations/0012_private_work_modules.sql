@@ -113,3 +113,12 @@ END;
 CREATE TRIGGER case_consent_audit AFTER UPDATE ON case_consents BEGIN
   INSERT INTO case_audit VALUES(lower(hex(randomblob(16))),NEW.case_id,NEW.updated_by,'consent-change',NULL,'allowed',NEW.updated_at);
 END;
+
+CREATE TRIGGER case_payment_validate BEFORE INSERT ON case_payment_events BEGIN
+  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM case_records r WHERE r.id=NEW.claim_id AND r.case_id=NEW.case_id AND r.kind='benefit_claim' AND r.archived_at IS NULL) THEN RAISE(ABORT,'INVALID_CLAIM') END;
+  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM case_records r WHERE r.id=NEW.source_record_id AND r.case_id=NEW.case_id AND r.archived_at IS NULL AND json_array_length(r.payload_json,'$.sourceIds')>0 AND json_extract(r.payload_json,'$.certainty') IN ('documented','official') AND (NEW.event_type IN ('deposit','refund') OR json_extract(r.payload_json,'$.certainty')='official') AND NOT EXISTS(SELECT 1 FROM json_each(r.payload_json,'$.sourceIds') j WHERE NOT EXISTS(SELECT 1 FROM case_documents d WHERE d.id=j.value AND d.case_id=NEW.case_id AND d.status='ready'))) THEN RAISE(ABORT,'PAYMENT_SOURCE_REQUIRED') END;
+  SELECT CASE WHEN NEW.event_type<>'decision_adjustment' AND (NEW.amount<0 OR NEW.recognized_days<0) OR NEW.event_type IN ('deposit','refund') AND NEW.recognized_days<>0 THEN RAISE(ABORT,'INVALID_PAYMENT') END;
+  SELECT CASE WHEN NEW.event_type='refund' AND NOT EXISTS(SELECT 1 FROM case_payment_events e WHERE e.id=NEW.corrects_id AND e.case_id=NEW.case_id AND e.claim_id=NEW.claim_id AND e.event_type='deposit' AND e.amount >= NEW.amount+COALESCE((SELECT SUM(amount) FROM case_payment_events r WHERE r.corrects_id=e.id AND r.event_type='refund'),0)) THEN RAISE(ABORT,'INVALID_REFUND') END;
+  SELECT CASE WHEN NEW.event_type='decision_adjustment' AND NOT EXISTS(SELECT 1 FROM case_payment_events e WHERE e.id=NEW.corrects_id AND e.case_id=NEW.case_id AND e.claim_id=NEW.claim_id AND e.event_type IN ('decision','decision_adjustment')) THEN RAISE(ABORT,'INVALID_CORRECTION') END;
+  SELECT CASE WHEN NEW.event_type IN ('decision','decision_adjustment') AND (NEW.amount+COALESCE((SELECT SUM(amount) FROM case_payment_events e WHERE e.claim_id=NEW.claim_id AND e.event_type IN ('decision','decision_adjustment')),0)<0 OR NEW.recognized_days+COALESCE((SELECT SUM(recognized_days) FROM case_payment_events e WHERE e.claim_id=NEW.claim_id AND e.event_type IN ('decision','decision_adjustment')),0)<0) THEN RAISE(ABORT,'NEGATIVE_DECISION_BALANCE') END;
+END;

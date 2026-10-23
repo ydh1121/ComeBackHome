@@ -9,6 +9,7 @@ const importCommit = await read('../src/application/use-cases/commitImportReview
 const mocks = await read('../src/mocks/repositories.ts');
 const runtimeTypes = await readImplementationSource('worker/runtime-types.ts');
 const pagesEntry = await read('../functions/api/_middleware.ts');
+const productGateway = await read('../worker/modules/gateway.ts');
 const api = await readImplementationSource('worker/api.ts');
 const person = await read('../worker/repositories/D1PersonRepository.ts');
 const schedule = await read('../worker/repositories/D1ScheduleRepository.ts');
@@ -32,13 +33,15 @@ for (const text of [
 }
 
 for (const text of [
-  'handleApiRequest',
+  'handleProductRequest',
   'createProviderRuntime',
   'context.env',
 ]) {
   if (!pagesEntry.includes(text)) failures.push('Pages API entry missing ' + text);
 }
 if (pagesEntry.includes('CBH_RUNTIME')) failures.push('Pages API entry still uses a service binding');
+if (!productGateway.includes('handleApiRequest(request, env, providers)')) failures.push('authenticated gateway must preserve the in-process API and providers');
+if (productGateway.includes('CBH_RUNTIME')) failures.push('authenticated gateway still uses a service binding');
 
 for (const [name, source, required] of [
   ['person', person, ['class D1PersonRepository', 'INSERT INTO people', 'UPDATE people SET']],

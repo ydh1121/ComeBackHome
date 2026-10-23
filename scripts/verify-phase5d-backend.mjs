@@ -7,6 +7,7 @@ const contracts = await readImplementationSource('worker/contracts.ts');
 const schema = await read('../db/migrations/0001_initial.sql');
 const architecture = await read('../docs/backend-architecture.md');
 const pagesFunction = await read('../functions/api/_middleware.ts');
+const productGateway = await read('../worker/modules/gateway.ts');
 const schedulerEntry = await read('../worker/index.ts');
 const schedulerConfig = JSON.parse(await read('../wrangler.scheduler.jsonc'));
 
@@ -64,13 +65,15 @@ for (const text of [
 }
 
 for (const text of [
-  'handleApiRequest',
+  'handleProductRequest',
   'createProviderRuntime',
   'context.env',
 ]) {
   if (!pagesFunction.includes(text)) failures.push('Pages backend entry missing ' + text);
 }
 if (pagesFunction.includes('CBH_RUNTIME')) failures.push('Pages backend still proxies to CBH_RUNTIME');
+if (!productGateway.includes('handleApiRequest(request, env, providers)')) failures.push('product gateway must preserve the in-process application API');
+if (productGateway.includes('CBH_RUNTIME')) failures.push('product gateway must not proxy to another Worker');
 if (schedulerEntry.includes('handleApiRequest')) failures.push('scheduler Worker must not host the application API');
 if (schedulerEntry.includes('createProviderRuntime')) failures.push('scheduler Worker must not host providers');
 if (schedulerEntry.includes('ASSETS')) failures.push('scheduler Worker must not serve the SPA');

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { privateRequest } from "./client";
+import { ApiError, privateRequest } from "./client";
 import { invalidateLocalReads } from "../../pwa/localCache";
 import { releasePrivateImportImage } from "../../application/services/WorkbookImportFileSelectionAction";
 import "./auth.css";
@@ -52,7 +52,9 @@ export function AuthRoot({
     [error, setError] = useState(""),
     [checking, setChecking] = useState(!mock);
   const current = useRef<Session | null>(session),
-    generation = useRef(0);
+    generation = useRef(0),
+    pendingLogout = useRef<boolean | null>(null),
+    sessionRequest = useRef<AbortController | null>(null);
   const apply = useCallback((next: Session) => {
     if (
       current.current?.user?.id !== next.user?.id ||
@@ -63,16 +65,24 @@ export function AuthRoot({
     setSession(next);
   }, []);
   const refresh = useCallback(async () => {
-    if (mock) return;
+    if (mock || pendingLogout.current !== null) return;
     const version = ++generation.current;
+    sessionRequest.current?.abort();
+    const abort = new AbortController();
+    sessionRequest.current = abort;
     try {
-      const next = await privateRequest<Session>("auth/session");
-      if (version !== generation.current) return;
+      const next = await privateRequest<Session>(
+        "auth/session",
+        "GET",
+        undefined,
+        abort.signal,
+      );
+      if (version !== generation.current || abort.signal.aborted) return;
       apply(next);
       setError("");
       setChecking(false);
     } catch {
-      if (version !== generation.current) return;
+      if (version !== generation.current || abort.signal.aborted) return;
       setError(
         "로그인 상태를 확인하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
       );
@@ -84,18 +94,29 @@ export function AuthRoot({
   };
   const logout = useCallback(
     async (all = false) => {
+      pendingLogout.current = all;
+      generation.current++;
+      setChecking(true);
+      clearPersonalMemory();
+      apply({ enabled: true, user: null });
       try {
         await privateRequest(
           "auth/" + (all ? "logout-all" : "logout"),
           "POST",
           {},
         );
-      } finally {
-        generation.current++;
-        clearPersonalMemory();
-        apply({ enabled: true, user: null });
-        broadcast();
+      } catch (error) {
+        if (!(error instanceof ApiError && error.code === "LOGIN_REQUIRED")) {
+          setError(
+            "서버에서 로그아웃을 확인하지 못했습니다. 연결 후 로그아웃을 다시 시도해 주세요.",
+          );
+          return;
+        }
       }
+      pendingLogout.current = null;
+      setError("");
+      setChecking(false);
+      broadcast();
     },
     [apply],
   );
@@ -116,24 +137,38 @@ export function AuthRoot({
     const storage = (event: StorageEvent) => {
       if (event.key === "cbh.auth-event") verify();
     };
-    const visibility = () => {
+    const hide = () => {
+      generation.current++;
+      sessionRequest.current?.abort();
       setChecking(true);
-      if (document.visibilityState === "visible") void refresh();
     };
+    const visibility = () => {
+      if (document.visibilityState === "visible") verify();
+      else hide();
+    };
+    const originalFetch = window.fetch;
+    const guardedFetch: typeof fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      if (response.headers.get("X-CBH-Session") === "invalid")
+        window.dispatchEvent(new Event("cbh-auth-expired"));
+      return response;
+    };
+    window.fetch = guardedFetch;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
     }, 60000);
     window.addEventListener("cbh-auth-expired", lock);
     window.addEventListener("storage", storage);
     window.addEventListener("pageshow", verify);
-    window.addEventListener("pagehide", visibility);
+    window.addEventListener("pagehide", hide);
     document.addEventListener("visibilitychange", visibility);
     return () => {
       clearInterval(timer);
+      if (window.fetch === guardedFetch) window.fetch = originalFetch;
       window.removeEventListener("cbh-auth-expired", lock);
       window.removeEventListener("storage", storage);
       window.removeEventListener("pageshow", verify);
-      window.removeEventListener("pagehide", visibility);
+      window.removeEventListener("pagehide", hide);
       document.removeEventListener("visibilitychange", visibility);
     };
   }, [session?.enabled, mock, apply, refresh]);
@@ -164,7 +199,19 @@ export function AuthRoot({
         <main className="auth-card" role="status">
           <h1>ComeBackHome</h1>
           <p>{error || "로그인 상태 확인 중…"}</p>
-          {error && <button onClick={() => void refresh()}>다시 확인</button>}
+          {error && (
+            <button
+              onClick={() =>
+                pendingLogout.current !== null
+                  ? void logout(pendingLogout.current)
+                  : void refresh()
+              }
+            >
+              {pendingLogout.current !== null
+                ? "로그아웃 다시 시도"
+                : "다시 확인"}
+            </button>
+          )}
         </main>
       )}
     </AuthContext.Provider>

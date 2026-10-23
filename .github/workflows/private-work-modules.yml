@@ -39,6 +39,7 @@ jobs:
           node-version: '22'
       - run: npm ci --no-audit --no-fund
       - run: npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: npm run build
         env:
           VITE_CBH_RUNTIME: api
