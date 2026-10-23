@@ -1,3 +1,4 @@
+import {useAuth} from '../modules/auth/AuthRoot';
 import { useThemePreference, setThemePreference, type ThemePreference } from '../shared/runtime/theme';
 import { useNavigate } from 'react-router';
 import { BackButton } from '../shared/components/BackButton';
@@ -6,6 +7,7 @@ import './notification-page.css';
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const auth = useAuth();
   const theme = useThemePreference();
 
   return (
@@ -13,6 +15,7 @@ export function SettingsPage() {
       <BackButton fallbackTo="/" />
       <h1 className="page-title">설정</h1>
       <div className="settings-list">
+        {auth.enabled&&<a className="settings-row-button" href="/account"><b>계정·산재 설정</b><Icon name="chevron-right" /></a>}
         <button type="button" className="settings-row-button" onClick={() => navigate('/notifications')}>
           <b>알림</b>
           <Icon name="chevron-right" />

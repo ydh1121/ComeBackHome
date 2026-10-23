@@ -1,0 +1,46 @@
+name: Private work modules (isolated only)
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'worker/**'
+      - 'functions/**'
+      - 'db/migrations/**'
+      - 'scripts/verify-private-work*'
+      - 'test/private-work/**'
+      - '.github/workflows/private-work-modules.yml'
+permissions:
+  contents: read
+concurrency:
+  group: private-work-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck && npm run typecheck:worker
+      - run: node scripts/verify-private-work.mjs
+      - run: node_modules/.bin/workerd test test/private-work/crypto-probe.capnp
+  browser-d1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - run: npm run build
+        env:
+          VITE_CBH_RUNTIME: api
+          VITE_CBH_PROVIDER_RUNTIME: api
+      - run: node scripts/verify-private-work-browser.mjs

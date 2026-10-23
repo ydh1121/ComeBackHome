@@ -1,4 +1,4 @@
-import { handleApiRequest } from '../../worker/api';
+import { handleProductRequest } from '../../worker/modules/gateway';
 import { createProviderRuntime } from '../../worker/providers/runtime';
 import type { WorkerEnv } from '../../worker/runtime-types';
 
@@ -12,5 +12,5 @@ export async function onRequest(context: PagesContext): Promise<Response> {
     context.env,
     globalThis.fetch.bind(globalThis),
   );
-  return handleApiRequest(context.request, context.env, providerRuntime);
+  return handleProductRequest(context.request, context.env, providerRuntime);
 }
