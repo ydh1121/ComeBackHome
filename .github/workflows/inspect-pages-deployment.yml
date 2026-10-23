@@ -30,7 +30,7 @@ jobs:
             if (!response.ok || body.success !== true) throw new Error('Cloudflare metadata GET failed: HTTP ' + response.status);
             return body.result;
           }
-          const [project, deployments] = await Promise.all([read(''), read('/deployments?per_page=5')]);
+          const [project, deployments] = await Promise.all([read(''), read('/deployments?env=production&per_page=5')]);
           const deployment = d => d ? { id: d.id, environment: d.environment, commit: d.deployment_trigger?.metadata?.commit_hash, stage: d.latest_stage?.name, status: d.latest_stage?.status, created: d.created_on } : null;
           console.log(JSON.stringify({
             project: project.name, productionBranch: project.production_branch,

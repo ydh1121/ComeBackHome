@@ -15,7 +15,13 @@ async function scenario({failed=false,advanced=false,reuse=false,ambiguous=false
   if(url.includes('/jobs?'))return Response.json({jobs:Array.from({length:12},()=>({conclusion:'success'}))});
   if(url.endsWith('/branches/main'))return Response.json({commit:{sha:advanced?'b'.repeat(40):sha}});
   if(url.endsWith('/api/health'))return Response.json({ok:true,commitSha:ready?sha:'b'.repeat(40)});
-  if(url.includes('/deployments?'))return Response.json({success:true,result:(!missing&&(processed||reuse))?[record]:[]});
+  if(url.includes('/deployments?')){
+   const query=new URL(url).searchParams;
+   assert.equal(query.get('env'),'production','Pages lookup must exclude previews');
+   // Simulate the actual provider rejection that the original fixture missed.
+   if(query.get('per_page')==='100')return Response.json({success:false,errors:[{code:1000}]},{status:400});
+   return Response.json({success:true,result:(!missing&&(processed||reuse))?[record]:[]});
+  }
   reads++;
   return Response.json({success:true,result:{name:'come-back-home',source:{config:{production_branch:'main',production_deployments_enabled:true}},canonical_deployment:(processed||reuse)?record:null}});
  };
