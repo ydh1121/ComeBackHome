@@ -33,7 +33,10 @@ export async function deployCanonicalPages({ env, fetcher = fetch, sleep = ms =>
   const project = await json(cf, env.CLOUDFLARE_API_TOKEN);
   if (project.name !== 'come-back-home' || project.source?.config?.production_branch !== 'main' || project.source?.config?.production_deployments_enabled !== true) throw new Error('Canonical project configuration mismatch');
   const matches = d => d?.environment === 'production' && d.deployment_trigger?.metadata?.commit_hash === sha;
-  const recent = await json(cf + '/deployments?per_page=100', env.CLOUDFLARE_API_TOKEN);
+  // Pages rejected the GitHub-style 100-item query in production. Keep the
+  // previously verified small page and exclude unrelated preview deployments.
+  const deploymentListUrl = cf + '/deployments?env=production&per_page=5';
+  const recent = await json(deploymentListUrl, env.CLOUDFLARE_API_TOKEN);
   let deployment = [project.canonical_deployment, ...recent].find(d => matches(d) && !['failure','canceled'].includes(d.latest_stage?.status));
   let requested = false;
   if (!deployment) {
@@ -45,9 +48,9 @@ export async function deployCanonicalPages({ env, fetcher = fetch, sleep = ms =>
     deployment = response?.ok && body?.success === true && body.result?.id ? body.result : null;
     requested = true;
     if (!deployment) {
-      const observed = await json(cf + '/deployments?per_page=100', env.CLOUDFLARE_API_TOKEN);
+      const observed = await json(deploymentListUrl, env.CLOUDFLARE_API_TOKEN);
       deployment = observed.find(matches);
-      if (!deployment) throw new Error('Deployment response ambiguous; no second POST issued');
+      if (!deployment) throw new Error('Deployment response ambiguous; no second POST issued; HTTP ' + (response?.status ?? 0) + '; codes=' + (body?.errors ?? []).map(e => Number(e.code)).filter(Number.isFinite).join(','));
     }
     if (!matches(deployment)) throw new Error('Deployment identity mismatch');
   }
