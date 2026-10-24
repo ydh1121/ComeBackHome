@@ -543,6 +543,8 @@ try {
         const geometry = await adminPage.evaluate(() => ({
           viewport: innerWidth,
           document: document.documentElement.scrollWidth,
+          body: document.body.scrollWidth,
+          scrollX,
           outside: Array.from(document.querySelectorAll(".private-page *"))
             .map((el) => ({
               tag: el.tagName,
@@ -552,6 +554,21 @@ try {
             }))
             .filter((el) => el.right > innerWidth + 1)
             .slice(0, 20),
+          overflowing: Array.from(document.querySelectorAll("body *"))
+            .filter((el) => el.scrollWidth > el.clientWidth + 1)
+            .map((el) => ({
+              tag: el.tagName,
+              className: el.className,
+              name: el.getAttribute("name"),
+              width: el.getBoundingClientRect().width,
+              left: el.getBoundingClientRect().left,
+              client: el.clientWidth,
+              scroll: el.scrollWidth,
+              overflow: getComputedStyle(el).overflowX,
+              display: getComputedStyle(el).display,
+              closed: !!el.closest("details:not([open])"),
+            }))
+            .slice(0, 45),
         }));
         assert.ok(
           geometry.document <= geometry.viewport + 1,
