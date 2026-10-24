@@ -574,6 +574,36 @@ try {
             }))
             .slice(0, 45),
         }));
+        if (geometry.document > geometry.viewport + 1) {
+          const variants = [];
+          for (const [name, css] of [
+            [
+              "native-appearance",
+              ".private-page select {appearance:none;-webkit-appearance:none}",
+            ],
+            ["label-clip", ".private-page label:has(> select) {overflow:clip}"],
+            [
+              "label-hidden",
+              ".private-page label:has(> select) {overflow:hidden}",
+            ],
+            [
+              "label-containment",
+              ".private-page label:has(> select) {contain:paint}",
+            ],
+          ]) {
+            const style = await adminPage.addStyleTag({ content: css });
+            variants.push({
+              name,
+              width: await adminPage.evaluate(
+                () => document.documentElement.scrollWidth,
+              ),
+            });
+            await style.evaluate((el) => el.remove());
+          }
+          console.log(
+            "PRIVATE_SYNTHETIC_OVERFLOW_VARIANTS " + JSON.stringify(variants),
+          );
+        }
         assert.ok(
           geometry.document <= geometry.viewport + 1,
           "populated calculation no overflow " +
