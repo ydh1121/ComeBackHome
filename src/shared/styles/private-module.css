@@ -99,6 +99,11 @@
   resize: vertical;
   line-height: 1.7;
 }
+.private-page select {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .private-page form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

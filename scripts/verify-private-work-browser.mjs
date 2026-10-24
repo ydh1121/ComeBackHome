@@ -560,6 +560,10 @@ try {
               tag: el.tagName,
               className: el.className,
               name: el.getAttribute("name"),
+              label:
+                el.tagName === "LABEL"
+                  ? el.childNodes[0]?.textContent?.trim()
+                  : null,
               width: el.getBoundingClientRect().width,
               left: el.getBoundingClientRect().left,
               client: el.clientWidth,
