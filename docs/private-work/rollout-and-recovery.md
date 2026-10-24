@@ -4,11 +4,11 @@
 
 ## 먼저 결정할 내용
 
-1. 기존 일정·사람·경로·푸시 설정은 하나의 공동 공간이다. 두 계정이 이를 함께 관리할지 사용자가 결정한다. 산재 자료는 별도로 신이본 계정에 귀속된다. 기존 자료의 개인별 분할은 이번 변경에 포함되지 않는다.
+1. 기존 일정·사람·경로·푸시 설정은 하나의 공동 공간이다. **2026-10-24 사용자가 두 계정의 공동 사용을 승인했다.** 산재 자료는 별도로 신이본 계정에 귀속된다. 이미 생성된 비밀번호·해시·Drive 키를 다시 만들지 않고, 운영 적용 승인 후 기존 두 계정에 공동 공간 권한만 별도로 부여한다. 기존 자료를 개인별로 분할하지 않는다.
 2. 기존 Cloudflare `come-back-home`의 실제 Free 플랜·DB 바인딩·변수·배포 경로를 확인한다. 새 프로젝트는 필요하지 않다.
 3. 비밀번호와 Drive 암호화 키는 [Windows 준비 절차](owner-setup.md)대로 사용자 PC에서만 만든다. 기존 VAPID·교통 API 키를 교체하지 않는다.
 4. 실제 Free CPU 예산에서 로그인·비밀번호 변경을 검증할 승인된 경로를 정한다. 로컬 workerd 성공이나 wall time은 운영 CPU 수락이 아니다. 강도 하향·유료 전환은 자동으로 하지 않는다.
-5. 실제 Google OAuth/Picker, 비공개 보관 폴더, 실제 iPhone 로그인 유지·로그아웃을 별도로 검수한다. 운영 알림 발송·실사용 원본 업로드는 개발 CI에 포함되지 않는다.
+5. 실제 Google OAuth/Picker, 비공개 보관 폴더, 실제 iPhone 로그인 유지·로그아웃은 **검수할 새 버전이 배포된 뒤** 별도로 확인한다. 이들을 전부 완료해야 첫 배포 승인을 요청할 수 있다는 순환 조건을 만들지 않는다. 운영 알림 발송·실사용 원본 업로드는 개발 CI에 포함되지 않는다.
 
 ## 승인 후 적용 순서
 
@@ -37,8 +37,22 @@
    & .\node_modules\.bin\wrangler.cmd d1 execute come-back-home-db --remote --config .\wrangler.jsonc --file (Join-Path $cbhPrivateSetup 'bootstrap-hashes.sql')
    ```
 
-5. 결과와 두 계정·산재 소유자·명시적 기존 공간 권한을 확인한다. 실패한 계정 생성 파일을 반복 적용하지 않는다. 해시 SQL도 비공개로 취급한다.
-6. 기존 배포 절차를 사용하며 `PRIVATE_WORK_ENABLED`는 마지막에 활성화한다. 첫 로그인/강제 변경 → 계정 권한 → 신이본의 관리자 동의 → 기존 일정/OCR → 실제 Drive 원본 검증 → iPhone 세션을 확인한다. 실제 배포 ID와 검수 결과를 기록한다.
+5. 결과와 두 계정·산재 소유자·명시적 기존 공간 권한을 확인한다. 기존 해시 파일에 공동 공간 grant가 없다면, 운영 적용 승인 범위에서 배포 담당자가 아래 SQL을 적용한다. 먼저 두 계정이 각각 한 개 존재하는지 확인하고, 없으면 중단한다. 이 SQL은 계정 UUID·비밀번호·산재 소유권을 변경하지 않는다.
+
+   ```sql
+   SELECT login_id FROM auth_users WHERE login_id IN ('ydh1121','yvonne');
+   INSERT INTO auth_workspace_grants(user_id,workspace,permission,approved_at)
+   SELECT id,'legacy','write',strftime('%Y-%m-%dT%H:%M:%fZ','now')
+   FROM auth_users WHERE login_id IN ('ydh1121','yvonne')
+   ON CONFLICT(user_id) DO UPDATE SET permission='write',approved_at=excluded.approved_at;
+   INSERT INTO auth_audit(id,actor_id,action,outcome,target_id,created_at)
+   SELECT lower(hex(randomblob(16))),NULL,'owner-approved-legacy-shared-access','applied',id,
+     strftime('%Y-%m-%dT%H:%M:%fZ','now')
+   FROM auth_users WHERE login_id IN ('ydh1121','yvonne');
+   ```
+
+   적용 후 두 grant 모두 `legacy/write`인지 조회해 확인한다. 실패한 계정 생성 파일을 반복 적용하지 않는다. 해시 SQL도 비공개로 취급한다.
+6. 기존 배포 절차를 사용하며 `PRIVATE_WORK_ENABLED`는 코드·계정 준비가 끝나고 실환경 검수를 시작할 때 활성화한다. 첫 로그인/강제 변경과 Free 실행 한도 → 계정 권한 → 신이본의 관리자 동의 → 기존 일정/OCR → 실제 Drive 연결·원본 검증 → iPhone 세션을 확인한다. **MAIN 병합·검수용 운영 배포 승인과 배포 후 정식 수락은 별도다.** 실제 배포 ID와 검수 결과를 기록한다.
 
 ## 실패 시 복구
 
