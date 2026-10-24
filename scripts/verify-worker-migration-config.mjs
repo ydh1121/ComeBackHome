@@ -33,11 +33,13 @@ expect(
 );
 
 expect(
-  pagesFunction.includes("handleApiRequest") &&
+  pagesFunction.includes("handleProductRequest") &&
     pagesFunction.includes("createProviderRuntime") &&
     pagesFunction.includes("context.env"),
   'Pages Function must execute backend directly',
 );
+const privateGateway = await readFile(new URL('../worker/modules/gateway.ts', import.meta.url), 'utf8');
+expect(privateGateway.includes('handleApiRequest(request, env, providers)') && !privateGateway.includes('CBH_RUNTIME'), 'in-process auth gateway must retain direct legacy API execution');
 expect(!pagesFunction.includes('CBH_RUNTIME'), 'Pages Function must not proxy to a backend Worker');
 expect(!pagesWorkflow.includes("service: 'come-back-home-runtime'"), 'Pages must not bind to come-back-home-runtime');
 expect(

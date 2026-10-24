@@ -1,7 +1,8 @@
 import type { D1DatabaseLike, StaticAssetFetcher } from '../packages/portable/d1/types';
+import type { PrivateEnv } from './modules/auth/contracts';
 export * from '../packages/portable/d1/types';
 
-export interface WorkerEnv {
+export interface WorkerEnv extends PrivateEnv {
   DB: D1DatabaseLike;
   ASSETS?: StaticAssetFetcher;
   MUTATIONS_ENABLED?: string;

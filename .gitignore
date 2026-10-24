@@ -11,3 +11,6 @@ dist/
 # Generated local OCR runtime assets (Phase 5X; do not commit binaries)
 public/ocr/
 public/ort/
+
+# Isolated private module QA uses synthetic data only.
+artifacts/private-work/

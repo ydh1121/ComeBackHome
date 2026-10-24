@@ -33,7 +33,7 @@ expect(d1?.database_id === '00000000-0000-0000-0000-000000000000', 'local config
 expect(d1?.preview_database_id === 'comebackhome-local', 'local preview database id is missing');
 expect(d1?.migrations_dir === 'db/migrations', 'D1 migrations_dir must be db/migrations');
 expect(config.vars?.PUSH_DELIVERY_ENABLED === '0', 'local push delivery must stay disabled');
-expect(localEntry.includes('handleApiRequest'), 'local Pages harness must execute application API');
+expect(localEntry.includes('handleProductRequest'), 'local Pages harness must execute application API');
 expect(localEntry.includes('ASSETS'), 'local Pages harness must preserve SPA asset verification');
 expect(!schedulerEntry.includes('handleApiRequest'), 'production scheduler Worker must not host application API');
 expect(!schedulerEntry.includes('ASSETS'), 'production scheduler Worker must not serve SPA assets');

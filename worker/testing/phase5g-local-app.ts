@@ -1,4 +1,4 @@
-import { handleApiRequest } from '../api';
+import { handleProductRequest } from '../modules/gateway';
 import type { ExecutionContextLike, WorkerEnv } from '../runtime-types';
 
 export default {
@@ -23,7 +23,7 @@ export default {
       return Response.json({ jobs: jobs.results, receipts: receipts.results, state });
     }
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
-      return handleApiRequest(request, env, null);
+      return handleProductRequest(request, env, null);
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response('Local static asset binding is unavailable.', { status: 503 });

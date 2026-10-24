@@ -1,0 +1,80 @@
+export class ApiError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+  ) {
+    super(errorText(code));
+  }
+}
+export function errorText(code: string): string {
+  const texts: Record<string, string> = {
+    LOGIN_REQUIRED: "다시 로그인해 주세요.",
+    LOGIN_FAILED: "아이디 또는 비밀번호를 확인해 주세요.",
+    TRY_LATER: "시도가 많습니다. 15분 후 다시 시도해 주세요.",
+    PASSWORD_INVALID:
+      "새 비밀번호는 15~128자이며 기존 비밀번호와 달라야 합니다.",
+    PASSWORD_INCORRECT: "현재 비밀번호를 확인해 주세요.",
+    PASSWORD_CHANGE_REQUIRED: "임시 비밀번호를 먼저 변경해 주세요.",
+    REVISION_CONFLICT:
+      "다른 기기에서 먼저 수정했습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요.",
+    CASE_ACCESS_DENIED: "신이본 계정에서 관리자 열람 동의를 설정해야 합니다.",
+    CASE_NOT_PROVISIONED: "계정·산재 자료 공간 초기 설정이 필요합니다.",
+    DRIVE_NOT_CONFIGURED: "Google Drive 연결 설정이 아직 적용되지 않았습니다.",
+    DRIVE_RECONNECT: "문서를 보관하는 Google 계정을 다시 연결해 주세요.",
+    DRIVE_FOLDER_REQUIRED: "먼저 비공개 보관 폴더를 선택해 주세요.",
+    PRIVATE_FOLDER_REQUIRED: "공유되지 않은 내 Drive 폴더를 선택해 주세요.",
+    DRIVE_NOT_PRIVATE:
+      "파일의 공유 권한이 바뀌었습니다. 비공개 상태를 확인해 주세요.",
+    DRIVE_INTEGRITY_FAILED:
+      "원본 확인이 일치하지 않습니다. 파일을 보존하고 다시 확인해 주세요.",
+    DRIVE_REVISION_CHANGED:
+      "Drive의 원본 버전이 변경됐습니다. 처음 보관한 원본을 복원하거나 새 문서로 등록해 주세요.",
+    UPLOAD_RETRY:
+      "다른 전송 상태가 확인됐습니다. 다시 시도하면 이어서 전송합니다.",
+    POLICY_VERSION_CONFLICT:
+      "같은 버전 이름의 다른 정책이 있습니다. 새 버전 이름으로 저장해 주세요.",
+    INVALID_REFUND: "반환액이 연결한 입금의 남은 금액을 초과합니다.",
+    NEGATIVE_DECISION_BALANCE:
+      "정정 후 결정액이나 인정일수가 음수가 됩니다. 정정값을 확인해 주세요.",
+    DRIVE_FILE_MISSING:
+      "Drive에서 원본을 찾지 못했습니다. 원본을 복원한 뒤 다시 확인해 주세요.",
+    OFFICIAL_SOURCE_REQUIRED:
+      "기관 확정 상태에는 확인된 원본 문서를 연결해 주세요.",
+    PAYMENT_SOURCE_REQUIRED: "지급 근거가 되는 원본 연결 기록을 선택해 주세요.",
+    VERIFIED_DOCUMENT_REQUIRED: "보관 확인이 끝난 원본만 연결할 수 있습니다.",
+    INVALID_FILE: "PDF·PNG·JPG·WebP 파일을 최대 20MB까지 선택할 수 있습니다.",
+    FILE_TYPE_MISMATCH: "파일 내용과 확장자가 일치하지 않습니다.",
+    WORKSPACE_ACCESS_REQUIRED: "기존 일정 자료의 접근 설정이 필요합니다.",
+    WRITES_DISABLED: "현재 저장이 중지되어 있습니다.",
+    ARCHIVE_FOLDER_LOCKED:
+      "원본 보존을 위해 보관 폴더 변경은 별도 이전 절차가 필요합니다.",
+  };
+  return (
+    texts[code] ??
+    `처리하지 못했습니다 (${code}). 입력과 연결 상태를 확인해 주세요.`
+  );
+}
+export async function privateRequest<T = Record<string, unknown>>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch("/api/" + path, {
+    method,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
+  });
+  const value = await response
+    .json()
+    .catch(() => ({ error: "SERVICE_UNAVAILABLE" }));
+  if (!response.ok) {
+    if (value.error === "LOGIN_REQUIRED")
+      window.dispatchEvent(new Event("cbh-auth-expired"));
+    throw new ApiError(value.error ?? "SERVICE_UNAVAILABLE", response.status);
+  }
+  return value as T;
+}
