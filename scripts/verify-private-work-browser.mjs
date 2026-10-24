@@ -351,13 +351,13 @@ try {
     await page
       .getByRole("heading", { name: "산재·직장", exact: true })
       .waitFor();
-    assert.ok(
-      await page
-        .locator(".document-list")
-        .getByRole("heading", { name: "synthetic-" + label + ".pdf" })
-        .isVisible(),
-      "remembered login + document persistence",
-    );
+    // The authenticated shell renders before the document status/list fetch.
+    // Wait for the persisted original itself; shell visibility is not a data
+    // readiness barrier, especially in WebKit after reload.
+    await page
+      .locator(".document-list")
+      .getByRole("heading", { name: "synthetic-" + label + ".pdf" })
+      .waitFor({ state: "visible", timeout: 15000 });
     // A second real browser session exercises owner consent and the admin UI.
     await page.getByRole("button", { name: "접근·이력", exact: true }).click();
     await page
