@@ -119,14 +119,18 @@
   display: flex;
   align-items: center;
 }
-/* WebKit includes a native select's intrinsic option width in a grid label's
-   scrollable overflow even when the select's border box fits. Keep these labels
-   in normal flow; the dropdown and its full option labels remain native. */
+/* WebKit can propagate a native select's intrinsic option width beyond its
+   correctly sized border box. Contain that overflow at the field, not the page;
+   the native picker retains the full option text and keyboard behavior. */
 .private-page label:has(> select) {
   display: block;
+  overflow: clip;
 }
 .private-page label > select {
   margin-top: 8px;
+}
+.private-page label > select:focus-visible {
+  outline-offset: -3px;
 }
 .private-page fieldset {
   border: 1px solid var(--cbh-line);

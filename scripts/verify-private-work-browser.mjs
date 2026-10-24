@@ -508,11 +508,24 @@ try {
     const policySnapshot = await (
       await adminContext.request.get(base + "/api/private/case")
     ).json();
-    await adminPage
-      .getByLabel("계산 근거", { exact: true })
-      .selectOption(
-        policySnapshot.policies.find((p) => p.key === "work_injury").id,
-      );
+    const policySelect = adminPage.getByLabel("계산 근거", { exact: true });
+    const workInjuryPolicy = policySnapshot.policies.find(
+      (p) => p.key === "work_injury",
+    );
+    await policySelect.focus();
+    await policySelect.press("ArrowDown");
+    await policySelect.press("Enter");
+    assert.equal(
+      await policySelect.inputValue(),
+      workInjuryPolicy.id,
+      "native policy picker remains keyboard selectable",
+    );
+    assert.ok(
+      (await policySelect.locator("option:checked").textContent()).includes(
+        workInjuryPolicy.effectiveTo,
+      ),
+      "full policy effective range remains available in the picker",
+    );
     await adminPage
       .getByLabel("계산 기준일", { exact: true })
       .fill("2026-10-24");
@@ -534,6 +547,20 @@ try {
       await adminPage.emulateMedia({ colorScheme: mode });
       for (const width of [375, 390, 768, 1024, 1440]) {
         await adminPage.setViewportSize({ width, height: 900 });
+        await policySelect.focus();
+        await adminPage.keyboard.press("Tab");
+        await adminPage.keyboard.press("Shift+Tab");
+        const focus = await policySelect.evaluate((el) => ({
+          focused: document.activeElement === el,
+          offset: getComputedStyle(el).outlineOffset,
+          width: getComputedStyle(el).outlineWidth,
+          style: getComputedStyle(el).outlineStyle,
+        }));
+        assert.deepEqual(
+          focus,
+          { focused: true, offset: "-3px", width: "2px", style: "solid" },
+          "focus ring remains visible inside the contained field",
+        );
         await adminPage.screenshot({
           path: resolve(
             "artifacts/private-work",
@@ -574,36 +601,6 @@ try {
             }))
             .slice(0, 45),
         }));
-        if (geometry.document > geometry.viewport + 1) {
-          const variants = [];
-          for (const [name, css] of [
-            [
-              "native-appearance",
-              ".private-page select {appearance:none;-webkit-appearance:none}",
-            ],
-            ["label-clip", ".private-page label:has(> select) {overflow:clip}"],
-            [
-              "label-hidden",
-              ".private-page label:has(> select) {overflow:hidden}",
-            ],
-            [
-              "label-containment",
-              ".private-page label:has(> select) {contain:paint}",
-            ],
-          ]) {
-            const style = await adminPage.addStyleTag({ content: css });
-            variants.push({
-              name,
-              width: await adminPage.evaluate(
-                () => document.documentElement.scrollWidth,
-              ),
-            });
-            await style.evaluate((el) => el.remove());
-          }
-          console.log(
-            "PRIVATE_SYNTHETIC_OVERFLOW_VARIANTS " + JSON.stringify(variants),
-          );
-        }
         assert.ok(
           geometry.document <= geometry.viewport + 1,
           "populated calculation no overflow " +
