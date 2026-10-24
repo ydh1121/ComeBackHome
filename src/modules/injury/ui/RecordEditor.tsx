@@ -16,7 +16,11 @@ export const certaintyLabel = {
   documented: "문서 확인",
   official: "기관 확정",
 };
-export function payloadText(payload: CasePayload, kind: RecordKind): string {
+export function payloadText(
+  payload: CasePayload,
+  kind: RecordKind,
+  data?: CaseData,
+): string {
   const spec: RecordSpec = RECORD_SPECS[kind];
   return [
     payload.title,
@@ -25,10 +29,32 @@ export function payloadText(payload: CasePayload, kind: RecordKind): string {
       .filter(
         (f) => payload.data[f.key] !== undefined && payload.data[f.key] !== "",
       )
-      .map((f) => `${f.label}: ${fieldText(f, payload.data[f.key])}`),
+      .map((f) => `${f.label}: ${fieldText(f, payload.data[f.key], data)}`),
   ].join("\n");
 }
-function fieldText(field: Field, value: string | number | boolean) {
+function fieldText(
+  field: Field,
+  value: string | number | boolean,
+  data?: CaseData,
+) {
+  if (
+    data &&
+    ["employmentId", "claimId", "relatedId", "relatedMessage"].includes(
+      field.key,
+    )
+  )
+    return (
+      data.records.find((r) => r.id === value)?.payload.title ??
+      "연결 기록 확인 필요"
+    );
+  if (data && field.key === "sourceDocument")
+    return (
+      data.documents.find((d) => d.id === value)?.filename ?? "원본 확인 필요"
+    );
+  if (data && field.key === "policyId")
+    return (
+      data.policies.find((p) => p.id === value)?.version ?? "정책 확인 필요"
+    );
   if (field.type === "boolean") return value ? "예" : "아니요";
   return field.options?.find((o) => o[0] === value)?.[1] ?? String(value);
 }
@@ -54,9 +80,11 @@ export function CopyButton({ value }: { value: string }) {
 export function RecordCard({
   record,
   open,
+  data,
 }: {
   record: CaseRecord;
-  open: () => void;
+  open?: () => void;
+  data: CaseData;
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null),
     start = useRef({ x: 0, y: 0 });
@@ -67,6 +95,7 @@ export function RecordCard({
   useEffect(() => cancel, []);
   const down = (event: PointerEvent) => {
     if ((event.target as HTMLElement).closest("button,a,input")) return;
+    if (!open) return;
     start.current = { x: event.clientX, y: event.clientY };
     cancel();
     timer.current = setTimeout(open, 550);
@@ -95,13 +124,15 @@ export function RecordCard({
           </small>
           <h3>{record.payload.title}</h3>
         </div>
-        <button className="secondary" onClick={open}>
-          편집
-        </button>
+        {open && (
+          <button className="secondary" onClick={open}>
+            편집
+          </button>
+        )}
       </div>
       <div className="content-scroll">
         <div className="copy-toolbar">
-          <CopyButton value={payloadText(record.payload, record.kind)} />
+          <CopyButton value={payloadText(record.payload, record.kind, data)} />
         </div>
         <p className="record-body">{record.payload.body || "본문 없음"}</p>
         <dl>
@@ -113,8 +144,8 @@ export function RecordCard({
             )
             .map((f) => (
               <div key={f.key}>
-                <dt>{f.label}</dt>
-                <dd>{fieldText(f, record.payload.data[f.key])}</dd>
+                <dt>{f.label.replace(/ ID$/, "")}</dt>
+                <dd>{fieldText(f, record.payload.data[f.key], data)}</dd>
               </div>
             ))}
         </dl>
@@ -124,7 +155,8 @@ export function RecordCard({
         {new Date(record.updatedAt).toLocaleString("ko-KR", {
           timeZone: "Asia/Seoul",
         })}{" "}
-        · 버전 {record.revision}
+        · {data.actors.find((a) => a.id === record.updatedBy)?.name ?? "계정"} ·
+        버전 {record.revision}
       </small>
     </article>
   );
@@ -190,8 +222,39 @@ export function RecordEditor({
     return () => window.removeEventListener("beforeunload", unload);
   }, [dirty]);
   useEffect(() => {
+    const previous =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     form.current?.querySelector<HTMLInputElement>("input")?.focus();
+    return () => previous?.focus();
   }, []);
+  useEffect(() => {
+    const dialog = form.current?.closest('[role="dialog"]');
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) {
+        event.preventDefault();
+        if (!dirty || confirm("저장하지 않은 입력을 취소할까요?")) close();
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const controls = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          "button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href]",
+        ),
+      ).filter((e) => e.getClientRects().length);
+      const first = controls[0],
+        last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [dirty, busy, close]);
   const dismiss = () => {
     if (!dirty || confirm("저장하지 않은 입력을 취소할까요?")) close();
   };
@@ -353,7 +416,7 @@ export function RecordEditor({
           </label>
           <div className="editor-content-scroll">
             <div className="copy-toolbar">
-              <CopyButton value={payloadText(payload, kind)} />
+              <CopyButton value={payloadText(payload, kind, data)} />
             </div>
             <label>
               본문·메모
@@ -427,7 +490,7 @@ export function RecordEditor({
           {conflict && (
             <section className="conflict-panel">
               <h3>다른 기기의 최신 저장본</h3>
-              <pre>{payloadText(conflict.payload, kind)}</pre>
+              <pre>{payloadText(conflict.payload, kind, data)}</pre>
               <p>
                 내 입력은 보존되어 있습니다. 두 내용을 확인한 뒤 필요한 부분을
                 직접 합쳐 주세요.
@@ -474,9 +537,10 @@ export function RecordEditor({
                   <small>
                     버전 {h.revision} ·{" "}
                     {new Date(h.createdAt).toLocaleString("ko-KR")} · 작성자{" "}
-                    {h.authorId}
+                    {data.actors.find((a) => a.id === h.authorId)?.name ??
+                      "계정"}
                   </small>
-                  <pre>{payloadText(h.payload, kind)}</pre>
+                  <pre>{payloadText(h.payload, kind, data)}</pre>
                 </section>
               ))}
               <button

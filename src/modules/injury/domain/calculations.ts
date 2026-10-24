@@ -87,6 +87,9 @@ export function estimateUnemployment(
   input: {
     date: string;
     averageDailyWage: number;
+    ordinaryDailyWage: number;
+    dailyWorker: boolean;
+    specialBasis: boolean;
     scheduledDailyHours: number;
     allocatedDays: number;
   },
@@ -102,6 +105,8 @@ export function estimateUnemployment(
   const p = policy.values;
   if (
     !Number.isFinite(input.averageDailyWage) ||
+    !Number.isFinite(input.ordinaryDailyWage) ||
+    input.ordinaryDailyWage < 0 ||
     !Number.isFinite(input.scheduledDailyHours) ||
     input.averageDailyWage < 0 ||
     input.scheduledDailyHours <= 0 ||
@@ -111,6 +116,8 @@ export function estimateUnemployment(
     input.allocatedDays > 500
   )
     throw new Error("INVALID_INPUT");
+  if (input.specialBasis)
+    return { amount: null, dailyRate: null, status: "agency_review" as const };
   // Short-time rules need a separately verified hour bracket; do not extrapolate an 8h rule.
   if (input.scheduledDailyHours !== p.maximumHours)
     return { amount: null, dailyRate: null, status: "hours_review" as const };
@@ -118,7 +125,13 @@ export function estimateUnemployment(
     p.minimumWageHourly * input.scheduledDailyHours * p.minimumRate;
   const daily = Math.min(
     p.maximumDaily,
-    Math.max(minimum, input.averageDailyWage * p.baseRate),
+    Math.max(
+      minimum,
+      (input.dailyWorker
+        ? input.averageDailyWage
+        : Math.max(input.averageDailyWage, input.ordinaryDailyWage)) *
+        p.baseRate,
+    ),
   );
   return {
     amount: Math.floor(daily * input.allocatedDays),
@@ -141,6 +154,7 @@ export interface InsuranceWindow {
   exceptionEvidence?: string;
   exceptionKind?: "illness_unpaid" | "short_hours";
   maxMonths?: number;
+  priorBenefitLostDate?: string;
 }
 export function insuredDays(
   records: PaidDay[],
@@ -175,7 +189,11 @@ export function insuredDays(
   let outside = 0;
   for (const item of records) {
     day(item.date);
-    if (item.date < start || item.date > leaveDate) {
+    if (
+      item.date < start ||
+      item.date > leaveDate ||
+      (policy.priorBenefitLostDate && item.date < policy.priorBenefitLostDate)
+    ) {
       outside++;
       continue;
     }
@@ -276,6 +294,12 @@ export function aggregateInsuredPeriods(
   periods: InsuredPeriod[],
   asOf: string,
 ) {
+  day(asOf);
+  for (const p of periods) {
+    day(p.from);
+    day(p.lost);
+    if (p.lost <= p.from) throw Error("INVALID_INPUT");
+  }
   const sorted = periods
     .filter((p) => p.from <= asOf)
     .sort((a, b) => b.from.localeCompare(a.from));

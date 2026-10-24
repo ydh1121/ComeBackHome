@@ -218,10 +218,24 @@ export class CaseRepository {
       createdAt: r.created_at,
     }));
   }
+  async restore(id: string, revision: number): Promise<void> {
+    const row = await this.db
+      .prepare(
+        `UPDATE case_records SET archived_at=NULL,revision=revision+1,updated_by=?2,updated_at=?6 WHERE case_id=?1 AND id=?5 AND revision=?7 AND archived_at IS NOT NULL AND ${this.acl()} RETURNING id`,
+      )
+      .bind(...this.args(), id, instant(), revision)
+      .first();
+    if (!row) {
+      await this.authorize();
+      throw new PrivateError(409, "REVISION_CONFLICT");
+    }
+  }
   async policies(): Promise<LegalPolicy[]> {
     await this.authorize();
     const rows = await this.db
-      .prepare("SELECT * FROM case_policies ORDER BY effective_from DESC")
+      .prepare(
+        "SELECT * FROM case_policies ORDER BY effective_from DESC,created_at DESC,id DESC",
+      )
       .all<Record<string, unknown>>();
     return rows.results.map((r) => ({
       id: String(r.id),

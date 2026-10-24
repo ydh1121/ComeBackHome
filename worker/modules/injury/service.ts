@@ -61,6 +61,7 @@ export async function handleCase(
       });
     }
     if (request.method === "PUT" && owner) {
+      await repo.authorize();
       const body = await readJson(request);
       if (
         typeof body.adminAccess !== "boolean" ||
@@ -74,19 +75,21 @@ export async function handleCase(
       if (body.adminAccess && (!body.purpose.trim() || !body.retention.trim()))
         throw new PrivateError(400, "CONSENT_DETAILS_REQUIRED");
       const row = await env.DB.prepare(
-        `UPDATE case_consents SET admin_access=?2,purpose=?3,retention=?4,revision=revision+1,updated_by=?5,updated_at=?6 WHERE case_id=?1 AND revision=?7 RETURNING revision`,
+        `UPDATE case_consents SET admin_access=?5,purpose=?6,retention=?7,revision=revision+1,updated_by=?2,updated_at=?8 WHERE case_id=?1 AND revision=?9 AND ${repo.acl()} RETURNING revision`,
       )
         .bind(
-          profile.id,
+          ...repo.args(),
           body.adminAccess ? 1 : 0,
           body.purpose,
           body.retention,
-          p.id,
           now(),
           Number(body.revision),
         )
         .first();
-      if (!row) throw new PrivateError(409, "REVISION_CONFLICT");
+      if (!row) {
+        await repo.authorize();
+        throw new PrivateError(409, "REVISION_CONFLICT");
+      }
       return privateJson(row);
     }
     throw new PrivateError(403, "OWNER_ONLY");
@@ -122,6 +125,14 @@ export async function handleCase(
     await repo.authorize();
     return privateJson({
       caseId: profile.id,
+      actors: (
+        await env.DB.prepare(
+          "SELECT id,role FROM auth_users WHERE disabled=0",
+        ).all<{ id: string; role: string }>()
+      ).results.map((u) => ({
+        id: u.id,
+        name: u.role === "admin" ? "관리자" : "신이본",
+      })),
       owner: p.id === profile.owner_id,
       records,
       policies,
@@ -132,6 +143,13 @@ export async function handleCase(
     });
   }
   if (path[0] === "records" && path[1]) {
+    if (path[2] === "restore" && request.method === "POST") {
+      const body = await readJson(request);
+      if (!Number.isSafeInteger(body.revision))
+        throw new PrivateError(400, "INVALID_RECORD");
+      await repo.restore(path[1], Number(body.revision));
+      return privateJson({ ok: true });
+    }
     if (path[2] === "history" && request.method === "GET")
       return privateJson({ history: await repo.history(path[1]) });
     if (path.length === 2 && request.method === "GET")
@@ -161,9 +179,9 @@ export async function handleCase(
     return privateJson({
       events: (
         await env.DB.prepare(
-          "SELECT actor_id,action,target_id,outcome,created_at FROM case_audit WHERE case_id=?1 ORDER BY created_at DESC LIMIT 200",
+          `SELECT actor_id,action,target_id,outcome,created_at FROM case_audit WHERE case_id=?1 AND ${repo.acl()} ORDER BY created_at DESC LIMIT 200`,
         )
-          .bind(profile.id)
+          .bind(...repo.args())
           .all()
       ).results,
     });
@@ -270,30 +288,83 @@ export async function handleCase(
 
   if (path[0] === "policies" && request.method === "POST") {
     if (p.role !== "admin") throw new PrivateError(403, "ADMIN_ONLY");
-    const b = await readJson(request),
-      policy = b.policy as LegalPolicy;
-    if (!validPolicy(policy)) throw new PrivateError(400, "INVALID_POLICY");
-    const id = crypto.randomUUID();
-    const inserted = await env.DB.prepare(
-      `INSERT INTO case_policies SELECT ?5,?6,?7,?8,?9,?10,?11,?12,?13,?2,?14 WHERE ${repo.acl()} RETURNING id`,
+    const b = await readJson(request);
+    const candidates =
+      path[1] === "import" &&
+      b.version === "cbh-policy/v1" &&
+      b.approved === true
+        ? b.policies
+        : path.length === 1
+          ? [b.policy]
+          : null;
+    if (
+      !Array.isArray(candidates) ||
+      !candidates.length ||
+      candidates.length > 10 ||
+      !candidates.every(validPolicy)
     )
-      .bind(
-        ...repo.args(),
-        id,
-        policy.key,
-        policy.version,
-        policy.effectiveFrom,
-        policy.effectiveTo,
-        policy.status,
-        policy.sourceUrl,
-        policy.checkedAt,
-        JSON.stringify(policy.values),
-        now(),
+      throw new PrivateError(400, "INVALID_POLICY");
+    const policies = candidates as LegalPolicy[];
+    if (
+      new Set(policies.map((p) => p.key + ":" + p.version)).size !==
+      policies.length
+    )
+      throw new PrivateError(400, "INVALID_POLICY");
+    const statements = [];
+    for (const policy of policies) {
+      const existing = (await repo.policies()).find(
+        (p) => p.key === policy.key && p.version === policy.version,
+      );
+      if (existing) {
+        const fields = [
+          "effectiveFrom",
+          "effectiveTo",
+          "status",
+          "sourceUrl",
+          "checkedAt",
+        ] as const;
+        if (
+          fields.some((k) => existing[k] !== policy[k]) ||
+          Object.keys({ ...existing.values, ...policy.values }).some(
+            (k) => existing.values[k] !== policy.values[k],
+          )
+        )
+          throw new PrivateError(409, "POLICY_VERSION_CONFLICT");
+        continue;
+      }
+      statements.push(
+        env.DB.prepare(
+          `INSERT INTO case_policies SELECT ?5,?6,?7,?8,?9,?10,?11,?12,?13,?2,?14 WHERE ${repo.acl()} RETURNING id`,
+        ).bind(
+          ...repo.args(),
+          crypto.randomUUID(),
+          policy.key,
+          policy.version,
+          policy.effectiveFrom,
+          policy.effectiveTo,
+          policy.status,
+          policy.sourceUrl,
+          policy.checkedAt,
+          JSON.stringify(policy.values),
+          now(),
+        ),
+      );
+    }
+    try {
+      const result = statements.length ? await env.DB.batch(statements) : [];
+      await repo.authorize();
+      return privateJson({
+        inserted: result.reduce((n, r) => n + (r.results?.length ?? 0), 0),
+        duplicateSafe: true,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /UNIQUE constraint failed: case_policies/.test(error.message)
       )
-      .first();
-    if (!inserted) throw new PrivateError(403, "CASE_ACCESS_DENIED");
-    await repo.audit("policy-create", id);
-    return privateJson({ id }, 201);
+        throw new PrivateError(409, "POLICY_VERSION_CONFLICT");
+      throw error;
+    }
   }
 
   if (path[0] === "import" && request.method === "POST") {

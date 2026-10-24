@@ -1,0 +1,96 @@
+{
+  "version": "cbh-policy/v1",
+  "policies": [
+    {
+      "id": "",
+      "version": "2026-10-24-confirmed-v1",
+      "effectiveFrom": "2026-10-08",
+      "effectiveTo": "2026-11-26",
+      "status": "effective",
+      "checkedAt": "2026-10-24",
+      "key": "work_injury",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1032080823",
+      "values": {
+        "baseRate": 0.7,
+        "lowRate": 0.9,
+        "minimumCompensationDaily": 82560,
+        "lowThresholdRate": 0.8,
+        "minimumWageDaily": 82560,
+        "excludedShortDays": 3,
+        "maximumCompensationDaily": 268299
+      }
+    },
+    {
+      "id": "",
+      "version": "2026-10-24-confirmed-v1",
+      "effectiveFrom": "2026-10-08",
+      "effectiveTo": "2026-11-26",
+      "status": "effective",
+      "checkedAt": "2026-10-24",
+      "key": "unemployment",
+      "sourceUrl": "https://easylaw.go.kr/CSP/CnpClsMain.laf?ccfNo=2&cciNo=3&cnpClsNo=2&csmSeq=722&popMenu=ov",
+      "values": {
+        "baseRate": 0.6,
+        "minimumWageHourly": 10320,
+        "minimumRate": 0.8,
+        "maximumDaily": 68100,
+        "maximumHours": 8
+      }
+    },
+    {
+      "id": "",
+      "version": "2026-10-24-confirmed-v1",
+      "effectiveFrom": "2026-10-08",
+      "effectiveTo": "2026-11-26",
+      "status": "effective",
+      "checkedAt": "2026-10-24",
+      "key": "insurance_window",
+      "sourceUrl": "https://www.easylaw.go.kr/CSP/CnpClsMainBtr.laf?ccfNo=2&cciNo=1&cnpClsNo=1&csmSeq=722&popMenu=ov",
+      "values": {
+        "months": 18,
+        "requiredDays": 180,
+        "maxMonths": 36
+      }
+    },
+    {
+      "id": "",
+      "version": "2026-10-24-confirmed-v1",
+      "effectiveFrom": "2026-10-08",
+      "effectiveTo": "2026-11-26",
+      "status": "effective",
+      "checkedAt": "2026-10-24",
+      "key": "employment_pay",
+      "sourceUrl": "https://law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1012792285",
+      "values": {
+        "minimumEmployees": 5,
+        "overtimeMultiplier": 1.5,
+        "nightPremium": 0.5,
+        "minimumWeeklyHours": 15,
+        "severanceDailyFactor": 30,
+        "yearDays": 365,
+        "annualLeaveBase": 15,
+        "annualLeaveCap": 25,
+        "attendanceThreshold": 80
+      }
+    },
+    {
+      "id": "",
+      "version": "2026-10-24-confirmed-v1",
+      "effectiveFrom": "2026-10-08",
+      "effectiveTo": "2026-11-26",
+      "status": "effective",
+      "checkedAt": "2026-10-24",
+      "key": "deadlines",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0040&lsiSeq=287491&urlMode=lsScJoRltInfoR",
+      "values": {
+        "inquiryDays": 7,
+        "consultLead": 14,
+        "prepareLead": 10,
+        "planLead": 7,
+        "appealDays": 90,
+        "employerDays": 10,
+        "employerExtensionDays": 7
+      }
+    }
+  ]
+}

@@ -122,3 +122,7 @@ CREATE TRIGGER case_payment_validate BEFORE INSERT ON case_payment_events BEGIN
   SELECT CASE WHEN NEW.event_type='decision_adjustment' AND NOT EXISTS(SELECT 1 FROM case_payment_events e WHERE e.id=NEW.corrects_id AND e.case_id=NEW.case_id AND e.claim_id=NEW.claim_id AND e.event_type IN ('decision','decision_adjustment')) THEN RAISE(ABORT,'INVALID_CORRECTION') END;
   SELECT CASE WHEN NEW.event_type IN ('decision','decision_adjustment') AND (NEW.amount+COALESCE((SELECT SUM(amount) FROM case_payment_events e WHERE e.claim_id=NEW.claim_id AND e.event_type IN ('decision','decision_adjustment')),0)<0 OR NEW.recognized_days+COALESCE((SELECT SUM(recognized_days) FROM case_payment_events e WHERE e.claim_id=NEW.claim_id AND e.event_type IN ('decision','decision_adjustment')),0)<0) THEN RAISE(ABORT,'NEGATIVE_DECISION_BALANCE') END;
 END;
+
+CREATE TRIGGER case_policy_audit AFTER INSERT ON case_policies BEGIN
+  INSERT INTO case_audit SELECT lower(hex(randomblob(16))),id,NEW.created_by,'policy-create',NEW.id,'allowed',NEW.created_at FROM case_profiles;
+END;

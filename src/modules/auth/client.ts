@@ -27,6 +27,15 @@ export function errorText(code: string): string {
       "파일의 공유 권한이 바뀌었습니다. 비공개 상태를 확인해 주세요.",
     DRIVE_INTEGRITY_FAILED:
       "원본 확인이 일치하지 않습니다. 파일을 보존하고 다시 확인해 주세요.",
+    DRIVE_REVISION_CHANGED:
+      "Drive의 원본 버전이 변경됐습니다. 처음 보관한 원본을 복원하거나 새 문서로 등록해 주세요.",
+    UPLOAD_RETRY:
+      "다른 전송 상태가 확인됐습니다. 다시 시도하면 이어서 전송합니다.",
+    POLICY_VERSION_CONFLICT:
+      "같은 버전 이름의 다른 정책이 있습니다. 새 버전 이름으로 저장해 주세요.",
+    INVALID_REFUND: "반환액이 연결한 입금의 남은 금액을 초과합니다.",
+    NEGATIVE_DECISION_BALANCE:
+      "정정 후 결정액이나 인정일수가 음수가 됩니다. 정정값을 확인해 주세요.",
     DRIVE_FILE_MISSING:
       "Drive에서 원본을 찾지 못했습니다. 원본을 복원한 뒤 다시 확인해 주세요.",
     OFFICIAL_SOURCE_REQUIRED:

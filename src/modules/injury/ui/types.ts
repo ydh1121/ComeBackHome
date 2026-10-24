@@ -24,6 +24,7 @@ export interface PaymentInfo {
 export interface CaseData {
   caseId: string;
   owner: boolean;
+  actors: Array<{ id: string; name: string }>;
   records: CaseRecord[];
   policies: LegalPolicy[];
   documents: DocumentInfo[];

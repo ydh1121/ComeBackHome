@@ -9,6 +9,7 @@ import {
 import { RecordCard, RecordEditor } from "./RecordEditor";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { PaymentsPanel } from "./PaymentsPanel";
+import { PolicyPanel } from "./PolicyPanel";
 import { CalculationsPanel } from "./CalculationsPanel";
 import type { CaseData } from "./types";
 
@@ -30,6 +31,11 @@ const actions: Record<string, string> = {
   expiry: "수급기간 만료",
   appointment: "예약·인정일",
   task: "진행할 일",
+  receipt_check: "접수번호·실제 접수 확인",
+  progress_inquiry: "공단 진행상태 문의",
+  benefit_prepare: "취업불능 기간·휴업급여 청구 확인",
+  expense_check: "본인부담 치료비 청구 가능 여부 확인",
+  disability_check: "치료종결 후 잔존 장해 검토",
 };
 interface Consent {
   owner: boolean;
@@ -253,22 +259,31 @@ export function InjuryApp() {
               <div className="record-grid">
                 {records.map((record) =>
                   archived ? (
-                    <article className="private-card" key={record.id}>
-                      <h3>{record.payload.title}</h3>
-                      <p>보관됨 · 이력 유지</p>
+                    <div key={record.id}>
+                      <RecordCard record={record} data={data} />
                       <button
                         className="secondary"
-                        onClick={() =>
-                          setEditing({ kind: record.kind, record })
-                        }
+                        onClick={async () => {
+                          try {
+                            await privateRequest(
+                              "private/case/records/" + record.id + "/restore",
+                              "POST",
+                              { revision: record.revision },
+                            );
+                            await reload();
+                          } catch (e) {
+                            setError((e as Error).message);
+                          }
+                        }}
                       >
-                        내용·이력 보기
+                        보관 기록 복원
                       </button>
-                    </article>
+                    </div>
                   ) : (
                     <RecordCard
                       key={record.id}
                       record={record}
+                      data={data}
                       open={() => setEditing({ kind: record.kind, record })}
                     />
                   ),
@@ -406,58 +421,6 @@ function AuditPanel() {
           {e.action} · {e.outcome}
         </p>
       ))}
-    </details>
-  );
-}
-function PolicyPanel({
-  admin,
-  data,
-  reload,
-}: {
-  admin: boolean;
-  data: CaseData;
-  reload: () => Promise<void>;
-}) {
-  const [error, setError] = useState("");
-  return (
-    <details className="private-card">
-      <summary>계산 정책과 공식 근거</summary>
-      {data.policies.map((p) => (
-        <p key={p.id}>
-          {p.key} · {p.version} · {p.status} · {p.effectiveFrom} ~{" "}
-          {p.effectiveTo}
-          <br />
-          <a href={p.sourceUrl} target="_blank" rel="noreferrer">
-            공식 출처
-          </a>{" "}
-          · 확인 {p.checkedAt}
-        </p>
-      ))}
-      {admin && (
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const f = e.currentTarget,
-              d = new FormData(f);
-            try {
-              const policy = JSON.parse(String(d.get("policy")));
-              await privateRequest("private/case/policies", "POST", { policy });
-              f.reset();
-              await reload();
-              setError("정책 버전을 추가했습니다. 기존 버전은 유지됩니다.");
-            } catch (err) {
-              setError((err as Error).message);
-            }
-          }}
-        >
-          <label>
-            검증한 정책 JSON
-            <textarea name="policy" rows={8} required />
-          </label>
-          <button>새 정책 버전 등록</button>
-        </form>
-      )}
-      <p role="status">{error}</p>
     </details>
   );
 }

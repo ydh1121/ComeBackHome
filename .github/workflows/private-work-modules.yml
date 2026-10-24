@@ -7,6 +7,7 @@ on:
       - 'functions/**'
       - 'db/migrations/**'
       - 'scripts/verify-private-work*'
+      - 'scripts/private-work/**'
       - 'test/private-work/**'
       - '.github/workflows/private-work-modules.yml'
 permissions:
@@ -15,6 +16,19 @@ concurrency:
   group: private-work-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  windows-password:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Windows password hash interoperability
+        shell: ${{ matrix.shell }}
+        run: ./scripts/private-work/Test-PrivateWorkPassword.ps1
+        env:
+          CBH_SYNTHETIC_HASH_VECTOR: 'gZ55cLN0OTnysLl5JNgQY/gg++302xGfLxHERoHIm3w='
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -45,3 +59,9 @@ jobs:
           VITE_CBH_RUNTIME: api
           VITE_CBH_PROVIDER_RUNTIME: api
       - run: node scripts/verify-private-work-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: private-work-synthetic-browser-screenshots
+          path: artifacts/private-work/*.png
+          retention-days: 7

@@ -27,6 +27,7 @@ interface DocumentRow {
   bytes: number;
   sha256: string;
   drive_file_id: string | null;
+  drive_revision: string | null;
   folder_id: string | null;
   status: string;
   session_encrypted: string | null;
@@ -316,8 +317,8 @@ export async function handleDocuments(
   } else if (row.status === "trashed")
     throw new PrivateError(409, "DOCUMENT_HIDDEN");
   const { c, api } = await drive();
-  const verify = () =>
-    api.verify({
+  const verify = async () => {
+    const metadata = await api.verify({
       id: row.drive_file_id!,
       bytes: row.bytes,
       sha256: row.sha256,
@@ -325,6 +326,21 @@ export async function handleDocuments(
       folder: row.folder_id!,
       allowedPermissionIds: JSON.parse(c.permission_ids_json),
     });
+    if (row.drive_revision && row.drive_revision !== metadata.headRevisionId)
+      throw new PrivateError(409, "DRIVE_REVISION_CHANGED");
+    return metadata;
+  };
+  const saveVerified = async () => {
+    const m = await verify();
+    const saved = await env.DB.prepare(
+      `UPDATE case_documents SET status='ready',drive_revision=?6,session_encrypted=NULL,updated_at=?7 WHERE case_id=?1 AND id=?5 AND status<>'trashed' AND ${repo.acl()} RETURNING id`,
+    )
+      .bind(...repo.args(), id, m.headRevisionId ?? null, now())
+      .first();
+    if (!saved) throw new PrivateError(403, "CASE_ACCESS_DENIED");
+    await repo.audit("document-verified", id);
+    return privateJson({ id, status: "ready" });
+  };
   if (path[1] === "upload" && request.method === "POST") {
     if (row.status === "ready")
       return privateJson({ offset: row.bytes, complete: true });
@@ -333,6 +349,41 @@ export async function handleDocuments(
     let session = row.session_encrypted
       ? await unseal(row.session_encrypted, env)
       : null;
+    if (session) {
+      try {
+        const progress = await api.offset(session, row.bytes);
+        if (progress.complete) await saveVerified();
+        return privateJson(progress);
+      } catch (error) {
+        if (
+          !(
+            error instanceof PrivateError && error.code === "DRIVE_FILE_MISSING"
+          )
+        )
+          throw error;
+        // An expired upload URL can also mean the upload finished while its
+        // final response was lost. Check the reserved file ID first.
+        try {
+          await saveVerified();
+          return privateJson({ offset: row.bytes, complete: true });
+        } catch (verifyError) {
+          if (
+            !(
+              verifyError instanceof PrivateError &&
+              verifyError.code === "DRIVE_FILE_MISSING"
+            )
+          )
+            throw verifyError;
+        }
+        const cleared = await env.DB.prepare(
+          `UPDATE case_documents SET session_encrypted=NULL,status='pending',updated_at=?7 WHERE case_id=?1 AND id=?5 AND session_encrypted=?6 AND status<>'trashed' AND ${repo.acl()} RETURNING id`,
+        )
+          .bind(...repo.args(), id, row.session_encrypted, now())
+          .first();
+        if (!cleared) throw new PrivateError(409, "UPLOAD_RETRY");
+        session = null;
+      }
+    }
     if (!session) {
       session = await api.begin({
         id: row.drive_file_id,
@@ -381,15 +432,7 @@ export async function handleDocuments(
     request.method === "POST"
   ) {
     try {
-      const m = await verify();
-      const saved = await env.DB.prepare(
-        `UPDATE case_documents SET status='ready',drive_revision=?6,session_encrypted=NULL,updated_at=?7 WHERE case_id=?1 AND id=?5 AND status<>'trashed' AND ${repo.acl()} RETURNING id`,
-      )
-        .bind(...repo.args(), id, m.headRevisionId ?? null, now())
-        .first();
-      if (!saved) throw new PrivateError(403, "CASE_ACCESS_DENIED");
-      await repo.audit("document-verified", id);
-      return privateJson({ id, status: "ready" });
+      return await saveVerified();
     } catch (error) {
       await env.DB.prepare(
         `UPDATE case_documents SET status='failed',updated_at=?6 WHERE case_id=?1 AND id=?5 AND ${repo.acl()}`,
@@ -404,9 +447,14 @@ export async function handleDocuments(
       throw new PrivateError(409, "DOCUMENT_NOT_VERIFIED");
     await verify();
     await repo.authorize();
-    const response = await api.download(row.drive_file_id!);
+    const bytes = await api.verifiedDownload(
+      row.drive_file_id!,
+      row.bytes,
+      row.sha256,
+    );
+    await repo.authorize();
     await repo.audit("document-download", id);
-    return new Response(response.body, {
+    return new Response(bytes, {
       headers: {
         "Content-Type": row.mime,
         "Content-Disposition": `attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(row.filename)}`,

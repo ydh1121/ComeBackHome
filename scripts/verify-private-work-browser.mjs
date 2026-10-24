@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pbkdf2Sync, randomBytes, createCipheriv } from "node:crypto";
@@ -46,6 +46,7 @@ const seal = (value) => {
   return iv.toString("base64") + "." + encrypted.toString("base64");
 };
 try {
+  await mkdir("artifacts/private-work", { recursive: true });
   await writeFile(
     config,
     JSON.stringify({
@@ -241,7 +242,9 @@ try {
         ),
         "no horizontal overflow " + width,
       );
-      await page.screenshot({ path: join(scratch, `${label}-${width}.png`) });
+      await page.screenshot({
+        path: resolve("artifacts/private-work", `${label}-${width}.png`),
+      });
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "기록 추가", exact: true }).click();
@@ -253,12 +256,11 @@ try {
     await dialog.getByLabel("기한", { exact: true }).fill("2026-12-31");
     await dialog.getByRole("button", { name: "저장", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
-    const card = page
-      .locator(".record-card")
-      .filter({
-        has: page.getByRole("heading", { name: "합성 할 일 " + label }),
-      });
+    const card = page.locator(".record-card").filter({
+      has: page.getByRole("heading", { name: "합성 할 일 " + label }),
+    });
     await card.waitFor();
+    await card.scrollIntoViewIfNeeded();
     await card.locator(".content-scroll").evaluate((n) => (n.scrollTop = 2000));
     const copy = await card.locator(".copy-button").boundingBox(),
       scroll = await card.locator(".content-scroll").boundingBox();
@@ -267,7 +269,22 @@ try {
         copy.y + copy.height <= scroll.y + scroll.height + 2,
       "copy stays within scrolled content",
     );
-    await card.getByRole("button", { name: "편집", exact: true }).click();
+    const bodyBox = await card.locator(".record-body").boundingBox();
+    await page.mouse.move(bodyBox.x + 12, Math.max(bodyBox.y, scroll.y) + 55);
+    await page.mouse.down();
+    await dialog.waitFor({ state: "visible" });
+    await page.mouse.up();
+    await dialog
+      .locator(".editor-content-scroll")
+      .evaluate((n) => (n.scrollTop = 1000));
+    const editCopy = await dialog.locator(".copy-button").boundingBox(),
+      editScroll = await dialog.locator(".editor-content-scroll").boundingBox();
+    assert.ok(
+      editCopy.y >= editScroll.y - 2 &&
+        editCopy.y + editCopy.height <= editScroll.y + editScroll.height + 2,
+      "copy remains visible while editing",
+    );
+
     await dialog
       .getByLabel("제목", { exact: true })
       .fill("내 충돌 초안 " + label);
@@ -341,6 +358,137 @@ try {
         .isVisible(),
       "remembered login + document persistence",
     );
+    // A second real browser session exercises owner consent and the admin UI.
+    await page.getByRole("button", { name: "접근·이력", exact: true }).click();
+    await page.getByLabel("함께 관리하는 목적").fill("합성 공동 관리 검증");
+    await page.getByLabel("자료 보관·검토 기간").fill("격리 검증 동안");
+    await page.getByLabel("관리자의 읽기·수정 허용").check();
+    await page.getByRole("button", { name: "동의 설정 저장" }).click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "저장했습니다." })
+      .waitFor();
+    const adminContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const adminPage = await adminContext.newPage();
+    adminPage.on("pageerror", (e) => errors.push(e.message));
+    await adminPage.goto(base + "/injury");
+    await adminPage.getByLabel("아이디", { exact: true }).fill("ydh1121");
+    await adminPage
+      .getByLabel("비밀번호", { exact: true })
+      .fill(label === "chromium" ? password : newPassword);
+    await adminPage
+      .getByRole("button", { name: "로그인", exact: true })
+      .click();
+    if (label === "chromium") {
+      await adminPage
+        .getByLabel("현재 비밀번호", { exact: true })
+        .fill(password);
+      await adminPage
+        .getByLabel("새 비밀번호", { exact: true })
+        .fill(newPassword);
+      await adminPage.getByLabel("새 비밀번호 다시 입력").fill(newPassword);
+      await adminPage
+        .getByRole("button", { name: "변경 후 다시 로그인" })
+        .click();
+      await adminPage.getByLabel("아이디", { exact: true }).fill("ydh1121");
+      await adminPage.getByLabel("비밀번호", { exact: true }).fill(newPassword);
+      await adminPage
+        .getByRole("button", { name: "로그인", exact: true })
+        .click();
+    }
+    await adminPage
+      .getByRole("heading", { name: "산재·직장", exact: true })
+      .waitFor();
+    await adminPage
+      .getByRole("button", { name: "접근·이력", exact: true })
+      .click();
+    await adminPage.getByText("계산 정책과 공식 근거", { exact: true }).click();
+    await adminPage.getByLabel("검증된 정책 파일 불러오기").setInputFiles({
+      name: "synthetic-policy.json",
+      mimeType: "application/json",
+      buffer: await readFile("docs/private-work/policies/2026-confirmed.json"),
+    });
+    await adminPage
+      .getByRole("button", { name: "검토한 정책 모두 저장" })
+      .click();
+    await adminPage
+      .getByRole("status")
+      .filter({ hasText: "정책을 저장했습니다." })
+      .waitFor();
+    await adminPage.screenshot({
+      path: resolve("artifacts/private-work", `${label}-policy-390.png`),
+    });
+    await adminPage.getByRole("button", { name: "지급", exact: true }).click();
+    await adminPage.getByText("예상금액·기간 계산", { exact: true }).click();
+    const policySnapshot = await (
+      await adminContext.request.get(base + "/api/private/case")
+    ).json();
+    await adminPage
+      .getByLabel("계산 근거", { exact: true })
+      .selectOption(
+        policySnapshot.policies.find((p) => p.key === "work_injury").id,
+      );
+    await adminPage
+      .getByLabel("계산 기준일", { exact: true })
+      .fill("2026-10-24");
+    await adminPage.getByLabel("평균임금 일액", { exact: true }).fill("100000");
+    await adminPage.getByLabel("실제 취업불능 일수", { exact: true }).fill("4");
+    await adminPage
+      .getByRole("button", { name: "예상 계산", exact: true })
+      .click();
+    await adminPage.getByText("280000", { exact: true }).waitFor();
+    const afterCalculation = await (
+      await adminContext.request.get(base + "/api/private/case")
+    ).json();
+    assert.equal(
+      afterCalculation.payments.length,
+      policySnapshot.payments.length,
+      "estimate never creates a decision or deposit",
+    );
+    for (const mode of ["light", "dark"]) {
+      await adminPage.emulateMedia({ colorScheme: mode });
+      for (const width of [375, 390, 768, 1024, 1440]) {
+        await adminPage.setViewportSize({ width, height: 900 });
+        assert.ok(
+          await adminPage.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth + 1,
+          ),
+          "populated calculation no overflow " + mode + " " + width,
+        );
+        await adminPage.screenshot({
+          path: resolve(
+            "artifacts/private-work",
+            `${label}-calculation-${mode}-${width}.png`,
+          ),
+        });
+      }
+    }
+    await page.getByLabel("관리자의 읽기·수정 허용").uncheck();
+    await page.getByRole("button", { name: "동의 설정 저장" }).click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "저장했습니다." })
+      .waitFor();
+    assert.equal(
+      (await adminContext.request.get(base + "/api/private/case")).status(),
+      403,
+      "withdrawal blocks other real browser session",
+    );
+    await adminPage
+      .getByRole("button", { name: "새로고침", exact: true })
+      .click();
+    await adminPage
+      .getByRole("heading", { name: "열람 동의가 필요합니다" })
+      .waitFor();
+    assert.equal(
+      await adminPage.locator(".record-card").count(),
+      0,
+      "revoked admin private content removed",
+    );
+    await adminContext.close();
     await page.getByRole("link", { name: "내 계정", exact: true }).click();
     await page
       .getByRole("button", { name: "현재 기기 로그아웃", exact: true })
@@ -366,7 +514,7 @@ try {
     console.log(
       "PRIVATE_BROWSER_D1_PASS " +
         label +
-        " responsive_375_390_768_1024_1440 login_first_change_cookie_conflict_copy_drive_verify_logout_back",
+        " responsive_375_390_768_1024_1440 login_first_change_cookie_conflict_longpress_copy_drive_verify_policy_calculation_consent_revocation_logout_back",
     );
   }
 } finally {

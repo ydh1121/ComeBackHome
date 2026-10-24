@@ -73,10 +73,14 @@ export class DriveArchive {
     });
     if (!response.ok && response.status !== 308)
       throw new PrivateError(
-        response.status === 401 ? 401 : response.status === 404 ? 404 : 502,
+        response.status === 401
+          ? 401
+          : [404, 410].includes(response.status)
+            ? 404
+            : 502,
         response.status === 401
           ? "DRIVE_RECONNECT"
-          : response.status === 404
+          : [404, 410].includes(response.status)
             ? "DRIVE_FILE_MISSING"
             : "DRIVE_REQUEST_FAILED",
       );
@@ -245,6 +249,18 @@ export class DriveArchive {
   }
   download(id: string): Promise<Response> {
     return this.request(`drive/v3/files/${encodeURIComponent(id)}?alt=media`);
+  }
+  async verifiedDownload(
+    id: string,
+    bytes: number,
+    sha256: string,
+  ): Promise<ArrayBuffer> {
+    // Hash the exact bytes returned to the user, including when Drive changes
+    // between the metadata check and the media request.
+    const data = await readBounded(await this.download(id), bytes);
+    if (data.byteLength !== bytes || (await digest(data)) !== sha256)
+      throw new PrivateError(409, "DRIVE_INTEGRITY_FAILED");
+    return data;
   }
 }
 export async function refreshDriveToken(

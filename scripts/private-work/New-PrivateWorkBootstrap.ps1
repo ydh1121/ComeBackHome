@@ -22,13 +22,15 @@ function New-RandomBytes([int]$Length) {
   try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
   return ,$bytes
 }
+function Get-PasswordHash([string]$Password, [byte[]]$Salt) {
+  # SHA-256, 600,000 iterations, 32-byte key; identical to the Worker contract.
+  $derive = [Security.Cryptography.Rfc2898DeriveBytes]::new($Password, $Salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
+  try { return [Convert]::ToBase64String($derive.GetBytes(32)) } finally { $derive.Dispose() }
+}
 function New-PasswordMaterial {
   $temporary = [Convert]::ToBase64String((New-RandomBytes 24))
   $salt = New-RandomBytes 16
-  # SHA-256, 600,000 iterations, 32-byte key; identical to the Worker contract.
-  $derive = [Security.Cryptography.Rfc2898DeriveBytes]::new($temporary, $salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
-  try { $hash = $derive.GetBytes(32) } finally { $derive.Dispose() }
-  return @{Temporary=$temporary;Salt=[Convert]::ToBase64String($salt);Hash=[Convert]::ToBase64String($hash)}
+  return @{Temporary=$temporary;Salt=[Convert]::ToBase64String($salt);Hash=(Get-PasswordHash $temporary $salt)}
 }
 $time = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 $statements = New-Object 'System.Collections.Generic.List[string]'

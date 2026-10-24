@@ -8,7 +8,9 @@ import {
   severanceEstimate,
   annualLeaveEstimate,
   requirePolicy,
+  aggregateInsuredPeriods,
   type PaidDay,
+  type InsuranceWindow,
 } from "../domain/calculations";
 import { todaySeoul, inclusiveDays } from "../domain/dates";
 import type { CaseData } from "./types";
@@ -43,6 +45,8 @@ const labels: Record<string, string> = {
   accrualEstimate: "발생 연차 추정",
   expiryNeedsReview: "연차 만료 확인 필요",
   calendarDays: "달력상 재직일",
+  insuredCalendarDays: "별도로 합산한 피보험기간 달력일",
+  excludedBefore: "과거 구직급여로 제외하는 상실일 이전",
 };
 const statusLabels: Record<string, string> = {
   estimate: "입력값 기반 예상",
@@ -53,6 +57,7 @@ const statusLabels: Record<string, string> = {
 export function CalculationsPanel({ data }: { data: CaseData }) {
   const [mode, setMode] = useState<string>("work_injury"),
     [result, setResult] = useState<Record<string, unknown> | null>(null),
+    [exception, setException] = useState("none"),
     [error, setError] = useState("");
   const key = ["payroll", "severance"].includes(mode)
     ? "employment_pay"
@@ -159,6 +164,9 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
                 {
                   date: s("date"),
                   averageDailyWage: n("average"),
+                  ordinaryDailyWage: n("ordinary"),
+                  dailyWorker: b("dailyWorker"),
+                  specialBasis: b("specialBasis"),
                   scheduledDailyHours: n("hours"),
                   allocatedDays: n("days"),
                 },
@@ -170,15 +178,71 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
                 "requiredDays",
                 "maxMonths",
               ]);
-              const window = {
+              const pastBenefitLost = data.records
+                .filter(
+                  (r) =>
+                    r.kind === "employment" &&
+                    !r.archivedAt &&
+                    r.payload.data.actualOrSimulated === "actual" &&
+                    r.payload.data.previousBenefitsUsed === true &&
+                    r.payload.data.insuredLost,
+                )
+                .map((r) => String(r.payload.data.insuredLost))
+                .sort()
+                .at(-1);
+              const window: InsuranceWindow = {
                 months: policy.values.months,
                 requiredDays: policy.values.requiredDays,
                 maxMonths: policy.values.maxMonths,
+                priorBenefitLostDate: pastBenefitLost,
               };
+              if (mode === "insurance_window" && exception !== "none") {
+                const source = data.documents.find(
+                  (d) => d.id === s("exceptionSource") && d.status === "ready",
+                );
+                if (!source)
+                  throw Error("예외 요건을 확인한 원본 문서를 선택해 주세요.");
+                window.exceptionEvidence = source.id;
+                if (exception === "illness_unpaid") {
+                  if (!b("continuous"))
+                    throw Error(
+                      "계속된 무급기간과 연장 사유를 먼저 확인해 주세요.",
+                    );
+                  window.exceptionKind = "illness_unpaid";
+                  window.extensionDays = n("extensionDays");
+                } else {
+                  if (!b("shortConfirmed"))
+                    throw Error("단시간 예외의 세 요건을 확인해 주세요.");
+                  window.exceptionKind = "short_hours";
+                  window.months = 24;
+                }
+              }
               if (mode === "insurance_window")
                 out = {
                   ...insuredDays(paid, s("leave"), window),
                   calendarDays: inclusiveDays(s("hire"), s("leave")),
+                  excludedBefore: pastBenefitLost ?? "없음",
+                  ...aggregateInsuredPeriods(
+                    data.records
+                      .filter(
+                        (r) =>
+                          r.kind === "employment" &&
+                          !r.archivedAt &&
+                          r.payload.data.actualOrSimulated === "actual" &&
+                          r.payload.data.insuredFrom &&
+                          r.payload.data.insuredLost &&
+                          r.payload.sourceIds.length > 0 &&
+                          r.payload.certainty !== "reported" &&
+                          r.payload.certainty !== "estimated",
+                      )
+                      .map((r) => ({
+                        from: String(r.payload.data.insuredFrom),
+                        lost: String(r.payload.data.insuredLost),
+                        previousBenefitsUsed:
+                          r.payload.data.previousBenefitsUsed === true,
+                      })),
+                    s("leave"),
+                  ),
                 };
               else
                 out = simulateEmployment(
@@ -284,6 +348,12 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
           )}
           {mode === "unemployment" && (
             <>
+              {number("ordinary", "통상임금 일액")}
+              {checkbox("dailyWorker", "마지막 사업장에서 일용근로자였음")}
+              {checkbox(
+                "specialBasis",
+                "최근 반복 자격 취득 등 별도 기초일액 산정 대상",
+              )}
               {number("hours", "1일 소정근로시간", 8, 1, 8)}
               {number("days", "확인한 소정급여일수", undefined, 0, 500)}
             </>
@@ -316,6 +386,61 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
                 <input name="extra" />
               </label>
               {checkbox("holiday", "선택한 유급주휴의 실제 발생 요건을 확인함")}
+            </>
+          )}
+          {mode === "insurance_window" && (
+            <>
+              <label>
+                기준기간 예외
+                <select
+                  value={exception}
+                  onChange={(e) => {
+                    setException(e.target.value);
+                    setResult(null);
+                  }}
+                >
+                  <option value="none">일반 기준기간</option>
+                  <option value="illness_unpaid">
+                    질병·부상 등 계속된 무급기간 연장
+                  </option>
+                  <option value="short_hours">단시간근로 24개월 예외</option>
+                </select>
+              </label>
+              {exception !== "none" && (
+                <label>
+                  예외 근거 원본
+                  <select name="exceptionSource" required>
+                    <option value="">문서 선택</option>
+                    {data.documents
+                      .filter((d) => d.status === "ready")
+                      .map((d) => (
+                        <option value={d.id} key={d.id}>
+                          {d.filename}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+              {exception === "illness_unpaid" && (
+                <>
+                  {number(
+                    "extensionDays",
+                    "확인된 무급기간 일수",
+                    undefined,
+                    30,
+                    1096,
+                  )}
+                  {checkbox(
+                    "continuous",
+                    "기준기간 내 30일 이상 계속된 무급기간이며 법정 연장 사유에 해당함을 확인",
+                  )}
+                </>
+              )}
+              {exception === "short_hours" &&
+                checkbox(
+                  "shortConfirmed",
+                  "이직 당시 주 15시간 미만·주 2일 이하이며, 이전 24개월 중 해당 근로일 90일 이상을 확인",
+                )}
             </>
           )}
           {mode === "payroll" && (
@@ -376,6 +501,26 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
             기관의 수급자격·지급결정과 별개입니다. 근거가 없는 날짜를 유급일로
             자동 확정하지 않습니다.
           </p>
+          {Array.isArray(result.milestones) && (
+            <>
+              <h4>피보험기간 목표 (잠정)</h4>
+              {(
+                result.milestones as Array<{
+                  years: number;
+                  remainingCalendarDays: number;
+                }>
+              ).map((m) => (
+                <p key={m.years}>
+                  {m.years}년 기준까지 약 {m.remainingCalendarDays}일
+                </p>
+              ))}
+              <p>
+                원본이 연결된 실제 직장 이력만 사용합니다. 윤년·중복·과거 수급
+                내역에 따른 기관 산정과 대조해야 하며, 180 유급일 요건과
+                별개입니다.
+              </p>
+            </>
+          )}
         </section>
       )}
     </details>

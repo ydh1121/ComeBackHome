@@ -14,6 +14,11 @@ export interface CaseDeadline {
     | "appeal"
     | "expiry"
     | "appointment"
+    | "receipt_check"
+    | "progress_inquiry"
+    | "benefit_prepare"
+    | "expense_check"
+    | "disability_check"
     | "task";
   responsible: "hospital" | "employer" | "owner" | "agency";
   overdue: boolean;
@@ -64,6 +69,50 @@ export function caseDeadlines(
     } catch {
       /* No unverified legal dates. */
     }
+    if (
+      r.kind === "intake" &&
+      d.filedAt &&
+      !["approved", "partial", "denied"].includes(String(d.status))
+    ) {
+      if (!d.receiptNo)
+        add(r, String(d.filedAt), "receipt_check", "recommended", "owner");
+      if (limits && Number.isInteger(limits.inquiryDays))
+        add(
+          r,
+          addDays(String(d.filedAt), limits.inquiryDays),
+          "progress_inquiry",
+          "recommended",
+          "agency",
+        );
+    }
+    if (
+      r.kind === "benefit_claim" &&
+      d.benefitType === "workers_comp_leave" &&
+      d.status === "estimate" &&
+      Number(d.incapacityDays) > 0 &&
+      d.from
+    )
+      add(r, String(d.from), "benefit_prepare", "recommended", "owner");
+    if (
+      r.kind === "expense" &&
+      d.status === "review" &&
+      d.serviceDate &&
+      r.payload.sourceIds.length
+    )
+      add(r, String(d.serviceDate), "expense_check", "recommended", "owner");
+    if (
+      r.kind === "disability" &&
+      d.medicalCureDate &&
+      d.status === "review" &&
+      d.residual !== "none"
+    )
+      add(
+        r,
+        String(d.medicalCureDate),
+        "disability_check",
+        "recommended",
+        "owner",
+      );
     if (r.kind === "treatment") {
       if (d.appointmentAt)
         add(r, String(d.appointmentAt), "appointment", "official", "owner");

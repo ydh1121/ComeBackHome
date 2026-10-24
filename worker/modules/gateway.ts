@@ -83,6 +83,20 @@ export async function handleProductRequest(
         error.code === "LOGIN_REQUIRED" ? { "X-CBH-Session": "invalid" } : {},
       );
     }
+    // D1 trigger invariants are still checked inside the write transaction.
+    // Return only known public error codes, never the SQL/driver message.
+    const invariant =
+      error instanceof Error
+        ? [
+            "INVALID_CLAIM",
+            "PAYMENT_SOURCE_REQUIRED",
+            "INVALID_PAYMENT",
+            "INVALID_REFUND",
+            "INVALID_CORRECTION",
+            "NEGATIVE_DECISION_BALANCE",
+          ].find((code) => new RegExp(`\\b${code}\\b`).test(error.message))
+        : undefined;
+    if (invariant) return privateJson({ error: invariant }, 409);
     // Never reflect SQL, file names, credentials or provider response bodies.
     return privateJson({ error: "PRIVATE_SERVICE_UNAVAILABLE" }, 503);
   }
