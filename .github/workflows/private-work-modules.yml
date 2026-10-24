@@ -1,0 +1,69 @@
+name: Private work modules (isolated only)
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'worker/**'
+      - 'functions/**'
+      - 'db/migrations/**'
+      - 'scripts/verify-private-work*'
+      - 'scripts/private-work/**'
+      - 'test/private-work/**'
+      - '.github/workflows/private-work-modules.yml'
+permissions:
+  contents: read
+concurrency:
+  group: private-work-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-password:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Windows PowerShell password hash interoperability
+        shell: powershell
+        run: ./scripts/private-work/Test-PrivateWorkPassword.ps1
+        env:
+          CBH_SYNTHETIC_HASH_VECTOR: 'gZ55cLN0OTnysLl5JNgQY/gg++302xGfLxHERoHIm3w='
+      - name: Verify PowerShell 7 password hash interoperability
+        shell: pwsh
+        run: ./scripts/private-work/Test-PrivateWorkPassword.ps1
+        env:
+          CBH_SYNTHETIC_HASH_VECTOR: 'gZ55cLN0OTnysLl5JNgQY/gg++302xGfLxHERoHIm3w='
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck && npm run typecheck:worker
+      - run: node scripts/verify-private-work.mjs
+      - run: node_modules/.bin/workerd test test/private-work/crypto-probe.capnp
+  browser-d1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: npm run build
+        env:
+          VITE_CBH_RUNTIME: api
+          VITE_CBH_PROVIDER_RUNTIME: api
+      - run: node scripts/verify-private-work-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: private-work-synthetic-browser-screenshots
+          path: artifacts/private-work/*.png
+          retention-days: 7

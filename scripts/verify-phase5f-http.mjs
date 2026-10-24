@@ -121,7 +121,8 @@ for (const text of [
   'const runtimeMode = resolveRuntimeMode()',
   'const providerMode = resolveProviderRuntimeMode()',
   "import.meta.env.DEV && runtimeMode === 'mock'",
-  "root.textContent = 'ComeBackHome 시작 실패: '",
+  "setError('시작하지 못했습니다. 연결 상태를 확인한 뒤 새로고침해 주세요.')",
+  'role="status"',
 ]) {
   if (!main.includes(text)) failures.push('main runtime bootstrap missing ' + text);
 }

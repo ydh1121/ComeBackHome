@@ -1,6 +1,7 @@
 import { readImplementationSource } from './lib/implementation-source.mjs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { relative } from 'node:path';
+import ts from 'typescript';
 
 const root = new URL('..', import.meta.url);
 const failures = [];
@@ -177,6 +178,7 @@ const expectedMigrations = [
   '0009_approved_workbook_import_receipts.sql',
   '0010_arrival_advance_notification.sql',
   '0011_person_birthdays.sql',
+  '0012_private_work_modules.sql',
 ];
 expect(
   JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),
@@ -209,7 +211,13 @@ for (const rootPath of ['../src/', '../worker/', '../functions/']) {
     const path = relative(root.pathname, file.pathname);
     if (path.includes('/mocks/') || path.endsWith('mockComposition.ts') || path.includes('/pages/Qa')) continue;
     const source = await readFile(file, 'utf8');
-    if (/\bTODO\b|\bFIXME\b|not implemented/i.test(source)) failures.push('unresolved product TODO: ' + path);
+    // Task status values such as "todo" are product data, not unfinished code.
+    const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
+    let unfinished = /not implemented/i.test(source);
+    for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+      if ([ts.SyntaxKind.SingleLineCommentTrivia, ts.SyntaxKind.MultiLineCommentTrivia].includes(token) && /\bTODO\b|\bFIXME\b/i.test(scanner.getTokenText())) unfinished = true;
+    }
+    if (unfinished) failures.push('unresolved product TODO: ' + path);
     for (const forbidden of ['mock-person-1', 'MOCK_FIXTURE', 'fixture-person', 'e2e-place-', 'e2e-bus', 'e2e-subway']) {
       if (source.includes(forbidden)) failures.push('mock/fixture leakage in production source: ' + path + ' -> ' + forbidden);
     }
