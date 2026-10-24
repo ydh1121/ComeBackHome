@@ -19,13 +19,15 @@ jobs:
   windows-password:
     runs-on: windows-latest
     timeout-minutes: 10
-    strategy:
-      matrix:
-        shell: [powershell, pwsh]
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Windows password hash interoperability
-        shell: ${{ matrix.shell }}
+      - name: Verify Windows PowerShell password hash interoperability
+        shell: powershell
+        run: ./scripts/private-work/Test-PrivateWorkPassword.ps1
+        env:
+          CBH_SYNTHETIC_HASH_VECTOR: 'gZ55cLN0OTnysLl5JNgQY/gg++302xGfLxHERoHIm3w='
+      - name: Verify PowerShell 7 password hash interoperability
+        shell: pwsh
         run: ./scripts/private-work/Test-PrivateWorkPassword.ps1
         env:
           CBH_SYNTHETIC_HASH_VECTOR: 'gZ55cLN0OTnysLl5JNgQY/gg++302xGfLxHERoHIm3w='
