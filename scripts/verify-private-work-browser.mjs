@@ -534,18 +534,34 @@ try {
       await adminPage.emulateMedia({ colorScheme: mode });
       for (const width of [375, 390, 768, 1024, 1440]) {
         await adminPage.setViewportSize({ width, height: 900 });
-        assert.ok(
-          await adminPage.evaluate(
-            () => document.documentElement.scrollWidth <= innerWidth + 1,
-          ),
-          "populated calculation no overflow " + mode + " " + width,
-        );
         await adminPage.screenshot({
           path: resolve(
             "artifacts/private-work",
             `${label}-calculation-${mode}-${width}.png`,
           ),
         });
+        const geometry = await adminPage.evaluate(() => ({
+          viewport: innerWidth,
+          document: document.documentElement.scrollWidth,
+          outside: Array.from(document.querySelectorAll(".private-page *"))
+            .map((el) => ({
+              tag: el.tagName,
+              className: el.className,
+              right: el.getBoundingClientRect().right,
+              width: el.getBoundingClientRect().width,
+            }))
+            .filter((el) => el.right > innerWidth + 1)
+            .slice(0, 20),
+        }));
+        assert.ok(
+          geometry.document <= geometry.viewport + 1,
+          "populated calculation no overflow " +
+            mode +
+            " " +
+            width +
+            " " +
+            JSON.stringify(geometry),
+        );
       }
     }
     await page.getByLabel("관리자의 읽기·수정 허용").uncheck();

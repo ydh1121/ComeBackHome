@@ -101,10 +101,13 @@
 }
 .private-page form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 .private-page label {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   font-size: 14px;
   color: var(--cbh-text);
@@ -380,7 +383,7 @@
     font-size: 14px;
   }
   .field-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .editor-overlay {
     padding: 8px;
