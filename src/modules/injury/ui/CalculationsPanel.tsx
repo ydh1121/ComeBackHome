@@ -319,7 +319,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
       >
         <label>
           계산 근거
-          <select name="policy" required>
+          <select name="policy" aria-label="계산 근거" required>
             <option value="">공식 정책 선택</option>
             {policies.map((p) => (
               <option key={p.id} value={p.id}>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../auth/AuthRoot";
 import { privateRequest } from "../../auth/client";
 import {
@@ -12,6 +12,7 @@ import { PaymentsPanel } from "./PaymentsPanel";
 import { PolicyPanel } from "./PolicyPanel";
 import { CalculationsPanel } from "./CalculationsPanel";
 import type { CaseData } from "./types";
+import { reviewCaseSeed, type CaseSeed } from "../domain/imports";
 
 const tabs = [
   ["tasks", "할 일"],
@@ -431,11 +432,16 @@ function DataTransfer({
   data: CaseData;
   reload: () => Promise<void>;
 }) {
-  const [candidate, setCandidate] = useState<{
-      version: string;
-      records: Array<{ kind: RecordKind; payload: unknown }>;
-    } | null>(null),
+  const [candidate, setCandidate] = useState<CaseSeed | null>(null),
+    [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const selection = useRef(0);
+  useEffect(
+    () => () => {
+      selection.current++;
+    },
+    [],
+  );
   return (
     <details className="private-card">
       <summary>내 자료 내보내기·기획 자료 가져오기</summary>
@@ -466,24 +472,26 @@ function DataTransfer({
         <input
           type="file"
           accept="application/json,.json"
+          disabled={busy}
           onChange={async (e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
             if (!file) return;
+            const ticket = ++selection.current;
+            setCandidate(null);
+            setError("");
             try {
               if (file.size > 180000)
                 throw Error("한 번에 180KB 이하 자료를 선택해 주세요.");
-              const parsed = JSON.parse(await file.text());
-              if (
-                parsed.version !== "cbh-case-seed/v1" ||
-                !Array.isArray(parsed.records) ||
-                parsed.records.length > 80
-              )
-                throw Error("기획 자료 형식을 확인해 주세요.");
-              setCandidate(parsed);
-              setError("");
+              const parsed = reviewCaseSeed(JSON.parse(await file.text()));
+              if (ticket === selection.current) setCandidate(parsed);
             } catch (err) {
-              setError((err as Error).message);
+              if (ticket === selection.current)
+                setError(
+                  file.size > 180000
+                    ? (err as Error).message
+                    : "기획 자료의 형식·내용을 확인해 주세요. 저장하지 않았습니다.",
+                );
             }
           }}
         />
@@ -494,11 +502,62 @@ function DataTransfer({
             새 기록 {candidate.records.length}건. 기존 {data.records.length}건은
             덮어쓰지 않습니다.
           </p>
-          <pre className="import-preview">
-            {JSON.stringify(candidate.records, null, 2)}
-          </pre>
+          <p>
+            아래 내용을 펼쳐 확인한 뒤 저장하세요. 파일을 선택한 것만으로는
+            저장되지 않습니다.
+          </p>
+          <div className="seed-preview" aria-label="가져올 기록 미리보기">
+            {candidate.records.map((record, index) => (
+              <details key={index}>
+                <summary>{record.payload.title}</summary>
+                <small>
+                  {RECORD_SPECS[record.kind].title} ·{" "}
+                  {
+                    {
+                      reported: "본인 진술·초안",
+                      estimated: "예상",
+                      documented: "문서 근거",
+                      official: "기관 확인",
+                    }[record.payload.certainty]
+                  }
+                </small>
+                <p className="record-body">
+                  {record.payload.body || "본문 없음"}
+                </p>
+                <dl>
+                  {RECORD_SPECS[record.kind].fields
+                    .filter(
+                      (field) =>
+                        record.payload.data[field.key] !== undefined &&
+                        record.payload.data[field.key] !== "",
+                    )
+                    .map((field) => {
+                      const value = record.payload.data[field.key];
+                      return (
+                        <div key={field.key}>
+                          <dt>{field.label}</dt>
+                          <dd>
+                            {field.options?.find(
+                              (option) => option[0] === value,
+                            )?.[1] ??
+                              (typeof value === "boolean"
+                                ? value
+                                  ? "예"
+                                  : "아니요"
+                                : String(value))}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                </dl>
+              </details>
+            ))}
+          </div>
           <button
+            disabled={busy}
             onClick={async () => {
+              setBusy(true);
+              setError("");
               try {
                 await privateRequest("private/case/import", "POST", {
                   ...candidate,
@@ -508,12 +567,18 @@ function DataTransfer({
                 await reload();
               } catch (e) {
                 setError((e as Error).message);
+              } finally {
+                setBusy(false);
               }
             }}
           >
             검토 완료 · 새 기록으로 저장
           </button>
-          <button className="secondary" onClick={() => setCandidate(null)}>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => setCandidate(null)}
+          >
             취소
           </button>
         </>

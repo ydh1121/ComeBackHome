@@ -360,6 +360,88 @@ try {
     );
     // A second real browser session exercises owner consent and the admin UI.
     await page.getByRole("button", { name: "접근·이력", exact: true }).click();
+    await page
+      .getByText("내 자료 내보내기·기획 자료 가져오기", { exact: true })
+      .click();
+    const seedTitle = "합성 가져오기 " + label;
+    const seedFile = {
+      name: "synthetic-seed.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          version: "cbh-case-seed/v1",
+          approved: true,
+          records: [
+            {
+              kind: "content",
+              payload: {
+                title: seedTitle,
+                body: "합성 초안 검토",
+                certainty: "reported",
+                sourceIds: [],
+                data: { category: "guide", medium: "none" },
+              },
+            },
+          ],
+        }),
+      ),
+    };
+    const seedInput = page.getByLabel("검토할 기획 자료 JSON");
+    const recordCount = async () =>
+      (await (await ctx.request.get(base + "/api/private/case")).json()).records
+        .length;
+    const beforeImport = await recordCount();
+    await seedInput.setInputFiles(seedFile);
+    await page
+      .locator(".seed-preview")
+      .getByText(seedTitle, { exact: true })
+      .click();
+    await page
+      .locator(".seed-preview")
+      .getByText("합성 초안 검토", { exact: true })
+      .waitFor();
+    assert.equal(
+      await recordCount(),
+      beforeImport,
+      "even approved=true in selected file cannot write before UI approval",
+    );
+    await page.getByRole("button", { name: "취소", exact: true }).click();
+    assert.equal(
+      await recordCount(),
+      beforeImport,
+      "cancel import preserves D1",
+    );
+    await seedInput.setInputFiles(seedFile);
+    await seedInput.setInputFiles({
+      name: "invalid.json",
+      mimeType: "application/json",
+      buffer: Buffer.from('{"version":"cbh-case-seed/v1","records":[]}'),
+    });
+    await page
+      .getByText(
+        "기획 자료의 형식·내용을 확인해 주세요. 저장하지 않았습니다.",
+        { exact: true },
+      )
+      .waitFor();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "검토 완료 · 새 기록으로 저장" })
+        .count(),
+      0,
+      "invalid replacement clears old preview",
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await seedInput.setInputFiles(seedFile);
+      await page
+        .getByRole("button", { name: "검토 완료 · 새 기록으로 저장" })
+        .click();
+      await page.locator(".seed-preview").waitFor({ state: "hidden" });
+      assert.equal(
+        await recordCount(),
+        beforeImport + 1,
+        "explicit import stores once, replay is idempotent",
+      );
+    }
     await page.getByLabel("함께 관리하는 목적").fill("합성 공동 관리 검증");
     await page.getByLabel("자료 보관·검토 기간").fill("격리 검증 동안");
     await page.getByLabel("관리자의 읽기·수정 허용").check();

@@ -62,6 +62,81 @@ const check = (actual, expected, message) => {
   checks++;
 };
 try {
+  // Existing synthetic workspace: transaction rollback and successful addition.
+  // SQLite evidence does not imply a production D1 restore was performed.
+  const rehearsal = new DatabaseSync(":memory:");
+  const migrationNames = (await readdir("db/migrations"))
+    .filter((n) => n.endsWith(".sql"))
+    .sort();
+  for (const name of migrationNames.filter((n) => n < "0012"))
+    rehearsal.exec(await readFile("db/migrations/" + name, "utf8"));
+  rehearsal.exec(
+    "INSERT INTO people(id,name,created_at,updated_at) VALUES('legacy-synthetic','Synthetic retained person','2026-01-01','2026-01-01')",
+  );
+  rehearsal.exec(
+    "INSERT INTO schedules(id,person_id,schedule_date,start_time,end_time,created_at,updated_at) VALUES('legacy-shift','legacy-synthetic','2026-10-24','09:00','18:00','2026-01-01','2026-01-01')",
+  );
+  const legacyObjects = rehearsal
+    .prepare(
+      "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name",
+    )
+    .all();
+  const legacyTables = legacyObjects
+    .filter((row) => row.type === "table")
+    .map((row) => row.name);
+  const legacyRows = () =>
+    legacyTables.map((table) => [
+      table,
+      rehearsal
+        .prepare('SELECT * FROM "' + table.replaceAll('"', '""') + '"')
+        .all(),
+    ]);
+  const baselineRows = legacyRows();
+  const additiveSql = await readFile(
+    "db/migrations/0012_private_work_modules.sql",
+    "utf8",
+  );
+  rehearsal.exec("BEGIN");
+  rehearsal.exec(additiveSql);
+  assert.throws(() =>
+    rehearsal.exec("SELECT cbh_synthetic_migration_failure()"),
+  );
+  rehearsal.exec("ROLLBACK");
+  check(
+    rehearsal
+      .prepare(
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name",
+      )
+      .all(),
+    legacyObjects,
+    "failed migration rollback restores prior schema",
+  );
+  check(
+    legacyRows(),
+    baselineRows,
+    "failed migration preserves every legacy row",
+  );
+  rehearsal.exec(additiveSql);
+  check(
+    legacyRows(),
+    baselineRows,
+    "successful additive migration preserves every legacy row",
+  );
+  check(
+    rehearsal
+      .prepare(
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name",
+      )
+      .all()
+      .filter((row) =>
+        legacyObjects.some(
+          (old) => old.type === row.type && old.name === row.name,
+        ),
+      ),
+    legacyObjects,
+    "successful additive migration preserves every legacy schema object",
+  );
+  rehearsal.close();
   for (const name of (await readdir("db/migrations"))
     .filter((n) => n.endsWith(".sql"))
     .sort())
@@ -404,6 +479,38 @@ try {
     sql.prepare("SELECT admin_access FROM case_consents").get().admin_access,
     0,
     "revoked session cannot grant consent",
+  );
+  const { reviewCaseSeed } = await load("src/modules/injury/domain/imports.ts");
+  const reviewedSeed = reviewCaseSeed({
+    version: "cbh-case-seed/v1",
+    approved: true,
+    records: [{ kind: "task", payload }],
+  });
+  check(
+    Object.hasOwn(reviewedSeed, "approved"),
+    false,
+    "file cannot authorize its own import",
+  );
+  for (const invalid of [
+    { version: "cbh-case-seed/v1", records: [] },
+    { version: "cbh-case-seed/v1", records: [{ kind: "__proto__", payload }] },
+    {
+      version: "cbh-case-seed/v1",
+      records: [
+        {
+          kind: "task",
+          payload: { ...payload, certainty: "official", sourceIds: [] },
+        },
+      ],
+    },
+  ]) {
+    assert.throws(() => reviewCaseSeed(invalid));
+    checks++;
+  }
+  check(
+    (await call("private/case/import", "POST", reviewedSeed, member)).status,
+    400,
+    "reviewed import still requires explicit approval",
   );
   let inserts = 0;
   const beforeCount = sql

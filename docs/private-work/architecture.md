@@ -1,6 +1,6 @@
 # Private work injury and employment module
 
-Implementation track v0.7, 2026-10-23. Base: `de7c548502171c4cce63b0162358b3dac5821304`.
+Implementation track v0.7, 2026-10-24. Base: `de7c548502171c4cce63b0162358b3dac5821304`.
 Implementation and isolated tests authorized; MAIN merge, deployment, production migrations and configuration changes are **not authorized**.
 
 ## Phase 0
@@ -46,3 +46,7 @@ If no Drive grant exists, keep the selected file on the user's device and offer 
 Independent calculation cases, authenticated D1/API tests, Windows PowerShell hash interoperability, actual workerd crypto probe, Chromium/WebKit at 375/390/768/1024/1440, login/expiry/revocation/CSRF/IDOR, consent revocation, long text sticky copy/edit/longpress, conflicts, upload cancellation/retry/checksum/ACL/deletion failures, migration rollback rehearsal and all existing 12 CI jobs.
 
 Physical iPhone persistence, live OAuth/Drive grant, Workers Free CPU quota and production rollout are separate acceptance levels. Local timing is not production CPU evidence. Do not weaken hash settings, lower QA thresholds or create a paid/external service to turn a blocker green.
+
+Deadlines are derived in-app guidance, as required by the v0.7 planning ledger. They do not dispatch the legacy commute Push/Outbox. Recommended inquiry dates never mean automatic claim approval. Treatment approval, incapacity, payment decisions and actual deposits remain separate records.
+
+Policy preparation is in `policies/`; no policy or private planning content is silently seeded at runtime. A private 63-record planning import remains outside Git/CI and requires human review. The UI validates the file before approval and renders readable record previews. See [rollout and recovery](rollout-and-recovery.md) for the owner handoff.
