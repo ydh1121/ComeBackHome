@@ -101,8 +101,6 @@
 }
 .private-page select {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .private-page form {
   display: grid;
@@ -120,6 +118,15 @@
 .private-page label.auth-check {
   display: flex;
   align-items: center;
+}
+/* WebKit includes a native select's intrinsic option width in a grid label's
+   scrollable overflow even when the select's border box fits. Keep these labels
+   in normal flow; the dropdown and its full option labels remain native. */
+.private-page label:has(> select) {
+  display: block;
+}
+.private-page label > select {
+  margin-top: 8px;
 }
 .private-page fieldset {
   border: 1px solid var(--cbh-line);
