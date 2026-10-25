@@ -1,6 +1,7 @@
 import { PrivateError } from "./contracts";
+import { PASSWORD_ITERATIONS } from "../../../src/modules/auth/password-policy";
+export { PASSWORD_ITERATIONS, validPassword } from "../../../src/modules/auth/password-policy";
 
-export const PASSWORD_ITERATIONS = 600_000;
 export function encode64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
@@ -81,12 +82,4 @@ export async function verifyPassword(
   let difference = 0;
   for (let i = 0; i < 32; i++) difference |= actual[i] ^ expected[i];
   return difference === 0;
-}
-export function validPassword(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    [...value].length >= 15 &&
-    [...value].length <= 128 &&
-    !/^(.)\1+$/.test(value)
-  );
 }

@@ -184,6 +184,14 @@ try {
         viewport: { width: 390, height: 844 },
         serviceWorkers: "block",
       });
+    await ctx.addInitScript(() => {
+      const derive = crypto.subtle.deriveBits.bind(crypto.subtle);
+      window.__cbhSyntheticKdfIterations = [];
+      crypto.subtle.deriveBits = (algorithm, ...rest) => {
+        if (algorithm.name === "PBKDF2") window.__cbhSyntheticKdfIterations.push(algorithm.iterations);
+        return derive(algorithm, ...rest);
+      };
+    });
     const page = await ctx.newPage();
     let ready = false;
     for (let i = 0; i < 100; i++) {
@@ -205,8 +213,16 @@ try {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     let anonymousLegacyRequests = 0;
+    let derivedLoginRequests = 0;
     page.on("request", (req) => {
       if (req.url().includes("/api/people")) anonymousLegacyRequests++;
+      if (new URL(req.url()).pathname === "/api/auth/login" && req.method() === "POST") {
+        const data = req.postDataJSON();
+        assert.equal(data.protocol, "cbh-pbkdf2-relief/v1");
+        assert.equal(data.password, undefined);
+        assert.equal(Buffer.from(data.material, "base64").length, 32);
+        derivedLoginRequests++;
+      }
     });
     await page.goto(base + "/injury");
     await page.getByRole("button", { name: "로그인", exact: true }).waitFor();
@@ -239,6 +255,9 @@ try {
     await page
       .getByRole("heading", { name: "산재·직장", exact: true })
       .waitFor();
+    const iterations = await page.evaluate(() => window.__cbhSyntheticKdfIterations);
+    assert(iterations.length >= 2 && iterations.every(n => n === 600000), "actual browser keeps 600k client KDF");
+    assert(derivedLoginRequests >= 2, "browser sends only derived materials");
     const cookies = await ctx.cookies();
     const session = cookies.find((c) => c.name === "__Host-cbh-session");
     assert.ok(

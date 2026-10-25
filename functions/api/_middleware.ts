@@ -8,9 +8,13 @@ interface PagesContext {
 }
 
 export async function onRequest(context: PagesContext): Promise<Response> {
+  // Owner activated authentication after provisioning. An absent dashboard
+  // variable on a later build must not silently expose the shared workspace.
+  // Explicit "0" remains the owner's deliberate rollout rollback switch.
+  const env = { ...context.env, PRIVATE_WORK_ENABLED: context.env.PRIVATE_WORK_ENABLED ?? "1" };
   const providerRuntime = createProviderRuntime(
-    context.env,
+    env,
     globalThis.fetch.bind(globalThis),
   );
-  return handleProductRequest(context.request, context.env, providerRuntime);
+  return handleProductRequest(context.request, env, providerRuntime);
 }

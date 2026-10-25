@@ -1,7 +1,7 @@
 # Private work injury and employment module
 
 Implementation track v0.7, 2026-10-24. Base: `de7c548502171c4cce63b0162358b3dac5821304`.
-Implementation and isolated tests authorized; MAIN merge, deployment, production migrations and configuration changes are **not authorized**.
+Initial implementation hold was superseded by the owner's explicit MAIN/PWA login rollout request. Narrow login fixes may follow required CI through the existing canonical deployment; unrelated production changes remain outside that scope. See rollout history and the password server-relief boundary below.
 
 ## Phase 0
 
@@ -26,7 +26,11 @@ Implementation and isolated tests authorized; MAIN merge, deployment, production
 
 `src/modules/injury` owns application contracts, pure calculations and UI. `worker/modules/injury` owns case ACL, revision-checked repositories, policies, documents and ledger. Only generic portable primitives may be shared with the original PWA. No imports of existing schedule/commute/OCR repositories.
 
-The case owner grants/revokes administrator access explicitly. Account preferences remain personal. Legacy workspace membership is a separate provisioning decision, never inferred from the case role. Release requires an owner-reviewed legacy ownership map; until configured, authenticated legacy access fails closed. The rollout flag is off by default until provisioned and accepted.
+The case owner grants/revokes administrator access explicitly. Account preferences remain personal. Legacy workspace membership is a separate provisioning decision, never inferred from the case role. The owner approved both accounts sharing the existing workspace, and confirmed their grants. The owner activated authentication; canonical Pages now defaults to protected mode if the flag is absent. An explicit `0` remains a deliberate rollout rollback, not an automatic error recovery.
+
+## Password runtime correction
+
+Production rejected the original server-side 600k PBKDF2 operation despite local workerd success. [Server relief and atomic credential upgrade](password-server-relief.md) preserves the browser's 600k derivation and adds a separate salted 10k server verifier. Server-side credential/session verification remains mandatory. Existing Windows credentials upgrade in-app without re-registration or schema migration. The protocol's password-equivalent material, client policy limitation and incompatible-old-code rollback boundary are documented explicitly.
 
 ## Persistence
 

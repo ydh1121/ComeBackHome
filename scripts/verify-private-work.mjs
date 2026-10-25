@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, readdir } from "node:fs/promises";
 import { createServer } from "vite";
+import { pbkdf2Sync, randomBytes } from "node:crypto";
+const originalDerive = Object.getOwnPropertyDescriptor(crypto.subtle, 'deriveBits');
+const nativeDerive = crypto.subtle.deriveBits.bind(crypto.subtle);
+let serverKdfCalls = 0;
 const vite = await createServer({
   appType: "custom",
   logLevel: "error",
@@ -182,7 +186,7 @@ try {
   const { handleProductRequest } = await load("worker/modules/gateway.ts");
   const env = { DB: db, PRIVATE_WORK_ENABLED: "1", MUTATIONS_ENABLED: "1" };
   let driveFetcher = fetch;
-  const call = (path, method = "GET", body, cookie, originHeader = origin) =>
+  const rawCall = (path, method = "GET", body, cookie, originHeader = origin) =>
     handleProductRequest(
       new Request(origin + "/api/" + path, {
         method,
@@ -198,6 +202,31 @@ try {
       null,
       driveFetcher,
     );
+  // Reproduce the production native cap, not local workerd's permissive KDF.
+  // Independent Node derivation models the browser; server calls must stay 10k.
+  Object.defineProperty(crypto.subtle, 'deriveBits', { configurable: true, value: async (algorithm, ...rest) => {
+    if (algorithm.name === 'PBKDF2') {
+      if (algorithm.iterations > 100000) throw new DOMException(`Pbkdf2 failed: iteration counts above 100000 are not supported (requested ${algorithm.iterations}).`, 'NotSupportedError');
+      assert.equal(algorithm.iterations, 10000); serverKdfCalls++;
+    }
+    return nativeDerive(algorithm, ...rest);
+  } });
+  const derive = (password, salt) => pbkdf2Sync(password, Buffer.from(salt, 'base64'), 600000, 32, 'sha256').toString('base64');
+  const call = async (path, method = "GET", body, cookie, originHeader = origin) => {
+    if (path === 'auth/login' && method === 'POST' && body?.password !== undefined) {
+      const response = await rawCall('auth/login-parameters', 'POST', { loginId: body.loginId }, cookie, originHeader);
+      if (!response.ok) return response;
+      const params = await response.json();
+      const { password, ...rest } = body;
+      body = { ...rest, protocol: params.protocol, salt: params.salt, material: derive(password, params.salt) };
+    } else if (path === 'auth/password' && method === 'POST' && body?.currentPassword !== undefined) {
+      const response = await rawCall('auth/password-parameters', 'GET', undefined, cookie, originHeader);
+      if (!response.ok) return response;
+      const params = await response.json(), newSalt = randomBytes(16).toString('base64');
+      body = { protocol: params.protocol, salt: params.salt, currentMaterial: derive(body.currentPassword, params.salt), newMaterial: derive(body.newPassword, newSalt), newSalt };
+    }
+    return rawCall(path, method, body, cookie, originHeader);
+  };
   check(
     (await call("private/case")).status,
     401,
@@ -1429,12 +1458,15 @@ try {
   );
   check(validFilePrefix(file.buffer, "application/pdf"), true, "PDF magic");
   check(validFilePrefix(file.buffer, "image/png"), false, "mismatched MIME");
+  assert(serverKdfCalls > 0, "server relief exercised under production iteration cap");
   console.log(
     "PRIVATE_WORK_CONTRACT_PASS checks=" +
       checks +
       " auth_csrf_force_change_revocation_consent_races_history_ledger_rolling_days_drive_integrity",
   );
 } finally {
+  if (originalDerive) Object.defineProperty(crypto.subtle, 'deriveBits', originalDerive);
+  else delete crypto.subtle.deriveBits;
   sql.close();
   await vite.close();
 }

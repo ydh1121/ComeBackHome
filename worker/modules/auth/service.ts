@@ -2,12 +2,11 @@ import type { D1DatabaseLike } from "../../../packages/portable/d1/types";
 import { authReadiness } from "./readiness";
 import {
   digest,
-  hashPassword,
   randomToken,
-  validPassword,
-  verifyPassword,
   type PasswordHash,
 } from "./crypto";
+import { PASSWORD_ITERATIONS, PASSWORD_PROTOCOL } from "../../../src/modules/auth/password-policy";
+import { material64, passwordRecord, passwordVerifier, verifyPasswordMaterial, wrapLegacyPassword } from "./password-verifier";
 import {
   PrivateError,
   privateJson,
@@ -129,6 +128,34 @@ const DUMMY: PasswordHash = {
   salt_b64: "AAAAAAAAAAAAAAAAAAAAAA==",
   hash_b64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 };
+const DUMMY_VERIFIER: PasswordHash = { ...DUMMY,
+  hash_b64: "Q0JIU1IwMQAAAAAAAAAAAAAAAAAAAAAANRTSCydUQFQOCwrt36femNdwysi4FLi0z8+vBM9KBQ4=" };
+function loginId(body: Record<string, unknown>) {
+  return typeof body.loginId === "string" ? body.loginId.trim().toLowerCase().slice(0, 80) : "";
+}
+function parameters(stored: PasswordHash) {
+  return { protocol: PASSWORD_PROTOCOL, iterations: PASSWORD_ITERATIONS, salt: stored.salt_b64 };
+}
+// A preparation request never authenticates. Upgrade only the representation,
+// preserving the existing password, salt, user ID, forced change and all grants.
+// CAS and audit are one transaction. A concurrent password change always wins.
+async function prepareCredential(db: D1DatabaseLike, user: UserRow, stored: PasswordHash) {
+  if (passwordRecord(stored).version === 2) return stored;
+  const wrapped = await wrapLegacyPassword(stored), instant = now();
+  await db.batch([
+    db.prepare(`UPDATE auth_credentials SET hash_b64=?2,updated_at=?3
+      WHERE user_id=?1 AND hash_b64=?4 AND salt_b64=?5 AND algorithm='pbkdf2-sha256' AND iterations=600000
+      AND EXISTS(SELECT 1 FROM auth_users WHERE id=?1 AND auth_epoch=?6 AND disabled=0)`)
+      .bind(user.id, wrapped.hash_b64, instant, stored.hash_b64, stored.salt_b64, user.auth_epoch),
+    db.prepare(`INSERT INTO auth_audit SELECT ?1,NULL,'credential-format-upgrade','allowed',?2,?3
+      WHERE EXISTS(SELECT 1 FROM auth_credentials WHERE user_id=?2 AND hash_b64=?4)`)
+      .bind(crypto.randomUUID(), user.id, instant, wrapped.hash_b64),
+  ]);
+  const current = await credentials(db, user.id);
+  if (!current || passwordRecord(current).version !== 2)
+    throw new PrivateError(409, "SESSION_CHANGED");
+  return current;
+}
 function publicPrincipal(p: Principal) {
   return {
     id: p.id,
@@ -166,12 +193,19 @@ export async function handleAuth(
       throw e;
     }
   }
+  if (path === "login-parameters" && request.method === "POST") {
+    const login = loginId(await readJson(request));
+    await throttle(db, ["prepare-ip:" + (request.headers.get("CF-Connecting-IP") ?? "local"), "prepare-login:" + login], 10);
+    const user = await db.prepare("SELECT * FROM auth_users WHERE login_id=?1").bind(login).first<UserRow>();
+    const stored = user && !user.disabled ? await credentials(db, user.id) : null;
+    // Fixed allowed login names are already public; never expose account IDs,
+    // roles, credential hashes or whether a session may be issued here.
+    return privateJson(parameters(user && stored ? await prepareCredential(db, user, stored) : DUMMY));
+  }
   if (path === "login" && request.method === "POST") {
     const body = await readJson(request);
-    const login =
-      typeof body.loginId === "string"
-        ? body.loginId.trim().toLowerCase().slice(0, 80)
-        : "";
+    if (body.protocol !== PASSWORD_PROTOCOL) throw new PrivateError(426, "CLIENT_UPDATE_REQUIRED");
+    const login = loginId(body);
     await throttle(
       db,
       [
@@ -180,17 +214,14 @@ export async function handleAuth(
       ],
       10,
     );
-    const password =
-      typeof body.password === "string" && body.password.length <= 512
-        ? body.password
-        : "";
     const user = await db
       .prepare("SELECT * FROM auth_users WHERE login_id=?1")
       .bind(login)
       .first<UserRow>();
-    const stored = user ? await credentials(db, user.id) : null;
-    const matches = await verifyPassword(password, stored ?? DUMMY);
-    if (!matches || !user || !stored || user.disabled) {
+    const stored = user && !user.disabled ? await credentials(db, user.id) : null;
+    const verifier = stored ?? DUMMY_VERIFIER;
+    const matches = await verifyPasswordMaterial(body.material, verifier);
+    if (!matches || !user || !stored || user.disabled || body.salt !== stored.salt_b64) {
       await authAudit(db, null, "login", "denied");
       throw new PrivateError(401, "LOGIN_FAILED");
     }
@@ -240,6 +271,12 @@ export async function handleAuth(
     );
   }
   const principal = await authenticate(request, env, true);
+  if (path === "password-parameters" && request.method === "GET") {
+    const stored = await credentials(db, principal.id);
+    if (!stored) throw new PrivateError(503, "AUTH_NOT_READY");
+    if (passwordRecord(stored).version !== 2) throw new PrivateError(503, "AUTH_PASSWORD_UPGRADE_REQUIRED");
+    return privateJson(parameters(stored));
+  }
   if (path === "logout" && request.method === "POST") {
     await db
       .prepare("UPDATE auth_sessions SET revoked_at=?2 WHERE token_hash=?1")
@@ -265,18 +302,14 @@ export async function handleAuth(
   if (path === "password" && request.method === "POST") {
     const body = await readJson(request);
     await throttle(db, ["password:" + principal.id], 8);
-    const old =
-      typeof body.currentPassword === "string" ? body.currentPassword : "";
-    if (
-      old.length > 512 ||
-      !validPassword(body.newPassword) ||
-      body.newPassword === old
-    )
+    if (body.protocol !== PASSWORD_PROTOCOL) throw new PrivateError(426, "CLIENT_UPDATE_REQUIRED");
+    const next = material64(body.newMaterial, 32), nextSalt = material64(body.newSalt, 16);
+    if (!next || !nextSalt || body.newSalt === body.salt || body.newMaterial === body.currentMaterial)
       throw new PrivateError(400, "PASSWORD_INVALID");
     const stored = await credentials(db, principal.id);
-    if (!stored || !(await verifyPassword(old, stored)))
+    if (!stored || !(await verifyPasswordMaterial(body.currentMaterial, stored)) || body.salt !== stored.salt_b64)
       throw new PrivateError(401, "PASSWORD_INCORRECT");
-    const hash = await hashPassword(body.newPassword);
+    const hash = await passwordVerifier(next, nextSalt);
     const instant = now();
     const changed = await db.batch([
       db
