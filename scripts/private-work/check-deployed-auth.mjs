@@ -12,7 +12,7 @@ export async function checkDeployedAuth({ sha, fetcher = fetch }) {
   if (!health.ok || version.ok !== true || version.commitSha !== sha) throw new Error('Exact deployed source not observed; auth probe skipped');
   const response = await fetcher(origin + '/api/auth/readiness', options());
   const result = await response.json().catch(() => null);
-  if (response.status === 404 && result?.error === 'FEATURE_UNAVAILABLE') return { auth: 'disabled', loginAccepted: false, writes: 0 };
+  if (response.status === 404 && result?.error === 'FEATURE_UNAVAILABLE') return { auth: 'blocked', reason: 'AUTH_DISABLED', loginAccepted: false, writes: 0 };
   const database = ['ready', 'unavailable'].includes(result?.database) ? result.database : 'unknown';
   const passwordRuntime = ['supported', 'unsupported', 'unavailable'].includes(result?.passwordRuntime) ? result.passwordRuntime : 'unknown';
   return { auth: response.status === 200 && database === 'ready' && passwordRuntime === 'supported' ? 'runtime-ready' : 'blocked', database, passwordRuntime, loginAccepted: false, writes: 0 };

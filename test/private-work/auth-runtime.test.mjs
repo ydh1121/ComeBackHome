@@ -160,7 +160,8 @@ test('deployed check pins the source, sends only two unauthenticated reads and r
       assert.equal(calls.length, 1);
     } else {
       const result = await checkDeployedAuth({ sha, fetcher });
-      assert.equal(result.auth, state === 'supported' ? 'runtime-ready' : state === 'disabled' ? 'disabled' : 'blocked');
+      assert.equal(result.auth, state === 'supported' ? 'runtime-ready' : 'blocked');
+      if (state === 'disabled') assert.equal(result.reason, 'AUTH_DISABLED');
       assert.equal(result.loginAccepted, false);
       assert.equal(result.writes, 0);
       assert.equal(calls.length, 2);
