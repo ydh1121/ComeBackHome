@@ -1,10 +1,20 @@
 # 로그인 준비와 운영 전환
 
-**일반 사용자는 [로그인이 안 될 때 — Windows PC에서 확인하기](login-help.md)를 먼저 읽는다.** 아래 긴 명령은 개발 담당자용이며, 현재 오류 화면을 확인하려고 실행할 필요가 없다.
+**일반 사용자는 [로그인 마무리 — Windows PC에서 한 번만](login-help.md)를 따른다.** 아래 긴 명령은 개발 담당자용이다.
 
-2026-10-25: PR #102는 MAIN `033708c48dfd4853372ccad1744887943a0918e2`로 병합·기존 주소 배포 완료. MAIN 필수 CI 12/12와 배포 확인이 통과했다. 운영 DB·계정 적용은 아직 확인되지 않았고, 이후 사용자 화면에서 로그인 서버 오류가 보고됐다. 코드 배포 성공과 실제 로그인 성공은 별도다.
+2026-10-25: PR #102는 MAIN `033708c48dfd4853372ccad1744887943a0918e2`로 병합·기존 주소 배포 완료. MAIN 필수 CI 12/12와 배포 확인이 통과했다. 사용자의 올바른 운영 D1 콘솔에서 필수 로그인 테이블 10개 조회가 0개인 것을 확인했다. 코드 배포 성공과 실제 로그인 성공은 별도다.
 
-사용자 지시로 **Cloudflare 클라우드 브라우저 접속 금지**. 이 문서만으로 운영 DB 변경이나 인증 경계를 우회할 수 없다. 일반 사용자는 먼저 자신의 PC에서 Cloudflare 로그인 가능 여부와 위 안내의 읽기 전용 결과만 확인한다.
+사용자 지시로 **Cloudflare 클라우드 브라우저 접속 금지**. 이 문서만으로 운영 DB 변경이나 인증 경계를 우회할 수 없다. 사용자는 본인 PC에서 D1 콘솔 접속에 성공했으므로 Cloudflare 로그인 진단을 반복하지 않는다.
+
+## 현재 권장 실행 경로
+
+기존 수동 GitHub workflow를 보완했다. 소유자가 `feat/private-work-injury`를 선택하고 `APPLY_REMOTE_COMEBACKHOME_D1`을 입력해 실행한다. 이 절차는 정확한 DB ID·검수된 0012 SHA-256·이전 11개 이력·부분 설치 여부를 검사하고, **쓰기 직전 D1 Time Travel 복구 시점 조회와 실행 요약 기록에 성공해야만** 0012를 적용한다. 이미 완전히 적용됐으면 재적용하지 않는다. 다른 pending migration·복구 조회 실패·스키마 변경 감지 시 쓰기 전에 중단한다.
+
+자동화 경로는 Cloudflare의 항상 활성화된 Time Travel 백업을 사용한다. 전체 운영 DB를 공개 GitHub runner/artifact로 내보내지 않는다. 복구 시점의 UTC timestamp만 요약에 남기며 opaque bookmark·자료 원문·계정 해시는 로그에 남기지 않는다. Free의 복구 가능 기간은 7일이다. 이 경로의 사전 복구 검증은 아래 수동 경로의 로컬 SQL export와 구분한다. 장기 별도 백업이 필요한 경우 기존 비공개 Drive 보관 정책을 따른다.
+
+계정 파일은 사용자 PC에서만 운영 D1 콘솔에 적용한다. 이어 `scripts/private-work/complete-login-access.sql`로 사용자 승인된 공동 일정 권한을 적용하고, `READY_FOR_LOGIN` 두 행을 확인한 뒤 실제 로그인·비밀번호 변경을 검수한다. 동의·비밀번호·기존 일정은 권한 SQL에서 변경하지 않는다. DB 준비 성공을 실제 로그인 성공으로 기록하지 않는다.
+
+공식 근거: [D1 Time Travel and backups](https://developers.cloudflare.com/d1/reference/time-travel/), [Wrangler migration 명령](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply).
 
 <details>
 <summary>개발 담당자용: DB 적용·배포·복구 절차 펼치기</summary>

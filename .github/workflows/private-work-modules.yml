@@ -42,6 +42,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck && npm run typecheck:worker
       - run: node scripts/verify-private-work.mjs
+      - run: node --test test/private-work/login-db-setup.test.mjs
       - run: node_modules/.bin/workerd test test/private-work/crypto-probe.capnp
   browser-d1:
     runs-on: ubuntu-latest
