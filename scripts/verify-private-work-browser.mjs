@@ -199,6 +199,9 @@ try {
       await new Promise((r) => setTimeout(r, 300));
     }
     assert.ok(ready, "local D1 runtime ready");
+    const readiness = await ctx.request.get(base + "/api/auth/readiness");
+    assert.equal(readiness.status(), 200);
+    assert.deepEqual(await readiness.json(), { database: "ready", passwordRuntime: "supported" });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     let anonymousLegacyRequests = 0;
@@ -213,6 +216,14 @@ try {
       .getByLabel("비밀번호", { exact: true })
       .fill(label === "chromium" ? password : newPassword);
     await page.getByLabel("이 기기에서 로그인 유지").check();
+    await page.route("**/api/auth/login", route => route.fulfill({
+      status: 503, contentType: "application/json",
+      body: JSON.stringify({ error: "AUTH_PASSWORD_RUNTIME_UNSUPPORTED" }),
+    }));
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "계정이나 비밀번호를 다시 등록하지 마세요" }).waitFor();
+    assert.equal((await ctx.cookies()).some(c => c.name === "__Host-cbh-session"), false);
+    await page.unroute("**/api/auth/login");
     await page.getByRole("button", { name: "로그인", exact: true }).click();
     if (label === "chromium") {
       await page.getByRole("heading", { name: "임시 비밀번호 변경" }).waitFor();

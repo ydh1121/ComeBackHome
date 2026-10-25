@@ -1,6 +1,23 @@
-# 운영 전환·복구 준비
+# 로그인 준비와 운영 전환
 
-현재 **PR #102 Draft / main 병합·운영 배포·운영 DB 변경 HOLD**다. 이 문서는 실행 승인서가 아니다. 기존 PWA는 기존 main을 계속 사용한다.
+**일반 사용자는 [로그인 마무리 — Windows PC에서 한 번만](login-help.md)를 따른다.** 아래 긴 명령은 개발 담당자용이다.
+
+2026-10-25: PR #102는 MAIN `033708c48dfd4853372ccad1744887943a0918e2`로 병합·기존 주소 배포 완료. MAIN 필수 CI 12/12와 배포 확인이 통과했다. 이후 사용자 실행40173675312에서 운영 `0012` 적용 완료 확인. 복구 시점은 `2026-10-25T07:41:00.322Z`, 기존 일정 테이블 구조 보존. 최신 사용자 조회는 `2 / 2 / 2 / 1`로 계정·공동 권한도 등록 완료다. DB 준비·계정 SQL을 다시 실행하지 않는다. PC와 iPhone에서 올바른 아이디로도 서버503이 남으며, 실제 로그인 성공은 아직 미확인이다.
+
+사용자 지시로 **Cloudflare 클라우드 브라우저 접속 금지**. 이 문서만으로 운영 DB 변경이나 인증 경계를 우회할 수 없다. 사용자는 본인 PC에서 D1 콘솔 접속에 성공했으므로 Cloudflare 로그인 진단을 반복하지 않는다.
+
+## 현재 권장 실행 경로
+
+기존 수동 GitHub workflow를 보완했다. 소유자가 `feat/private-work-injury`를 선택하고 `APPLY_REMOTE_COMEBACKHOME_D1`을 입력해 실행한다. 이 절차는 정확한 DB ID·검수된 0012 SHA-256·이전 11개 이력·부분 설치 여부를 검사하고, **쓰기 직전 D1 Time Travel 복구 시점 조회와 실행 요약 기록에 성공해야만** 0012를 적용한다. 이미 완전히 적용됐으면 재적용하지 않는다. 다른 pending migration·복구 조회 실패·스키마 변경 감지 시 쓰기 전에 중단한다.
+
+자동화 경로는 Cloudflare의 항상 활성화된 Time Travel 백업을 사용한다. 전체 운영 DB를 공개 GitHub runner/artifact로 내보내지 않는다. 복구 시점의 UTC timestamp만 요약에 남기며 opaque bookmark·자료 원문·계정 해시는 로그에 남기지 않는다. Free의 복구 가능 기간은 7일이다. 이 경로의 사전 복구 검증은 아래 수동 경로의 로컬 SQL export와 구분한다. 장기 별도 백업이 필요한 경우 기존 비공개 Drive 보관 정책을 따른다.
+
+계정 파일은 사용자 PC에서만 운영 D1 콘솔에 적용한다. 이어 `scripts/private-work/complete-login-access.sql`로 사용자 승인된 공동 일정 권한을 적용하고, `READY_FOR_LOGIN` 두 행을 확인한 뒤 실제 로그인·비밀번호 변경을 검수한다. 동의·비밀번호·기존 일정은 권한 SQL에서 변경하지 않는다. DB 준비 성공을 실제 로그인 성공으로 기록하지 않는다.
+
+공식 근거: [D1 Time Travel and backups](https://developers.cloudflare.com/d1/reference/time-travel/), [Wrangler migration 명령](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply).
+
+<details>
+<summary>개발 담당자용: DB 적용·배포·복구 절차 펼치기</summary>
 
 ## 먼저 결정할 내용
 
@@ -67,3 +84,5 @@
 비공개 산재 폴더의 `ComeBackHome-private-planning-2026-10-24.json`에는 기획 정본의 63개 초안과 출처가 있다. 원본 증빙이나 기관 확정 기록을 만들어낸 파일이 아니다. 운영 수락 뒤 신이본 계정의 **산재 → 접근·이력 → 내 자료 내보내기·기획 자료 가져오기**에서 선택 → 내용 확인 → **검토 완료 · 새 기록으로 저장** 순서로 사용한다. 같은 파일 재시도는 중복 생성하지 않는다.
 
 공식 계산 정책은 `policies/2026-confirmed.json`을 관리자 **접근·이력 → 계산 정책과 공식 근거**에서 별도로 검토·저장한다. 개인 초안과 법정 정책은 섞지 않는다. 적용 기간 밖의 계산에는 새 공식 근거 확인이 필요하다.
+
+</details>

@@ -1,3 +1,5 @@
+import { PrivateError } from "./contracts";
+
 export const PASSWORD_ITERATIONS = 600_000;
 export function encode64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
@@ -36,11 +38,25 @@ export async function hashPassword(
     false,
     ["deriveBits"],
   );
-  const hash = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", iterations: PASSWORD_ITERATIONS, salt },
-    key,
-    256,
-  );
+  let hash: ArrayBuffer;
+  try {
+    hash = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", hash: "SHA-256", iterations: PASSWORD_ITERATIONS, salt },
+      key,
+      256,
+    );
+  } catch (error) {
+    // workerd local tests do not enforce the production PBKDF2 iteration cap.
+    // Classify only the known provider error; never return its raw message or
+    // retry with a weaker work factor / another credential format.
+    if (
+      error instanceof Error &&
+      error.name === "NotSupportedError" &&
+      /^Pbkdf2 failed: iteration counts above \d+ are not supported \(requested 600000\)\.$/.test(error.message)
+    )
+      throw new PrivateError(503, "AUTH_PASSWORD_RUNTIME_UNSUPPORTED");
+    throw error;
+  }
   return {
     algorithm: "pbkdf2-sha256",
     iterations: PASSWORD_ITERATIONS,
