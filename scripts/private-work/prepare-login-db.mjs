@@ -12,6 +12,7 @@ export const CONFIRMATION = 'APPLY_REMOTE_COMEBACKHOME_D1';
 export const LEDGER_QUERY = 'SELECT name FROM d1_migrations ORDER BY name;';
 export const SCHEMA_QUERY = "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY type,name;";
 export const POLICY_QUERY = "SELECT COUNT(*) AS ready FROM auth_policy WHERE id='default' AND session_hours=12 AND remembered_days=30 AND idle_hours=168;";
+export const EXISTING_POLICY_QUERY = "SELECT COUNT(*) AS ready FROM auth_policy WHERE id='default';";
 const LEGACY_TABLES = ['people', 'schedules', 'places', 'notification_settings', 'push_subscriptions', 'notification_jobs', 'notification_planner_state', 'saved_commute_routes', 'saved_commute_route_vias', 'saved_commute_route_origins', 'saved_commute_route_destinations', 'presence_state'];
 
 function requireState(ok, code) { if (!ok) throw new Error(code); }
@@ -20,7 +21,7 @@ export function validateSource(config, files, sql) {
   const db = config.d1_databases?.[0];
   requireState(config.name === 'come-back-home' && config.d1_databases?.length === 1 &&
     db.binding === 'DB' && db.database_name === DATABASE && db.database_id === DATABASE_ID &&
-    db.migrations_dir === 'db/migrations' && !db.migrations_table, 'CANONICAL_DATABASE_MISMATCH');
+    db.migrations_dir === 'db/migrations' && !db.migrations_table && !db.migrations_pattern, 'CANONICAL_DATABASE_MISMATCH');
   requireState(createHash('sha256').update(sql).digest('hex') === MIGRATION_SHA256, 'UNREVIEWED_MIGRATION');
   requireState(files.length === 12 && files[11] === MIGRATION &&
     files.every((f, i) => f.startsWith(String(i + 1).padStart(4, '0') + '_')), 'UNEXPECTED_REPOSITORY_MIGRATIONS');
@@ -54,7 +55,11 @@ export async function prepareLoginDb({ files, objects, query, bookmark, apply, r
   const beforeLedger = await query(LEDGER_QUERY);
   const beforeSchema = await query(SCHEMA_QUERY);
   const state = assessState(beforeLedger, beforeSchema, files, objects);
-  if (state === 'applied') return { schema: 'already-applied', applied: [], accountSetup: 'not-verified' };
+  if (state === 'applied') {
+    const policy = await query(EXISTING_POLICY_QUERY);
+    requireState(policy.length === 1 && policy[0].ready === 1, 'AUTH_POLICY_MISSING');
+    return { schema: 'already-applied', applied: [], accountSetup: 'not-verified' };
+  }
 
   const recoveryAt = new Date().toISOString();
   const recovery = await bookmark(recoveryAt);
@@ -78,7 +83,9 @@ export async function main(env = process.env) {
   requireState(env.GITHUB_ACTIONS === 'true' && env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
     env.GITHUB_REPOSITORY === 'ydh1121/ComeBackHome' && env.CBH_D1_CONFIRMATION === CONFIRMATION, 'OWNER_DISPATCH_REQUIRED');
   requireState(!!env.CLOUDFLARE_API_TOKEN && !!env.CLOUDFLARE_ACCOUNT_ID, 'EXISTING_CLOUDFLARE_ACTION_SECRETS_MISSING');
-  const files = readdirSync('db/migrations').filter((f) => /^\d{4}_.+\.sql$/.test(f)).sort();
+  // Wrangler's default glob includes every *.sql, including non-numbered files.
+  // Never silently filter out a file that Wrangler could apply after preflight.
+  const files = readdirSync('db/migrations').filter((f) => f.endsWith('.sql')).sort();
   const objects = validateSource(JSON.parse(readFileSync('wrangler.jsonc', 'utf8')), files, readFileSync('db/migrations/' + MIGRATION, 'utf8'));
   function wrangler(args, failure) {
     try {

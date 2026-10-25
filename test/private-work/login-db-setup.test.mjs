@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { assessState, validateSource, rows, main, prepareLoginDb, MIGRATION, LEDGER_QUERY, SCHEMA_QUERY } from '../../scripts/private-work/prepare-login-db.mjs';
 
-const files = readdirSync('db/migrations').filter((f) => /^\d{4}_.+\.sql$/.test(f)).sort();
+const files = readdirSync('db/migrations').filter((f) => f.endsWith('.sql')).sort();
 const sql = readFileSync('db/migrations/' + MIGRATION, 'utf8');
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
 const objects = validateSource(config, files, sql);
@@ -33,10 +33,11 @@ function snapshotLegacy(db) {
     .map(({ name }) => [name, db.prepare('SELECT * FROM "' + name + '"').all()]);
 }
 test('wrong project/database/source or a later migration stops before any remote call', () => {
-  for (const wrong of [ { ...config, name: 'another-project' }, { ...config, d1_databases: [] }, { ...config, d1_databases: [{ ...config.d1_databases[0], database_id: 'another-db' }] } ])
+  for (const wrong of [ { ...config, name: 'another-project' }, { ...config, d1_databases: [] }, { ...config, d1_databases: [{ ...config.d1_databases[0], database_id: 'another-db' }] }, { ...config, d1_databases: [{ ...config.d1_databases[0], migrations_pattern: 'other/*.sql' }] } ])
     assert.throws(() => validateSource(wrong, files, sql), /CANONICAL_DATABASE_MISMATCH/);
   assert.throws(() => validateSource(config, files, sql + '\nDROP TABLE people;'), /UNREVIEWED_MIGRATION/);
   assert.throws(() => validateSource(config, [...files, '0013_extra.sql'], sql), /UNEXPECTED_REPOSITORY_MIGRATIONS/);
+  assert.throws(() => validateSource(config, [...files, 'unexpected.sql'], sql), /UNEXPECTED_REPOSITORY_MIGRATIONS/);
 });
 test('push/PR/local invocation cannot use the production runner', async () => {
   for (const event of [undefined, 'push', 'pull_request'])
@@ -98,6 +99,10 @@ test('a recorded migration with a missing required trigger is rejected', async (
   const f = fixture(); await f.apply(); f.db.exec('DROP TRIGGER case_owner_immutable');
   assert.throws(() => assessState(f.db.prepare(LEDGER_QUERY).all(), f.db.prepare(SCHEMA_QUERY).all(), files, objects), /PRIVATE_SCHEMA_INCOMPLETE/);
 });
+test('already-applied schema without the auth policy is not accepted and is not reinstalled', async () => {
+  const f = fixture(); await f.apply(); f.events.length = 0; f.db.exec('DELETE FROM auth_policy');
+  await assert.rejects(prepareLoginDb(f), /AUTH_POLICY_MISSING/); assert(!f.events.includes('apply'));
+});
 test('unexpected legacy schema changes or missing policy are not accepted after apply', async () => {
   for (const [change, error] of [['ALTER TABLE people ADD COLUMN unexpected TEXT', /LEGACY_SCHEMA_CHANGED/], ['DELETE FROM auth_policy', /INITIAL_AUTH_POLICY_MISSING/]]) {
     const f = fixture(), apply = f.apply; f.apply = async () => { await apply(); f.db.exec(change); };
@@ -112,6 +117,12 @@ function seedAccount(db, login, credential = true) {
   db.prepare('INSERT INTO auth_preferences VALUES(?,1,?)').run(login, '2026-10-25');
 }
 function seedCase(db) { db.exec("INSERT INTO case_profiles VALUES('test-case','yvonne','2026-10-25'); INSERT INTO case_consents VALUES('test-case',0,'','',1,'yvonne','2026-10-25')"); }
+test('both accounts without a case owner/consent cannot receive setup grants', async () => {
+  const f = fixture(); await f.apply(); seedAccount(f.db, 'ydh1121'); seedAccount(f.db, 'yvonne');
+  f.db.exec(grantSql); assert.equal(f.db.prepare('SELECT COUNT(*) n FROM auth_workspace_grants').get().n, 0);
+  f.db.exec("INSERT INTO case_profiles VALUES('test-case','yvonne','2026-10-25')");
+  f.db.exec(grantSql); assert.equal(f.db.prepare('SELECT COUNT(*) n FROM auth_workspace_grants').get().n, 0);
+});
 test('shared schedule setup requires both credentials and the original owner/consent', async () => {
   const f = fixture(); await f.apply();
   f.db.exec(grantSql); assert.equal(f.db.prepare('SELECT COUNT(*) n FROM auth_workspace_grants').get().n, 0);
