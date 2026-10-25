@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { ApiError, privateRequest } from "./client";
+import { loginWithPassword, changeWithPassword } from "./password";
 import { invalidateLocalReads } from "../../pwa/localCache";
 import { releasePrivateImportImage } from "../../application/services/WorkbookImportFileSelectionAction";
 import "./auth.css";
@@ -231,11 +232,11 @@ function Login({ onSuccess }: { onSuccess: () => Promise<void> }) {
           setBusy(true);
           setError("");
           try {
-            await privateRequest("auth/login", "POST", {
-              loginId: data.get("login"),
-              password: data.get("password"),
+            await loginWithPassword({
+              loginId: String(data.get("login") ?? ""),
+              password: String(data.get("password") ?? ""),
               remember: data.get("remember") === "on",
-              deviceName: data.get("device"),
+              deviceName: String(data.get("device") ?? ""),
             });
             e.currentTarget?.reset();
             await onSuccess();
@@ -305,10 +306,7 @@ export function PasswordChange({ initial = false }: { initial?: boolean }) {
           }
           setBusy(true);
           try {
-            await privateRequest("auth/password", "POST", {
-              currentPassword: d.get("current"),
-              newPassword: d.get("next"),
-            });
+            await changeWithPassword(String(d.get("current") ?? ""), String(d.get("next") ?? ""));
             f.reset();
             clearPersonalMemory();
             localStorage.setItem("cbh.auth-event", crypto.randomUUID());

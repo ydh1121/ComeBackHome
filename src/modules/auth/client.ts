@@ -13,6 +13,9 @@ export function errorText(code: string): string {
     AUTH_PASSWORD_RUNTIME_UNSUPPORTED:
       "서버 실행 환경에서 현재 비밀번호 검증 방식을 지원하지 않습니다. 계정이나 비밀번호를 다시 등록하지 마세요. 서버 수정이 필요합니다.",
     AUTH_NOT_READY: "서버의 로그인 설정을 확인해야 합니다. 계정 등록을 반복하지 마세요.",
+    CLIENT_UPDATE_REQUIRED: "로그인 기능이 업데이트됐습니다. 앱을 완전히 닫았다가 다시 열어 주세요.",
+    AUTH_PASSWORD_RECORD_INVALID: "서버의 비밀번호 등록 상태 확인이 필요합니다. 계정 파일을 다시 실행하지 마세요.",
+    AUTH_PASSWORD_UPGRADE_REQUIRED: "로그인 준비가 갱신됐습니다. 로그인 버튼을 다시 눌러 주세요.",
     PRIVATE_SERVICE_UNAVAILABLE:
       "서버에서 로그인·자료 요청을 처리하지 못했습니다. 계정 등록이나 비밀번호 변경을 반복하지 마세요. 오류 코드: PRIVATE_SERVICE_UNAVAILABLE",
     TRY_LATER: "시도가 많습니다. 15분 후 다시 시도해 주세요.",

@@ -10,7 +10,7 @@ const { createPasswordRuntimeCheck, authReadiness } = await vite.ssrLoadModule('
 const { handleProductRequest } = await vite.ssrLoadModule('/worker/modules/gateway.ts');
 const { errorText } = await vite.ssrLoadModule('/src/modules/auth/client.ts');
 const nativeDerive = crypto.subtle.deriveBits.bind(crypto.subtle);
-const cap = () => new DOMException('Pbkdf2 failed: iteration counts above 100000 are not supported (requested 600000).', 'NotSupportedError');
+const cap = (iterations = 10000) => new DOMException(`Pbkdf2 failed: iteration counts above 100000 are not supported (requested ${iterations}).`, 'NotSupportedError');
 
 async function withDerive(derive, run) {
   const original = Object.getOwnPropertyDescriptor(crypto.subtle, 'deriveBits');
@@ -30,7 +30,7 @@ test('fixed runtime vector uses the unchanged 600k format and agrees with indepe
 
 test('concurrent public probes share one fixed derivation per isolate', async () => {
   let calls = 0;
-  await withDerive(async (...args) => { calls++; assert.equal(args[0].iterations, 600000); return nativeDerive(...args); }, async () => {
+  await withDerive(async (...args) => { calls++; assert.equal(args[0].iterations, 10000); return nativeDerive(...args); }, async () => {
     const check = createPasswordRuntimeCheck();
     assert.deepEqual(await Promise.all(Array.from({ length: 8 }, () => check())), Array(8).fill('supported'));
     assert.equal(await check(), 'supported');
@@ -38,9 +38,9 @@ test('concurrent public probes share one fixed derivation per isolate', async ()
   });
 });
 
-test('production-only iteration cap is classified without fallback or lower iterations', async () => {
+test('legacy 600k and relief 10k stages classify their own exact cap without retry', async () => {
   let calls = 0;
-  await withDerive(async (algorithm) => { calls++; assert.equal(algorithm.iterations, 600000); throw cap(); }, async () => {
+  await withDerive(async (algorithm) => { calls++; assert.equal(algorithm.iterations, calls === 1 ? 600000 : 10000); throw cap(algorithm.iterations); }, async () => {
     await assert.rejects(hashPassword('synthetic-sensitive-value'), (error) => error.code === 'AUTH_PASSWORD_RUNTIME_UNSUPPORTED' && error.status === 503 && !error.message.includes('synthetic-sensitive'));
     assert.equal(calls, 1);
     const check = createPasswordRuntimeCheck();
@@ -119,7 +119,7 @@ test('login exposes only the fixed unsupported-runtime code and cannot issue a s
   };
   const request = () => new Request('https://local.invalid/api/auth/login', {
     method: 'POST', headers: { Origin: 'https://local.invalid', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ loginId: 'unknown-fixture', password: 'synthetic-sensitive-value' }),
+    body: JSON.stringify({ protocol: 'cbh-pbkdf2-relief/v1', loginId: 'unknown-fixture', material: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', salt: 'AAAAAAAAAAAAAAAAAAAAAA==' }),
   });
   for (const [failure, code] of [[cap(), 'AUTH_PASSWORD_RUNTIME_UNSUPPORTED'], [new Error('private driver secret'), 'PRIVATE_SERVICE_UNAVAILABLE']]) {
     await withDerive(async () => { throw failure; }, async () => {
@@ -160,7 +160,8 @@ test('deployed check pins the source, sends only two unauthenticated reads and r
       assert.equal(calls.length, 1);
     } else {
       const result = await checkDeployedAuth({ sha, fetcher });
-      assert.equal(result.auth, state === 'supported' ? 'runtime-ready' : state === 'disabled' ? 'disabled' : 'blocked');
+      assert.equal(result.auth, state === 'supported' ? 'runtime-ready' : 'blocked');
+      if (state === 'disabled') assert.equal(result.reason, 'AUTH_DISABLED');
       assert.equal(result.loginAccepted, false);
       assert.equal(result.writes, 0);
       assert.equal(calls.length, 2);

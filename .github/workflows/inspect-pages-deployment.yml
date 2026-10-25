@@ -2,12 +2,43 @@ name: Inspect canonical Pages deployment (read-only)
 on:
   workflow_dispatch:
   pull_request:
-    paths: [.github/workflows/inspect-pages-deployment.yml]
+    paths:
+      - .github/workflows/inspect-pages-deployment.yml
+      - scripts/private-work/check-deployed-auth.mjs
+      - worker/modules/auth/**
+      - src/modules/auth/**
 permissions:
   contents: read
 jobs:
+  canonical-auth-readonly:
+    # Production diagnostics are distinct from isolated software CI. A known
+    # live failure must not create a circular prerequisite for its code fix.
+    # No Cloudflare account credentials or deployment/settings job is used.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'fix/auth-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read current base deployment only (no secrets, writes or login attempts)
+        env:
+          EXPECTED_MAIN: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { checkDeployedAuth } from './scripts/private-work/check-deployed-auth.mjs';
+          try {
+            const result = await checkDeployedAuth({ sha: process.env.EXPECTED_MAIN });
+            console.log(JSON.stringify(result));
+            if (result.auth === 'blocked') process.exitCode = 1;
+          } catch {
+            console.error('Canonical read-only auth check unavailable; no changes performed');
+            process.exitCode = 1;
+          }
+          NODE
   inspect:
-    if: github.repository == 'ydh1121/ComeBackHome' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'ydh1121/ComeBackHome' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

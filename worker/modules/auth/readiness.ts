@@ -1,5 +1,6 @@
 import type { D1DatabaseLike } from "../../../packages/portable/d1/types";
-import { hashPassword } from "./crypto";
+import { passwordVerifier, passwordRecord } from "./password-verifier";
+import { encode64 } from "./crypto";
 import { PrivateError, privateJson } from "./contracts";
 
 type RuntimeState = "supported" | "unsupported" | "unavailable";
@@ -11,10 +12,11 @@ export function createPasswordRuntimeCheck() {
   let result: Promise<RuntimeState> | undefined;
   return () => (result ??= (async (): Promise<RuntimeState> => {
       try {
-        const hash = await hashPassword(
-          "cbh-auth-runtime-probe-v1", new Uint8Array(16),
-        );
-        return hash.hash_b64 === "7Z0sARnt0CSGGpJd7T9sSXSt929/3JI7fI9OEOnTSms="
+        // Exercise the deployed server stage (10k). The browser's separate
+        // 600k stage is checked in Chromium/WebKit, not claimed by this probe.
+        const hash = await passwordVerifier(new Uint8Array(32), new Uint8Array(16), new Uint8Array(16));
+        const record = passwordRecord(hash);
+        return record.version === 2 && encode64(record.verifier) === "NRTSCydUQFQOCwrt36femNdwysi4FLi0z8+vBM9KBQ4="
           ? "supported" : "unavailable";
       } catch (error) {
         return error instanceof PrivateError && error.code === "AUTH_PASSWORD_RUNTIME_UNSUPPORTED"
