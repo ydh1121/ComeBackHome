@@ -1,6 +1,10 @@
 # 로그인 마무리 — Windows PC에서 한 번만
 
-**현재 상태:** 2026-10-25 16:41 KST, 사용자가 실행한 [DB 준비 작업 40173675312](https://github.com/ydh1121/ComeBackHome/actions/runs/40173675312)이 성공했다. `0012` 적용과 기존 일정 테이블 구조 보존을 확인했다. **DB 준비는 끝났으므로 1번을 다시 실행하지 않는다.** 계정 파일과 공동 권한 등록, 실제 로그인 성공 여부는 아직 확인 중이다.
+**현재 상태:** 2026-10-25 사용자 조회·첨부로 **`2 / 2 / 2 / 1` — 두 계정·비밀번호 레코드·공동 일정 권한·산재 소유자 등록 완료**를 확인했다. PC와 iPhone에서 올바른 아이디 `ydh1121`을 입력해도 서버 오류가 난다. **아래 1~3번은 이미 끝났다. SQL 등록이나 키 생성을 반복하지 않는다.**
+
+`PRIVATE_SERVICE_UNAVAILABLE`는 비밀번호 불일치가 아닌 서버 처리 오류다. 현재 서버의 PBKDF2 600,000회 검증이 운영 환경에서 허용되는지 확인해야 한다. 로컬 workerd 테스트 통과만으로 운영 지원을 보장할 수 없다. 오류 분류와 계정 정보를 읽지 않는 읽기 전용 진단을 준비했으며, 진단 반영 전에는 원인을 확정하거나 로그인 해결 완료로 표시하지 않는다.
+
+담당자가 기존 주소에 진단을 반영하고 결과를 확인한 다음 사용자에게 필요한 행동을 안내한다. 비밀번호·해시 파일을 보내거나 Cloudflare 설정을 다시 바꿀 필요가 없다. [DB 준비 작업 40173675312](https://github.com/ydh1121/ComeBackHome/actions/runs/40173675312)도 성공 확인됐다.
 
 이미 만든 임시 비밀번호와 `bootstrap-hashes.sql`을 그대로 사용한다. Google 설정이나 키 등록을 반복할 필요가 없다. 담당자는 Cloudflare 클라우드 브라우저를 사용하지 않는다.
 
@@ -21,7 +25,7 @@ SELECT (SELECT COUNT(*) FROM auth_users WHERE login_id IN ('ydh1121','yvonne') A
 | `2 / 2 / 2 / 1` | 등록 준비 완료. 아래 4번으로 간다. |
 | 그 외 값 또는 실행 오류 | 부분 등록 여부를 확인해야 한다. 계정 파일을 다시 실행하지 말고 숫자 네 개나 오류 문구만 전달한다. |
 
-**로그인 아이디는 이메일이 아니다. 관리자 `ydh1121`, 신이본 `yvonne`이다.** 첨부 화면에 들어 있던 이메일은 지우고 해당 아이디만 입력한다. 이 수정만으로 서버 503 오류까지 해결된다고 단정하지 않으며, 등록 준비 후에도 `PRIVATE_SERVICE_UNAVAILABLE`이면 서버 확인이 더 필요하다.
+**로그인 아이디는 관리자 `ydh1121`, 신이본 `yvonne`이다.** 최신 사용자 화면은 올바른 아이디를 사용한다. 이전 이메일 오입력을 현재 오류의 원인으로 취급하지 않는다.
 
 <details>
 <summary>1. DB 준비 실행 — 이미 완료됨, 신규 설치 참고용</summary>
@@ -70,7 +74,7 @@ SELECT (SELECT COUNT(*) FROM auth_users WHERE login_id IN ('ydh1121','yvonne') A
 1. [공동 일정 권한 설정 파일](../../scripts/private-work/complete-login-access.sql)을 연다.
 2. 파일 오른쪽 위 **Copy raw file / 복사 아이콘**을 눌러 **파일 전체 내용**을 복사한다. 아이콘이 없으면 **Raw**를 열고 Ctrl + A → Ctrl + C를 누른다. 현재 파일은 설명문 없이 **한 줄에 SQL 문장 하나씩, 총 3줄**이다. `INSERT INTO auth_workspace_grants`로 시작하는지 확인한다.
 3. 같은 **come-back-home-db → Console** 입력란을 비우고 붙인 뒤 **Execute / 실행**을 누른다.
-4. 마지막 결과 표가 아래처럼 나오는지 확인한다.
+4. 콘솔이 첫 쓰기 문장의 `This query returned no data.`만 표시할 수도 있다. 이 문구만으로 실패를 판단하거나 반복 실행하지 않는다. 결과 표가 보이지 않으면 위 읽기 전용 한 줄 조회에서 `2 / 2 / 2 / 1`인지 확인한다. 마지막 SELECT를 별도로 실행할 때의 표는 아래와 같다.
 
 | account | password_record | shared_workspace_access | result |
 | --- | --- | --- | --- |
@@ -93,9 +97,9 @@ SELECT (SELECT COUNT(*) FROM auth_users WHERE login_id IN ('ydh1121','yvonne') A
 ## 담당자용 확인
 
 - 승인된 MAIN은 `033708c`, 기존 필수 CI 12/12와 기존 주소 배포는 완료됐다.
-- 이번 변경은 수동 DB 준비 도구와 안내다. 앱·기존 스키마·0012 SQL·비밀번호 생성기는 수정하지 않았다.
+- 서버의 알려진 PBKDF2 제한은 `AUTH_PASSWORD_RUNTIME_UNSUPPORTED`로 분류하며 강도 하향이나 다른 방식 재시도는 하지 않는다. `/api/auth/readiness`는 고정 공개 테스트 값으로 1회/인스턴스 검증하고 정책만 SELECT한다. 계정·자격증명·세션·개인 자료 조회/쓰기와 외부 요청이 없다. 성공도 실제 로그인·Free CPU 수락과 구분한다.
 - 실행 전 D1 Time Travel로 복구 시점을 검증한다. 현재 Free 보관 기간은 7일이고, 복구는 이후 정상 변경도 되돌리므로 자동 실행하지 않는다. 민감한 전체 DB를 공개 CI artifact로 내보내지 않는다.
 - 기존 GitHub 연결 도구에는 workflow dispatch 기능이 없어 소유자가 1번 실행 버튼을 누른다. 담당자는 Cloudflare 인증 차단을 다른 로그인 방식으로 우회하지 않는다.
-- 운영 DB `0012`는 사용자 실행 로그로 적용 완료를 확인했다. 계정 등록·실제 로그인·Free CPU·iPhone 수락은 여전히 별도다. 이 SQL 오류를 근거로 DB 준비 workflow를 재실행하지 않는다.
+- 운영 DB `0012`, 두 계정과 공동 권한 등록은 확인됐다. 실제 로그인·Free CPU·iPhone 수락은 미완료다. DB 준비 workflow를 재실행하지 않는다.
 
 [Cloudflare 공식 Time Travel 안내](https://developers.cloudflare.com/d1/reference/time-travel/) · [개발 담당자용 복구 절차](rollout-and-recovery.md)

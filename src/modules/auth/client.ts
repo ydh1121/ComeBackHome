@@ -10,6 +10,11 @@ export function errorText(code: string): string {
   const texts: Record<string, string> = {
     LOGIN_REQUIRED: "다시 로그인해 주세요.",
     LOGIN_FAILED: "아이디 또는 비밀번호를 확인해 주세요.",
+    AUTH_PASSWORD_RUNTIME_UNSUPPORTED:
+      "서버 실행 환경에서 현재 비밀번호 검증 방식을 지원하지 않습니다. 계정이나 비밀번호를 다시 등록하지 마세요. 서버 수정이 필요합니다.",
+    AUTH_NOT_READY: "서버의 로그인 설정을 확인해야 합니다. 계정 등록을 반복하지 마세요.",
+    PRIVATE_SERVICE_UNAVAILABLE:
+      "서버에서 로그인·자료 요청을 처리하지 못했습니다. 계정 등록이나 비밀번호 변경을 반복하지 마세요. 오류 코드: PRIVATE_SERVICE_UNAVAILABLE",
     TRY_LATER: "시도가 많습니다. 15분 후 다시 시도해 주세요.",
     PASSWORD_INVALID:
       "새 비밀번호는 15~128자이며 기존 비밀번호와 달라야 합니다.",

@@ -1,4 +1,5 @@
 import type { D1DatabaseLike } from "../../../packages/portable/d1/types";
+import { authReadiness } from "./readiness";
 import {
   digest,
   hashPassword,
@@ -143,6 +144,8 @@ export async function handleAuth(
   path: string,
 ): Promise<Response> {
   const db = env.DB;
+  if (path === "readiness" && request.method === "GET")
+    return authReadiness(db);
   if (path === "session" && request.method === "GET") {
     try {
       const p = await authenticate(request, env, true);
