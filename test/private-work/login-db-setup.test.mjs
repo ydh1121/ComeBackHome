@@ -111,12 +111,31 @@ test('unexpected legacy schema changes or missing policy are not accepted after 
 });
 
 const grantSql = readFileSync('scripts/private-work/complete-login-access.sql', 'utf8');
+const readinessSql = readFileSync('scripts/private-work/check-login-setup.sql', 'utf8');
 function seedAccount(db, login, credential = true) {
   db.prepare('INSERT INTO auth_users VALUES(?,?,?,0,1,0,?)').run(login, login, login === 'yvonne' ? 'member' : 'admin', '2026-10-25');
   if (credential) db.prepare('INSERT INTO auth_credentials VALUES(?,?,600000,?,?,?)').run(login, 'pbkdf2-sha256', 'SYNTHETIC_SALT', 'SYNTHETIC_HASH', '2026-10-25');
   db.prepare('INSERT INTO auth_preferences VALUES(?,1,?)').run(login, '2026-10-25');
 }
 function seedCase(db) { db.exec("INSERT INTO case_profiles VALUES('test-case','yvonne','2026-10-25'); INSERT INTO case_consents VALUES('test-case',0,'','',1,'yvonne','2026-10-25')"); }
+test('comment-free console statements and one-line status distinguish empty, partial and ready accounts', async () => {
+  const f = fixture(); await f.apply();
+  assert.equal(readinessSql.trim().split(/\r?\n/).length, 1);
+  const status = () => Object.values(f.db.prepare(readinessSql).get());
+  assert.deepEqual(status(), [0, 0, 0, 0]);
+  seedAccount(f.db, 'ydh1121'); assert.deepEqual(status(), [1, 1, 0, 0]);
+  seedAccount(f.db, 'yvonne'); assert.deepEqual(status(), [2, 2, 0, 0]);
+  seedCase(f.db); assert.deepEqual(status(), [2, 2, 0, 1]);
+  const lines = grantSql.trim().split(/\r?\n/);
+  assert.equal(lines.length, 3);
+  for (const line of lines) {
+    assert.match(line, /^(INSERT|WITH) /);
+    assert(!line.includes('--'));
+    f.db.exec(line); // Also valid in a console that executes one input line at a time.
+  }
+  assert.deepEqual(status(), [2, 2, 2, 1]);
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM auth_audit').get().n, 2);
+});
 test('both accounts without a case owner/consent cannot receive setup grants', async () => {
   const f = fixture(); await f.apply(); seedAccount(f.db, 'ydh1121'); seedAccount(f.db, 'yvonne');
   f.db.exec(grantSql); assert.equal(f.db.prepare('SELECT COUNT(*) n FROM auth_workspace_grants').get().n, 0);
