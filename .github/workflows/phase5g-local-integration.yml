@@ -108,6 +108,9 @@ on:
   pull_request:
     branches:
       - main
+      # PR #106 is stacked on the isolated Drive fix. Keep its required
+      # browser Paddle gate active before either change is merged.
+      - fix/drive-oauth-recovery
     paths:
       - "scripts/deploy-canonical-pages.mjs"
       - ".github/workflows/deploy-canonical-pages.yml"

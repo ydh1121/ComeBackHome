@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { verifyPublicAuthUi } from "./private-work/verify-public-auth-ui.mjs";
+import { verifyAdvisorR1 } from "./private-work/verify-advisor-r1-ui.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -244,11 +245,14 @@ try {
       await page.getByRole("button", { name: "로그인", exact: true }).click();
     }
     await page
-      .getByRole("heading", { name: "산재·직장", exact: true })
+      .getByRole("heading", { name: "나의 산재 도우미", exact: true })
       .waitFor();
     const iterations = await page.evaluate(() => window.__cbhSyntheticKdfIterations);
     assert(iterations.length >= 2 && iterations.every(n => n === 600000), "actual browser keeps 600k client KDF");
     assert(derivedLoginRequests >= 2, "browser sends only derived materials");
+    // R1 exercises a real reload; assert the login-document KDF observations
+    // before that reload resets window-scoped instrumentation.
+    await verifyAdvisorR1(page,ctx,base,label);
     const cookies = await ctx.cookies();
     const session = cookies.find((c) => c.name === "__Host-cbh-session");
     assert.ok(
@@ -421,7 +425,7 @@ try {
     );
     await page.reload();
     await page
-      .getByRole("heading", { name: "산재·직장", exact: true })
+      .getByRole("heading", { name: "나의 산재 도우미", exact: true })
       .waitFor();
     // The authenticated shell renders before the document status/list fetch.
     // Wait for the persisted original itself; shell visibility is not a data
@@ -554,8 +558,9 @@ try {
         .click();
     }
     await adminPage
-      .getByRole("heading", { name: "산재·직장", exact: true })
+      .getByRole("heading", { name: "나의 산재 도우미", exact: true })
       .waitFor();
+    await adminPage.getByRole("button",{name:"내 관리함",exact:true}).click();
     await adminPage
       .getByRole("button", { name: "접근·이력", exact: true })
       .click();
