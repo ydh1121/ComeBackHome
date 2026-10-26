@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pbkdf2Sync, randomBytes, createCipheriv } from "node:crypto";
+import { pbkdf2Sync, randomBytes } from "node:crypto";
 import { chromium, webkit } from "playwright";
 const root = process.cwd(),
   scratch = await mkdtemp(join(tmpdir(), "cbh-private-ci-")),
@@ -35,17 +35,6 @@ const run = (cmd, args, extra = {}) =>
 const key = randomBytes(32),
   password = "Synthetic-CI-Only!Password-123",
   newPassword = "Synthetic-Changed!Password-456";
-const seal = (value) => {
-  const iv = randomBytes(12),
-    cipher = createCipheriv("aes-256-gcm", key, iv);
-  cipher.setAAD(Buffer.from("cbh-private-drive/v1"));
-  const encrypted = Buffer.concat([
-    cipher.update(value, "utf8"),
-    cipher.final(),
-    cipher.getAuthTag(),
-  ]);
-  return iv.toString("base64") + "." + encrypted.toString("base64");
-};
 try {
   await mkdir("artifacts/private-work", { recursive: true });
   await writeFile(
@@ -110,7 +99,6 @@ try {
   sql.push(
     `INSERT INTO case_profiles VALUES('case-fixture','member-fixture','${stamp}');`,
     `INSERT INTO case_consents VALUES('case-fixture',0,'','',1,'member-fixture','${stamp}');`,
-    `INSERT INTO case_drive_connections VALUES('case-fixture','${seal("synthetic-refresh")}','synthetic-google-subject','synthetic-folder','["synthetic-owner"]','member-fixture','${stamp}');`,
   );
   const seed = join(scratch, "synthetic.sql");
   await writeFile(seed, sql.join("\n"));
@@ -383,13 +371,14 @@ try {
       assert.equal(syntheticPage.links,1,"Synthetic provider fixture must render before callback: "+JSON.stringify(syntheticPage));
       await page.locator("#synthetic-oauth-cancel").click();
     };
-    await page.getByRole("button",{name:"Google 계정 다시 연결",exact:true}).evaluate(button=>{button.click();button.click();});
+    const connectButton = () => page.getByRole("button",{name:/^Google (Drive 연결|계정 다시 연결)$/});
+    await connectButton().evaluate(button=>{button.click();button.click();});
     await finishSyntheticConsent();
     await page.getByRole("status").filter({hasText:"Google Drive 연결을 취소했습니다"}).waitFor();
     assert.equal(oauthStarts,1,"rapid double click creates a single consent request");
     assert.equal(new URL(page.url()).searchParams.has("state"),false);
     syntheticConsent = "code=synthetic-code";
-    await page.getByRole("button",{name:"Google 계정 다시 연결",exact:true}).click();
+    await connectButton().click();
     await finishSyntheticConsent();
     await page.getByRole("status").filter({hasText:"Google 동의 절차에서 돌아왔습니다"}).waitFor();
     assert.equal(oauthStarts,2,"one fresh request for the successful retry");
@@ -397,7 +386,13 @@ try {
     const connected = await ctx.request.get(base+"/api/private/case/documents/status");
     const connectedStatus = await connected.json();
     assert.equal(connectedStatus.connected,true,"real local D1 callback persisted connection");
-    assert.equal(connectedStatus.folderSelected,true,"reconnection preserves original folder");
+    assert.equal(connectedStatus.folderSelected,label==="webkit","new connection has no folder; later reconnection preserves selected folder");
+    if (!connectedStatus.folderSelected) {
+      const selected = await api("private/case/documents/folder",{folderId:"synthetic-folder"},"PUT");
+      assert.equal(selected.status(),200,"local D1 folder selection verifies private provider permissions");
+      await page.reload();
+    }
+    console.log("PRIVATE_OAUTH_LOCAL_D1_PASS "+label+" callback_cancel_success_first_connect_reconnect_folder provider=synthetic");
     await page.unroute("**/api/private/case/documents/oauth/start");
     await page.unroute("https://accounts.google.com/**");
     await page.locator("input[type=file]").first().waitFor();
