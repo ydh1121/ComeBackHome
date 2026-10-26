@@ -51,6 +51,6 @@ export function advisorSummary(records: CaseRecord[], profile: AdvisorProfile | 
         return { label: names[String(intake.payload.data.status)] ?? "저장한 진행 상황을 확인해 주세요", review: true, source: intake.payload.certainty === "official" ? "기관 자료를 연결한 기존 기록" : "기존에 적어 둔 내용 · 현재 상황 확인 필요" };
     }
     if (profile?.confirmed)
-        return { label: answerText(0, profile.answers[0]), review: profile.answers.some(v => v !== null), source: "직접 알려주신 내용 · 기관 확인과는 달라요" };
-    return { label: "현재 단계 확인이 필요해요", review: !!profile?.deferred, source: "입력하지 않아도 안내를 볼 수 있어요" };
+        return { label: answerText(0, profile.answers[0]), review: ["filed", "investigating", "decision"].includes(profile.answers[0] ?? ""), source: "직접 알려주신 내용 · 기관 확인과는 달라요" };
+    return { label: "현재 단계 확인이 필요해요", review: false, source: "입력하지 않아도 안내를 볼 수 있어요" };
 }

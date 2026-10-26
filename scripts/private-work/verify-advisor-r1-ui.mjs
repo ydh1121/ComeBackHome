@@ -108,6 +108,7 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     await page.getByRole('button', { name: '내 상황 알려주기', exact: true }).click();
     await page.getByRole('button', { name: '지금은 나중에 할래요', exact: true }).click();
     await page.locator('.advisor-primary').waitFor();
+    await page.getByRole('button', { name: '병원에 이렇게 말하기', exact: false }).waitFor();
     // Restore all-unknown confirmed guidance for the second browser without changing other records.
     data = await (await api('private/case')).json();
     const latest = data.records.find(r => r.id === profile.id);

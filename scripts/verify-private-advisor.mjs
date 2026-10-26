@@ -10,6 +10,10 @@ try {
     check(m.QUESTIONS.length, 3);
     const blank = m.emptyProfile();
     check(blank.answers, [null, null, null]);
+    check(m.advisorSummary([], { ...blank, deferred: true }).review, false);
+    check(m.advisorSummary([], { ...blank, confirmed: true, answers: [null, 'working', null] }).review, false);
+    check(m.advisorSummary([], { ...blank, confirmed: true, answers: ['before', 'working', 'checking'] }).review, false);
+    check(m.advisorSummary([], { ...blank, confirmed: true, answers: ['filed', 'working', null] }).review, true);
     const record = { id: m.profileId('case-fixture'), caseId: 'case-fixture', kind: 'content', payload: m.profilePayload(blank), revision: 1, updatedBy: 'synthetic-member', updatedAt: '2026-10-26', archivedAt: null };
     check(validatePayload('content', record.payload), record.payload);
     check(m.readProfile(record), blank);
