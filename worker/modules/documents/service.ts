@@ -159,8 +159,10 @@ export async function handleDocuments(
           grant_type: "authorization_code",
         }),
         signal: AbortSignal.timeout(20000),
-        redirect: "error",
+        redirect: "manual",
       }));
+      if (response.status >= 300 && response.status < 400)
+        throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
       const tokens = (await step("token-body", () => response.json())) as {
         access_token?: string;
         refresh_token?: string;
@@ -172,9 +174,11 @@ export async function handleDocuments(
         {
           headers: { Authorization: "Bearer " + tokens.access_token },
           signal: AbortSignal.timeout(15000),
-          redirect: "error",
+          redirect: "manual",
         },
       ));
+      if (identity.status >= 300 && identity.status < 400)
+        throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
       const user = (await step("identity", () => identity.json())) as { sub?: string };
       if (!identity.ok || !user || typeof user.sub !== "string" || !user.sub)
         throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
