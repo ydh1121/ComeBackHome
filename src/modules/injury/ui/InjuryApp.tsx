@@ -139,12 +139,12 @@ export function InjuryApp() {
       <div className="private-title">
         <div>
           <h1>나의 산재 도우미</h1>
-          <p className="advisor-page-subtitle">오늘 무엇부터 하면 되는지 하나씩 알려드릴게요.</p>
         </div>
         <button className="secondary" onClick={() => void reload()}>
           새로고침
         </button>
       </div>
+      <p className="advisor-page-subtitle">오늘 무엇부터 하면 되는지 하나씩 알려드릴게요.</p>
       <nav className="private-tabs advisor-top-nav" aria-label="산재 메뉴">
         {([["today","오늘"],["progress","진행 상황"],["library","내 자료"]] as const).map(([key,title])=><button key={key} aria-current={view===key?"page":undefined} onClick={()=>navigate(key)}>{title}</button>)}
       </nav>

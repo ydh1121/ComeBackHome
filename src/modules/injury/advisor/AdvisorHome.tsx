@@ -27,7 +27,7 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
     const open = (next: typeof view) => { setView(next); setMessage(""); history.replaceState(null, "", "/injury?section=today" + (next === "hospital" ? "&action=hospital" : "")); window.scrollTo(0, 0); };
     const begin = (cursor?: number) => {
         if (stored && (!readProfile(stored) || stored.archivedAt)) {
-            setMessage("저장한 답변을 먼저 확인해야 해요. 내 관리함에서 보관 기록을 확인해 주세요. 기존 답변은 바꾸지 않았어요.");
+            setMessage("저장한 답변을 지금 열 수 없어요. 기존 답변은 바꾸지 않았어요. 오늘의 안내는 계속 볼 수 있어요.");
             return;
         }
         setBase(stored);
@@ -154,7 +154,7 @@ function AdvisorScript({ data, reload }: {
     catch {
         setMessage("복사하지 못했어요. 아래 문장을 길게 눌러 직접 선택할 수 있어요.");
     } }}>문장 복사</button>{!editing && <button className="secondary" onClick={edit}>문장 편집</button>}</div>
-    {editing ? <><label>전달할 문장<textarea value={draft} maxLength={60000} rows={9} onChange={e => setDraft(e.target.value)}/></label><div className="private-actions"><button disabled={busy || !!conflict || !draft.trim()} onClick={() => void save()}>문장 저장</button><button className="secondary" disabled={busy} onClick={() => { setEditing(false); setDraft(text); setConflict(null); setMessage("편집을 취소했어요. 저장된 문장은 그대로예요."); }}>취소</button></div></> : <p className="advisor-script-body">{text}</p>}
+    {editing ? <><label htmlFor="advisor-hospital-script">전달할 문장</label><textarea id="advisor-hospital-script" value={draft} maxLength={60000} rows={9} onChange={e => setDraft(e.target.value)}/><div className="private-actions"><button disabled={busy || !!conflict || !draft.trim()} onClick={() => void save()}>문장 저장</button><button className="secondary" disabled={busy} onClick={() => { setEditing(false); setDraft(text); setConflict(null); setMessage("편집을 취소했어요. 저장된 문장은 그대로예요."); }}>취소</button></div></> : <p className="advisor-script-body">{text}</p>}
     {conflict && <div className="conflict-panel"><h4>다른 기기의 최신 문장</h4><p className="advisor-script-body">{conflict.payload.body}</p><button className="secondary" onClick={() => { setBase(conflict); setConflict(null); }}>최신 문장 확인 · 내 작성문 유지</button></div>}
     <p role="status">{message}</p><small>{record ? "저장된 문장 · 수정 이력은 내 관리함에서 볼 수 있어요" : "기본 안내 문장 · 내 상황에 맞게 바꿀 수 있어요"}</small>
   </article>;

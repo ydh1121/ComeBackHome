@@ -190,12 +190,14 @@
   margin: 9px 0
 }
 .advisor-script textarea {
-  min-height: 220px
+  min-height: 220px;
+  margin-top: 8px
 }
 .private-page .advisor-top-nav {
   display: grid;
   grid-template-columns: repeat(3,minmax(0,1fr));
-  gap: 6px
+  gap: 6px;
+  margin-bottom: 4px
 }
 .private-page .advisor-top-nav button {
   min-height: 46px;
@@ -207,7 +209,7 @@
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
-  margin: 0 0 18px
+  margin: 0 0 12px
 }
 .advisor-utilities button {
   background: transparent;
@@ -217,10 +219,17 @@
   border: 0;
   padding: 8px 10px
 }
-.advisor-page-subtitle {
+.private-page .advisor-page-subtitle {
   font-size: 14px;
   color: var(--cbh-muted);
-  margin-top: 10px
+  margin: 8px 0 20px
+}
+.private-page:has(.advisor-top-nav) .private-title {
+  margin-bottom: 0
+}
+.private-page:has(.advisor-top-nav) .private-title>button {
+  flex: none;
+  white-space: nowrap
 }
 .private-page .advisor-manage-title {
   margin: 0 0 16px
@@ -238,7 +247,7 @@
 @media(max-width:420px) {
   .private-page:has(.advisor-top-nav) .private-title {
     gap: 10px;
-    margin-bottom: 16px
+    margin-bottom: 0
   }
   .private-page:has(.advisor-top-nav) .private-title h1 {
     font-size: 26px

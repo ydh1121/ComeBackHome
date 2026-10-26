@@ -1,16 +1,31 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 export async function verifyAdvisorR1(page, ctx, base, label) {
+    try {
+        await verifyAdvisorR1Flow(page, ctx, base, label);
+    } catch (error) {
+        await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-failure.png`), fullPage: true }).catch(() => {});
+        console.error('ADVISOR_FAILURE_UI', JSON.stringify(await page.evaluate(() => ({
+            headings: [...document.querySelectorAll('h1,h2,h3,h4')].map(el => el.textContent),
+            textareas: [...document.querySelectorAll('textarea')].map(el => ({ id: el.id, labels: [...el.labels].map(l => l.textContent), ariaLabel: el.getAttribute('aria-label') })),
+            buttons: [...document.querySelectorAll('button')].map(el => ({ text: el.textContent, disabled: el.disabled }))
+        })).catch(() => null)));
+        throw error;
+    }
+}
+async function verifyAdvisorR1Flow(page, ctx, base, label) {
     const api = async (path, method = 'GET', data) => ctx.request.fetch(base + '/api/' + path, { method, headers: { Origin: base }, ...(data === undefined ? {} : { data }) });
     await page.locator('.advisor-primary').waitFor();
     assert.equal(await page.getByRole('navigation', { name: '산재 메뉴', exact: true }).getByRole('button').count(), 3);
     assert.equal(await page.getByRole('button', { name: '기록 추가', exact: true }).count(), 0);
     assert.equal(await page.locator('.record-tools, .record-add, textarea, select').count(), 0, 'no record-entry prerequisites on home');
-    for (const width of [375, 390]) {
+    for (const width of [375, 390, 768, 1024, 1440]) {
         await page.setViewportSize({ width, height: 844 });
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-home-${width}.png`) });
+        if ([375,390,1440].includes(width)) await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-home-${width}.png`) });
     }
+    await page.setViewportSize({width:390,height:844});
+    await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-home-390-full.png`), fullPage: true });
     // Explicit disconnected status: guidance remains usable; no file is claimed saved.
     await page.route('**/api/private/case/documents/status', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ owner: true, configured: false, connected: false, folderSelected: false, maxBytes: 20971520, chunkBytes: 1048576 }) }));
     await page.getByRole('button', { name: '내 자료', exact: true }).click();
@@ -31,7 +46,13 @@ export async function verifyAdvisorR1(page, ctx, base, label) {
     assert.equal(await page.evaluate(() => window.__advisorCopied), 'synthetic unsaved draft');
     await page.getByRole('button', { name: '취소', exact: true }).click();
     assert.equal(await page.locator('.advisor-script-body').first().innerText(), original, 'cancel preserves saved or fallback text');
-    await page.getByRole('button', { name: '문장 편집', exact: true }).click();
+    const scriptBody = page.locator('.advisor-script-body').first();
+    await scriptBody.scrollIntoViewIfNeeded();
+    const scriptBox = await scriptBody.boundingBox();
+    await page.mouse.move(scriptBox.x + 15, scriptBox.y + 15);
+    await page.mouse.down();
+    try { await page.getByLabel('전달할 문장', { exact: true }).waitFor(); }
+    finally { await page.mouse.up(); }
     const longText = ('합성 검토 문장입니다. 필요한 작업과 증상을 직접 설명합니다.\n').repeat(35);
     await page.getByLabel('전달할 문장', { exact: true }).fill(longText);
     await page.getByRole('button', { name: '문장 저장', exact: true }).click();
