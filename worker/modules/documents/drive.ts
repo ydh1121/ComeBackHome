@@ -65,11 +65,14 @@ export class DriveArchive {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
   async request(path: string, init: RequestInit = {}): Promise<Response> {
-    const response = await this.fetcher("https://www.googleapis.com/" + path, {
+    // Native workerd fetch rejects a class instance as its `this` receiver.
+    // Keep injected fetch and the production native function as plain calls.
+    const fetcher = this.fetcher;
+    const response = await fetcher("https://www.googleapis.com/" + path, {
       ...init,
       headers: { Authorization: "Bearer " + this.token, ...init.headers },
       signal: AbortSignal.timeout(25000),
-      redirect: "error",
+      redirect: "manual",
     });
     if (!response.ok && response.status !== 308)
       throw new PrivateError(
@@ -281,8 +284,10 @@ export async function refreshDriveToken(
       grant_type: "refresh_token",
     }),
     signal: AbortSignal.timeout(20000),
-    redirect: "error",
+    redirect: "manual",
   });
+  if (response.status >= 300 && response.status < 400)
+    throw new PrivateError(401, "DRIVE_RECONNECT");
   const body = (await response.json()) as { access_token?: string };
   if (!response.ok || !body.access_token)
     throw new PrivateError(401, "DRIVE_RECONNECT");

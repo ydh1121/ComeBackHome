@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { privateRequest, ApiError } from "../../auth/client";
 import type { CaseData } from "./types";
+import { driveConnectionNotice } from "../domain/drive-connection";
 const base = "private/case/documents";
 declare global {
   interface Window {
@@ -60,12 +61,24 @@ export function DocumentsPanel({
       connected: boolean;
       folderSelected: boolean;
     } | null>(null),
-    [message, setMessage] = useState(""),
+    [message, setMessage] = useState(() => driveConnectionNotice(new URLSearchParams(location.search).get("drive"))),
     [busy, setBusy] = useState(false),
     [progress, setProgress] = useState(0),
     [file, setFile] = useState<File | null>(null),
     [handoff, setHandoff] = useState("");
   const controller = useRef<AbortController | null>(null);
+  const connecting = useRef(false);
+  const connect = async () => {
+    if (connecting.current) return;
+    connecting.current = true;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await privateRequest<{ url: string }>(base + "/oauth/start", "POST", {});
+      location.assign(result.url);
+    } catch (error) { setMessage((error as Error).message); }
+    finally { connecting.current = false; setBusy(false); }
+  };
   const refresh = () =>
     privateRequest<NonNullable<typeof status>>(base + "/status").then(
       setStatus,
@@ -231,22 +244,16 @@ export function DocumentsPanel({
             <p>
               {status.folderSelected
                 ? "비공개 Drive 보관 폴더가 연결돼 있습니다."
-                : "신이본의 Google 계정에서 비공개 보관 폴더를 선택해 주세요."}
+                : status.connected
+                  ? "Google 계정이 연결돼 있습니다. 보관 폴더 선택을 완료해 주세요."
+                  : "원본을 보관할 Google 계정을 연결한 뒤 비공개 보관 폴더를 선택해 주세요."}
             </p>
             {status.owner && (
               <div className="private-actions">
                 <button
                   className="secondary"
                   disabled={busy}
-                  onClick={() =>
-                    void privateRequest<{ url: string }>(
-                      base + "/oauth/start",
-                      "POST",
-                      {},
-                    )
-                      .then((v) => location.assign(v.url))
-                      .catch((e) => setMessage(e.message))
-                  }
+                  onClick={() => void connect()}
                 >
                   {status.connected
                     ? "Google 계정 다시 연결"

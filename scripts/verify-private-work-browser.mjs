@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { verifyPublicAuthUi } from "./private-work/verify-public-auth-ui.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pbkdf2Sync, randomBytes, createCipheriv } from "node:crypto";
+import { pbkdf2Sync, randomBytes } from "node:crypto";
 import { chromium, webkit } from "playwright";
 const root = process.cwd(),
   scratch = await mkdtemp(join(tmpdir(), "cbh-private-ci-")),
@@ -34,17 +35,6 @@ const run = (cmd, args, extra = {}) =>
 const key = randomBytes(32),
   password = "Synthetic-CI-Only!Password-123",
   newPassword = "Synthetic-Changed!Password-456";
-const seal = (value) => {
-  const iv = randomBytes(12),
-    cipher = createCipheriv("aes-256-gcm", key, iv);
-  cipher.setAAD(Buffer.from("cbh-private-drive/v1"));
-  const encrypted = Buffer.concat([
-    cipher.update(value, "utf8"),
-    cipher.final(),
-    cipher.getAuthTag(),
-  ]);
-  return iv.toString("base64") + "." + encrypted.toString("base64");
-};
 try {
   await mkdir("artifacts/private-work", { recursive: true });
   await writeFile(
@@ -109,7 +99,6 @@ try {
   sql.push(
     `INSERT INTO case_profiles VALUES('case-fixture','member-fixture','${stamp}');`,
     `INSERT INTO case_consents VALUES('case-fixture',0,'','',1,'member-fixture','${stamp}');`,
-    `INSERT INTO case_drive_connections VALUES('case-fixture','${seal("synthetic-refresh")}','synthetic-google-subject','synthetic-folder','["synthetic-owner"]','member-fixture','${stamp}');`,
   );
   const seed = join(scratch, "synthetic.sql");
   await writeFile(seed, sql.join("\n"));
@@ -210,6 +199,8 @@ try {
     const readiness = await ctx.request.get(base + "/api/auth/readiness");
     assert.equal(readiness.status(), 200);
     assert.deepEqual(await readiness.json(), { database: "ready", passwordRuntime: "supported" });
+    await verifyPublicAuthUi(page, base);
+    await page.setViewportSize({width:390,height:844});
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     let anonymousLegacyRequests = 0;
@@ -354,6 +345,57 @@ try {
     await dialog.getByRole("button", { name: "저장", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "문서·메모", exact: true }).click();
+    await page.goto(base + "/api/private/case/documents/oauth/callback?state=synthetic-stale&code=synthetic-only");
+    await page.getByRole("status").filter({hasText:"키를 다시 등록할 필요는 없습니다"}).waitFor();
+    assert.equal(new URL(page.url()).pathname,"/injury");
+    assert.equal(new URL(page.url()).searchParams.has("code"),false);
+    let oauthStarts = 0, syntheticConsent = "error=access_denied";
+    await page.route("**/api/private/case/documents/oauth/start", async route => {
+      oauthStarts++;
+      await new Promise(resolve=>setTimeout(resolve,80));
+      await route.continue();
+    });
+    await page.route("https://accounts.google.com/**", async route => {
+      assert.equal(new URL(route.request().url()).pathname,"/o/oauth2/v2/auth");
+      const state=new URL(route.request().url()).searchParams.get("state");
+      assert(state);
+      const target=base+"/api/private/case/documents/oauth/callback?state="+state+"&"+syntheticConsent;
+      // WebKit cannot fulfill an intercepted navigation with a 3xx response.
+      // A synthetic provider page and real link click retain the cross-site
+      // top-level navigation/cookie contract without contacting Google.
+      await route.fulfill({status:200,contentType:"text/html; charset=utf-8",body:'<!doctype html><html><head><meta charset="utf-8"></head><body><a id="synthetic-oauth-cancel" href="'+target.replaceAll('&','&amp;')+'">Cancel synthetic Google consent</a></body></html>'});
+    });
+    const finishSyntheticConsent = async () => {
+      await page.waitForURL("https://accounts.google.com/**",{waitUntil:"domcontentloaded"});
+      const syntheticPage=await page.evaluate(()=>({host:location.host,charset:document.characterSet,links:document.querySelectorAll('#synthetic-oauth-cancel').length,bodyPresent:!!document.body}));
+      assert.equal(syntheticPage.links,1,"Synthetic provider fixture must render before callback: "+JSON.stringify(syntheticPage));
+      await page.locator("#synthetic-oauth-cancel").click();
+    };
+    const connectButton = () => page.getByRole("button",{name:/^Google (Drive 연결|계정 다시 연결)$/});
+    await connectButton().evaluate(button=>{button.click();button.click();});
+    await finishSyntheticConsent();
+    await page.getByRole("status").filter({hasText:"Google Drive 연결을 취소했습니다"}).waitFor();
+    assert.equal(oauthStarts,1,"rapid double click creates a single consent request");
+    assert.equal(new URL(page.url()).searchParams.has("state"),false);
+    syntheticConsent = "code=synthetic-code";
+    await connectButton().click();
+    await finishSyntheticConsent();
+    await page.getByRole("status").filter({hasText:"Google 동의 절차에서 돌아왔습니다"}).waitFor();
+    assert.equal(oauthStarts,2,"one fresh request for the successful retry");
+    assert.equal(new URL(page.url()).searchParams.has("code"),false);
+    const connected = await ctx.request.get(base+"/api/private/case/documents/status");
+    const connectedStatus = await connected.json();
+    assert.equal(connectedStatus.connected,true,"real local D1 callback persisted connection");
+    assert.equal(connectedStatus.folderSelected,label==="webkit","new connection has no folder; later reconnection preserves selected folder");
+    if (!connectedStatus.folderSelected) {
+      const selected = await api("private/case/documents/folder",{folderId:"synthetic-folder"},"PUT");
+      assert.equal(selected.status(),200,"local D1 folder selection verifies private provider permissions");
+      await page.reload();
+    }
+    console.log("PRIVATE_OAUTH_LOCAL_D1_PASS "+label+" callback_cancel_success_first_connect_reconnect_folder provider=synthetic");
+    await page.unroute("**/api/private/case/documents/oauth/start");
+    await page.unroute("https://accounts.google.com/**");
+    await page.locator("input[type=file]").first().waitFor();
     const bytes = Buffer.from("%PDF-synthetic-original-" + label);
     await page
       .locator("input[type=file]")

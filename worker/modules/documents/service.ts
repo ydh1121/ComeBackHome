@@ -8,6 +8,8 @@ import {
 } from "../auth/contracts";
 import { digest, encode64, randomToken } from "../auth/crypto";
 import { CaseRepository } from "../injury/repository";
+import { driveReturn } from "./oauth-result";
+import { driveOAuthStep, type DriveOAuthStep } from "./oauth-step";
 import {
   DriveArchive,
   refreshDriveToken,
@@ -99,9 +101,9 @@ export async function handleDocuments(
         .replaceAll("/", "_")
         .replace(/=+$/, "");
       await env.DB.prepare(
-        "DELETE FROM case_oauth_states WHERE user_id=?1 OR expires_at<?2",
+        "DELETE FROM case_oauth_states WHERE (user_id=?1 AND session_hash=?3) OR expires_at<?2",
       )
-        .bind(p.id, now())
+        .bind(p.id, now(), p.sessionHash)
         .run();
       await env.DB.prepare(
         "INSERT INTO case_oauth_states VALUES (?1,?2,?3,?4,?5)",
@@ -129,79 +131,79 @@ export async function handleDocuments(
       return privateJson({ url: url.href });
     }
     if (path[1] === "callback" && request.method === "GET") {
+      const step = <T>(phase: DriveOAuthStep, operation: () => Promise<T>) =>
+        driveOAuthStep(phase, operation, (failed) => repo.audit("drive-connect-failed", null, failed));
       const query = new URL(request.url).searchParams,
         state = query.get("state") ?? "";
-      const row = await env.DB.prepare(
+      const stateHash = await digest(state);
+      const row = await step("state", () => env.DB.prepare(
         "DELETE FROM case_oauth_states WHERE state_hash=?1 AND user_id=?2 AND session_hash=?3 AND expires_at>?4 RETURNING verifier_encrypted",
       )
-        .bind(await digest(state), p.id, p.sessionHash, now())
-        .first<{ verifier_encrypted: string }>();
+        .bind(stateHash, p.id, p.sessionHash, now())
+        .first<{ verifier_encrypted: string }>());
       if (!row) throw new PrivateError(400, "OAUTH_STATE_EXPIRED");
-      if (query.has("error"))
-        return new Response(null, {
-          status: 303,
-          headers: {
-            Location: "/injury?section=documents&drive=cancelled",
-            "Cache-Control": "no-store",
-          },
-        });
+      if (query.has("error")) return driveReturn("cancelled");
       const code = query.get("code");
       if (!code || code.length > 4096)
         throw new PrivateError(400, "OAUTH_CODE_REQUIRED");
-      const response = await fetcher("https://oauth2.googleapis.com/token", {
+      const verifier = await step("key", () => unseal(row.verifier_encrypted, env));
+      const response = await step("token", () => fetcher("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           client_id: env.PRIVATE_DRIVE_CLIENT_ID!,
           client_secret: env.PRIVATE_DRIVE_CLIENT_SECRET!,
           code,
-          code_verifier: await unseal(row.verifier_encrypted, env),
+          code_verifier: verifier,
           redirect_uri: callback(request),
           grant_type: "authorization_code",
         }),
         signal: AbortSignal.timeout(20000),
-        redirect: "error",
-      });
-      const tokens = (await response.json()) as {
+        redirect: "manual",
+      }));
+      if (response.status >= 300 && response.status < 400)
+        throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
+      const tokens = (await step("token-body", () => response.json())) as {
         access_token?: string;
         refresh_token?: string;
       };
-      if (!response.ok || !tokens.access_token || !tokens.refresh_token)
+      if (!response.ok || !tokens || typeof tokens.access_token !== "string" || !tokens.access_token || typeof tokens.refresh_token !== "string" || !tokens.refresh_token)
         throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
-      const identity = await fetcher(
+      const identity = await step("identity", () => fetcher(
         "https://openidconnect.googleapis.com/v1/userinfo",
         {
           headers: { Authorization: "Bearer " + tokens.access_token },
           signal: AbortSignal.timeout(15000),
-          redirect: "error",
+          redirect: "manual",
         },
-      );
-      const user = (await identity.json()) as { sub?: string };
-      if (!identity.ok || !user.sub)
+      ));
+      if (identity.status >= 300 && identity.status < 400)
         throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
-      const old = await connection();
-      if (old && old.google_subject !== user.sub)
+      const user = (await step("identity", () => identity.json())) as { sub?: string };
+      if (!identity.ok || !user || typeof user.sub !== "string" || !user.sub)
+        throw new PrivateError(502, "DRIVE_CONNECT_FAILED");
+      const subject = user.sub, refreshToken = tokens.refresh_token;
+      const old = await step("connection", connection);
+      if (old && old.google_subject !== subject)
         throw new PrivateError(409, "DRIVE_ACCOUNT_CHANGED");
       await repo.authorize();
-      await env.DB.prepare(
-        `INSERT INTO case_drive_connections SELECT ?1,?5,?6,'','[]',?2,?7 WHERE ${repo.acl()} ON CONFLICT(case_id) DO UPDATE SET refresh_token_encrypted=excluded.refresh_token_encrypted,connected_at=excluded.connected_at`,
+      const sealedToken = await step("key", () => seal(refreshToken, env));
+      const saved = await step("connection", () => env.DB.prepare(
+        `INSERT INTO case_drive_connections SELECT ?1,?5,?6,'','[]',?2,?7 WHERE ${repo.acl()} ON CONFLICT(case_id) DO UPDATE SET refresh_token_encrypted=excluded.refresh_token_encrypted,connected_at=excluded.connected_at WHERE case_drive_connections.google_subject=excluded.google_subject RETURNING case_id`,
       )
         .bind(
           ...repo.args(),
-          await seal(tokens.refresh_token, env),
-          user.sub,
+          sealedToken,
+          subject,
           now(),
         )
-        .run();
-      await repo.audit("drive-connect", null);
-      return new Response(null, {
-        status: 303,
-        headers: {
-          Location: "/injury?section=documents&drive=connected",
-          "Cache-Control": "no-store",
-          "Referrer-Policy": "no-referrer",
-        },
-      });
+        .first<{ case_id: string }>());
+      if (!saved) {
+        await repo.authorize();
+        throw new PrivateError(409, "DRIVE_ACCOUNT_CHANGED");
+      }
+      await step("audit", () => repo.audit("drive-connect", null));
+      return driveReturn("connected");
     }
   }
   if (path[0] === "picker" && request.method === "POST") {
