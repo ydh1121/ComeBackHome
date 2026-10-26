@@ -247,10 +247,12 @@ try {
     await page
       .getByRole("heading", { name: "나의 산재 도우미", exact: true })
       .waitFor();
-    await verifyAdvisorR1(page,ctx,base,label);
     const iterations = await page.evaluate(() => window.__cbhSyntheticKdfIterations);
     assert(iterations.length >= 2 && iterations.every(n => n === 600000), "actual browser keeps 600k client KDF");
     assert(derivedLoginRequests >= 2, "browser sends only derived materials");
+    // R1 exercises a real reload; assert the login-document KDF observations
+    // before that reload resets window-scoped instrumentation.
+    await verifyAdvisorR1(page,ctx,base,label);
     const cookies = await ctx.cookies();
     const session = cookies.find((c) => c.name === "__Host-cbh-session");
     assert.ok(
