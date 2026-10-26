@@ -593,11 +593,86 @@ try {
   const fixtureDrive = createDriveFixture();
   driveFetcher = fixtureDrive.fetcher;
   const { seal: sealToken } = await load("worker/modules/documents/drive.ts");
+  const { driveConnectionNotice } = await load("src/modules/injury/domain/drive-connection.ts");
+  for (const value of [null, "__proto__", "constructor", "untrusted-provider-text"])
+    check(driveConnectionNotice(value), "", "OAuth UI never reflects arbitrary query content");
   env.PRIVATE_DRIVE_CLIENT_ID = "synthetic";
   env.PRIVATE_DRIVE_CLIENT_SECRET = "synthetic";
   env.PRIVATE_DRIVE_TOKEN_KEY = cryptoModule.encode64(
     crypto.getRandomValues(new Uint8Array(32)),
   );
+  env.PRIVATE_DRIVE_PICKER_KEY = "synthetic";
+  env.PRIVATE_DRIVE_APP_ID = "000000";
+  // Real OAuth state/PKCE/session handling against isolated SQLite only.
+  // Provider responses are synthetic; no Google account is contacted.
+  let tokenCalls = 0, expectedChallenge = "", oauthMode = "success";
+  driveFetcher = async (input, init) => {
+    const url = String(input);
+    if (url === 'https://oauth2.googleapis.com/token') {
+      tokenCalls++;
+      const body = new URLSearchParams(String(init.body));
+      check(body.get('redirect_uri'), origin + '/api/private/case/documents/oauth/callback', 'OAuth exact same-origin callback');
+      const challenge = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.get('code_verifier')))).toString('base64url');
+      check(challenge, expectedChallenge, 'PKCE verifier matches issued S256 challenge');
+      if(oauthMode === 'failure') return Response.json({error:'synthetic-private-provider-error'},{status:400});
+      return Response.json({access_token:'synthetic-access',refresh_token:'synthetic-refresh'});
+    }
+    assert.equal(url,'https://openidconnect.googleapis.com/v1/userinfo');
+    return Response.json({sub:oauthMode === 'changed'?'different-synthetic-subject':'synthetic-subject'});
+  };
+  const startDrive = async (cookie = member) => {
+    const r = await call('private/case/documents/oauth/start','POST',{},cookie);
+    check(r.status,200,'owner may start Google connection');
+    const url = new URL((await r.json()).url);
+    check(url.searchParams.get('scope'),'openid https://www.googleapis.com/auth/drive.file','minimal Google scopes');
+    return url;
+  };
+  const finishDrive = (url, cookie = member, extra = 'code=synthetic-code') => call('private/case/documents/oauth/callback?state='+url.searchParams.get('state')+'&'+extra,'GET',undefined,cookie);
+  const returned = async (r, outcome) => {
+    check(r.status,303,'OAuth returns to app, not raw JSON');
+    check(r.headers.get('Location'),'/injury?section=documents&drive='+outcome,'safe OAuth outcome');
+    check(r.headers.get('Referrer-Policy'),'no-referrer','callback secrets not sent as referrer');
+    check(await r.text(),'','callback does not expose provider content');
+  };
+  const otherResponse = await call('auth/login','POST',{loginId:'yvonne',password:'synthetic-new-secret!456'});
+  const otherCookie = otherResponse.headers.get('Set-Cookie').split(';')[0];
+  const firstDrive = await startDrive(), otherDrive = await startDrive(otherCookie);
+  check(sql.prepare('SELECT COUNT(*) n FROM case_oauth_states').get().n,2,'another device does not invalidate active consent');
+  await returned(await finishDrive(firstDrive,otherCookie),'expired');
+  check(tokenCalls,0,'wrong session never exchanges a code');
+  const nextDrive = await startDrive();
+  await returned(await finishDrive(firstDrive),'expired');
+  check(sql.prepare('SELECT COUNT(*) n FROM case_oauth_states').get().n,2,'same-session replacement stays bounded');
+  await returned(await finishDrive(nextDrive,member,'error=access_denied'),'cancelled');
+  check(tokenCalls,0,'cancelled request never contacts token endpoint');
+  expectedChallenge = otherDrive.searchParams.get('code_challenge');
+  await returned(await finishDrive(otherDrive,otherCookie),'connected');
+  check(tokenCalls,1,'valid single-use state exchanges once');
+  await returned(await finishDrive(otherDrive,otherCookie),'expired');
+  check(tokenCalls,1,'callback reload cannot replay code');
+  const expiredDrive = await startDrive();
+  sql.exec("UPDATE case_oauth_states SET expires_at='2000-01-01T00:00:00.000Z'");
+  await returned(await finishDrive(expiredDrive),'expired');
+  check(tokenCalls,1,'expired state never contacts Google');
+  await returned(await finishDrive(expiredDrive,null),'session-ended');
+  await returned(await finishDrive(expiredDrive,admin),'owner-only');
+  const connectionBefore = sql.prepare('SELECT * FROM case_drive_connections').get();
+  for(const [mode,outcome] of [['failure','failed'],['changed','account-changed']]) {
+    const request = await startDrive(); expectedChallenge=request.searchParams.get('code_challenge'); oauthMode=mode;
+    await returned(await finishDrive(request),outcome);
+    check(sql.prepare('SELECT * FROM case_drive_connections').get(),connectionBefore,'failed/replaced account preserves original archive connection');
+  }
+  sql.exec('DELETE FROM case_drive_connections');
+  const racingDrive=await startDrive(); expectedChallenge=racingDrive.searchParams.get('code_challenge'); oauthMode='success';
+  beforeStatement=source=>{
+    if(!source.startsWith('INSERT INTO case_drive_connections SELECT')) return;
+    beforeStatement=null;
+    sql.prepare('INSERT INTO case_drive_connections VALUES(?,?,?,?,?,?,?)').run('case-fixture',connectionBefore.refresh_token_encrypted,'different-winner','','[]','member-fixture',now);
+  };
+  await returned(await finishDrive(racingDrive),'account-changed');
+  check(sql.prepare('SELECT google_subject FROM case_drive_connections').get().google_subject,'different-winner','concurrent different Google account cannot replace winning connection token');
+  sql.exec('DELETE FROM case_drive_connections; DELETE FROM case_oauth_states');
+  driveFetcher = fixtureDrive.fetcher;
   sql
     .prepare("INSERT INTO case_drive_connections VALUES(?,?,?,?,?,?,?)")
     .run(

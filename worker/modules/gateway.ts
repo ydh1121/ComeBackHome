@@ -4,6 +4,7 @@ import type { ProviderSourceBundle } from "../providers/contracts";
 import { authenticate, handleAuth, authAudit } from "./auth/service";
 import { assertSameOrigin, PrivateError, privateJson } from "./auth/contracts";
 import { handleCase } from "./injury/service";
+import { driveFailure } from "./documents/oauth-result";
 
 // This adapter alone connects independent private modules to the legacy API.
 export async function handleProductRequest(
@@ -72,17 +73,20 @@ export async function handleProductRequest(
       headers,
     });
   } catch (error) {
+    const driveCallback = path === "/api/private/case/documents/oauth/callback" && request.method === "GET";
     if (error instanceof PrivateError) {
       if (error.code === "LOGIN_REQUIRED")
         await authAudit(env.DB, null, "unauthorized-access", "denied").catch(
           () => {},
         );
+      if (driveCallback) return driveFailure(error.code);
       return privateJson(
         { error: error.code },
         error.status,
         error.code === "LOGIN_REQUIRED" ? { "X-CBH-Session": "invalid" } : {},
       );
     }
+    if (driveCallback) return driveFailure("unavailable");
     // D1 trigger invariants are still checked inside the write transaction.
     // Return only known public error codes, never the SQL/driver message.
     const invariant =

@@ -8,6 +8,7 @@ import {
 } from "../auth/contracts";
 import { digest, encode64, randomToken } from "../auth/crypto";
 import { CaseRepository } from "../injury/repository";
+import { driveReturn } from "./oauth-result";
 import {
   DriveArchive,
   refreshDriveToken,
@@ -99,9 +100,9 @@ export async function handleDocuments(
         .replaceAll("/", "_")
         .replace(/=+$/, "");
       await env.DB.prepare(
-        "DELETE FROM case_oauth_states WHERE user_id=?1 OR expires_at<?2",
+        "DELETE FROM case_oauth_states WHERE (user_id=?1 AND session_hash=?3) OR expires_at<?2",
       )
-        .bind(p.id, now())
+        .bind(p.id, now(), p.sessionHash)
         .run();
       await env.DB.prepare(
         "INSERT INTO case_oauth_states VALUES (?1,?2,?3,?4,?5)",
@@ -137,14 +138,7 @@ export async function handleDocuments(
         .bind(await digest(state), p.id, p.sessionHash, now())
         .first<{ verifier_encrypted: string }>();
       if (!row) throw new PrivateError(400, "OAUTH_STATE_EXPIRED");
-      if (query.has("error"))
-        return new Response(null, {
-          status: 303,
-          headers: {
-            Location: "/injury?section=documents&drive=cancelled",
-            "Cache-Control": "no-store",
-          },
-        });
+      if (query.has("error")) return driveReturn("cancelled");
       const code = query.get("code");
       if (!code || code.length > 4096)
         throw new PrivateError(400, "OAUTH_CODE_REQUIRED");
@@ -183,8 +177,8 @@ export async function handleDocuments(
       if (old && old.google_subject !== user.sub)
         throw new PrivateError(409, "DRIVE_ACCOUNT_CHANGED");
       await repo.authorize();
-      await env.DB.prepare(
-        `INSERT INTO case_drive_connections SELECT ?1,?5,?6,'','[]',?2,?7 WHERE ${repo.acl()} ON CONFLICT(case_id) DO UPDATE SET refresh_token_encrypted=excluded.refresh_token_encrypted,connected_at=excluded.connected_at`,
+      const saved = await env.DB.prepare(
+        `INSERT INTO case_drive_connections SELECT ?1,?5,?6,'','[]',?2,?7 WHERE ${repo.acl()} ON CONFLICT(case_id) DO UPDATE SET refresh_token_encrypted=excluded.refresh_token_encrypted,connected_at=excluded.connected_at WHERE case_drive_connections.google_subject=excluded.google_subject RETURNING case_id`,
       )
         .bind(
           ...repo.args(),
@@ -192,16 +186,13 @@ export async function handleDocuments(
           user.sub,
           now(),
         )
-        .run();
+        .first<{ case_id: string }>();
+      if (!saved) {
+        await repo.authorize();
+        throw new PrivateError(409, "DRIVE_ACCOUNT_CHANGED");
+      }
       await repo.audit("drive-connect", null);
-      return new Response(null, {
-        status: 303,
-        headers: {
-          Location: "/injury?section=documents&drive=connected",
-          "Cache-Control": "no-store",
-          "Referrer-Policy": "no-referrer",
-        },
-      });
+      return driveReturn("connected");
     }
   }
   if (path[0] === "picker" && request.method === "POST") {

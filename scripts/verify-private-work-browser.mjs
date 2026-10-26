@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyPublicAuthUi } from "./private-work/verify-public-auth-ui.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -210,6 +211,8 @@ try {
     const readiness = await ctx.request.get(base + "/api/auth/readiness");
     assert.equal(readiness.status(), 200);
     assert.deepEqual(await readiness.json(), { database: "ready", passwordRuntime: "supported" });
+    await verifyPublicAuthUi(page, base);
+    await page.setViewportSize({width:390,height:844});
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     let anonymousLegacyRequests = 0;
@@ -354,6 +357,29 @@ try {
     await dialog.getByRole("button", { name: "저장", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "문서·메모", exact: true }).click();
+    await page.goto(base + "/api/private/case/documents/oauth/callback?state=synthetic-stale&code=synthetic-only");
+    await page.getByRole("status").filter({hasText:"키를 다시 등록할 필요는 없습니다"}).waitFor();
+    assert.equal(new URL(page.url()).pathname,"/injury");
+    assert.equal(new URL(page.url()).searchParams.has("code"),false);
+    let oauthStarts = 0;
+    await page.route("**/api/private/case/documents/oauth/start", async route => {
+      oauthStarts++;
+      await new Promise(resolve=>setTimeout(resolve,80));
+      await route.continue();
+    });
+    await page.route("https://accounts.google.com/**", async route => {
+      assert.equal(new URL(route.request().url()).pathname,"/o/oauth2/v2/auth");
+      const state=new URL(route.request().url()).searchParams.get("state");
+      assert(state);
+      await route.fulfill({status:302,headers:{Location:base+"/api/private/case/documents/oauth/callback?state="+state+"&error=access_denied"},body:""});
+    });
+    await page.getByRole("button",{name:"Google 계정 다시 연결",exact:true}).evaluate(button=>{button.click();button.click();});
+    await page.getByRole("status").filter({hasText:"Google Drive 연결을 취소했습니다"}).waitFor();
+    assert.equal(oauthStarts,1,"rapid double click creates a single consent request");
+    assert.equal(new URL(page.url()).searchParams.has("state"),false);
+    await page.unroute("**/api/private/case/documents/oauth/start");
+    await page.unroute("https://accounts.google.com/**");
+    await page.locator("input[type=file]").first().waitFor();
     const bytes = Buffer.from("%PDF-synthetic-original-" + label);
     await page
       .locator("input[type=file]")
