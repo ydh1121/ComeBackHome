@@ -615,9 +615,13 @@ try {
       const challenge = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.get('code_verifier')))).toString('base64url');
       check(challenge, expectedChallenge, 'PKCE verifier matches issued S256 challenge');
       if(oauthMode === 'failure') return Response.json({error:'synthetic-private-provider-error'},{status:400});
+      if(oauthMode === 'network') throw new TypeError('synthetic secret URL must never escape');
+      if(oauthMode === 'malformed') return new Response('<html>synthetic provider response</html>');
+      if(oauthMode === 'null-token') return Response.json(null);
       return Response.json({access_token:'synthetic-access',refresh_token:'synthetic-refresh'});
     }
     assert.equal(url,'https://openidconnect.googleapis.com/v1/userinfo');
+    if(oauthMode === 'identity') return new Response('synthetic identity error');
     return Response.json({sub:oauthMode === 'changed'?'different-synthetic-subject':'synthetic-subject'});
   };
   const startDrive = async (cookie = member) => {
@@ -657,10 +661,27 @@ try {
   await returned(await finishDrive(expiredDrive,null),'session-ended');
   await returned(await finishDrive(expiredDrive,admin),'owner-only');
   const connectionBefore = sql.prepare('SELECT * FROM case_drive_connections').get();
-  for(const [mode,outcome] of [['failure','failed'],['changed','account-changed']]) {
+  for(const [mode,outcome] of [['failure','failed'],['changed','account-changed'],['network','provider-unavailable'],['malformed','response-unavailable'],['null-token','failed'],['identity','provider-unavailable']]) {
     const request = await startDrive(); expectedChallenge=request.searchParams.get('code_challenge'); oauthMode=mode;
     await returned(await finishDrive(request),outcome);
     check(sql.prepare('SELECT * FROM case_drive_connections').get(),connectionBefore,'failed/replaced account preserves original archive connection');
+  }
+  const storeFailure = await startDrive(); expectedChallenge=storeFailure.searchParams.get('code_challenge'); oauthMode='success';
+  beforeStatement=source=>{
+    if(!source.startsWith('INSERT INTO case_drive_connections SELECT')) return;
+    beforeStatement=null;
+    throw Error('synthetic private SQL exception must never escape');
+  };
+  await returned(await finishDrive(storeFailure),'storage-unavailable');
+  check(sql.prepare('SELECT * FROM case_drive_connections').get(),connectionBefore,'storage failure keeps existing connection');
+  const safeFailures=sql.prepare("SELECT target_id,outcome FROM case_audit WHERE action='drive-connect-failed'").all();
+  check(safeFailures.map(r=>r.outcome),['token','token-body','identity','connection'],'private diagnostics contain fixed failure phase only');
+  check(safeFailures.every(r=>r.target_id===null),true,'failure audit never stores OAuth URL or credentials');
+  const { driveOAuthStep }=await load('worker/modules/documents/oauth-step.ts');
+  for(const phase of ['state','key','token','token-body','identity','connection','audit']) {
+    let reported;
+    await assert.rejects(()=>driveOAuthStep(phase,async()=>{throw Error('synthetic credential');},async value=>{reported=value;throw Error('synthetic audit unavailable');}),e=>e.code?.startsWith('DRIVE_') && !e.message.includes('synthetic'));
+    check(reported,phase,'audit outage cannot expose raw callback errors');
   }
   sql.exec('DELETE FROM case_drive_connections');
   const racingDrive=await startDrive(); expectedChallenge=racingDrive.searchParams.get('code_challenge'); oauthMode='success';

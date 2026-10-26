@@ -361,7 +361,7 @@ try {
     await page.getByRole("status").filter({hasText:"키를 다시 등록할 필요는 없습니다"}).waitFor();
     assert.equal(new URL(page.url()).pathname,"/injury");
     assert.equal(new URL(page.url()).searchParams.has("code"),false);
-    let oauthStarts = 0;
+    let oauthStarts = 0, syntheticConsent = "error=access_denied";
     await page.route("**/api/private/case/documents/oauth/start", async route => {
       oauthStarts++;
       await new Promise(resolve=>setTimeout(resolve,80));
@@ -371,20 +371,33 @@ try {
       assert.equal(new URL(route.request().url()).pathname,"/o/oauth2/v2/auth");
       const state=new URL(route.request().url()).searchParams.get("state");
       assert(state);
-      const target=base+"/api/private/case/documents/oauth/callback?state="+state+"&error=access_denied";
+      const target=base+"/api/private/case/documents/oauth/callback?state="+state+"&"+syntheticConsent;
       // WebKit cannot fulfill an intercepted navigation with a 3xx response.
       // A synthetic provider page and real link click retain the cross-site
       // top-level navigation/cookie contract without contacting Google.
       await route.fulfill({status:200,contentType:"text/html; charset=utf-8",body:'<!doctype html><html><head><meta charset="utf-8"></head><body><a id="synthetic-oauth-cancel" href="'+target.replaceAll('&','&amp;')+'">Cancel synthetic Google consent</a></body></html>'});
     });
+    const finishSyntheticConsent = async () => {
+      await page.waitForURL("https://accounts.google.com/**",{waitUntil:"domcontentloaded"});
+      const syntheticPage=await page.evaluate(()=>({host:location.host,charset:document.characterSet,links:document.querySelectorAll('#synthetic-oauth-cancel').length,bodyPresent:!!document.body}));
+      assert.equal(syntheticPage.links,1,"Synthetic provider fixture must render before callback: "+JSON.stringify(syntheticPage));
+      await page.locator("#synthetic-oauth-cancel").click();
+    };
     await page.getByRole("button",{name:"Google 계정 다시 연결",exact:true}).evaluate(button=>{button.click();button.click();});
-    await page.waitForURL("https://accounts.google.com/**",{waitUntil:"domcontentloaded"});
-    const syntheticPage=await page.evaluate(()=>({host:location.host,charset:document.characterSet,links:document.querySelectorAll('#synthetic-oauth-cancel').length,bodyPresent:!!document.body}));
-    assert.equal(syntheticPage.links,1,"Synthetic provider fixture must render before callback: "+JSON.stringify(syntheticPage));
-    await page.locator("#synthetic-oauth-cancel").click();
+    await finishSyntheticConsent();
     await page.getByRole("status").filter({hasText:"Google Drive 연결을 취소했습니다"}).waitFor();
     assert.equal(oauthStarts,1,"rapid double click creates a single consent request");
     assert.equal(new URL(page.url()).searchParams.has("state"),false);
+    syntheticConsent = "code=synthetic-code";
+    await page.getByRole("button",{name:"Google 계정 다시 연결",exact:true}).click();
+    await finishSyntheticConsent();
+    await page.getByRole("status").filter({hasText:"Google 동의 절차에서 돌아왔습니다"}).waitFor();
+    assert.equal(oauthStarts,2,"one fresh request for the successful retry");
+    assert.equal(new URL(page.url()).searchParams.has("code"),false);
+    const connected = await ctx.request.get(base+"/api/private/case/documents/status");
+    const connectedStatus = await connected.json();
+    assert.equal(connectedStatus.connected,true,"real local D1 callback persisted connection");
+    assert.equal(connectedStatus.folderSelected,true,"reconnection preserves original folder");
     await page.unroute("**/api/private/case/documents/oauth/start");
     await page.unroute("https://accounts.google.com/**");
     await page.locator("input[type=file]").first().waitFor();

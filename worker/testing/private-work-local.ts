@@ -21,7 +21,9 @@ export function createDriveFixture() {
   const fakeDrive: typeof fetch = async (input, init) => {
     const u = new URL(String(input));
     if (u.origin === "https://oauth2.googleapis.com")
-      return Response.json({ access_token: "synthetic-access-only" });
+      return Response.json({ access_token: "synthetic-access-only", refresh_token: "synthetic-refresh" });
+    if (u.origin === "https://openidconnect.googleapis.com")
+      return Response.json({ sub: "synthetic-google-subject" });
     if (u.origin !== "https://www.googleapis.com")
       throw Error("EXTERNAL_PROVIDER_DISABLED");
     if (u.pathname.endsWith("/generateIds"))
