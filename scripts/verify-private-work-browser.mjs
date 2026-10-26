@@ -371,9 +371,14 @@ try {
       assert.equal(new URL(route.request().url()).pathname,"/o/oauth2/v2/auth");
       const state=new URL(route.request().url()).searchParams.get("state");
       assert(state);
-      await route.fulfill({status:302,headers:{Location:base+"/api/private/case/documents/oauth/callback?state="+state+"&error=access_denied"},body:""});
+      const target=base+"/api/private/case/documents/oauth/callback?state="+state+"&error=access_denied";
+      // WebKit cannot fulfill an intercepted navigation with a 3xx response.
+      // A synthetic provider page and real link click retain the cross-site
+      // top-level navigation/cookie contract without contacting Google.
+      await route.fulfill({status:200,contentType:"text/html",body:'<!doctype html><a href="'+target.replaceAll('&','&amp;')+'">합성 Google 동의 취소</a>'});
     });
     await page.getByRole("button",{name:"Google 계정 다시 연결",exact:true}).evaluate(button=>{button.click();button.click();});
+    await page.getByRole("link",{name:"합성 Google 동의 취소",exact:true}).click();
     await page.getByRole("status").filter({hasText:"Google Drive 연결을 취소했습니다"}).waitFor();
     assert.equal(oauthStarts,1,"rapid double click creates a single consent request");
     assert.equal(new URL(page.url()).searchParams.has("state"),false);
