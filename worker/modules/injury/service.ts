@@ -20,6 +20,7 @@ import {
   benefitOverlapWarnings,
 } from "../../../src/modules/injury/domain/deadlines";
 import { validDate } from "../../../src/modules/injury/domain/dates";
+import { reviewAnalysis } from "../../../src/modules/injury/materials/model";
 import {
   summarizeLedger,
   type PaymentEvent,
@@ -367,8 +368,13 @@ export async function handleCase(
     }
   }
 
-  if (path[0] === "import" && request.method === "POST") {
-    const body = await readJson(request);
+  if ((path[0] === "import" || path[0] === "analysis") && request.method === "POST") {
+    let body = await readJson(request);
+    if (path[0] === "analysis") {
+      if (body.approved !== true) throw new PrivateError(400, "INVALID_ANALYSIS");
+      try { body = { ...reviewAnalysis(body).seed, approved: true }; }
+      catch { throw new PrivateError(400, "INVALID_ANALYSIS"); }
+    }
     if (
       body.version !== "cbh-case-seed/v1" ||
       body.approved !== true ||

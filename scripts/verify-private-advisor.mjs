@@ -33,9 +33,10 @@ try {
     check(m.scriptPayload(m.HOSPITAL_SCRIPT).certainty, 'reported');
     validatePayload('content', m.scriptPayload(m.HOSPITAL_SCRIPT));
     checks++;
-    assert(!/7월|엽떡|신이본|MRI|330/.test(m.HOSPITAL_SCRIPT));
+    assert(!/\d[\d,.]*\s*만원|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|010[-\d]{8,10}/.test(m.HOSPITAL_SCRIPT));
     checks++;
     await (await import('./private-work/verify-advisor-r2-model.mjs')).verifyAdvisorR2Model(vite);
+    await (await import('./private-work/verify-materials-model.mjs')).verifyMaterialsModel(vite);
     console.log('PRIVATE_ADVISOR_R1_MODEL_PASS checks=' + checks + ' empty_case_unknown_not_false_reported_not_official_existing_records_unchanged_no_private_seed');
 }
 finally {

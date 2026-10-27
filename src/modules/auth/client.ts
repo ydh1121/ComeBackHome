@@ -50,6 +50,8 @@ export function errorText(code: string): string {
       "기관 확정 상태에는 확인된 원본 문서를 연결해 주세요.",
     PAYMENT_SOURCE_REQUIRED: "지급 근거가 되는 원본 연결 기록을 선택해 주세요.",
     VERIFIED_DOCUMENT_REQUIRED: "보관 확인이 끝난 원본만 연결할 수 있습니다.",
+    INVALID_ANALYSIS: "분석 결과의 형식과 내용을 확인해 주세요. 저장하지 않았어요.",
+    REQUEST_TOO_LARGE: "자료가 너무 길어요. 일부를 나눠서 저장해 주세요.",
     INVALID_FILE: "PDF·PNG·JPG·WebP 파일을 최대 20MB까지 선택할 수 있습니다.",
     FILE_TYPE_MISMATCH: "파일 내용과 확장자가 일치하지 않습니다.",
     WORKSPACE_ACCESS_REQUIRED: "기존 일정 자료의 접근 설정이 필요합니다.",

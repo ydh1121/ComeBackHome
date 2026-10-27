@@ -198,6 +198,7 @@ export function RecordEditor({
     [revision, setRevision] = useState(record?.revision ?? 0),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [advanced, setAdvanced] = useState(false),
     [conflict, setConflict] = useState<CaseRecord | null>(null),
     [history, setHistory] = useState<
       Array<{
@@ -385,6 +386,7 @@ export function RecordEditor({
               await saved();
               close();
             } catch (err) {
+              setAdvanced(true);
               setError(
                 err instanceof ApiError
                   ? err.message
@@ -431,17 +433,12 @@ export function RecordEditor({
             </label>
           </div>
           <div className="field-grid">
-            {spec.fields.map((f) => (
-              <label
-                key={f.key}
-                className={f.type === "boolean" ? "auth-check" : ""}
-              >
-                {f.label.replace(/ ID$/, "")}
-                {f.required ? " *" : ""}
-                {input(f)}
-              </label>
-            ))}
+            {spec.fields.filter(f=>f.required||["status","dueDate","from","to","appointmentAt"].includes(f.key)).map(f=><label key={f.key} className={f.type==="boolean"?"auth-check":""}>{f.label.replace(/ ID$/," ")}{f.required?" *":""}{input(f)}</label>)}
           </div>
+          <details className="editor-advanced" open={advanced} onToggle={e=>setAdvanced(e.currentTarget.open)}>
+            <summary>추가 정보·연결 자료</summary>
+            <p className="materials-caption">아는 내용만 입력하세요. 기관 확인 여부와 원본 연결도 여기에서 관리해요.</p>
+            <div className="field-grid">{spec.fields.filter(f=>!f.required&&!["status","dueDate","from","to","appointmentAt"].includes(f.key)).map(f=><label key={f.key} className={f.type==="boolean"?"auth-check":""}>{f.label.replace(/ ID$/," ")}{input(f)}</label>)}</div>
           <label>
             확인 수준
             <select
@@ -486,6 +483,7 @@ export function RecordEditor({
                 ))
             )}
           </fieldset>
+          </details>
           <p role="alert">{error}</p>
           {conflict && (
             <section className="conflict-panel">

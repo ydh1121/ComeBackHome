@@ -8,6 +8,7 @@ import {
 } from "../domain/records";
 import { RecordCard, RecordEditor } from "./RecordEditor";
 import { DocumentsPanel } from "./DocumentsPanel";
+import { ManageHome, managementSections } from "../materials/ManageHome";
 import { PaymentsPanel } from "./PaymentsPanel";
 import { PolicyPanel } from "./PolicyPanel";
 import { CalculationsPanel } from "./CalculationsPanel";
@@ -25,7 +26,7 @@ const tabs = [
   ["documents", "문서·메모"],
   ["settings", "접근·이력"],
 ] as const;
-type Section = (typeof tabs)[number][0];
+type Section = (typeof tabs)[number][0] | "overview";
 type AdvisorRoute = "today" | "progress" | "library" | "manage" | "help";
 const actions: Record<string, string> = {
   treatment_consult: "진료계획 상담",
@@ -59,11 +60,11 @@ export function InjuryApp() {
     [consent, setConsent] = useState<Consent | null>(null),
     [view, setView] = useState<AdvisorRoute>(() => {
       const value=new URLSearchParams(location.search).get("section");
-      return tabs.some(([key])=>key===value) ? "manage" : ["progress","library","help"].includes(value ?? "") ? value as AdvisorRoute : "today";
+      return value === "documents" ? "library" : value === "manage" || tabs.some(([key])=>key===value) ? "manage" : ["progress","library","help"].includes(value ?? "") ? value as AdvisorRoute : "today";
     }),
     [section, setSection] = useState<Section>(() => {
       const value = new URLSearchParams(location.search).get("section");
-      return tabs.some((t) => t[0] === value) ? (value as Section) : "tasks";
+      return tabs.some((t) => t[0] === value) ? (value as Section) : "overview";
     }),
     [pageKey, setPageKey] = useState(0),
     [error, setError] = useState(""),
@@ -106,7 +107,7 @@ export function InjuryApp() {
     return () => document.removeEventListener("visibilitychange", refresh);
   }, [reload]);
   const choose = (value: Section) => {
-    setView("manage");
+    setView(value === "documents" ? "library" : "manage");
     setSection(value);
     setQuery("");
     setArchived(false);
@@ -118,7 +119,7 @@ export function InjuryApp() {
   };
   const navigate = (value: AdvisorRoute) => {
     setPageKey(key => key + 1);
-    if(value === "manage") choose(section);
+    if(value === "manage") { choose("overview"); history.replaceState(null,"","/injury?section=manage"); }
     else { setView(value);history.replaceState(null,"","/injury?section="+value); }
     window.scrollTo(0,0);
   };
@@ -150,17 +151,7 @@ export function InjuryApp() {
         {([["today","오늘"],["progress","진행 상황"],["library","내 자료"]] as const).map(([key,title])=><button key={key} aria-current={view===key?"page":undefined} onClick={()=>navigate(key)}>{title}</button>)}
       </nav>
       <div className="advisor-utilities"><button onClick={()=>navigate("help")}>상황별 도움말</button><button onClick={()=>navigate("manage")}>내 관리함<Icon name="chevron-right"/></button></div>
-      {view === "manage" && <><h2 className="advisor-manage-title">내 관리함</h2><nav className="private-tabs" aria-label="기록 관리 메뉴">
-        {tabs.map(([value, title]) => (
-          <button
-            key={value}
-            aria-current={section === value ? "page" : undefined}
-            onClick={() => choose(value)}
-          >
-            {title}
-          </button>
-        ))}
-      </nav></>}
+      {view === "manage" && section !== "overview" && <div className="management-section-head"><button className="secondary" onClick={()=>navigate("manage")}><Icon name="chevron-left"/>내 관리함으로</button><h2>{managementSections.find(s=>s.id===section)?.title??"자료 설정"}</h2></div>}
       {error && (
         <p className="private-card" role="alert">
           {error}
@@ -181,9 +172,11 @@ export function InjuryApp() {
       )}
       {data && view === "today" && <AdvisorHome key={pageKey} data={data} reload={reload} navigate={navigate}/>}
       {data && view === "progress" && <AdvisorProgress data={data} navigate={navigate}/>}
-      {data && view === "library" && <section className="advisor-stack"><article className="private-card"><h2>받은 서류를 한곳에</h2><p>사진이나 PDF로 보관하세요. 업로드가 끝나면 보관 여부를 확인할 수 있어요.</p></article><DocumentsPanel data={data} reload={reload}/><button className="secondary" onClick={()=>choose("documents")}>기존 문서·메모 모두 보기</button></section>}
+      {data && view === "library" && <DocumentsPanel data={data} reload={reload} openRecord={record=>setEditing({kind:record.kind,record})}/>}
+      {data && view === "manage" && section === "overview" && <ManageHome data={data} choose={choose}/>}
+
       {data && view === "help" && <AdvisorHelp onOpen={id=>{ navigate("today"); history.replaceState(null,"","/injury?section=today&action="+id); }}/>}
-      {data && view === "manage" && (
+      {data && view === "manage" && section !== "overview" && (
         <>
           {section === "tasks" && (
             <section className="private-card">
@@ -232,16 +225,13 @@ export function InjuryApp() {
               )}
             </section>
           )}
-          {section === "documents" && (
-            <DocumentsPanel data={data} reload={reload} />
-          )}{" "}
           {section === "payments" && (
             <PaymentsPanel data={data} reload={reload} />
           )}{" "}
           {["employment", "payments"].includes(section) && (
-            <CalculationsPanel data={data} />
+            <details className="private-card management-calculator"><summary>기간·예상금액 계산 도구</summary><CalculationsPanel data={data} /></details>
           )}
-          {section !== "settings" && (
+          {section !== "settings" && section !== "documents" && (
             <>
               <div className="record-tools">
                 <label>
@@ -262,24 +252,8 @@ export function InjuryApp() {
                   보관 기록
                 </label>
               </div>
-              <div className="record-add">
-                <label>
-                  기록 종류
-                  <select
-                    value={kind}
-                    onChange={(e) => setKind(e.target.value as RecordKind)}
-                  >
-                    {Object.entries(RECORD_SPECS)
-                      .filter(([, spec]) => spec.group === section)
-                      .map(([value, spec]) => (
-                        <option key={value} value={value}>
-                          {spec.title}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <button onClick={() => setEditing({ kind })}>기록 추가</button>
-              </div>
+              <div className="management-add-row"><button onClick={()=>setEditing({kind})}><Icon name="plus"/>기록 추가</button><small>{RECORD_SPECS[kind].title}</small></div>
+              <details className="management-kinds"><summary>다른 종류의 기록 추가</summary><div className="management-kind-list">{Object.entries(RECORD_SPECS).filter(([,spec])=>spec.group===section).map(([value,spec])=><button className="secondary" key={value} onClick={()=>{setKind(value as RecordKind);setEditing({kind:value as RecordKind});}}>{spec.title}<Icon name="chevron-right"/></button>)}</div></details>
               <div className="record-grid">
                 {records.map((record) =>
                   archived ? (

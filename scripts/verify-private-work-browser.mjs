@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { verifyPublicAuthUi } from "./private-work/verify-public-auth-ui.mjs";
 import { verifyAdvisorR1 } from "./private-work/verify-advisor-r1-ui.mjs";
+import { verifyMaterials } from "./private-work/verify-materials-ui.mjs";
 import { verifyAdvisorR2 } from "./private-work/verify-advisor-r2-ui.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
@@ -288,16 +289,16 @@ try {
     });
     await card.waitFor();
     await card.scrollIntoViewIfNeeded();
-    await card.locator(".content-scroll").evaluate((n) => (n.scrollTop = 2000));
+    await card.locator(".record-body").evaluate(n=>window.scrollTo(0,n.getBoundingClientRect().top+scrollY+300));
     const copy = await card.locator(".copy-button").boundingBox(),
       scroll = await card.locator(".content-scroll").boundingBox();
     assert.ok(
-      copy.y >= scroll.y - 2 &&
+      copy.y >= 0 && copy.y + copy.height <= 844 && copy.y >= scroll.y - 2 &&
         copy.y + copy.height <= scroll.y + scroll.height + 2,
-      "copy stays within scrolled content",
+      "copy follows page scrolling while staying inside its record",
     );
     const bodyBox = await card.locator(".record-body").boundingBox();
-    await page.mouse.move(bodyBox.x + 12, Math.max(bodyBox.y, scroll.y) + 55);
+    await page.mouse.move(bodyBox.x + 12, Math.max(100, copy.y + copy.height + 30));
     await page.mouse.down();
     await dialog.waitFor({ state: "visible" });
     await page.mouse.up();
@@ -350,7 +351,7 @@ try {
       .click();
     await dialog.getByRole("button", { name: "저장", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
-    await page.getByRole("button", { name: "문서·메모", exact: true }).click();
+    await page.getByRole("button", { name: "내 자료", exact: true }).click();
     await page.goto(base + "/api/private/case/documents/oauth/callback?state=synthetic-stale&code=synthetic-only");
     await page.getByRole("status").filter({hasText:"키를 다시 등록할 필요는 없습니다"}).waitFor();
     assert.equal(new URL(page.url()).pathname,"/injury");
@@ -411,7 +412,7 @@ try {
         mimeType: "application/pdf",
         buffer: bytes,
       });
-    await page.getByRole("button", { name: "원본 보관", exact: true }).click();
+    await page.getByRole("button", { name: "선택한 1개 파일 보관", exact: true }).click();
     await page
       .getByRole("status")
       .filter({ hasText: "원본 보관 확인 완료" })
@@ -436,8 +437,10 @@ try {
       .locator(".document-list")
       .getByRole("heading", { name: "synthetic-" + label + ".pdf" })
       .waitFor({ state: "visible", timeout: 15000 });
+    await verifyMaterials(page,ctx,base,label);
     // A second real browser session exercises owner consent and the admin UI.
-    await page.getByRole("button", { name: "접근·이력", exact: true }).click();
+    await page.getByRole("button", { name: "내 관리함", exact: true }).click();
+    await page.getByRole("button", { name: /자료 접근권한·수정 이력/ }).click();
     await page
       .getByText("내 자료 내보내기·기획 자료 가져오기", { exact: true })
       .click();
@@ -563,9 +566,7 @@ try {
       .getByRole("heading", { name: "산재 도우미", exact: true })
       .waitFor();
     await adminPage.getByRole("button",{name:"내 관리함",exact:true}).click();
-    await adminPage
-      .getByRole("button", { name: "접근·이력", exact: true })
-      .click();
+    await adminPage.goto(base+"/injury?section=settings");
     await adminPage.getByText("계산 정책과 공식 근거", { exact: true }).click();
     await adminPage.getByLabel("검증된 정책 파일 불러오기").setInputFiles({
       name: "synthetic-policy.json",
@@ -582,7 +583,7 @@ try {
     await adminPage.screenshot({
       path: resolve("artifacts/private-work", `${label}-policy-390.png`),
     });
-    await adminPage.getByRole("button", { name: "지급", exact: true }).click();
+    await adminPage.goto(base+"/injury?section=payments");
     await adminPage.getByText("예상금액·기간 계산", { exact: true }).click();
     const policySnapshot = await (
       await adminContext.request.get(base + "/api/private/case")

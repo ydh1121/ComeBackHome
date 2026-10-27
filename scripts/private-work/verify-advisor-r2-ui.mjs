@@ -67,6 +67,6 @@ export async function verifyAdvisorR2(page,ctx,base,label) {
   }
   page.off('request',count);
   await page.getByRole('button',{name:'내 관리함',exact:true}).click();
-  await page.getByRole('button',{name:'할 일',exact:true}).click();
+  await page.getByRole('button',{name:/준비할 일/,exact:false}).click();
   console.log('PRIVATE_ADVISOR_R2_UI_PASS '+label+' 12_guides_no_view_writes_explicit_reply_503_reload_branch_409_dedup_existing_records_unchanged');
 }

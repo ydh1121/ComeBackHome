@@ -34,8 +34,8 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     // Explicit disconnected status: guidance remains usable; no file is claimed saved.
     await page.route('**/api/private/case/documents/status', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ owner: true, configured: false, connected: false, folderSelected: false, maxBytes: 20971520, chunkBytes: 1048576 }) }));
     await page.getByRole('button', { name: '내 자료', exact: true }).click();
-    await page.getByText('원본을 지금 제출할 필요는 없습니다.', { exact: false }).waitFor();
-    assert.equal(await page.locator('input[type=file]').count(), 0);
+    await page.getByText('메모는 지금도 작성할 수 있어요.', { exact: false }).waitFor();
+    assert.equal(await page.locator('.materials-upload input[type=file]').count(), 0);
     await page.getByRole('button', { name: '오늘', exact: true }).click();
     await page.unroute('**/api/private/case/documents/status');
     await page.getByRole('button', { name: '물어볼 내용 보기', exact: false }).click();
@@ -121,6 +121,6 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     const restored = await api('private/case/records/' + profile.id, 'PUT', { kind: 'content', revision: latest.revision, payload: { ...latest.payload, body: JSON.stringify({ ...JSON.parse(latest.payload.body), deferred: false }) } });
     assert.equal(restored.status(), 200);
     await page.getByRole('button', { name: '내 관리함', exact: true }).click();
-    await page.getByRole('button', { name: '할 일', exact: true }).click();
+    await page.getByRole('button', { name: /준비할 일/, exact: false }).click();
     console.log('PRIVATE_ADVISOR_R1_UI_PASS ' + label + ' empty_home_three_tabs_copy_edit_cancel_conflict_persistent_unknown_retry_defer_legacy_access');
 }
