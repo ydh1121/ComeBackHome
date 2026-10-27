@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError, errorText, privateRequest } from '../../auth/client';
 import type { CaseData } from '../ui/types';
 import { ORGANIZATION_CATEGORIES, type OrganizationCategory, type OrganizationProposal } from './organization';
 
 interface Result { documentId: string; status: 'organized' | 'failed'; error?: string }
 export function OrganizationReview({ data, proposals, reload, receiptId }: { data: CaseData; proposals: OrganizationProposal[]; reload: () => Promise<void>; receiptId?: string }) {
-  const signature = JSON.stringify(proposals);
+  const signature = JSON.stringify(proposals), controlPrefix=useId();
   const [items,setItems] = useState(proposals), [selected,setSelected] = useState(proposals.map(p=>p.documentId));
   const [results,setResults] = useState<Result[]>([]), [busy,setBusy] = useState(false), [message,setMessage] = useState('');
   const [pendingCategories,setPendingCategories]=useState<Record<string,OrganizationCategory>>({});
@@ -68,7 +68,7 @@ export function OrganizationReview({ data, proposals, reload, receiptId }: { dat
       const document=data.documents.find(d=>d.id===item.documentId), result=results.find(r=>r.documentId===item.documentId), complete=result?.status==='organized';
       return <div className="analysis-proposal" key={item.documentId}>
         <label className="auth-check"><input type="checkbox" disabled={busy||complete||document?.status!=='ready'} checked={selected.includes(item.documentId)} onChange={e=>setSelected(v=>e.target.checked?[...v,item.documentId]:v.filter(id=>id!==item.documentId))}/><strong>{document?.filename??'확인할 수 없는 원본'}</strong></label>
-        <label>보관할 분야<select value={item.category} disabled={busy||complete||!!receiptId||!!pendingCategories[item.documentId]} onChange={e=>setItems(v=>v.map(p=>p.documentId===item.documentId?{...p,category:e.target.value as OrganizationCategory}:p))}>{Object.entries(ORGANIZATION_CATEGORIES).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+        <label htmlFor={controlPrefix+'-category-'+item.documentId}>보관할 분야</label><select id={controlPrefix+'-category-'+item.documentId} value={item.category} disabled={busy||complete||!!receiptId||!!pendingCategories[item.documentId]} onChange={e=>setItems(v=>v.map(p=>p.documentId===item.documentId?{...p,category:e.target.value as OrganizationCategory}:p))}>{Object.entries(ORGANIZATION_CATEGORIES).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
         {result&&<p role="status">{complete?'정리 완료':errorText(result.error??'DRIVE_REQUEST_FAILED')}</p>}
       </div>;
     })}

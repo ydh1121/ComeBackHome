@@ -210,6 +210,9 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   const organize=page.locator('.materials-organize');
   await organize.locator('summary').click();
   const organization=organize.getByRole('article',{name:'원본 폴더 정리',exact:true});
+  await organization.waitFor();
+  assert.equal(await organization.getByLabel('보관할 분야',{exact:true}).count(),2,'category names exclude the option text');
+  assert(await organization.getByRole('combobox').evaluateAll(selects=>selects.every(select=>select.labels?.length===1&&select.labels[0].textContent==='보관할 분야')),'every category select has an explicit stable label');
   await organization.getByLabel('보관할 분야',{exact:true}).first().selectOption('medical');
   await organization.getByLabel('보관할 분야',{exact:true}).last().selectOption('employment');
   assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'folder preview moves no original');
