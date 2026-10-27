@@ -187,6 +187,7 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await inbox.getByLabel('연결 정보',{exact:true}).waitFor();
   const connection=JSON.parse(await inbox.getByLabel('연결 정보',{exact:true}).inputValue());
   await inbox.locator('summary').click();
+  await inbox.getByLabel('연결 정보',{exact:true}).waitFor({state:'detached'});
   assert.equal(await inbox.getByLabel('연결 정보',{exact:true}).count(),0,'closing optional connection removes the one-time secret from DOM');
   await inbox.locator('summary').click();
   const fromTool={version:'cbh-analysis/v2',suggestions:[{type:'task',title:'Synthetic received task '+label,body:'Synthetic explicitly reviewed return',sourceIds:[source]}]};
@@ -202,6 +203,7 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await review.getByRole('status').filter({hasText:'새 기록 1개를 저장했어요'}).waitFor();
   assert.equal((await snapshot()).records.filter(r=>r.payload.title==='Synthetic received task '+label).length,1);
   await inbox.locator('summary').click();
+  await inbox.getByLabel('연결 정보',{exact:true}).waitFor({state:'detached'});
   assert.equal(await inbox.getByLabel('연결 정보',{exact:true}).count(),0,'closing optional connection removes the one-time secret from DOM');
 
   const beforeOrganization=await snapshot();
