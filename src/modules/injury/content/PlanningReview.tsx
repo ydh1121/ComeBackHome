@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, privateRequest } from '../../auth/client';
 import type { CaseData } from '../ui/types';
-import type { CaseRecord } from '../domain/records';
+import type { CaseRecord, RecordKind } from '../domain/records';
 import { RECORD_SPECS } from '../domain/records';
-import { CopyButton } from '../ui/RecordEditor';
+import { CopyButton, payloadText } from '../ui/RecordEditor';
 import { EditableGuidance } from './EditableGuidance';
 import { isPersonalReview, personalAnswer, planningSeed, preparePlanning, readPersonalReview, type PlanningEntry, type PlanningReview } from './model';
 import './content.css';
@@ -32,7 +32,7 @@ export function PlanningPreparation({data,reload,isAdmin}:{data:CaseData;reload:
     <p>비공개로 분류한 자료를 한 번만 확인해요. 개인 이야기는 본인 확인 전까지 별도로 표시하고, 기관 결정문과 정책은 여기에서 적용하지 않아요.</p>
     <label>관리자 분류 자료<input type="file" accept=".json,application/json" disabled={busy||reading} onChange={e=>{void load(e.target.files?.[0]);e.currentTarget.value='';}}/></label>
     {!!entries.length&&<><p>기본 안내 {entries.filter(e=>e.group==='guide').length}개 · 개인사 확인 {entries.filter(e=>e.group==='personal').length}개 · 보류 {entries.filter(e=>e.group==='hold').length}개</p>
-      <details><summary>분류 내용 확인</summary><div className="planning-review-list">{entries.map((entry,i)=><article key={entry.key+'-'+i}><h3>{entry.payload.title}</h3><p className="record-body">{entry.payload.body}</p><label>초안 {i+1} 분류<select aria-label={`초안 ${i+1} 분류`} disabled={busy} value={entry.group} onChange={e=>setEntries(rows=>rows.map((row,n)=>n===i?{...row,group:e.target.value as PlanningEntry['group']}:row))}><option value="personal">예전 이야기 · 본인 확인 필요</option>{entry.kind==='content'&&entry.payload.certainty!=='official'&&<option value="guide">개인 정보 없는 기본 안내</option>}<option value="hold">지금 적용하지 않음</option></select></label></article>)}</div></details>
+      <details><summary>분류 내용 확인</summary><div className="planning-review-list">{entries.map((entry,i)=><article key={entry.key+'-'+i}><h3>{entry.payload.title}</h3><div className="guidance-toolbar"><CopyButton value={payloadText(entry.payload,entry.kind,data)}/></div><p className="record-body">{payloadText(entry.payload,entry.kind,data)}</p><label>초안 {i+1} 분류<select aria-label={`초안 ${i+1} 분류`} disabled={busy} value={entry.group} onChange={e=>setEntries(rows=>rows.map((row,n)=>n===i?{...row,group:e.target.value as PlanningEntry['group']}:row))}><option value="personal">예전 이야기 · 본인 확인 필요</option>{entry.kind==='content'&&entry.payload.certainty!=='official'&&<option value="guide">개인 정보 없는 기본 안내</option>}<option value="hold">지금 적용하지 않음</option></select></label></article>)}</div></details>
       {!seed&&<p role="alert">분류 또는 전체 분량을 확인해 주세요. 저장하지 않았어요.</p>}
       <div className="private-actions"><button disabled={busy||!seed?.records.length} onClick={()=>void save()}>미등록 내용 {seed?.records.length??0}개 적용</button><button className="secondary" disabled={busy} onClick={()=>{setEntries([]);setMessage('적용하지 않았어요.');}}>취소</button></div></>}
     <p role="status">{reading?'분류 자료를 확인하는 중…':message}</p>
@@ -40,6 +40,7 @@ export function PlanningPreparation({data,reload,isAdmin}:{data:CaseData;reload:
 }
 function PersonalReviewCard({record,data,reload}:{record:CaseRecord;data:CaseData;reload:()=>Promise<void>}) {
   const initial=readPersonalReview(record)!;
+  const originalText=payloadText(initial.original.payload,initial.original.kind as RecordKind,data);
   const [base,setBase]=useState(record),[answer,setAnswer]=useState<PlanningReview['answer']>(initial.answer),[note,setNote]=useState(initial.note),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[conflict,setConflict]=useState<CaseRecord|null>(null),[history,setHistory]=useState<Array<{revision:number;payload:CaseRecord['payload'];authorId:string;createdAt:string}>>([]);
   const lock=useRef(false);
   const save=async()=>{
@@ -50,8 +51,8 @@ function PersonalReviewCard({record,data,reload}:{record:CaseRecord;data:CaseDat
   };
   return <details className="personal-review-card" data-personal-review={record.id}><summary>{record.payload.title}</summary>
     <div className="personal-review-status">예전 대화 기준 · {initial.answer==='pending'?'현재 상황 확인 전':'내가 확인한 참고 기록 · 기관 확인 전'}</div><h3>{record.payload.title}</h3>
-    <div className="guidance-toolbar"><CopyButton value={[initial.original.payload.body,note].filter(Boolean).join("\n\n")}/></div>
-    <p className="record-body">{initial.original.payload.body}</p>
+    <div className="guidance-toolbar"><CopyButton value={[originalText,note].filter(Boolean).join("\n\n")}/></div>
+    <p className="record-body">{originalText}</p>
     <small>{RECORD_SPECS[initial.original.kind as keyof typeof RECORD_SPECS].title} · 원래 기록과 공식 문서는 변경하지 않아요.</small>
     <label>지금도 맞는 내용인가요?<select aria-label="지금도 맞는 내용인가요?" disabled={busy} value={answer} onChange={e=>setAnswer(e.target.value as PlanningReview['answer'])}><option value="pending">선택해 주세요</option><option value="same">지금도 맞아요</option><option value="different">지금은 달라요</option><option value="unknown">잘 모르겠어요</option></select></label>
     <label htmlFor={"personal-note-"+record.id}>지금 알고 있는 내용</label><textarea id={"personal-note-"+record.id} disabled={busy} rows={3} maxLength={20000} value={note} onChange={e=>setNote(e.target.value)} placeholder={answer==='different'?'달라진 내용만 적어 주세요':'모르면 비워 두어도 괜찮아요'}/>

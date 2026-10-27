@@ -10,54 +10,14 @@ import {
   type Field,
 } from "../domain/records";
 import type { CaseData } from "./types";
+import { fieldText, payloadText } from "./record-text";
+export { payloadText } from "./record-text";
 export const certaintyLabel = {
   reported: "직접 입력",
   estimated: "예상",
   documented: "문서 확인",
   official: "기관 확정",
 };
-export function payloadText(
-  payload: CasePayload,
-  kind: RecordKind,
-  data?: CaseData,
-): string {
-  const spec: RecordSpec = RECORD_SPECS[kind];
-  return [
-    payload.title,
-    payload.body,
-    ...spec.fields
-      .filter(
-        (f) => payload.data[f.key] !== undefined && payload.data[f.key] !== "",
-      )
-      .map((f) => `${f.label}: ${fieldText(f, payload.data[f.key], data)}`),
-  ].join("\n");
-}
-function fieldText(
-  field: Field,
-  value: string | number | boolean,
-  data?: CaseData,
-) {
-  if (
-    data &&
-    ["employmentId", "claimId", "relatedId", "relatedMessage"].includes(
-      field.key,
-    )
-  )
-    return (
-      data.records.find((r) => r.id === value)?.payload.title ??
-      "연결 기록 확인 필요"
-    );
-  if (data && field.key === "sourceDocument")
-    return (
-      data.documents.find((d) => d.id === value)?.filename ?? "원본 확인 필요"
-    );
-  if (data && field.key === "policyId")
-    return (
-      data.policies.find((p) => p.id === value)?.version ?? "정책 확인 필요"
-    );
-  if (field.type === "boolean") return value ? "예" : "아니요";
-  return field.options?.find((o) => o[0] === value)?.[1] ?? String(value);
-}
 export function CopyButton({ value }: { value: string }) {
   const [message, setMessage] = useState("복사");
   return (

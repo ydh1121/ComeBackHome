@@ -44,6 +44,20 @@ export async function verifyContentModel(vite){
   check(m.planningSeed([{...prepared[0],group:'hold'}],[]).records,[]);
   const manifest={version:'cbh-planning-preparation/v1',sourceSha256:'a'.repeat(64),records:[{...guide,group:'guide'}]};
   check((await m.preparePlanning(manifest))[0].group,'guide');
+  const contact={kind:'content',payload:{title:'Synthetic contact guide',body:'',certainty:'documented',sourceIds:['synthetic-original'],data:{category:'contact',medium:'message',recipient:'Synthetic recipient',phone:'000-0000-0000',url:'https://example.test/source',checkedAt:'2026-01-02'}}};
+  const contactSnapshot=structuredClone(contact);
+  const contactEntries=await m.preparePlanning({...manifest,records:[{...contact,group:'guide'}]});
+  const contactGuide=m.planningSeed(contactEntries,[]).records[0].payload;
+  check(contactGuide.body,'종류: 기관 연락처\n전달 대상: Synthetic recipient\n전달 방법: 문자·메신저\n전화번호: 000-0000-0000\n공식 주소: https://example.test/source\n확인일: 2026-01-02\n기존 연결 원본 ID: synthetic-original');
+  check(contactGuide.certainty,'reported');check(contactGuide.sourceIds,[]);
+  check(contactGuide.body.includes(contact.payload.title),false);
+  check(contact,contactSnapshot);
+  const savedContact={...record,payload:contactGuide};
+  check(m.planningSeed(contactEntries,[savedContact]).records,[]);
+  const editedContact={...savedContact,payload:{...contactGuide,body:'Synthetic user correction'}};
+  check(m.planningSeed(contactEntries,[editedContact]).records,[]);
+  check(editedContact.payload.body,'Synthetic user correction');
+  check(m.planningSeed(contactEntries,[{...record,payload:{...contact.payload,body:''}}]).records.length,1);
   for(const patch of [{sourceSha256:'not-sha'},{records:[{...guide,group:'auto'}]},{records:[{...guide,group:'guide',payload:{...guide.payload,certainty:'official',sourceIds:['synthetic-doc']}}]}]){await assert.rejects(()=>m.preparePlanning({...manifest,...patch}));checks++;}
   const official={...guide,payload:{...guide.payload,certainty:'official',sourceIds:['synthetic-doc']}};
   check((await m.preparePlanning({version:'cbh-case-seed/v1',records:[official]}))[0].group,'hold');

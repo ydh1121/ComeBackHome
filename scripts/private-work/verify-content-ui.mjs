@@ -53,7 +53,7 @@ export async function verifyContent(page,ctx,base,label){
   const editedRestoredGuide=(await snapshot()).records.find(r=>r.id===guide.id);
   assert.equal(editedRestoredGuide.revision,restoredGuide.revision+1);assert.equal(editedRestoredGuide.payload.body,'Synthetic restored guidance '+label);
 
-  const original={kind:'content',payload:{title:'Synthetic prior note '+label,body:'Synthetic prior statement, not confirmed.',certainty:'reported',sourceIds:[],data:{category:'reference',medium:'none'}}};
+  const original={kind:'employment',payload:{title:'Synthetic prior note '+label,body:'',certainty:'reported',sourceIds:[],data:{employerName:'Synthetic workplace',employmentType:'temporary',actualOrSimulated:'planned',hireDate:'2026-01-02',wage:123400,wageType:'monthly'}}};
   const review={version:1,origin:'synthetic-origin-'+label,original,answer:'pending',note:''};
   const payload={title:original.payload.title,body:JSON.stringify(review),certainty:'reported',sourceIds:[],data:{category:'reference',medium:'none',recipient:'planning-personal/v1:synthetic-'+label}};
   const staging=await api('private/case/import','POST',{version:'cbh-case-seed/v1',approved:true,records:[{kind:'content',payload}]});assert.equal(staging.status(),200);
@@ -62,6 +62,11 @@ export async function verifyContent(page,ctx,base,label){
   const panel=page.locator('.personal-history-review');await panel.locator(':scope > summary').click();
   const card=panel.locator('[data-personal-review="'+prior.id+'"]');await card.locator(':scope > summary').click();
   await card.getByText('예전 대화 기준',{exact:false}).waitFor();
+  const expectedFields=['직장 이름: Synthetic workplace','고용 형태: 기간제','기록 구분: 예정','입사일: 2026-01-02','임금: 123400','임금 형태: 월급'];
+  for(const field of expectedFields)assert((await card.locator('.record-body').textContent()).includes(field),'body-empty original exposes '+field);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__contentCopied=value;}}}));
+  await card.getByRole('button',{name:'복사',exact:true}).click();
+  for(const field of expectedFields)assert((await page.evaluate(()=>window.__contentCopied)).includes(field),'copy includes original '+field);
   assert.equal(await card.getByRole('button',{name:'확인한 내용 저장',exact:true}).isDisabled(),true);
   await card.getByLabel('지금도 맞는 내용인가요?',{exact:true}).selectOption('different');
   await card.getByLabel('지금 알고 있는 내용',{exact:true}).fill('Synthetic current correction '+label);
@@ -105,5 +110,16 @@ export async function verifyContentAdmin(page,ctx,base,label){
   await panel.getByRole('status').filter({hasText:'새 내용 1개를 적용했어요'}).waitFor();
   const extended=await snapshot();assert.equal(extended.records.length,final.records.length+1);
   for(const old of final.records)assert.deepEqual(extended.records.find(r=>r.id===old.id),old,'reordered additions and repeats preserve edited records');
+  const structured={...prepared,records:[{kind:'employment',payload:{title:'Synthetic structured preparation '+label,body:'',certainty:'reported',sourceIds:[],data:{employerName:'Synthetic workplace',employmentType:'temporary',actualOrSimulated:'planned',hireDate:'2026-01-02',wage:123400,wageType:'monthly'}},group:'personal'}]};
+  await panel.getByLabel('관리자 분류 자료',{exact:true}).setInputFiles({name:'synthetic-structured.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(structured))});
+  await panel.getByText('기본 안내 0개 · 개인사 확인 1개 · 보류 0개',{exact:true}).waitFor();
+  await panel.getByText('분류 내용 확인',{exact:true}).click();
+  const preparedOriginal=panel.locator('.planning-review-list article');
+  for(const field of ['직장 이름: Synthetic workplace','입사일: 2026-01-02','임금: 123400'])assert((await preparedOriginal.locator('.record-body').textContent()).includes(field),'classification shows original '+field);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__preparedCopied=value;}}}));
+  await preparedOriginal.getByRole('button',{name:'복사',exact:true}).click();
+  assert((await page.evaluate(()=>window.__preparedCopied)).includes('임금: 123400'),'classification copy retains structured data');
+  await panel.getByRole('button',{name:'취소',exact:true}).click();
+  assert.deepEqual((await snapshot()).records,extended.records,'structured preview and copy do not persist any new facts');
   console.log('PRIVATE_CONTENT_ADMIN_UI_PASS '+label+' one_time_preparation_explicit_save_existing_edits_preserved');
 }

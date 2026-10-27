@@ -1,6 +1,7 @@
 import { reviewCaseSeed, type CaseSeed } from '../domain/imports';
 import { validatePayload, type CasePayload, type CaseRecord } from '../domain/records';
 import { withinRequestLimit } from '../materials/model';
+import { payloadFields } from '../ui/record-text';
 
 export type PlanningGroup = 'guide' | 'personal' | 'hold';
 export interface PlanningEntry { key: string; kind: CaseSeed['records'][number]['kind']; payload: CasePayload; group: PlanningGroup }
@@ -46,9 +47,13 @@ export function planningSeed(entries: PlanningEntry[], records: CaseRecord[]): C
       // A person must classify the text as general guidance. Official source
       // records and specialist facts are never converted into reusable advice.
       if (entry.kind !== 'content' || entry.payload.certainty === 'official') throw Error('기관 자료와 개인 기록은 기본 안내로 적용할 수 없어요.');
-      if (records.some(r=>r.kind==='content' && r.payload.title===entry.payload.title && r.payload.body===entry.payload.body)) continue;
+      // Keep structured contact/message values as source text. Classification
+      // does not verify those values or attach an unverified document link.
+      const fields=payloadFields(entry.payload,'content').filter(field=>!(field.key==='category'&&entry.payload.data.category==='guide')&&!(field.key==='medium'&&entry.payload.data.medium==='none'));
+      const body=[entry.payload.body,...fields.map(field=>`${field.label}: ${field.text}`),...(entry.payload.sourceIds.length?['기존 연결 원본 ID: '+entry.payload.sourceIds.join(', ')]:[])].filter(Boolean).join('\n');
+      if (records.some(r=>r.kind==='content' && r.payload.title===entry.payload.title && r.payload.body===body)) continue;
       result.push({kind:'content',payload:validatePayload('content',{
-        ...guidancePayload(entry.payload.title,entry.payload.body),
+        ...guidancePayload(entry.payload.title,body),
         data:{category:'guide',medium:'none',recipient:guidePrefix+entry.key},
       })});
     } else if (entry.group === 'personal') {

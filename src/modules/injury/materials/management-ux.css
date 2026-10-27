@@ -9,9 +9,12 @@
 .management-estimate .calculation-confirm{margin:0 0 20px;font-size:14px;line-height:1.6}
 .calculation-options>.field-grid{margin-top:18px}
 .calculation-result{margin-top:24px;padding-top:20px;border-top:1px solid var(--cbh-line)}
-.calculation-result dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-.calculation-result dt{font-size:13px;color:var(--cbh-muted)}
-.calculation-result dd{margin:7px 0 0;font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.private-page .calculation-result dl{display:grid;grid-template-columns:minmax(0,1fr);gap:8px 18px}
+/* Each result is a label above a full-width value. Override the shared
+   two-column definition row so nested cards cannot squeeze the value. */
+.private-page .calculation-result dl>div{display:block;min-width:0;padding:12px 0}
+.private-page .calculation-result dt{font-size:13px;line-height:1.6;color:var(--cbh-muted)}
+.private-page .calculation-result dd{margin:6px 0 0;min-width:0;font-size:16px;font-weight:600;line-height:1.6;word-break:keep-all;overflow-wrap:normal;font-variant-numeric:tabular-nums}
 .payment-workspace .payment-empty{border:1px solid var(--cbh-line);border-radius:18px;padding:22px;line-height:1.7}
 .payment-entry form{display:grid;gap:20px;margin-top:20px}
 .payment-entry [hidden]{display:none!important}
@@ -32,4 +35,5 @@
 .payment-workspace .ledger-grid dt{font-size:13px}
 .payment-workspace .ledger-grid dd{font-variant-numeric:tabular-nums}
 .payment-entry .private-actions{justify-content:flex-end}
-@media(max-width:480px){.calculation-result dl{gap:16px 12px}.payment-workspace .payment-empty{padding:18px}}
+@media(min-width:768px){.private-page .calculation-result dl{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.payment-workspace .payment-empty{padding:18px}}

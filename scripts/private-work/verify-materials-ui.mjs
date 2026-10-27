@@ -183,6 +183,12 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await page.getByRole('button',{name:'내 관리함',exact:true}).click();
   await page.getByRole('region',{name:'내 관리함 목록'}).waitFor();
   assert.equal(await page.getByLabel('기록 종류',{exact:true}).count(),0,'management starts with tasks, not a record-type form');
+  for(const theme of ['light','dark']){
+    await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+    assert.equal(await page.locator('.management-row').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','navigation rows must not inherit the filled primary action style');
+    await page.screenshot({path:resolve('artifacts/private-work',`${label}-management-${theme}-390.png`),fullPage:true,animations:'disabled'});
+  }
+  await page.evaluate(()=>delete document.documentElement.dataset.theme);
   await page.screenshot({path:resolve('artifacts/private-work',`${label}-management-390.png`),fullPage:true,animations:'disabled'});
   await page.getByRole('button',{name:/준비할 일/}).click();
   await page.getByRole('heading',{name:'Synthetic reviewed task '+label,exact:true}).waitFor();

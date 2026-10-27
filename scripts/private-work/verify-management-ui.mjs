@@ -83,21 +83,49 @@ export async function verifyManagement(page,ctx,base,label){
   await calc.getByRole('heading',{name:'입력값 기준 예상',exact:true}).waitFor();
   assert.deepEqual((await snapshot()).records,before.records,'all six estimates preserve records');
   assert.deepEqual((await snapshot()).payments,before.payments,'estimates create no decisions or deposits');
+  const assertReadableResults=async()=>{
+    const values=await calc.locator('.calculation-result dd').evaluateAll(nodes=>nodes.map(node=>{
+      const box=node.getBoundingClientRect(),style=getComputedStyle(node);
+      return {text:node.textContent.trim(),width:box.width,height:box.height,lineHeight:parseFloat(style.lineHeight),overflow:node.scrollWidth>node.clientWidth+1};
+    }));
+    assert(values.length>0,'calculation results are present for readability checks');
+    for(const value of values){
+      assert(value.width>=180,'result value has readable width: '+JSON.stringify(value));
+      assert.equal(value.overflow,false,'result value is not clipped: '+value.text);
+      if(/^[\d,]+(?:원|일)$/.test(value.text))assert(value.height<=value.lineHeight*1.2,'numeric result stays on one line: '+JSON.stringify(value));
+      else assert(value.height<=value.lineHeight*3.2,'short status does not wrap into a vertical column: '+JSON.stringify(value));
+    }
+  };
   for(const width of [375,390,768,1024,1440]){
     await page.setViewportSize({width,height:844});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await assertReadableResults();
     await page.screenshot({path:resolve('artifacts/private-work',`${label}-management-calculation-${width}.png`),fullPage:true,animations:'disabled'});
   }
+  const priorTheme=await page.evaluate(()=>({theme:document.documentElement.getAttribute('data-theme'),colorScheme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}));
+  for(const theme of ['light','dark']){
+    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+    await page.emulateMedia({colorScheme:theme});
+    for(const width of [375,390]){
+      await page.setViewportSize({width,height:844});
+      await assertReadableResults();
+      await calc.locator('.calculation-result').screenshot({path:resolve('artifacts/private-work',`${label}-management-result-${theme}-${width}.png`),animations:'disabled'});
+    }
+  }
+  await page.evaluate(value=>{if(value===null)document.documentElement.removeAttribute('data-theme');else document.documentElement.dataset.theme=value;},priorTheme.theme);
+  await page.emulateMedia({colorScheme:priorTheme.colorScheme});
+  await page.setViewportSize({width:390,height:844});
 
   const source=before.documents.find(d=>d.status==='ready');
   assert(source,'synthetic verified original exists');
   const title='Synthetic management claim '+label,sourceTitle='Synthetic management decision '+label;
-  const seed=await ctx.request.post(base+'/api/private/case/import',{data:{version:'cbh-case-seed/v1',approved:true,records:[
+  const seed=await ctx.request.post(base+'/api/private/case/import',{headers:{Origin:base},data:{version:'cbh-case-seed/v1',approved:true,records:[
     {kind:'benefit_claim',payload:{title,body:'Synthetic claim',certainty:'reported',sourceIds:[],data:{benefitType:'workers_comp_leave',status:'estimate',expectedAmount:500000}}},
     {kind:'content',payload:{title:sourceTitle,body:'Synthetic official source',certainty:'official',sourceIds:[source.id],data:{category:'reference',medium:'none'}}},
   ]}});
   assert(seed.ok(),await seed.text());
   const seeded=await snapshot(),claim=seeded.records.find(r=>r.payload.title===title),evidence=seeded.records.find(r=>r.payload.title===sourceTitle);
+  assert(claim&&evidence,'synthetic claim and verified-source record were both imported');
   await page.goto(base+'/injury?section=payments');
   const emptyLedger=page.locator('.payment-workspace article').filter({has:page.getByRole('heading',{name:title,exact:true})});
   for(const field of ['기관에서 정한 금액','실제 들어온 돈','기관이 인정한 날짜 수'])assert.equal(await emptyLedger.locator('dl>div').filter({has:page.getByText(field,{exact:true})}).locator('dd').textContent(),'아직 확인하지 않았어요','missing event is unknown, not zero');
@@ -119,7 +147,7 @@ export async function verifyManagement(page,ctx,base,label){
   let lost=true;const attempts=[];
   await page.route('**/api/private/case/payments',async route=>{
     attempts.push(route.request().postDataJSON());
-    if(lost){lost=false;const response=await route.fetch();assert(response.ok());return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'PRIVATE_SERVICE_UNAVAILABLE'})});}
+    if(lost){lost=false;const response=await route.fetch();assert(response.ok(),await response.text());return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'PRIVATE_SERVICE_UNAVAILABLE'})});}
     await route.continue();
   });
   await entry.getByRole('button',{name:'확인한 내역 저장',exact:true}).click();
