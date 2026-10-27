@@ -99,6 +99,8 @@ export async function verifyManagement(page,ctx,base,label){
   assert(seed.ok(),await seed.text());
   const seeded=await snapshot(),claim=seeded.records.find(r=>r.payload.title===title),evidence=seeded.records.find(r=>r.payload.title===sourceTitle);
   await page.goto(base+'/injury?section=payments');
+  const emptyLedger=page.locator('.payment-workspace article').filter({has:page.getByRole('heading',{name:title,exact:true})});
+  for(const field of ['기관에서 정한 금액','실제 들어온 돈','기관이 인정한 날짜 수'])assert.equal(await emptyLedger.locator('dl>div').filter({has:page.getByText(field,{exact:true})}).locator('dd').textContent(),'아직 확인하지 않았어요','missing event is unknown, not zero');
   const entry=page.locator('.payment-entry');await entry.locator(':scope > summary').click();
   const begin=async(type)=>{
     await entry.getByRole('button',{name:type==='decision'?'기관에서 정한 금액':'통장에 들어온 돈',exact:true}).click();

@@ -47,6 +47,7 @@ export async function verifyAdvisorR2(page,ctx,base,label) {
   await page.getByRole('radio',{name:'아직 답이 없어요',exact:true}).check();
   await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
   await page.getByRole('status').filter({hasText:'내 답변을 저장했어요'}).waitFor();
+  await page.getByRole('heading',{name:'회사에 답변을 다시 요청해 보세요',exact:true}).waitFor();
   const current=await (await api('private/case')).json(), company=current.records.find(r=>r.id==='advisor-response-v1-'+current.caseId+'-C');
   const other=await api('private/case/records/'+company.id,'PUT',{kind:'content',revision:company.revision,payload:{...company.payload,body:JSON.stringify({...JSON.parse(company.payload.body),answer:'refused'})}});
   assert.equal(other.status(),200);
@@ -57,6 +58,10 @@ export async function verifyAdvisorR2(page,ctx,base,label) {
   await page.getByRole('button',{name:'내 선택 유지',exact:true}).click();
   await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
   await page.getByRole('button',{name:'다음 안내 보기',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'조정할 업무와 기간을 확인해 두세요',exact:true}).waitFor();
+  await page.getByRole('radio',{name:'어렵다고 했어요',exact:true}).check();
+  await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
+  await page.getByRole('heading',{name:'회사 답변과 의료진 의견을 함께 정리하세요',exact:true}).waitFor();
   const after=await (await api('private/case')).json();
   for(const record of before.records.filter(r=> !['A','C'].some(id=>r.id==='advisor-response-v1-'+before.caseId+'-'+id))) assert.deepEqual(after.records.find(r=>r.id===record.id),record,'unrelated record retained');
   for(const id of ['A','C']) {

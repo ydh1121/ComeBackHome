@@ -98,6 +98,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
       <label>
         무엇을 알아볼까요?
         <select
+          aria-label="무엇을 알아볼까요?"
           value={mode}
           onChange={(e) => {
             setMode(e.target.value);setException("none");setPickedPolicy(null);setBasisDate(todaySeoul());setConditionsReviewed(false);
@@ -370,6 +371,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
               <label>
                 기관에서 기간 예외를 확인했나요?
                 <select
+                  aria-label="기관에서 기간 예외를 확인했나요?"
                   value={exception}
                   onChange={(e) => {
                     setException(e.target.value);

@@ -52,7 +52,9 @@ export function PaymentsPanel({
       <p className="management-explanation">예상한 금액, 기관에서 정한 금액, 실제 들어온 돈을 나누어 확인해요.</p>
       {claims.map((claim) => {
         const d = claim.payload.data,
-          events = data.payments.filter((e) => e.claim_id === claim.id);
+          events = data.payments.filter((e) => e.claim_id === claim.id),
+          hasDecision = events.some(e=>["decision","decision_adjustment"].includes(e.event_type)),
+          hasPayment = events.some(e=>["deposit","refund"].includes(e.event_type));
         const sum = summarizeLedger(
           {
             benefitType: String(d.benefitType),
@@ -80,11 +82,11 @@ export function PaymentsPanel({
               {(
                 [
                   ["예상 총액", money(sum.expectedTotal)],
-                  ["기관에서 정한 금액", money(sum.approvedTotal)],
-                  ["실제 들어온 돈", money(sum.actualPaid)],
-                  ["결정됐지만 아직 안 들어온 돈", money(sum.approvedOutstanding)],
+                  ["기관에서 정한 금액", money(hasDecision?sum.approvedTotal:null)],
+                  ["실제 들어온 돈", money(hasPayment?sum.actualPaid:null)],
+                  ["결정액 중 입금 기록이 없는 금액", money(hasDecision?sum.approvedOutstanding:null)],
                   ["아직 결정되지 않은 예상액", money(sum.conditionalRemaining)],
-                  ["기관이 인정한 날짜 수", sum.recognizedDays + "일"],
+                  ["기관이 인정한 날짜 수", hasDecision?sum.recognizedDays + "일":"아직 확인하지 않았어요"],
                   [
                     "남은 날짜 수",
                     sum.remainingDays === null
@@ -146,7 +148,7 @@ export function PaymentsPanel({
               <h3>무엇을 확인했나요?</h3>
               <div className="payment-choices">{(['decision','deposit'] as const).map(value=><button type="button" className="secondary" key={value} aria-pressed={type===value} onClick={()=>{setType(value);setError('');setMessage('');}}>{eventNames[value]}</button>)}</div>
               <details open={correction}><summary>이전 내역을 정정하거나 돈을 돌려줬어요</summary><div className="payment-choices">{(['decision_adjustment','refund'] as const).map(value=><button type="button" className="secondary" key={value} aria-pressed={type===value} onClick={()=>{setType(value);setError('');setMessage('');}}>{eventNames[value]}</button>)}</div></details>
-              <label>어떤 급여에 관한 내용인가요?<select value={selectedClaim} required onChange={e=>setClaimId(e.target.value)}><option value="">급여 선택</option>{claims.map(r=><option key={r.id} value={r.id}>{r.payload.title}</option>)}</select></label>
+              <label>어떤 급여에 관한 내용인가요?<select aria-label="어떤 급여에 관한 내용인가요?" value={selectedClaim} required onChange={e=>setClaimId(e.target.value)}><option value="">급여 선택</option>{claims.map(r=><option key={r.id} value={r.id}>{r.payload.title}</option>)}</select></label>
             </fieldset>
             <fieldset className="payment-step" data-payment-step="1" hidden={step!==1} disabled={busy}>
               <h3>{eventNames[type]}을 확인해 주세요</h3>
@@ -159,9 +161,9 @@ export function PaymentsPanel({
             <fieldset className="payment-step" data-payment-step="2" hidden={step!==2} disabled={busy}>
               <h3>확인한 자료와 연결할게요</h3>
               <dl className="payment-review"><div><dt>내역</dt><dd>{eventNames[type]}</dd></div><div><dt>금액</dt><dd>{money(Number(review.amount))}</dd></div><div><dt>날짜</dt><dd>{review.date}</dd></div></dl>
-              <label>이 내용을 확인한 기록<select name="source" required><option value="">원본이 연결된 기록 선택</option>{sources.map(r=><option value={r.id} key={r.id}>{r.payload.title}</option>)}</select></label>
+              <label>이 내용을 확인한 기록<select name="source" aria-label="이 내용을 확인한 기록" required><option value="">원본이 연결된 기록 선택</option>{sources.map(r=><option value={r.id} key={r.id}>{r.payload.title}</option>)}</select></label>
               {!sources.length&&<p className="management-explanation">연결할 수 있는 근거 기록이 아직 없어요. <a href="/injury?section=documents">자료함에서 원본을 확인</a>하고 기록에 연결해 주세요. 지금은 저장하지 않았어요.</p>}
-              {correction&&<label>바로잡을 이전 내역<select name="corrects" required><option value="">이전 내역 선택</option>{data.payments.filter(p=>p.claim_id===selectedClaim&&(type==='refund'?p.event_type==='deposit':['decision','decision_adjustment'].includes(p.event_type))).map(p=><option value={p.id} key={p.id}>{p.event_date} · {eventNames[p.event_type]} · {money(p.amount)}</option>)}</select></label>}
+              {correction&&<label>바로잡을 이전 내역<select name="corrects" aria-label="바로잡을 이전 내역" required><option value="">이전 내역 선택</option>{data.payments.filter(p=>p.claim_id===selectedClaim&&(type==='refund'?p.event_type==='deposit':['decision','decision_adjustment'].includes(p.event_type))).map(p=><option value={p.id} key={p.id}>{p.event_date} · {eventNames[p.event_type]} · {money(p.amount)}</option>)}</select></label>}
               <p className="management-explanation">확인한 내역만 저장해요. 정정할 때도 이전 내역은 지우지 않아요.</p>
             </fieldset>
             <div className="private-actions">{step>0&&<button type="button" className="secondary" disabled={busy} onClick={()=>{setStep(v=>v-1);setError('');}}>이전</button>}<button type="button" className="secondary" disabled={busy} onClick={()=>{formRef.current?.reset();draftReference.current='entry-'+crypto.randomUUID();setStep(0);setType('decision');setError('');setMessage(saveAttempted?'입력을 취소했어요. 저장을 시도한 내역은 목록에서 처리 결과를 확인해 주세요.':'취소했어요. 내역은 저장하지 않았어요.');setSaveAttempted(false);}}>취소</button>{step<2?<button type="button" disabled={busy} onClick={next}>다음</button>:<button disabled={busy||!sources.length}>{busy?'저장 중…':'확인한 내역 저장'}</button>}</div>
