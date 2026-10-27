@@ -17,6 +17,13 @@ on:
       - scripts/prepare-*.mjs
       - scripts/generate-build-revision.mjs
       - scripts/deploy-canonical-pages.mjs
+      # A repair to a required private check must be releasable at its own
+      # accepted MAIN SHA even when the product runtime itself is unchanged.
+      - scripts/verify-private-work*
+      - scripts/verify-private-advisor.mjs
+      - scripts/private-work/**
+      - test/private-work/**
+      - .github/workflows/private-work-modules.yml
       - .github/workflows/deploy-canonical-pages.yml
       - scripts/private-work/check-deployed-auth.mjs
 permissions:

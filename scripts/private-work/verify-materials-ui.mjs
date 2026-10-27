@@ -139,8 +139,14 @@ async function verifyMaterialsFlow(page,ctx,base,label){
 
   // A JSON file can populate every specialist area without turning a draft into
   // an official decision. Reading or previewing it must not write anything.
+  const chooseAnalysisFile=async file=>{
+    // setInputFiles can bypass a disabled native picker. A save message appears
+    // before its data reload finishes; wait for the same ready state a user needs.
+    await page.waitForFunction(()=>document.querySelector('.analysis-review input[type=file]')?.disabled===false);
+    await review.getByLabel('분석 결과 파일 가져오기',{exact:true}).setInputFiles(file);
+  };
   const specialized=specialistAnalysisFixture(label,source);
-  await review.getByLabel('분석 결과 파일 가져오기',{exact:true}).setInputFiles({name:'synthetic-analysis.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(specialized))});
+  await chooseAnalysisFile({name:'synthetic-analysis.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(specialized))});
   await page.waitForFunction(()=>{const panel=document.querySelector('.analysis-review');return !!panel?.querySelector('textarea')?.value&&!panel?.querySelector('input[type=file]')?.disabled&&(panel.querySelector('.analysis-proposal')||panel.querySelector('[role=status]')?.textContent);});
   assert.equal(await review.locator('.analysis-proposal').count(),3,'specialist JSON preview: '+await review.getByRole('status').textContent());
   await review.locator('.analysis-proposal').filter({hasText:'Synthetic exposure draft '+label}).waitFor();
@@ -169,7 +175,7 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   assert.equal(savedDay.payload.data.employmentId,savedEmployment.id,'new specialist records are linked within the atomic batch');
   assert.equal(savedDay.payload.data.verification,'estimated');
   assert.deepEqual(specializedSaved.payments,accepted.payments,'specialist proposals create no ledger event');
-  await review.getByLabel('분석 결과 파일 가져오기',{exact:true}).setInputFiles({name:'synthetic-bad.json',mimeType:'application/json',buffer:Buffer.from('{bad')});
+  await chooseAnalysisFile({name:'synthetic-bad.json',mimeType:'application/json',buffer:Buffer.from('{bad')});
   await review.getByRole('status').filter({hasText:'형식이나 연결 원본'}).waitFor();
   assert.equal(await review.locator('.analysis-proposal').count(),0,'invalid file clears stale preview');
 
