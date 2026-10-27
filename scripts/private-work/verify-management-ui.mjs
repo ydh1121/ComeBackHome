@@ -3,21 +3,45 @@ import {resolve} from 'node:path';
 
 // Run only against the existing isolated D1 runtime, after policy installation.
 export async function verifyManagement(page,ctx,base,label){
+  try { await verifyManagementFlow(page,ctx,base,label); }
+  catch(error){
+    await page.screenshot({path:resolve('artifacts/private-work',`${label}-management-failure.png`),fullPage:true,animations:'disabled'}).catch(()=>{});
+    console.error('PRIVATE_MANAGEMENT_FAILURE_STATE',await page.evaluate(()=>({
+      path:location.pathname+location.search,
+      details:Array.from(document.querySelectorAll('.management-calculator,.management-estimate')).map(el=>({className:el.className,open:el.open})),
+      statuses:Array.from(document.querySelectorAll('.management-estimate [role=status]')).map(el=>({text:el.textContent,visible:!!el.getClientRects().length})),
+      policyOptions:document.querySelectorAll('.management-estimate select[name=policy] option').length,
+    })).catch(()=>null));
+    throw error;
+  }
+}
+async function verifyManagementFlow(page,ctx,base,label){
   assert(['localhost','127.0.0.1'].includes(new URL(base).hostname),'isolated runtime only');
   const snapshot=async()=>await(await ctx.request.get(base+'/api/private/case')).json();
   const before=await snapshot();
-  const openCalculator=async()=>{
+  const openCalculator=async(expectedPolicies)=>{
+    const loaded=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case'&&response.request().method()==='GET');
     await page.goto(base+'/injury?section=payments');
-    await page.getByText('기간·예상금액 계산 도구',{exact:true}).click();
-    await page.getByText('예상금액·기간 계산',{exact:true}).click();
-    return page.locator('.management-estimate');
+    const response=await loaded;assert(response.ok(),'case data loads before opening the calculator');
+    const body=await response.json();
+    if(expectedPolicies!==undefined)assert.equal(body.policies.length,expectedPolicies,'the browser received the intended policy fixture');
+    // Native details state can be restored by the browser. Open each level
+    // explicitly rather than blindly toggling a previously open disclosure.
+    for(const selector of ['.management-calculator','.management-estimate']){
+      const details=page.locator(selector);await details.waitFor();
+      if(!await details.evaluate(el=>el.open))await details.locator(':scope > summary').click();
+      await page.waitForFunction(s=>document.querySelector(s)?.open,selector);
+    }
+    const calc=page.locator('.management-estimate');
+    await calc.getByLabel('무엇을 알아볼까요?',{exact:true}).waitFor();
+    return calc;
   };
   await page.route('**/api/private/case',async route=>{
     if(route.request().method()!=='GET')return route.continue();
     const response=await route.fetch(),body=await response.json();
     await route.fulfill({response,json:{...body,policies:[]}});
   });
-  let calc=await openCalculator();
+  let calc=await openCalculator(0);
   await calc.getByRole('status').filter({hasText:'아직 계산 근거가 준비되지 않았어요'}).waitFor();
   assert(await calc.getByRole('button',{name:'예상 계산',exact:true}).isDisabled());
   assert(await calc.getByLabel('확인한 하루 평균임금 (원)',{exact:true}).isDisabled());
