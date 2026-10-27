@@ -10,6 +10,9 @@ on:
       - "fix/p0-production-push-key-ocr-real-e2e"
     paths:
       - "scripts/deploy-canonical-pages.mjs"
+      - "scripts/private-work/**"
+      - "test/private-work/**"
+      - ".github/workflows/private-work-modules.yml"
       - ".github/workflows/deploy-canonical-pages.yml"
       - ".github/workflows/deploy-backend-worker.yml"
       - ".github/workflows/verify-ui-deployment.yml"
@@ -113,6 +116,9 @@ on:
       - fix/drive-oauth-recovery
     paths:
       - "scripts/deploy-canonical-pages.mjs"
+      - "scripts/private-work/**"
+      - "test/private-work/**"
+      - ".github/workflows/private-work-modules.yml"
       - ".github/workflows/deploy-canonical-pages.yml"
       - ".github/workflows/deploy-backend-worker.yml"
       - ".github/workflows/verify-ui-deployment.yml"
