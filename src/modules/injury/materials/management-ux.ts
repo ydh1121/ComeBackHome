@@ -43,3 +43,18 @@ export function calculationValue(key:string,value:unknown):string {
   const status:Record<string,string>={estimate:'입력한 내용으로 계산한 예상',agency_review:'기관에 확인한 뒤 계산할 수 있어요',hours_review:'근무시간에 맞는 계산 기준을 먼저 확인해요',review_required:'근로조건과 증빙을 먼저 확인해요'};
   return status[String(value)]??String(value);
 }
+
+export const tracksPaymentDays=(benefitType:unknown)=>['workers_comp_leave','unemployment'].includes(String(benefitType));
+/** Legacy ledger zero cannot distinguish an omitted day count from an explicit
+ * zero. Keep that uncertainty in the UI; never rewrite the immutable events. */
+export function paymentDayDisplay(data:Record<string,unknown>,events:ReadonlyArray<{event_type:string;recognized_days:number}>,totals:{recognizedDays:number;remainingDays:number|null}){
+  const applicable=tracksPaymentDays(data.benefitType);
+  const decisions=events.filter(e=>['decision','decision_adjustment'].includes(e.event_type));
+  const hasDayEvidence=decisions.length>0&&decisions.every(e=>e.recognized_days!==0);
+  const hasExplicitRemaining=typeof data.officialRemainingDays==='number';
+  return {
+    applicable,
+    recognizedDays:applicable&&hasDayEvidence?totals.recognizedDays:null,
+    remainingDays:applicable&&(hasDayEvidence||hasExplicitRemaining)?totals.remainingDays:null,
+  };
+}

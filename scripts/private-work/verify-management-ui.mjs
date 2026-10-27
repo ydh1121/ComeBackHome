@@ -136,7 +136,9 @@ export async function verifyManagement(page,ctx,base,label){
     await entry.getByRole('button',{name:'다음',exact:true}).click();
     await entry.getByLabel('확인한 금액 (원)',{exact:true}).fill('123400');
     await entry.getByLabel('통지서·입금 내역의 날짜',{exact:true}).fill('2026-10-24');
+    if(type==='decision')assert.equal(await entry.getByLabel('기관이 인정한 날짜 수',{exact:true}).inputValue(),'','unconfirmed recognized days start blank');
     await entry.getByRole('button',{name:'다음',exact:true}).click();
+    if(type==='decision')await entry.locator('.payment-review').getByText('일수 확인 필요',{exact:true}).waitFor();
     await entry.getByLabel('이 내용을 확인한 기록',{exact:true}).selectOption(evidence.id);
   };
   await begin('decision');
@@ -166,6 +168,13 @@ export async function verifyManagement(page,ctx,base,label){
   assert.deepEqual(events.map(e=>e.event_type).sort(),['decision','deposit']);
   assert.deepEqual(saved.records,seeded.records,'ledger entry does not alter claims or sources');
   for(const old of seeded.payments)assert.deepEqual(saved.payments.find(p=>p.id===old.id),old);
+  const ledger=page.locator('.payment-workspace article').filter({has:page.getByRole('heading',{name:title,exact:true})});
+  await ledger.getByText('일수 확인 필요',{exact:true}).first().waitFor();
+  assert.equal(await ledger.locator('dl>div').filter({has:page.getByText('기관이 인정한 날짜 수',{exact:true})}).locator('dd').textContent(),'일수 확인 필요','legacy zero is not displayed as a known zero day count');
+  assert.equal(await ledger.locator('dl>div').filter({has:page.getByText('남은 날짜 수',{exact:true})}).locator('dd').textContent(),'아직 계산되지 않았어요');
+  await ledger.locator('summary').click();
+  const depositText=await ledger.locator('details p').filter({hasText:'통장에 들어온 돈'}).textContent();
+  assert(!/0일/.test(depositText),'a deposit has no recognized-day label');
   await entry.getByText('이전 내역을 정정하거나 돈을 돌려줬어요',{exact:true}).click();
   await entry.getByRole('button',{name:'돌려준 돈',exact:true}).click();
   await entry.getByRole('button',{name:'다음',exact:true}).click();
@@ -178,5 +187,24 @@ export async function verifyManagement(page,ctx,base,label){
   assert.deepEqual((await snapshot()).payments,saved.payments,'cancelled correction preserves the ledger');
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:resolve('artifacts/private-work',`${label}-management-payments-390.png`),fullPage:true,animations:'disabled'});
+  // One-off benefit types never require a day count; only the read fixture varies.
+  let fixtureType='medical_expense';
+  await page.route('**/api/private/case',async route=>{
+    const response=await route.fetch(),body=await response.json();
+    await route.fulfill({response,json:{...body,records:body.records.map(r=>r.id===claim.id?{...r,payload:{...r.payload,data:{...r.payload.data,benefitType:fixtureType}}}:r)}});
+  });
+  for(const type of ['medical_expense','disability','severance']){
+    fixtureType=type;await page.goto(base+'/injury?section=payments');
+    await entry.locator(':scope > summary').click();
+    await entry.getByLabel('어떤 급여에 관한 내용인가요?',{exact:true}).selectOption(claim.id);
+    await entry.getByRole('button',{name:'다음',exact:true}).click();
+    assert.equal(await entry.locator('input[name=days]').count(),0,type+' has no irrelevant day input');
+    assert.equal(await ledger.getByText('기관이 인정한 날짜 수',{exact:true}).count(),0,type+' has no irrelevant ledger day row');
+    await entry.getByRole('button',{name:'취소',exact:true}).click();
+  }
+  await page.unroute('**/api/private/case');
+  assert.deepEqual((await snapshot()).records,saved.records,'benefit display fixtures do not change stored records');
+  assert.deepEqual((await snapshot()).payments,saved.payments,'display and cancellation do not change stored events');
+  await page.goto(base+'/injury?section=payments');
   console.log('PRIVATE_MANAGEMENT_UI_PASS '+label+' six_calculators_no_writes_explicit_review_lost_response_replay_preserved_ledger');
 }

@@ -14,5 +14,20 @@ export async function verifyManagementModel(vite){
   assert.equal(m.calculationValue('qualifiesByEnteredFacts',false),'해당하지 않아요');
   assert(!m.calculationError(Error('INVALID_DATE')).includes('INVALID_DATE'));
   assert(!m.calculationError(Error('UNEXPECTED_INTERNAL')).includes('UNEXPECTED_INTERNAL'));
-  console.log('PRIVATE_MANAGEMENT_MODEL_PASS checks=11');
+  let checks=11;
+  const check=(actual,expected)=>{assert.deepEqual(actual,expected);checks++;};
+  const {summarizeLedger}=await vite.ssrLoadModule('/src/modules/injury/domain/calculations.ts');
+  const claim={benefitType:'unemployment',dailyRate:100,allocatedDays:100,expectedAmount:null};
+  const display=(data,events)=>m.paymentDayDisplay(data,events,summarizeLedger(data,events.map((e,i)=>({id:String(i),eventType:e.event_type,amount:0,recognizedDays:e.recognized_days}))));
+  const unknown=[{event_type:'decision',recognized_days:0}],positive=[{event_type:'decision',recognized_days:20}],cancelled=[...positive,{event_type:'decision_adjustment',recognized_days:-20}];
+  check(display(claim,[]),{applicable:true,recognizedDays:null,remainingDays:null});
+  check(display(claim,unknown),{applicable:true,recognizedDays:null,remainingDays:null});
+  check(display(claim,positive),{applicable:true,recognizedDays:20,remainingDays:80});
+  check(display(claim,cancelled),{applicable:true,recognizedDays:0,remainingDays:100});
+  check(display({...claim,officialRemainingDays:72},unknown),{applicable:true,recognizedDays:null,remainingDays:72});
+  check(display(claim,[...positive,...unknown]),{applicable:true,recognizedDays:null,remainingDays:null});
+  check(display({...claim,officialRemainingDays:72},[...positive,...unknown]),{applicable:true,recognizedDays:null,remainingDays:72});
+  check(display(claim,[{event_type:'deposit',recognized_days:0}]),{applicable:true,recognizedDays:null,remainingDays:null});
+  for(const benefitType of ['medical_expense','disability','severance'])check(display({...claim,benefitType},unknown),{applicable:false,recognizedDays:null,remainingDays:null});
+  console.log('PRIVATE_MANAGEMENT_MODEL_PASS checks='+checks);
 }

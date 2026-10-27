@@ -40,6 +40,11 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     await page.unroute('**/api/private/case/documents/status');
     await page.getByRole('button', { name: '물어볼 내용 보기', exact: false }).click();
     await page.getByRole('heading', { name: '말할 내용', exact: true }).waitFor();
+    // Chromium and WebKit deliberately share persisted D1 records. A claim or
+    // deadline created by the first engine can change the next recommended
+    // conversation, so conflict injection must target the open conversation.
+    const action = new URL(page.url()).searchParams.get('action');
+    assert.match(action ?? '', /^[A-L]$/, 'the home CTA opens a concrete advice scenario');
     await page.waitForFunction(() => { const el = document.querySelector('.advisor-action'); return el && getComputedStyle(el).opacity === '1' && el.getAnimations().every(a => a.playState === 'finished'); });
     await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-action-390.png`), fullPage: true, animations: 'disabled' });
     await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.__advisorCopied = text; } } }); });
@@ -61,7 +66,11 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     finally { await page.mouse.up(); }
     const longText = ('합성 검토 문장입니다. 필요한 작업과 증상을 직접 설명합니다.\n').repeat(35);
     await page.getByLabel('전달할 문장', { exact: true }).fill(longText);
+    const savedScriptRequest = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname.startsWith('/api/private/case/records/'));
     await page.getByRole('button', { name: '문장 저장', exact: true }).click();
+    const scriptRequest = await savedScriptRequest;
+    const savedScriptId = decodeURIComponent(new URL(scriptRequest.url()).pathname.split('/').at(-1));
+    assert.equal(scriptRequest.postDataJSON().payload.body, longText, 'the captured write is the edited delivery script');
     await page.getByRole('button', { name: '문장 편집', exact: true }).waitFor();
     const position = await page.locator('.advisor-script').evaluate(el => ({ top: el.getBoundingClientRect().top + scrollY, height: el.getBoundingClientRect().height }));
     await page.evaluate(top => window.scrollTo(0, top + 250), position.top);
@@ -71,8 +80,11 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     await page.getByRole('button', { name: '문장 편집', exact: true }).click();
     await page.getByLabel('전달할 문장', { exact: true }).fill('내가 작성한 합성 문장 ' + label);
     let data = await (await api('private/case')).json();
-    const script = data.records.find(r => r.id === 'advisor-hospital-v1-' + data.caseId);
+    const expectedScriptId = action === 'A' ? 'advisor-hospital-v1-' + data.caseId : 'advisor-script-v1-' + data.caseId + '-' + action;
+    assert.equal(savedScriptId, expectedScriptId, 'the displayed scenario saves its own delivery script');
+    const script = data.records.find(r => r.id === savedScriptId);
     assert(script, 'edited fallback is stored in existing case records');
+    assert.equal(script.payload.body, longText, 'the exact saved script is used for concurrency validation');
     const other = await api('private/case/records/' + script.id, 'PUT', { kind: 'content', revision: script.revision, payload: { ...script.payload, body: '다른 기기의 합성 문장' } });
     assert.equal(other.status(), 200);
     await page.getByRole('button', { name: '문장 저장', exact: true }).click();
