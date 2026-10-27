@@ -9,6 +9,7 @@ import {
 import { RecordCard, RecordEditor } from "./RecordEditor";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { ManageHome, managementSections } from "../materials/ManageHome";
+import { PlanningPreparation } from "../content/PlanningReview";
 import { PaymentsPanel } from "./PaymentsPanel";
 import { PolicyPanel } from "./PolicyPanel";
 import { CalculationsPanel } from "./CalculationsPanel";
@@ -175,7 +176,7 @@ export function InjuryApp() {
       {data && view === "library" && <DocumentsPanel data={data} reload={reload} openRecord={record=>setEditing({kind:record.kind,record})} createRecord={kind=>setEditing({kind})}/>}
       {data && view === "manage" && section === "overview" && <ManageHome data={data} choose={choose}/>}
 
-      {data && view === "help" && <AdvisorHelp onOpen={id=>{ navigate("today"); history.replaceState(null,"","/injury?section=today&action="+id); }}/>}
+      {data && view === "help" && <AdvisorHelp data={data} reload={reload} onOpen={id=>{ navigate("today"); history.replaceState(null,"","/injury?section=today&action="+id); }}/>}
       {data && view === "manage" && section !== "overview" && (
         <>
           {section === "tasks" && (
@@ -294,6 +295,7 @@ export function InjuryApp() {
           )}
           {section === "settings" && (
             <>
+              <PlanningPreparation data={data} reload={reload} isAdmin={auth.user?.role === "admin"} />
               <AuditPanel />
               <PolicyPanel
                 admin={auth.user?.role === "admin"}

@@ -37,6 +37,8 @@ try {
     checks++;
     await (await import('./private-work/verify-advisor-r2-model.mjs')).verifyAdvisorR2Model(vite);
     await (await import('./private-work/verify-materials-model.mjs')).verifyMaterialsModel(vite);
+    await (await import('./private-work/verify-content-model.mjs')).verifyContentModel(vite);
+    await (await import('./private-work/verify-management-model.mjs')).verifyManagementModel(vite);
     console.log('PRIVATE_ADVISOR_R1_MODEL_PASS checks=' + checks + ' empty_case_unknown_not_false_reported_not_official_existing_records_unchanged_no_private_seed');
 }
 finally {

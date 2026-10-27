@@ -181,19 +181,21 @@ function blank(kind: RecordKind): CasePayload {
 }
 export function RecordEditor({
   record,
+  draft,
   kind,
   data,
   close,
   saved,
 }: {
   record?: CaseRecord;
+  draft?: { id: string; payload: CasePayload };
   kind: RecordKind;
   data: CaseData;
   close: () => void;
   saved: () => Promise<void>;
 }) {
   const [payload, setPayload] = useState<CasePayload>(
-      record ? structuredClone(record.payload) : blank(kind),
+      record ? structuredClone(record.payload) : draft ? structuredClone(draft.payload) : blank(kind),
     ),
     [revision, setRevision] = useState(record?.revision ?? 0),
     [busy, setBusy] = useState(false),
@@ -208,7 +210,7 @@ export function RecordEditor({
         createdAt: string;
       }>
     >([]);
-  const id = useRef(record?.id ?? crypto.randomUUID()),
+  const id = useRef(record?.id ?? draft?.id ?? crypto.randomUUID()),
     form = useRef<HTMLFormElement>(null),
     initial = useRef(JSON.stringify(payload));
   const dirty = JSON.stringify(payload) !== initial.current;

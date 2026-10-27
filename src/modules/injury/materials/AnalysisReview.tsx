@@ -31,7 +31,7 @@ export function AnalysisReview({ data, reload }: { data: CaseData; reload: () =>
   return <details className="private-card analysis-review">
     <summary>GPT 답변을 준비할 일·메모로 가져오기</summary>
     <p className="materials-caption">요청문에 맞춰 받은 JSON 부분을 붙여 넣으세요. 확인한 항목만 새 기록으로 저장해요.</p>
-    <label>GPT 분석 결과<textarea rows={5} value={text} disabled={busy} maxLength={180000} onChange={e=>reset(e.target.value)}/></label>
+    <label htmlFor="analysis-result">GPT 분석 결과</label><textarea id="analysis-result" rows={5} value={text} disabled={busy} maxLength={180000} onChange={e=>reset(e.target.value)}/>
     <button className="secondary" disabled={busy||!text.trim()} onClick={review}>내용 확인</button>
     {candidate&&<div className="analysis-proposals">
       {candidate.suggestions.map((s,i)=><article key={i} className="analysis-proposal">
@@ -51,6 +51,6 @@ export function AnalysisRequest({value,change,close}:{value:string;change:(v:str
   return <article className="private-card analysis-request" aria-label="GPT 분석 요청문">
     <div className="copy-toolbar"><CopyButton value={value}/><button className="secondary" onClick={close}>닫기</button></div>
     <h2>요청문이 준비됐어요</h2><p className="materials-caption">복사해서 ChatGPT에 한 번에 전달하세요. 파일과 메모가 자동 전송되지는 않아요.</p>
-    <label>분석 요청문<textarea rows={10} value={value} onChange={e=>change(e.target.value)}/></label>
+    <label htmlFor="analysis-request">분석 요청문</label><textarea id="analysis-request" rows={10} value={value} onChange={e=>change(e.target.value)}/>
   </article>;
 }

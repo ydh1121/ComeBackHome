@@ -14,14 +14,8 @@ import {
 } from "../domain/calculations";
 import { todaySeoul, inclusiveDays } from "../domain/dates";
 import type { CaseData } from "./types";
-const modes = [
-  ["work_injury", "휴업급여 예상"],
-  ["unemployment", "구직급여 예상"],
-  ["insurance_window", "고용보험 일수"],
-  ["simulation", "신규 직장 시뮬레이션"],
-  ["payroll", "임금 차액"],
-  ["severance", "퇴직금·연차"],
-] as const;
+import { calculationModes as modes, calculationHelp, applicablePolicies, calculationError, calculationValue } from "../materials/management-ux";
+import "../materials/management-ux.css";
 const labels: Record<string, string> = {
   amount: "예상 총액",
   dailyRate: "예상 1일액",
@@ -48,17 +42,14 @@ const labels: Record<string, string> = {
   insuredCalendarDays: "별도로 합산한 피보험기간 달력일",
   excludedBefore: "과거 구직급여로 제외하는 상실일 이전",
 };
-const statusLabels: Record<string, string> = {
-  estimate: "입력값 기반 예상",
-  agency_review: "기관 판단 필요",
-  hours_review: "단시간근로 산식 확인 필요",
-  review_required: "근로조건·증빙 확인 필요",
-};
 export function CalculationsPanel({ data }: { data: CaseData }) {
   const [mode, setMode] = useState<string>("work_injury"),
     [result, setResult] = useState<Record<string, unknown> | null>(null),
     [exception, setException] = useState("none"),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [basisDate,setBasisDate] = useState(todaySeoul()),
+    [pickedPolicy,setPickedPolicy] = useState<string|null>(null),
+    [conditionsReviewed,setConditionsReviewed] = useState(false);
   const key = ["payroll", "severance"].includes(mode)
     ? "employment_pay"
     : mode === "simulation"
@@ -67,6 +58,8 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
   const policies = data.policies.filter(
     (p) => p.key === key && p.status === "effective",
   );
+  const validPolicies=applicablePolicies(policies,basisDate);
+  const policyId=pickedPolicy??(validPolicies.length===1?validPolicies[0].id:"");
   const number = (
     name: string,
     label: string,
@@ -90,7 +83,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
   const date = (name: string, label: string, value = todaySeoul()) => (
     <label>
       {label}
-      <input name={name} type="date" defaultValue={value} required />
+      <input name={name} type="date" defaultValue={value} required onChange={e=>{if(name==="date"||name==="leave"){setBasisDate(e.target.value);setPickedPolicy(null);}setResult(null);}}/>
     </label>
   );
   const checkbox = (name: string, label: string) => (
@@ -100,14 +93,14 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
     </label>
   );
   return (
-    <details className="private-card">
+    <details className="private-card management-estimate">
       <summary>예상금액·기간 계산</summary>
       <label>
-        계산 종류
+        무엇을 알아볼까요?
         <select
           value={mode}
           onChange={(e) => {
-            setMode(e.target.value);
+            setMode(e.target.value);setException("none");setPickedPolicy(null);setBasisDate(todaySeoul());setConditionsReviewed(false);
             setResult(null);
             setError("");
           }}
@@ -119,8 +112,11 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
           ))}
         </select>
       </label>
+      <p className="management-explanation">{calculationHelp[mode]} <a href="/injury?section=today">자료 확인 방법부터 볼게요</a></p>
       <form
         key={mode}
+        onChange={()=>setResult(null)}
+        onInvalid={e=>{const details=(e.target as HTMLElement).closest("details.calculation-options");if(details instanceof HTMLDetailsElement)details.open=true;}}
         onSubmit={(e) => {
           e.preventDefault();
           setError("");
@@ -133,7 +129,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
           try {
             if (!policy)
               throw Error(
-                "현재 시행 중인 공식 근거 정책을 먼저 등록해 주세요.",
+                "계산 기준을 아직 확인하지 못했어요. 기본 안내는 계속 볼 수 있어요.",
               );
             const paid: PaidDay[] = data.records
               .filter((r) => r.kind === "paid_day" && !r.archivedAt)
@@ -307,55 +303,36 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
               };
             setResult(out);
           } catch (err) {
-            setError(
-              (err as Error).message === "VERIFIED_POLICY_REQUIRED"
-                ? "계산 기준일에 유효한 정책을 확인해 주세요."
-                : (err as Error).message === "INVALID_INPUT"
-                  ? "일수·시간·금액 입력을 확인해 주세요."
-                  : (err as Error).message,
-            );
+            setError(calculationError(err));
           }
         }}
       >
-        <label>
-          계산 근거
-          <select name="policy" aria-label="계산 근거" required>
-            <option value="">공식 정책 선택</option>
-            {policies.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.version} · {p.effectiveFrom} ~ {p.effectiveTo}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!policies.length && (
-          <p>
-            계산 정책 미등록 상태입니다. 근거·적용기간 확인 전에는 금액을
-            산출하지 않습니다.
-          </p>
-        )}
+        <details className="calculation-basis" open={!policyId&&policies.length>0}>
+          <summary>계산 기준 확인</summary>
+          {policyId&&<p className="management-explanation">{basisDate}에 적용할 근거를 선택했어요. 실제 지급 여부는 기관의 결정과 달라요.</p>}
+          <label>적용할 근거<select name="policy" aria-label="계산 근거" value={policyId} onChange={e=>{setPickedPolicy(e.target.value);setResult(null);}} required><option value="">맞는 근거를 확인해 주세요</option>{policies.map(p=><option key={p.id} value={p.id}>{p.version} · {p.effectiveFrom} ~ {p.effectiveTo}</option>)}</select></label>
+          {validPolicies.length>1&&<p className="management-explanation">이 날짜에 적용할 근거가 여러 개예요. 어느 근거가 맞는지 확인한 뒤 선택해 주세요.</p>}
+        </details>
+        {!policies.length&&<p className="management-explanation" role="status">아직 계산 근거가 준비되지 않았어요. 숫자를 입력하지 않아도 도우미 안내와 자료 보관은 이용할 수 있어요.</p>}
+        {!!policies.length&&!validPolicies.length&&<p className="management-explanation" role="status">선택한 날짜에 맞는 계산 근거가 없어요. 날짜나 계산 기준을 먼저 확인해 주세요.</p>}
+        <fieldset disabled={!policies.length} className="calculation-inputs">
         <div className="field-grid">
           {["work_injury", "unemployment", "payroll"].includes(mode) &&
             date("date", "계산 기준일")}
           {["work_injury", "unemployment", "severance"].includes(mode) &&
-            number("average", "평균임금 일액")}
+            number("average", "확인한 하루 평균임금 (원)")}
           {mode === "work_injury" && (
             <>
-              {number("days", "실제 취업불능 일수", undefined, 0, 1500)}
-              {checkbox("partial", "기간 중 근로·임금 수령 있음")}
-              {checkbox("special", "고령·최저임금 미적용 등 특례 검토 필요")}
+              {number("days", "실제로 일하지 못한 날짜 수", undefined, 0, 1500)}
+              <details className="calculation-options"><summary>이런 경우가 있나요?</summary><div className="field-grid">{checkbox("partial", "이 기간에 일을 하거나 임금을 받은 날이 있어요")}{checkbox("special", "별도의 적용 기준을 확인해야 해요")}</div></details>
             </>
           )}
           {mode === "unemployment" && (
             <>
-              {number("ordinary", "통상임금 일액")}
-              {checkbox("dailyWorker", "마지막 사업장에서 일용근로자였음")}
-              {checkbox(
-                "specialBasis",
-                "최근 반복 자격 취득 등 별도 기초일액 산정 대상",
-              )}
-              {number("hours", "1일 소정근로시간", 8, 1, 8)}
-              {number("days", "확인한 소정급여일수", undefined, 0, 500)}
+              {number("ordinary", "확인한 하루 통상임금 (원)")}
+              {number("hours", "계약상 하루 근무시간", 8, 1, 8)}
+              {number("days", "고용센터가 정한 날짜 수", undefined, 0, 500)}
+              <details className="calculation-options"><summary>근무 형태·추가 확인</summary><div className="field-grid">{checkbox("dailyWorker", "마지막 직장에서 일용근로자로 일했어요")}{checkbox("specialBasis", "반복 취업 등으로 별도 계산 기준을 확인해야 해요")}</div></details>
             </>
           )}
           {["insurance_window", "simulation", "severance"].includes(mode) && (
@@ -378,11 +355,11 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
                 </div>
               </fieldset>
               <label>
-                예외 무급일 (쉼표로 구분)
-                <input name="unpaid" placeholder="2026-11-03, 2026-11-04" />
+                따로 임금을 받지 않는 날 (쉼표로 구분)
+                <input name="unpaid" placeholder="YYYY-MM-DD, YYYY-MM-DD" />
               </label>
               <label>
-                추가 유급일 (쉼표로 구분)
+                따로 임금을 받는 날 (쉼표로 구분)
                 <input name="extra" />
               </label>
               {checkbox("holiday", "선택한 유급주휴의 실제 발생 요건을 확인함")}
@@ -391,7 +368,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
           {mode === "insurance_window" && (
             <>
               <label>
-                기준기간 예외
+                기관에서 기간 예외를 확인했나요?
                 <select
                   value={exception}
                   onChange={(e) => {
@@ -445,19 +422,22 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
           )}
           {mode === "payroll" && (
             <>
-              {number("hourly", "통상 시급")}
+              {number("hourly", "확인한 시급 (원)")}
+              <details className="calculation-options"><summary>추가 근무·이미 받은 수당 확인</summary><div className="field-grid">
               {number("overtime", "법정 연장 시간", 0, 0, 744)}
               {number("night", "야간 시간", 0, 0, 744)}
               {number("paidOvertime", "이미 받은 연장수당", 0)}
               {number("paidNight", "이미 받은 야간수당", 0)}
               {number("employees", "상시근로자 수", 5)}
-              {checkbox("verified", "명세서와 포함된 수당 확인")}
+              {checkbox("verified", "급여명세서에 포함된 수당을 확인했어요")}
+              </div></details>
             </>
           )}
           {mode === "severance" && (
             <>
-              {number("weekly", "4주 평균 주 소정시간", 40, 0, 168)}
-              {number("ordinary", "통상임금 일액")}
+              {number("ordinary", "확인한 하루 통상임금 (원)")}
+              <details className="calculation-options"><summary>근무 조건·이미 받은 퇴직금·연차 확인</summary><div className="field-grid">
+              {number("weekly", "계약상 한 주 근무시간 (4주 평균)", 40, 0, 168)}
               {number("paid", "이미 받은 퇴직금", 0)}
               {number("employees", "상시근로자 수", 5)}
               {number("attendance", "출근율 %", 100, 0, 100)}
@@ -468,14 +448,17 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
               </label>
               {number("used", "사용 연차", 0, 0, 100)}
               {number("paidLeave", "이미 정산한 연차", 0, 0, 100)}
+              </div></details>
             </>
           )}
         </div>
-        <button disabled={!policies.length}>예상 계산</button>
+        </fieldset>
+        {["payroll","severance"].includes(mode)&&<label className="auth-check calculation-confirm"><input type="checkbox" checked={conditionsReviewed} onChange={e=>setConditionsReviewed(e.target.checked)}/>추가 조건을 열어 실제 근무시간·인원·정산 내역을 확인했어요</label>}
+        <button disabled={!policies.length||!policyId||(["payroll","severance"].includes(mode)&&!conditionsReviewed)}>예상 계산</button>
         <p role="alert">{error}</p>
       </form>
       {result && (
-        <section aria-live="polite">
+        <section className="calculation-result" aria-live="polite">
           <h3>입력값 기준 예상</h3>
           <dl>
             {Object.entries(result)
@@ -484,15 +467,7 @@ export function CalculationsPanel({ data }: { data: CaseData }) {
                 <div key={k}>
                   <dt>{labels[k]}</dt>
                   <dd>
-                    {v === null
-                      ? "확인 필요"
-                      : typeof v === "boolean"
-                        ? v
-                          ? "예"
-                          : "아니요"
-                        : Array.isArray(v)
-                          ? v.join(", ") || "없음"
-                          : (statusLabels[String(v)] ?? String(v))}
+                    {calculationValue(k,v)}
                   </dd>
                 </div>
               ))}

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { verifyPublicAuthUi } from "./private-work/verify-public-auth-ui.mjs";
 import { verifyAdvisorR1 } from "./private-work/verify-advisor-r1-ui.mjs";
 import { verifyMaterials } from "./private-work/verify-materials-ui.mjs";
+import { verifyContent, verifyContentAdmin } from "./private-work/verify-content-ui.mjs";
+import { verifyManagement } from "./private-work/verify-management-ui.mjs";
 import { verifyAdvisorR2 } from "./private-work/verify-advisor-r2-ui.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
@@ -438,6 +440,7 @@ try {
       .getByRole("heading", { name: "synthetic-" + label + ".pdf" })
       .waitFor({ state: "visible", timeout: 15000 });
     await verifyMaterials(page,ctx,base,label);
+    await verifyContent(page,ctx,base,label);
     // A second real browser session exercises owner consent and the admin UI.
     await page.getByRole("button", { name: "내 관리함", exact: true }).click();
     await page.getByRole("button", { name: /자료 접근권한·수정 이력/ }).click();
@@ -566,6 +569,7 @@ try {
       .getByRole("heading", { name: "산재 도우미", exact: true })
       .waitFor();
     await adminPage.getByRole("button",{name:"내 관리함",exact:true}).click();
+    await verifyContentAdmin(adminPage,adminContext,base,label);
     await adminPage.goto(base+"/injury?section=settings");
     await adminPage.getByText("계산 정책과 공식 근거", { exact: true }).click();
     await adminPage.getByLabel("검증된 정책 파일 불러오기").setInputFiles({
@@ -593,6 +597,7 @@ try {
     const workInjuryPolicy = policySnapshot.policies.find(
       (p) => p.key === "work_injury",
     );
+    await adminPage.getByText("계산 기준 확인", { exact: true }).click();
     await policySelect.focus();
     await policySelect.press("ArrowDown");
     await policySelect.press("Enter");
@@ -610,12 +615,12 @@ try {
     await adminPage
       .getByLabel("계산 기준일", { exact: true })
       .fill("2026-10-24");
-    await adminPage.getByLabel("평균임금 일액", { exact: true }).fill("100000");
-    await adminPage.getByLabel("실제 취업불능 일수", { exact: true }).fill("4");
+    await adminPage.getByLabel("확인한 하루 평균임금 (원)", { exact: true }).fill("100000");
+    await adminPage.getByLabel("실제로 일하지 못한 날짜 수", { exact: true }).fill("4");
     await adminPage
       .getByRole("button", { name: "예상 계산", exact: true })
       .click();
-    await adminPage.getByText("280000", { exact: true }).waitFor();
+    await adminPage.getByText("280,000원", { exact: true }).waitFor();
     const afterCalculation = await (
       await adminContext.request.get(base + "/api/private/case")
     ).json();
@@ -693,6 +698,7 @@ try {
         );
       }
     }
+    await verifyManagement(adminPage,adminContext,base,label);
     await page.getByLabel("관리자의 읽기·수정 허용").uncheck();
     await page.getByRole("button", { name: "동의 설정 저장" }).click();
     await page

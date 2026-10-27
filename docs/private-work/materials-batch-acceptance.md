@@ -26,10 +26,19 @@ Authenticated GPT-to-app callbacks, automatic Drive folder moves and mapping int
 
 ## Validation
 
+### Advisor content and management continuation
+
+- General action guidance can be edited without deployment through existing content records, with copy, long-press, revision history and conflict handling. Safe fallback guidance remains available before any seed is applied.
+- Administrator preparation classifies private planning drafts as general guidance, personal review or held material. Selection alone does not write; explicit application fills missing entries and preserves existing edits. Personal review keeps the original draft and remains reported information, separate from diagnoses, decisions and payments. Private preparation files are not repository fixtures.
+- Payment entry asks for the event, amount/date and supporting record in three steps. Corrections stay separate. A stable reference per draft makes a retry after a lost response duplicate-safe; a separate new deposit has a separate reference.
+- The six existing calculations retain their formulas and policy validation. The UI helps select the sole applicable verified basis, keeps detailed conditions secondary, separates unknown results from zero, and clears results when inputs change. No estimate writes a decision or deposit.
+
 - `verify-materials-model.mjs`: bounded input, MIME/size validation, UTF-8 request limits, strict result schema, reported-only records and recommended dates, one source-preserving request.
 - `verify-private-work.mjs`: approval, ACL, session revocation, invalid/foreign source, mixed-invalid atomic rejection, transaction/audit rollback and replay.
 - `verify-materials-ui.mjs`: actual Chromium/WebKit product UI with isolated D1 and synthetic Drive; multiple originals, partial failure, retry, duplicate, cancellation, multiple memo files, grouped handoff, review/cancel/edit/failure/replay, retained originals/records, 375/390/768/1024/1440 and dark mode.
 - Existing advisor and private browser tests remain, including page-relative sticky copy and edit/history/conflict flows. Existing full PWA required CI remains unchanged.
+- `verify-content-model.mjs` / `verify-content-ui.mjs`: classification, original preservation, reported-only personal review, seed replay, editable guidance and existing revision/conflict controls.
+- `verify-management-model.mjs` / `verify-management-ui.mjs`: six calculations, missing/expired policy, zero-write estimates, payment review/cancel, lost response replay and retained ledger entries.
 
 The real iPhone, real private originals and future automated classification are separate acceptance stages. Synthetic CI does not establish those outcomes.
 

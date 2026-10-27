@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import {resolve} from 'node:path';
+export async function verifyContent(page,ctx,base,label){
+  const api=(path,method='GET',data)=>ctx.request.fetch(base+'/api/'+path,{method,headers:{Origin:base},...(data===undefined?{}:{data})});
+  const snapshot=async()=>await(await api('private/case')).json();
+  const before=await snapshot();
+  await page.goto(base+'/injury?section=today&action=A');
+  const block=page.locator('[data-guidance-key="A-reason"]');await block.waitFor();
+  await block.getByRole('button',{name:'안내 이유 편집',exact:true}).click();
+  let editor=page.getByRole('dialog');
+  await editor.locator('textarea').fill('Synthetic unsaved guidance '+label);
+  page.once('dialog',d=>d.accept());await editor.getByRole('button',{name:'취소',exact:true}).click();
+  assert.deepEqual((await snapshot()).records,before.records,'guidance cancel writes nothing');
+  const body=block.locator('p').first();await body.scrollIntoViewIfNeeded();const box=await body.boundingBox();
+  await page.mouse.move(box.x+10,box.y+10);await page.mouse.down();
+  try{await editor.waitFor();}finally{await page.mouse.up();}
+  await editor.locator('textarea').fill('Synthetic edited guidance '+label);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__contentCopied=value;}}}));
+  await editor.getByRole('button',{name:'복사',exact:true}).click();
+  assert((await page.evaluate(()=>window.__contentCopied)).includes('Synthetic edited guidance '+label),'copy is available while editing');
+  await editor.getByRole('button',{name:'저장',exact:true}).click();await editor.waitFor({state:'hidden'});
+  await block.getByText('Synthetic edited guidance '+label,{exact:true}).waitFor();
+  let data=await snapshot(),guide=data.records.find(r=>r.id==='guide-v1-A-reason-'+data.caseId);
+  assert.equal(guide.payload.certainty,'reported');assert.deepEqual(guide.payload.sourceIds,[]);
+  await block.getByRole('button',{name:'안내 이유 편집',exact:true}).click();
+  await editor.locator('textarea').fill('Synthetic own guidance '+label);
+  const changed=await api('private/case/records/'+guide.id,'PUT',{kind:'content',revision:guide.revision,payload:{...guide.payload,body:'Synthetic other-device guidance '+label}});assert.equal(changed.status(),200);
+  await editor.getByRole('button',{name:'저장',exact:true}).click();
+  await editor.getByRole('heading',{name:'다른 기기의 최신 저장본',exact:true}).waitFor();
+  assert.equal(await editor.locator('textarea').inputValue(),'Synthetic own guidance '+label);
+  await editor.getByRole('button',{name:'최신본 확인 · 내 입력 계속 편집',exact:true}).click();
+  await editor.getByRole('button',{name:'저장',exact:true}).click();await editor.waitFor({state:'hidden'});
+  const history=await(await api('private/case/records/'+guide.id+'/history')).json();assert(history.history.length>=3);
+  await page.reload();await block.getByText('Synthetic own guidance '+label,{exact:true}).waitFor();
+
+  const original={kind:'content',payload:{title:'Synthetic prior note '+label,body:'Synthetic prior statement, not confirmed.',certainty:'reported',sourceIds:[],data:{category:'reference',medium:'none'}}};
+  const review={version:1,origin:'synthetic-origin-'+label,original,answer:'pending',note:''};
+  const payload={title:original.payload.title,body:JSON.stringify(review),certainty:'reported',sourceIds:[],data:{category:'reference',medium:'none',recipient:'planning-personal/v1:synthetic-'+label}};
+  const staging=await api('private/case/import','POST',{version:'cbh-case-seed/v1',approved:true,records:[{kind:'content',payload}]});assert.equal(staging.status(),200);
+  data=await snapshot();const prior=data.records.find(r=>r.payload.data.recipient===payload.data.recipient);
+  await page.goto(base+'/injury?section=today');
+  const panel=page.locator('.personal-history-review');await panel.locator(':scope > summary').click();
+  const card=panel.locator('[data-personal-review="'+prior.id+'"]');await card.locator(':scope > summary').click();
+  await card.getByText('예전 대화 기준',{exact:false}).waitFor();
+  assert.equal(await card.getByRole('button',{name:'확인한 내용 저장',exact:true}).isDisabled(),true);
+  await card.getByLabel('지금도 맞는 내용인가요?',{exact:true}).selectOption('different');
+  await card.getByLabel('지금 알고 있는 내용',{exact:true}).fill('Synthetic current correction '+label);
+  assert.equal((await snapshot()).records.find(r=>r.id===prior.id).revision,prior.revision,'answer selection does not save');
+  await card.getByRole('button',{name:'다시 입력',exact:true}).click();
+  assert.equal(await card.getByLabel('지금 알고 있는 내용',{exact:true}).inputValue(),'');
+  await card.getByLabel('지금도 맞는 내용인가요?',{exact:true}).selectOption('unknown');
+  await card.getByRole('button',{name:'확인한 내용 저장',exact:true}).click();
+  const reviewedCount=data.records.filter(r=>String(r.payload.data.recipient).startsWith('planning-personal/v1:') && JSON.parse(r.payload.body).answer!=='pending' && !r.archivedAt).length+1;
+  await panel.getByText('확인한 이야기 '+reviewedCount+'개',{exact:true}).waitFor();
+  const after=await snapshot(),saved=after.records.find(r=>r.id===prior.id);
+  assert.equal(saved.payload.certainty,'reported');assert.deepEqual(saved.payload.sourceIds,[]);
+  assert.deepEqual(JSON.parse(saved.payload.body).original,original);assert.equal(JSON.parse(saved.payload.body).answer,'unknown');
+  for(const r of before.records){if(r.id!==guide.id)assert.deepEqual(after.records.find(n=>n.id===r.id),r,'unrelated records unchanged');}
+  assert.deepEqual(after.documents,before.documents);assert.deepEqual(after.payments,before.payments);
+  await page.screenshot({path:resolve('artifacts/private-work',`${label}-content-review-390.png`),fullPage:true});
+  console.log('PRIVATE_CONTENT_UI_PASS '+label+' editable_guidance_cancel_conflict_history_personal_unknown_no_fact_promotion');
+}
+export async function verifyContentAdmin(page,ctx,base,label){
+  const snapshot=async()=>await(await ctx.request.get(base+'/api/private/case')).json();
+  const payload={title:'Synthetic prepared guide '+label,body:'Synthetic general instruction.',certainty:'reported',sourceIds:[],data:{category:'guide',medium:'none'}};
+  const prepared={version:'cbh-planning-preparation/v1',sourceSha256:'a'.repeat(64),records:[{kind:'content',payload,group:'guide'}]};
+  const before=await snapshot();await page.goto(base+'/injury?section=settings');
+  const panel=page.locator('.planning-preparation');await panel.locator(':scope > summary').click();
+  await panel.getByLabel('관리자 분류 자료',{exact:true}).setInputFiles({name:'synthetic-prepared.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(prepared))});
+  await panel.getByText('기본 안내 1개 · 개인사 확인 0개 · 보류 0개',{exact:true}).waitFor();
+  assert.deepEqual((await snapshot()).records,before.records,'prepared file alone cannot save');
+  await panel.getByRole('button',{name:'미등록 내용 1개 적용',exact:true}).click();
+  await panel.getByRole('status').filter({hasText:'새 내용 1개를 적용했어요'}).waitFor();
+  const after=await snapshot(),guide=after.records.find(r=>r.payload.title===payload.title);assert(guide);
+  await ctx.request.put(base+'/api/private/case/records/'+guide.id,{headers:{Origin:base},data:{kind:'content',revision:guide.revision,payload:{...guide.payload,body:'Synthetic owner-edited guide'}}});
+  await page.reload();await panel.locator(':scope > summary').click();
+  await panel.getByLabel('관리자 분류 자료',{exact:true}).setInputFiles({name:'synthetic-prepared.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(prepared))});
+  await panel.getByRole('button',{name:'미등록 내용 0개 적용',exact:true}).waitFor();
+  assert.equal(await panel.getByRole('button',{name:'미등록 내용 0개 적용',exact:true}).isDisabled(),true);
+  const final=await snapshot();assert.equal(final.records.length,after.records.length);assert.equal(final.records.find(r=>r.id===guide.id).payload.body,'Synthetic owner-edited guide');
+  for(const old of before.records)assert.deepEqual(final.records.find(r=>r.id===old.id),old);
+  console.log('PRIVATE_CONTENT_ADMIN_UI_PASS '+label+' one_time_preparation_explicit_save_existing_edits_preserved');
+}

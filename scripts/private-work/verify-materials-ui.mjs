@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 export async function verifyMaterials(page,ctx,base,label){
+  try { await verifyMaterialsFlow(page,ctx,base,label); }
+  catch(error) {
+    await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-failure.png`),fullPage:true}).catch(()=>{});
+    throw error;
+  }
+}
+async function verifyMaterialsFlow(page,ctx,base,label){
   const snapshot=async()=>await(await ctx.request.get(base+'/api/private/case')).json();
   await page.goto(base+'/injury?section=library');
   const input=page.locator('.materials-upload input[type=file]');
@@ -62,7 +69,7 @@ export async function verifyMaterials(page,ctx,base,label){
     {name:`synthetic-note-${label}-two.md`,mimeType:'text/markdown',buffer:Buffer.from('Synthetic second memo')},
   ]);
   await page.waitForFunction(()=>document.querySelectorAll('.notes-composer textarea').length===2 || (!!document.querySelector('.notes-composer [role=status]')?.textContent && !document.querySelector('.notes-composer [role=status]')?.textContent.includes('읽는 중')));
-  assert.equal(await composer.locator('textarea').count(),2,'memo files loaded: '+await composer.getByRole('status').textContent());
+  assert.equal(await composer.locator('textarea').count(),2,'memo files loaded: '+await composer.locator('[role=status]').textContent());
   await composer.getByLabel('메모 2 내용',{exact:true}).waitFor();
   const beforeNotes=await snapshot();
   assert.equal(beforeNotes.records.length,stored.records.length,'memo files require separate save');
