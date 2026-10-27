@@ -538,6 +538,10 @@ try {
     const adminContext = await browser.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: 390, height: 844 },
+      // Match the member context: isolated provider fixtures must intercept
+      // page requests instead of a service worker making its own network call.
+      // Production SW behavior has its own required integration gate.
+      serviceWorkers: "block",
     });
     const adminPage = await adminContext.newPage();
     adminPage.on("pageerror", (e) => errors.push(e.message));
