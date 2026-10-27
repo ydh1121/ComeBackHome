@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
+import { specialistAnalysisFixture } from './materials-ui-fixtures.mjs';
 export async function verifyMaterials(page,ctx,base,label){
   try { await verifyMaterialsFlow(page,ctx,base,label); }
   catch(error) {
@@ -138,12 +139,10 @@ async function verifyMaterialsFlow(page,ctx,base,label){
 
   // A JSON file can populate every specialist area without turning a draft into
   // an official decision. Reading or previewing it must not write anything.
-  const specialized={version:'cbh-analysis/v2',suggestions:[
-    {type:'record',kind:'exposure',title:'Synthetic exposure draft '+label,body:'Synthetic work and symptom note',sourceIds:[source],data:{date:'2026-10-28',diagnosisStatus:'confirmed'}},
-    {type:'record',kind:'paid_day',title:'Synthetic linked paid day '+label,body:'Synthetic unconfirmed paid day',sourceIds:[source],data:{employmentId:'@job',date:'2026-01-05',dayType:'paid_work',verification:'documented'}},
-    {type:'record',kind:'employment',ref:'job',title:'Synthetic employment draft '+label,body:'Synthetic employment detail',sourceIds:[source],data:{employerName:'Synthetic workplace',hireDate:'2026-01-02'}},
-  ]};
+  const specialized=specialistAnalysisFixture(label,source);
   await review.getByLabel('분석 결과 파일 가져오기',{exact:true}).setInputFiles({name:'synthetic-analysis.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(specialized))});
+  await page.waitForFunction(()=>{const panel=document.querySelector('.analysis-review');return !!panel?.querySelector('textarea')?.value&&!panel?.querySelector('input[type=file]')?.disabled&&(panel.querySelector('.analysis-proposal')||panel.querySelector('[role=status]')?.textContent);});
+  assert.equal(await review.locator('.analysis-proposal').count(),3,'specialist JSON preview: '+await review.getByRole('status').textContent());
   await review.locator('.analysis-proposal').filter({hasText:'Synthetic exposure draft '+label}).waitFor();
   assert.equal((await snapshot()).records.length,accepted.records.length,'JSON file preview writes zero');
   assert(await review.locator('.analysis-fields').filter({hasText:'기록 대상일'}).textContent());

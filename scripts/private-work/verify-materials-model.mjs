@@ -1,10 +1,16 @@
 import { verifyAnalysisV2Model } from './verify-analysis-v2-model.mjs';
 import assert from 'node:assert/strict';
+import { specialistAnalysisFixture } from './materials-ui-fixtures.mjs';
 export async function verifyMaterialsModel(vite) {
   const m=await vite.ssrLoadModule('/src/modules/injury/materials/model.ts');
   let checks=0;
   const check=(actual,expected)=>{assert.deepEqual(actual,expected);checks++;};
   const invalid=value=>{assert.throws(()=>m.reviewAnalysis(value));checks++;};
+  const browserFixture=m.reviewAnalysis(specialistAnalysisFixture('model','synthetic-document'));
+  check(browserFixture.seed.records.map(r=>r.kind),['exposure','paid_day','employment']);
+  check(browserFixture.result.suggestions[0].data.diagnosisStatus,'unknown');
+  check(browserFixture.result.suggestions[1].data.employmentId,'@job');
+  check(browserFixture.result.suggestions[2].ref,'job');
   const memo={type:'memo',title:'Synthetic summary',body:'Synthetic source observations',sourceIds:[]};
   const task={type:'task',title:'Synthetic next step',body:'Ask for a missing document',sourceIds:['synthetic-document'],dueDate:'2026-12-31'};
   const input={version:'cbh-analysis/v1',approved:true,suggestions:[memo,task]};
