@@ -46,8 +46,8 @@
 .material-icon{display:grid;place-items:center;border-radius:10px;background:var(--cbh-surface-soft,var(--cbh-bg));color:var(--cbh-muted);width:38px;height:42px;flex:none}
 .material-row details>.private-actions{padding:0 0 18px}
 .material-row .record-card{border:0;padding:0 0 20px;background:transparent;box-shadow:none}
-.material-row .record-card .record-heading{justify-content:flex-end}
-.material-row .record-card .record-heading>div{display:none}
+.material-row .record-card .record-heading{justify-content:space-between}
+.material-row .record-card .record-heading h3{display:none}
 .material-row .record-card .content-scroll{max-height:none;overflow:visible;overscroll-behavior:auto}
 .material-row .record-card .copy-toolbar{top:8px}
 .material-row details>.secondary{margin:0 0 16px}

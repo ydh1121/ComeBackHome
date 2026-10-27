@@ -123,6 +123,38 @@ export async function verifyMaterials(page,ctx,base,label){
   await review.getByRole('status').filter({hasText:'새 기록 0개를 저장했어요'}).waitFor();
   assert.equal((await snapshot()).records.length,accepted.records.length,'repeated approval is idempotent');
 
+  // The unified library must retain creation of every former document record kind.
+  const create=page.locator('.materials-record-create');
+  await create.locator('summary').click();
+  const legacyKinds=[
+    ['agency_request','기관에 요청한 서류','서류·기관 회신',null],
+    ['exposure','몸 상태·일한 내용','건강·업무부담 기록','기록 대상일'],
+    ['incident','회사와 나눈 대화','회사 대화·분쟁 기록','발생일'],
+    ['content','안내·연락처·전달문','안내·메시지',null],
+  ];
+  for(const [kind,action,heading,dateLabel] of legacyKinds){
+    const previous=await snapshot();
+    await create.getByRole('button',{name:action,exact:true}).click();
+    const editor=page.getByRole('dialog');
+    await editor.getByRole('heading',{name:heading+' 추가',exact:true}).waitFor();
+    await editor.getByLabel('제목',{exact:true}).fill('Synthetic cancelled '+kind+' '+label);
+    page.once('dialog',dialog=>dialog.accept());
+    await editor.getByRole('button',{name:'취소',exact:true}).click();
+    await editor.waitFor({state:'hidden'});
+    assert.deepEqual((await snapshot()).records,previous.records,kind+' cancellation preserves records');
+    await create.getByRole('button',{name:action,exact:true}).click();
+    const title='Synthetic library '+kind+' '+label;
+    await editor.getByLabel('제목',{exact:true}).fill(title);
+    await editor.getByLabel('본문·메모',{exact:true}).fill('Synthetic retained record creation');
+    if(dateLabel)await editor.getByLabel(dateLabel+' *',{exact:true}).fill('2026-10-28');
+    await editor.getByRole('button',{name:'저장',exact:true}).click();
+    await editor.waitFor({state:'hidden'});
+    const current=await snapshot(),record=current.records.find(r=>r.payload.title===title);
+    assert.equal(current.records.length,previous.records.length+1);
+    assert.equal(record?.kind,kind,'original record kind is preserved');
+    for(const old of previous.records)assert.deepEqual(current.records.find(r=>r.id===old.id),old);
+  }
+
   await page.reload();await page.locator('.materials-list').waitFor();
   await page.getByLabel('자료 찾기',{exact:true}).fill('synthetic-batch-'+label);
   for(const width of [375,390,768,1024,1440]){

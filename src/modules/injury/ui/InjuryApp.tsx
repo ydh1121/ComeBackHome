@@ -172,7 +172,7 @@ export function InjuryApp() {
       )}
       {data && view === "today" && <AdvisorHome key={pageKey} data={data} reload={reload} navigate={navigate}/>}
       {data && view === "progress" && <AdvisorProgress data={data} navigate={navigate}/>}
-      {data && view === "library" && <DocumentsPanel data={data} reload={reload} openRecord={record=>setEditing({kind:record.kind,record})}/>}
+      {data && view === "library" && <DocumentsPanel data={data} reload={reload} openRecord={record=>setEditing({kind:record.kind,record})} createRecord={kind=>setEditing({kind})}/>}
       {data && view === "manage" && section === "overview" && <ManageHome data={data} choose={choose}/>}
 
       {data && view === "help" && <AdvisorHelp onOpen={id=>{ navigate("today"); history.replaceState(null,"","/injury?section=today&action="+id); }}/>}

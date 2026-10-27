@@ -3,7 +3,7 @@ import { privateRequest } from "../../auth/client";
 import type { CaseData } from "./types";
 import { driveConnectionNotice } from "../domain/drive-connection";
 import { Icon } from "../../../shared/components/Icon";
-import { RECORD_SPECS, type CaseRecord } from "../domain/records";
+import { RECORD_SPECS, type CaseRecord, type RecordKind } from "../domain/records";
 import { isProfile } from "../advisor/model";
 import { RecordCard, payloadText } from "./RecordEditor";
 import { analysisPrompt, documentError, MAX_FILES, MAX_BATCH_BYTES } from "../materials/model";
@@ -59,7 +59,7 @@ async function loadPicker() {
 }
 type UploadItem = { key:string; file?:File; name:string; state:'waiting'|'uploading'|'done'|'failed'|'cancelled'; progress:number; error?:string };
 const documentState:Record<string,string> = {ready:'보관 완료',pending:'전송 대기',uploading:'전송 중단 · 재시도 가능',verifying:'원본 확인 중',failed:'원본 확인 필요',missing:'원본 찾기 필요',trashed:'숨긴 자료'};
-export function DocumentsPanel({data,reload,openRecord}:{data:CaseData;reload:()=>Promise<void>;openRecord?:(record:CaseRecord)=>void}) {
+export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseData;reload:()=>Promise<void>;openRecord?:(record:CaseRecord)=>void;createRecord?:(kind:RecordKind)=>void}) {
   const [status,setStatus]=useState<{configured:boolean;owner:boolean;connected:boolean;folderSelected:boolean}|null>(null);
   const [message,setMessage]=useState(()=>driveConnectionNotice(new URLSearchParams(location.search).get('drive')));
   const [busy,setBusy]=useState(false),[queue,setQueue]=useState<UploadItem[]>([]),[selected,setSelected]=useState<Set<string>>(new Set()),[query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[hidden,setHidden]=useState(false),[question,setQuestion]=useState(''),[handoff,setHandoff]=useState('');
@@ -173,6 +173,12 @@ export function DocumentsPanel({data,reload,openRecord}:{data:CaseData;reload:()
       <div className="private-actions">{!!pendingCount&&<button disabled={busy} onClick={()=>void upload()}>선택한 {pendingCount}개 파일 보관</button>}{busy&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>전송 취소</button>}</div>
     </div>}
     <NotesComposer reload={reload}/>
+    {createRecord&&<details className="private-card materials-record-create"><summary>다른 내용 기록하기</summary><div className="management-kind-list">{([
+      ['agency_request','기관에 요청한 서류'],
+      ['exposure','몸 상태·일한 내용'],
+      ['incident','회사와 나눈 대화'],
+      ['content','안내·연락처·전달문'],
+    ] as const).map(([kind,title])=><button className="secondary" key={kind} disabled={busy} onClick={()=>createRecord(kind)}>{title}<Icon name="chevron-right"/></button>)}</div></details>}
     <p role="status" className="materials-feedback">{message}</p>
     <div className="materials-tools"><label>자료 찾기<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="파일 이름·메모 내용 검색"/></label><label className="auth-check"><input type="checkbox" checked={hidden} disabled={busy} onChange={e=>{setHidden(e.target.checked);setSelected(new Set());setHandoff('');}}/>숨긴 자료</label></div>
     <div className="materials-filters" role="group" aria-label="자료 종류">{[['all','전체'],['files','파일'],['notes','메모·기록']].map(([key,title])=><button className="secondary" aria-pressed={filter===key} onClick={()=>setFilter(key)} key={key}>{title}</button>)}{!hidden&&!!visibleKeys.length&&<button className="secondary materials-select-all" disabled={busy} onClick={()=>setSelected(v=>{const n=new Set(v),all=visibleKeys.every(k=>n.has(k));for(const k of visibleKeys)all?n.delete(k):n.add(k);return n;})}>{visibleKeys.every(k=>selected.has(k))?'선택 해제':'보이는 자료 모두 선택'}</button>}</div>

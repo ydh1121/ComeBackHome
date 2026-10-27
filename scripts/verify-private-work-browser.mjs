@@ -584,6 +584,7 @@ try {
       path: resolve("artifacts/private-work", `${label}-policy-390.png`),
     });
     await adminPage.goto(base+"/injury?section=payments");
+    await adminPage.getByText("기간·예상금액 계산 도구", { exact: true }).click();
     await adminPage.getByText("예상금액·기간 계산", { exact: true }).click();
     const policySnapshot = await (
       await adminContext.request.get(base + "/api/private/case")
