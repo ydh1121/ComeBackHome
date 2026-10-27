@@ -13,6 +13,7 @@ const vite = await createServer({
 });
 const sql = new DatabaseSync(":memory:");
 let beforeStatement = null;
+let d1Queries=0, batchDepth=0;
 const db = {
   prepare(source) {
     let args = [];
@@ -22,6 +23,7 @@ const db = {
         return this;
       },
       compile() {
+        if(!batchDepth)d1Queries++;
         if (beforeStatement) beforeStatement(source);
         const bound = [];
         const text = source.replace(/\?(\d+)/g, (_, n) => {
@@ -46,6 +48,7 @@ const db = {
     };
   },
   async batch(statements) {
+    d1Queries++;batchDepth++;
     sql.exec("BEGIN");
     try {
       const result = [];
@@ -55,7 +58,7 @@ const db = {
     } catch (e) {
       sql.exec("ROLLBACK");
       throw e;
-    }
+    } finally { batchDepth--; }
   },
 };
 const load = (p) => vite.ssrLoadModule("/" + p),
@@ -1581,6 +1584,8 @@ try {
   );
   check(validFilePrefix(file.buffer, "application/pdf"), true, "PDF magic");
   check(validFilePrefix(file.buffer, "image/png"), false, "mismatched MIME");
+  const {verifyAnalysisV2Contract}=await import('./private-work/verify-analysis-v2-contract.mjs');
+  await verifyAnalysisV2Contract({sql,call,member,load,queryCount:{get:()=>d1Queries,reset:()=>{d1Queries=0;}},setBeforeStatement:fn=>{beforeStatement=fn;}});
   assert(serverKdfCalls > 0, "server relief exercised under production iteration cap");
   console.log(
     "PRIVATE_WORK_CONTRACT_PASS checks=" +

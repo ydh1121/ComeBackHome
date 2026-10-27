@@ -9,7 +9,9 @@ import { RecordCard, payloadText } from "./RecordEditor";
 import { analysisPrompt, documentError, MAX_FILES, MAX_BATCH_BYTES } from "../materials/model";
 import { uploadOriginal } from "../materials/upload";
 import { NotesComposer } from "../materials/NotesComposer";
-import { AnalysisReview, AnalysisRequest } from "../materials/AnalysisReview";
+import { AnalysisReview, AnalysisRequest, type IncomingAnalysis } from "../materials/AnalysisReview";
+import { AnalysisReceipts } from "../materials/AnalysisReceipts";
+import { OrganizationReview } from "../materials/OrganizationReview";
 import "../materials/materials.css";
 const base = "private/case/documents";
 declare global {
@@ -63,6 +65,7 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
   const [status,setStatus]=useState<{configured:boolean;owner:boolean;connected:boolean;folderSelected:boolean}|null>(null);
   const [message,setMessage]=useState(()=>driveConnectionNotice(new URLSearchParams(location.search).get('drive')));
   const [busy,setBusy]=useState(false),[queue,setQueue]=useState<UploadItem[]>([]),[selected,setSelected]=useState<Set<string>>(new Set()),[query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[hidden,setHidden]=useState(false),[question,setQuestion]=useState(''),[handoff,setHandoff]=useState('');
+  const [incomingAnalysis,setIncomingAnalysis]=useState<IncomingAnalysis|null>(null);
   const controller=useRef<AbortController|null>(null),lock=useRef(false),mounted=useRef(true);
   const refresh=()=>privateRequest<NonNullable<typeof status>>(base+'/status').then(setStatus);
   useEffect(()=>{
@@ -194,6 +197,8 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
     </div>
     {!!selectedCount&&<section className="private-card materials-batch" aria-label="선택한 자료로 할 일"><div className="materials-batch-heading"><strong>{selectedCount}개 선택</strong><button className="secondary" disabled={busy} onClick={()=>{setSelected(new Set());setHandoff('');}}>선택 해제</button></div><label>궁금한 점 <small>선택사항</small><input disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} placeholder="예: 빠진 서류와 다음에 할 일을 알려줘"/></label><button disabled={busy} onClick={()=>void prepare()}>GPT 분석 요청 한 번에 준비</button></section>}
     {handoff&&<AnalysisRequest value={handoff} change={setHandoff} close={()=>setHandoff('')}/>}
-    <AnalysisReview data={data} reload={reload}/>
+    {!!selectedDocuments.length&&<details className="private-card materials-organize"><summary>선택한 파일을 분야별로 정리</summary><OrganizationReview data={data} proposals={selectedDocuments.map(d=>({documentId:d.id,category:'other' as const}))} reload={reload}/></details>}
+    <AnalysisReview data={data} reload={reload} incoming={incomingAnalysis}/>
+    <AnalysisReceipts documentIds={selectedDocuments.map(d=>d.id)} notes={selectedNotes.map(r=>({id:r.id,revision:r.revision}))} onReview={setIncomingAnalysis}/>
   </section>;
 }

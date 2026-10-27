@@ -85,7 +85,7 @@ export class CaseRepository {
   async list(): Promise<CaseRecord[]> {
     const result = await this.db
       .prepare(
-        `SELECT * FROM case_records WHERE case_id=?1 AND ${this.acl()} ORDER BY updated_at DESC,id`,
+        `SELECT * FROM case_records WHERE case_id=?1 AND kind<>'analysis_receipt' AND id NOT LIKE 'analysis-receipt-%' AND ${this.acl()} ORDER BY updated_at DESC,id`,
       )
       .bind(...this.args())
       .all<RecordRow>();
@@ -93,6 +93,7 @@ export class CaseRepository {
     return result.results.map(record);
   }
   async get(id: string): Promise<CaseRecord> {
+    if(id.startsWith("analysis-receipt-")) throw new PrivateError(404,"RECORD_NOT_FOUND");
     const row = await this.db
       .prepare(
         `SELECT * FROM case_records WHERE case_id=?1 AND ${this.acl()} AND id=?5`,

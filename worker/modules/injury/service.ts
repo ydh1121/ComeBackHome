@@ -20,7 +20,8 @@ import {
   benefitOverlapWarnings,
 } from "../../../src/modules/injury/domain/deadlines";
 import { validDate } from "../../../src/modules/injury/domain/dates";
-import { reviewAnalysis } from "../../../src/modules/injury/materials/model";
+import { reviewAnalysis, resolveAnalysisSeed } from "../../../src/modules/injury/materials/model";
+import { handleAnalysisReceipts, assertReceiptCurrent, receiptApplyGuard } from "./analysis-receipts";
 import {
   summarizeLedger,
   type PaymentEvent,
@@ -96,6 +97,8 @@ export async function handleCase(
     throw new PrivateError(403, "OWNER_ONLY");
   }
   await repo.authorize();
+  if (path[0] === "analysis-receipts")
+    return handleAnalysisReceipts(request,env,p,repo,path.slice(1));
   if (path[0] === "documents")
     return handleDocuments(
       request,
@@ -144,6 +147,7 @@ export async function handleCase(
     });
   }
   if (path[0] === "records" && path[1]) {
+    if(path[1].startsWith("analysis-receipt-")) throw new PrivateError(404,"RECORD_NOT_FOUND");
     if (path[2] === "restore" && request.method === "POST") {
       const body = await readJson(request);
       if (!Number.isSafeInteger(body.revision))
@@ -370,10 +374,21 @@ export async function handleCase(
 
   if ((path[0] === "import" || path[0] === "analysis") && request.method === "POST") {
     let body = await readJson(request);
+    let applicationReceiptId: string | null = null;
     if (path[0] === "analysis") {
       if (body.approved !== true) throw new PrivateError(400, "INVALID_ANALYSIS");
-      try { body = { ...reviewAnalysis(body).seed, approved: true }; }
-      catch { throw new PrivateError(400, "INVALID_ANALYSIS"); }
+      const {receiptId,...draft}=body;
+      if(receiptId!==undefined&&typeof receiptId!=="string") throw new PrivateError(400,"INVALID_ANALYSIS");
+      applicationReceiptId=typeof receiptId==="string"?receiptId:null;
+      const received=applicationReceiptId?await assertReceiptCurrent(repo,applicationReceiptId):null;
+      try {
+        const reviewed=reviewAnalysis(draft);
+        if(received) {
+          const allowed=new Set(reviewAnalysis(received).result.suggestions.map(s=>JSON.stringify(s)));
+          if(reviewed.result.suggestions.some(s=>!allowed.has(JSON.stringify(s)))) throw Error("RECEIPT_RESULT_CHANGED");
+        }
+        body={...await resolveAnalysisSeed(reviewed,digest),approved:true};
+      } catch { throw new PrivateError(400,"INVALID_ANALYSIS"); }
     }
     if (
       body.version !== "cbh-case-seed/v1" ||
@@ -393,7 +408,6 @@ export async function handleCase(
       } catch {
         throw new PrivateError(400, "INVALID_RECORD");
       }
-      await repo.sources(payload);
       rows.push({
         id:
           "import-" +
@@ -405,16 +419,46 @@ export async function handleCase(
         payload,
       });
     }
+    // One bounded preflight query covers the complete batch. Per-record source
+    // lookups exceed Workers Free's query allowance for ordinary large imports.
+    const documentIds=[...new Set(rows.flatMap(r=>[...r.payload.sourceIds,...(r.payload.data.sourceDocument?[String(r.payload.data.sourceDocument)]:[])]))];
+    const planned=new Map(rows.map(row=>[row.id,row.kind]));
+    const allLinks=rows.flatMap(r=>["employmentId","claimId","relatedId","relatedMessage"].flatMap(key=>r.payload.data[key]?[{id:String(r.payload.data[key]),kind:key==="employmentId"?"employment":key==="claimId"?"benefit_claim":"*"}]:[]));
+    for(const row of rows) for(const key of ["employmentId","claimId","relatedId","relatedMessage"]){
+      const id=String(row.payload.data[key]??"");
+      if(!id||!planned.has(id))continue;
+      const kind=planned.get(id);
+      if((key==="employmentId"&&kind!=="employment")||(key==="claimId"&&kind!=="benefit_claim")||(key==="relatedMessage"&&kind!=="content")) throw new PrivateError(400,"INVALID_LINK");
+    }
+    const links=allLinks.filter(link=>!planned.has(link.id));
+    const validation=await env.DB.prepare(`SELECT
+      (SELECT COUNT(*) FROM json_each(?5) j WHERE NOT EXISTS(SELECT 1 FROM case_documents d WHERE d.id=j.value AND d.case_id=?1 AND d.status='ready')) missing_documents,
+      (SELECT COUNT(*) FROM json_each(?6) j WHERE NOT EXISTS(SELECT 1 FROM case_records r WHERE r.id=json_extract(j.value,'$.id') AND r.case_id=?1 AND r.archived_at IS NULL AND r.id NOT LIKE 'analysis-receipt-%')) missing_links,
+      (SELECT COUNT(*) FROM json_each(?6) j WHERE json_extract(j.value,'$.kind')<>'*' AND EXISTS(SELECT 1 FROM case_records r WHERE r.id=json_extract(j.value,'$.id') AND r.case_id=?1 AND r.kind<>json_extract(j.value,'$.kind'))) wrong_kind
+      WHERE ${repo.acl()}`).bind(...repo.args(),JSON.stringify(documentIds),JSON.stringify(links)).first<{missing_documents:number;missing_links:number;wrong_kind:number}>();
+    if(!validation){await repo.authorize();throw new PrivateError(403,"CASE_ACCESS_DENIED");}
+    if(validation.missing_documents) throw new PrivateError(400,"VERIFIED_DOCUMENT_REQUIRED");
+    if(validation.missing_links) throw new PrivateError(404,"RECORD_NOT_FOUND");
+    if(validation.wrong_kind) throw new PrivateError(400,"INVALID_LINK");
+    // A stale ACL/source/link must abort the entire D1 batch, not silently skip
+    // one row. SQLite json('') deliberately raises inside the invalid CASE branch.
     const result = await env.DB.batch(
       rows.map((row) =>
         env.DB.prepare(
-          `INSERT INTO case_records SELECT ?5,?1,?6,?7,1,?2,?8,NULL WHERE ${repo.acl()} ON CONFLICT(id) DO NOTHING RETURNING id`,
+          `INSERT INTO case_records SELECT ?5,?1,?6,
+          CASE WHEN ${repo.acl()} AND (?9 IS NULL OR ${receiptApplyGuard()})
+          AND NOT EXISTS(SELECT 1 FROM json_each(?7,'$.sourceIds') j WHERE NOT EXISTS(SELECT 1 FROM case_documents d WHERE d.id=j.value AND d.case_id=?1 AND d.status='ready'))
+          AND (COALESCE(json_extract(?7,'$.data.sourceDocument'),'')='' OR EXISTS(SELECT 1 FROM case_documents d WHERE d.id=json_extract(?7,'$.data.sourceDocument') AND d.case_id=?1 AND d.status='ready'))
+          AND NOT EXISTS(SELECT 1 FROM json_each(?7,'$.data') link WHERE link.key IN ('employmentId','claimId','relatedId','relatedMessage') AND link.value<>'' AND NOT EXISTS(SELECT 1 FROM case_records linked WHERE linked.id=link.value AND linked.case_id=?1 AND linked.archived_at IS NULL AND linked.id NOT LIKE 'analysis-receipt-%' AND (link.key<>'employmentId' OR linked.kind='employment') AND (link.key<>'claimId' OR linked.kind='benefit_claim')))
+          THEN ?7 ELSE json('') END,1,?2,?8,NULL
+          ON CONFLICT(id) DO NOTHING RETURNING id`,
         ).bind(
           ...repo.args(),
           row.id,
           row.kind,
           JSON.stringify(row.payload),
           now(),
+          applicationReceiptId,
         ),
       ),
     );
@@ -437,7 +481,7 @@ export async function handleCase(
           .all()
       ).results;
     const payments = await rows("case_payment_events"),
-      revisions = await rows("case_revisions");
+      revisions = (await rows("case_revisions")).filter(r=>!String(r.record_id).startsWith("analysis-receipt-"));
     const documents = (
       await env.DB.prepare(
         `SELECT id,filename,mime,bytes,sha256,drive_file_id,drive_revision,folder_id,status,created_by,created_at,updated_at FROM case_documents WHERE case_id=?1 AND ${repo.acl()}`,

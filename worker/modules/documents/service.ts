@@ -10,6 +10,8 @@ import { digest, encode64, randomToken } from "../auth/crypto";
 import { CaseRepository } from "../injury/repository";
 import { driveReturn } from "./oauth-result";
 import { driveOAuthStep, type DriveOAuthStep } from "./oauth-step";
+import { organizeDocuments } from "./organization";
+import { ORGANIZATION_CATEGORIES } from "../../../src/modules/injury/materials/organization";
 import {
   DriveArchive,
   refreshDriveToken,
@@ -288,6 +290,12 @@ export async function handleDocuments(
     await repo.audit("document-reserve", id);
     return privateJson(row, 201);
   }
+  if (path[0] === "organize" && path.length === 1 && request.method === "POST") {
+    const body = await readJson(request);
+    if (body.approved !== true) throw new PrivateError(400, "APPROVAL_REQUIRED");
+    const { c, api } = await drive();
+    return privateJson(await organizeDocuments(body, env, repo, c, api));
+  }
   const id = path[0];
   if (!id || !/^[A-Za-z0-9-]{8,80}$/.test(id))
     throw new PrivateError(404, "DOCUMENT_NOT_FOUND");
@@ -297,13 +305,26 @@ export async function handleDocuments(
     .bind(...repo.args(), id)
     .first<DocumentRow>();
   if (!row) throw new PrivateError(404, "DOCUMENT_NOT_FOUND");
+  if (path[1] === "organization" && path.length === 2 && request.method === "GET") {
+    if (row.status !== "ready") throw new PrivateError(409, "DOCUMENT_NOT_VERIFIED");
+    if (!row.session_encrypted) return privateJson({ pending: false });
+    let value: { version?: string; category?: string };
+    try { value = JSON.parse(await unseal(row.session_encrypted, env)); }
+    catch { throw new PrivateError(409, "DRIVE_ORGANIZATION_PENDING"); }
+    if (value.version !== "cbh-drive-move/v1" || !value.category || !Object.hasOwn(ORGANIZATION_CATEGORIES, value.category))
+      throw new PrivateError(409, "DRIVE_ORGANIZATION_PENDING");
+    return privateJson({ pending: true, category: value.category });
+  }
+  if (row.status === "ready" && row.session_encrypted)
+    throw new PrivateError(409, "DRIVE_ORGANIZATION_PENDING");
   if (path[1] === "archive" && request.method === "POST") {
     // Only metadata is hidden. Immutable original is retained in Drive.
-    await env.DB.prepare(
-      `UPDATE case_documents SET status='trashed',updated_at=?6 WHERE case_id=?1 AND id=?5 AND ${repo.acl()}`,
+    const hidden = await env.DB.prepare(
+      `UPDATE case_documents SET status='trashed',updated_at=?6 WHERE case_id=?1 AND id=?5 AND NOT(status='ready' AND session_encrypted IS NOT NULL) AND ${repo.acl()} RETURNING id`,
     )
       .bind(...repo.args(), id, now())
-      .run();
+      .first();
+    if (!hidden) throw new PrivateError(409, "DRIVE_ORGANIZATION_PENDING");
     await repo.audit("document-hide", id);
     return privateJson({ ok: true, originalPreserved: true });
   }
@@ -320,6 +341,10 @@ export async function handleDocuments(
     throw new PrivateError(409, "DOCUMENT_HIDDEN");
   const { c, api } = await drive();
   const verify = async () => {
+    if (row.status === "ready" && row.session_encrypted)
+      throw new PrivateError(409, "DRIVE_ORGANIZATION_PENDING");
+    if (row.folder_id !== c.folder_id)
+      await api.archiveFolder(row.folder_id!, c.folder_id, JSON.parse(c.permission_ids_json));
     const metadata = await api.verify({
       id: row.drive_file_id!,
       bytes: row.bytes,

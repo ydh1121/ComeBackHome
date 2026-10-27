@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 export async function verifyMaterials(page,ctx,base,label){
   try { await verifyMaterialsFlow(page,ctx,base,label); }
   catch(error) {
-    await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-failure.png`),fullPage:true}).catch(()=>{});
+    await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-failure.png`),fullPage:true,mask:[page.locator('.analysis-connection textarea')]}).catch(()=>{});
     throw error;
   }
 }
@@ -135,6 +135,107 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await review.getByRole('button',{name:'선택한 2개 새 기록으로 저장',exact:true}).click();
   await review.getByRole('status').filter({hasText:'새 기록 0개를 저장했어요'}).waitFor();
   assert.equal((await snapshot()).records.length,accepted.records.length,'repeated approval is idempotent');
+
+  // A JSON file can populate every specialist area without turning a draft into
+  // an official decision. Reading or previewing it must not write anything.
+  const specialized={version:'cbh-analysis/v2',suggestions:[
+    {type:'record',kind:'exposure',title:'Synthetic exposure draft '+label,body:'Synthetic work and symptom note',sourceIds:[source],data:{date:'2026-10-28',diagnosisStatus:'confirmed'}},
+    {type:'record',kind:'paid_day',title:'Synthetic linked paid day '+label,body:'Synthetic unconfirmed paid day',sourceIds:[source],data:{employmentId:'@job',date:'2026-01-05',dayType:'paid_work',verification:'documented'}},
+    {type:'record',kind:'employment',ref:'job',title:'Synthetic employment draft '+label,body:'Synthetic employment detail',sourceIds:[source],data:{employerName:'Synthetic workplace',hireDate:'2026-01-02'}},
+  ]};
+  await review.getByLabel('분석 결과 파일 가져오기',{exact:true}).setInputFiles({name:'synthetic-analysis.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(specialized))});
+  await review.locator('.analysis-proposal').filter({hasText:'Synthetic exposure draft '+label}).waitFor();
+  assert.equal((await snapshot()).records.length,accepted.records.length,'JSON file preview writes zero');
+  assert(await review.locator('.analysis-fields').filter({hasText:'기록 대상일'}).textContent());
+  assert(await review.locator('.analysis-fields').filter({hasText:'직장 이름'}).textContent());
+  const parentChoice=review.locator('.analysis-proposal').filter({hasText:'Synthetic employment draft '+label}).filter({has:page.locator('.auth-check strong', {hasText:'Synthetic employment draft '+label})}).getByRole('checkbox');
+  const childChoice=review.locator('.analysis-proposal').filter({hasText:'Synthetic linked paid day '+label}).getByRole('checkbox');
+  await parentChoice.uncheck();
+  assert.equal(await childChoice.isChecked(),false,'deselecting parent also deselects dependent draft');
+  await childChoice.check();
+  assert.equal(await parentChoice.isChecked(),true,'selecting child also selects its parent');
+  assert(await review.getByText(/분석 제안에서 보류한 정보/).count(),'official-looking AI field is visibly held for review');
+  await page.setViewportSize({width:390,height:844});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'structured review fits mobile');
+  await page.screenshot({path:resolve('artifacts/private-work',`${label}-analysis-specialist-review-390.png`),fullPage:true,animations:'disabled'});
+  await review.getByRole('button',{name:'선택한 3개 새 기록으로 저장',exact:true}).click();
+  await review.getByRole('status').filter({hasText:'새 기록 3개를 저장했어요'}).waitFor();
+  const specializedSaved=await snapshot();
+  const exposure=specializedSaved.records.find(r=>r.payload.title==='Synthetic exposure draft '+label);
+  assert.equal(exposure.kind,'exposure');assert.equal(exposure.payload.certainty,'reported');
+  assert.equal(exposure.payload.data.diagnosisStatus,'unknown');
+  const savedEmployment=specializedSaved.records.find(r=>r.payload.title==='Synthetic employment draft '+label);
+  assert.equal(savedEmployment.kind,'employment');
+  const savedDay=specializedSaved.records.find(r=>r.payload.title==='Synthetic linked paid day '+label);
+  assert.equal(savedDay.payload.data.employmentId,savedEmployment.id,'new specialist records are linked within the atomic batch');
+  assert.equal(savedDay.payload.data.verification,'estimated');
+  assert.deepEqual(specializedSaved.payments,accepted.payments,'specialist proposals create no ledger event');
+  await review.getByLabel('분석 결과 파일 가져오기',{exact:true}).setInputFiles({name:'synthetic-bad.json',mimeType:'application/json',buffer:Buffer.from('{bad')});
+  await review.getByRole('status').filter({hasText:'형식이나 연결 원본'}).waitFor();
+  assert.equal(await review.locator('.analysis-proposal').count(),0,'invalid file clears stale preview');
+
+  // Optional API-capable analysis tools can return a bounded draft. The inbox
+  // still requires an authenticated user to review and explicitly save it.
+  const inbox=page.locator('.analysis-receipts');
+  await inbox.locator('summary').click();
+  const createReceipt=inbox.getByRole('button',{name:'선택한 자료의 답변 받을 연결 만들기',exact:true});
+  await page.waitForFunction(()=>{const buttons=[...document.querySelectorAll('.analysis-receipts button')];return buttons.some(b=>b.textContent==='선택한 자료의 답변 받을 연결 만들기'&&!b.disabled);});
+  await createReceipt.click();
+  await inbox.getByLabel('연결 정보',{exact:true}).waitFor();
+  const connection=JSON.parse(await inbox.getByLabel('연결 정보',{exact:true}).inputValue());
+  await inbox.locator('summary').click();
+  assert.equal(await inbox.getByLabel('연결 정보',{exact:true}).count(),0,'closing optional connection removes the one-time secret from DOM');
+  await inbox.locator('summary').click();
+  const fromTool={version:'cbh-analysis/v2',suggestions:[{type:'task',title:'Synthetic received task '+label,body:'Synthetic explicitly reviewed return',sourceIds:[source]}]};
+  const received=await ctx.request.post(connection.url,{headers:connection.headers,data:fromTool});
+  assert.equal(received.status(),202,'bearer grants staging only');
+  assert.deepEqual((await snapshot()).records,specializedSaved.records,'external receipt writes no business record');
+  await page.waitForFunction(()=>[...document.querySelectorAll('.analysis-receipts button')].some(b=>b.textContent==='받은 답변 확인'&&!b.disabled));
+  await inbox.getByRole('button',{name:'받은 답변 확인',exact:true}).click();
+  await inbox.getByRole('button',{name:'답변 가져와 검토',exact:true}).first().click();
+  await review.locator('.analysis-proposal').filter({hasText:'Synthetic received task '+label}).waitFor();
+  assert.deepEqual((await snapshot()).records,specializedSaved.records,'loading inbox result still writes zero business records');
+  await review.getByRole('button',{name:'선택한 1개 새 기록으로 저장',exact:true}).click();
+  await review.getByRole('status').filter({hasText:'새 기록 1개를 저장했어요'}).waitFor();
+  assert.equal((await snapshot()).records.filter(r=>r.payload.title==='Synthetic received task '+label).length,1);
+  await inbox.locator('summary').click();
+  assert.equal(await inbox.getByLabel('연결 정보',{exact:true}).count(),0,'closing optional connection removes the one-time secret from DOM');
+
+  const beforeOrganization=await snapshot();
+  const organize=page.locator('.materials-organize');
+  await organize.locator('summary').click();
+  const organization=organize.getByRole('article',{name:'원본 폴더 정리',exact:true});
+  await organization.getByLabel('보관할 분야',{exact:true}).first().selectOption('medical');
+  await organization.getByLabel('보관할 분야',{exact:true}).last().selectOption('employment');
+  assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'folder preview moves no original');
+  let orgRelease,orgStarted,organizationRequests=0;
+  const orgHeld=new Promise(resolve=>{orgRelease=resolve;}),orgSeen=new Promise(resolve=>{orgStarted=resolve;});
+  await page.route('**/api/private/case/documents/organize',async route=>{
+    organizationRequests++;orgStarted();await orgHeld;await route.abort('aborted').catch(()=>{});
+  });
+  await organization.getByRole('button',{name:'선택한 파일 2개 정리',exact:true}).click();
+  await orgSeen;
+  await organization.getByRole('button',{name:'정리 중지',exact:true}).click();orgRelease();
+  await organization.getByRole('status').filter({hasText:'정리를 중지했어요. 이미 이동한 원본'}).waitFor();
+  await page.waitForFunction(()=>[...document.querySelectorAll('.materials-organize button')].some(button=>button.textContent==='미완료 2개 다시 확인'&&!button.disabled));
+  assert.equal(organizationRequests,1,'stopping organization never starts the next file request');
+  assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'stopping before provider dispatch preserves every original');
+  await page.unroute('**/api/private/case/documents/organize');
+  await organization.getByRole('button',{name:'미완료 2개 다시 확인',exact:true}).click();
+  await organization.getByRole('status').filter({hasText:'선택한 원본을 비공개 보관 폴더 안에서 정리했어요.'}).waitFor();
+  const organized=await snapshot();
+  for(const original of beforeOrganization.documents){
+    const current=organized.documents.find(d=>d.id===original.id);
+    for(const key of ['id','filename','bytes','sha256','status'])assert.equal(current[key],original[key],'organization preserves original '+key);
+  }
+  assert.equal(organized.documents.length,beforeOrganization.documents.length);
+  assert.deepEqual(organized.records,beforeOrganization.records,'folder organization does not change business records');
+  const download=await ctx.request.get(base+'/api/private/case/documents/'+source+'/download');
+  assert.equal(download.status(),200,'organized original remains downloadable');
+  const handoff=await ctx.request.get(base+'/api/private/case/documents/'+source+'/handoff');
+  assert.equal(handoff.status(),200,'organized original still verifies for analysis');
+  await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-organized-390.png`),fullPage:true,animations:'disabled'});
+  await organize.locator('summary').click();
 
   // The unified library must retain creation of every former document record kind.
   const create=page.locator('.materials-record-create');

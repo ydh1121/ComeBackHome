@@ -1,5 +1,29 @@
 name: Private work modules (isolated only)
 on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'worker/**'
+      - 'functions/**'
+      - 'packages/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'index.html'
+      - 'tsconfig*.json'
+      - 'db/migrations/**'
+      - 'scripts/prepare-*.mjs'
+      - 'scripts/generate-build-revision.mjs'
+      - 'scripts/deploy-canonical-pages.mjs'
+      - 'scripts/verify-private-work*'
+      - 'scripts/verify-private-advisor.mjs'
+      - 'scripts/private-work/**'
+      - 'test/private-work/**'
+      - '.github/workflows/deploy-canonical-pages.yml'
+      - '.github/workflows/private-work-modules.yml'
   pull_request:
     paths:
       - 'src/**'
@@ -43,6 +67,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck && npm run typecheck:worker
       - run: node scripts/verify-private-work.mjs
+      - run: node scripts/private-work/verify-analysis-receipts.mjs
+      - run: node scripts/private-work/verify-organization.mjs
       - run: node scripts/verify-private-advisor.mjs
       - run: node --test test/private-work/login-db-setup.test.mjs
       - run: node --test test/private-work/auth-runtime.test.mjs

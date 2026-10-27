@@ -9,6 +9,9 @@ export interface DriveMetadata {
   parents?: string[];
   trashed?: boolean;
   headRevisionId?: string;
+  appProperties?: Record<string, string>;
+  etag?: string;
+  version?: string;
   permissions?: Array<{ id: string; type: string; role: string }>;
 }
 export interface DriveConnection {
@@ -90,11 +93,10 @@ export class DriveArchive {
     return response;
   }
   async metadata(id: string): Promise<DriveMetadata> {
-    return (
-      await this.request(
-        `drive/v3/files/${encodeURIComponent(id)}?fields=id,name,size,sha256Checksum,mimeType,parents,trashed,headRevisionId,permissions(id,type,role)&supportsAllDrives=true`,
-      )
-    ).json();
+    const response = await this.request(
+        `drive/v3/files/${encodeURIComponent(id)}?fields=id,name,size,sha256Checksum,mimeType,parents,trashed,headRevisionId,version,appProperties,permissions(id,type,role)&supportsAllDrives=true`,
+      );
+    return { ...(await response.json() as DriveMetadata), ...(response.headers.get("ETag") ? { etag: response.headers.get("ETag")! } : {}) };
   }
   async permissions(
     id: string,
@@ -131,6 +133,58 @@ export class DriveArchive {
     ).json()) as { ids: string[] };
     if (!body.ids?.[0]) throw new PrivateError(502, "DRIVE_REQUEST_FAILED");
     return body.ids[0];
+  }
+  async archiveFolder(id: string, root: string, allowedPermissionIds: string[], category?: string): Promise<void> {
+    const owners = await this.privateFolder(id);
+    if (owners.some(owner => !allowedPermissionIds.includes(owner))) throw new PrivateError(403, "DRIVE_NOT_PRIVATE");
+    if (id === root && category === undefined) return;
+    const m = await this.metadata(id);
+    if (m.parents?.length !== 1 || m.parents[0] !== root ||
+      m.appProperties?.cbhArchive !== "v1" || m.appProperties?.cbhRoot !== root ||
+      !m.appProperties?.cbhCategory || (category !== undefined && m.appProperties.cbhCategory !== category))
+      throw new PrivateError(409, "DRIVE_ARCHIVE_BOUNDARY");
+  }
+  async ensureCategoryFolder(id: string, root: string, category: string, name: string, allowedPermissionIds: string[]): Promise<void> {
+    await this.archiveFolder(root, root, allowedPermissionIds);
+    try { await this.metadata(id); }
+    catch (error) {
+      if (!(error instanceof PrivateError) || error.code !== "DRIVE_FILE_MISSING") throw error;
+      try {
+        await this.request("drive/v3/files?fields=id", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, name, mimeType: "application/vnd.google-apps.folder", parents: [root],
+            appProperties: { cbhArchive: "v1", cbhRoot: root, cbhCategory: category } }),
+        });
+      } catch (createError) {
+        // Same reserved ID may have been created by a simultaneous retry, or
+        // the response may have been lost. Verification, never another ID,
+        // decides whether the operation can safely continue.
+        try { await this.archiveFolder(id, root, allowedPermissionIds, category); }
+        catch { throw createError; }
+      }
+    }
+    await this.archiveFolder(id, root, allowedPermissionIds, category);
+  }
+  async movePrecondition(id: string, source: string, expected: DriveMetadata): Promise<{version:"v2"|"v3";etag:string}> {
+    if (expected.etag && /^"[^"\r\n]+"$/.test(expected.etag)) return {version:"v3",etag:expected.etag};
+    // v3 does not promise an ETag response header. The supported v2 metadata
+    // endpoint exposes one explicitly; bind it to the v3-verified binary AND
+    // metadata version before using v2's conditional metadata-only patch.
+    if (!expected.headRevisionId || !expected.version) throw new PrivateError(409,"DRIVE_CONCURRENT_CHECK_UNAVAILABLE");
+    const value = await (await this.request(`drive/v2/files/${encodeURIComponent(id)}?fields=id,etag,headRevisionId,version,parents(id),labels(trashed)&supportsAllDrives=true`)).json() as {
+      id?: string; etag?: string; headRevisionId?: string; version?: string; parents?:Array<{id:string}>;labels?:{trashed?:boolean};
+    };
+    if(value.id!==id || value.headRevisionId!==expected.headRevisionId || String(value.version)!==String(expected.version) || value.parents?.length!==1 || value.parents[0].id!==source || value.labels?.trashed)
+      throw new PrivateError(409,"DRIVE_REVISION_CHANGED");
+    if(!value.etag || !/^"[^"\r\n]+"$/.test(value.etag))throw new PrivateError(409,"DRIVE_CONCURRENT_CHECK_UNAVAILABLE");
+    return {version:"v2",etag:value.etag};
+  }
+  async move(id: string, source: string, destination: string, expected: DriveMetadata): Promise<void> {
+    const guard=await this.movePrecondition(id,source,expected);
+    const params = new URLSearchParams({ addParents: destination, removeParents: source, fields: "id,parents", supportsAllDrives: "true" });
+    await this.request(`drive/${guard.version}/files/${encodeURIComponent(id)}?${params}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json", "If-Match": guard.etag }, body: "{}",
+    });
   }
   async begin(input: {
     id: string;

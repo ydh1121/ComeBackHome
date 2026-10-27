@@ -1,3 +1,4 @@
+import { verifyAnalysisV2Model } from './verify-analysis-v2-model.mjs';
 import assert from 'node:assert/strict';
 export async function verifyMaterialsModel(vite) {
   const m=await vite.ssrLoadModule('/src/modules/injury/materials/model.ts');
@@ -26,5 +27,6 @@ export async function verifyMaterialsModel(vite) {
   const prompt=m.analysisPrompt([{id:'synthetic-document',filename:'synthetic.pdf',sha256:'synthetic-hash',url:'https://drive.google.com/file/d/synthetic-file/view'}],[{id:'synthetic-note',title:'Synthetic note',body:'Synthetic memo',revision:2}],'Find missing materials');
   for(const text of ['synthetic-document','synthetic-note','"revision": 2','cbh-analysis/v1','직접 수정은 하지 마세요','추정으로 확정하지 마세요']){assert(prompt.includes(text));checks++;}
   assert.throws(()=>m.analysisPrompt([],[],''));checks++;
+  await verifyAnalysisV2Model(vite);
   console.log('PRIVATE_MATERIALS_MODEL_PASS checks='+checks+' drafts_only_explicit_approval_bounded_input_no_provider_calls');
 }
