@@ -123,7 +123,7 @@
 .analysis-inbox li>div:first-child{min-width:0}
 .analysis-inbox strong,.analysis-inbox small{display:block}
 .analysis-inbox strong{font-size:14px}
-.analysis-inbox small{font-size:12px;line-height:1.6;margin-top:6px}
+.analysis-inbox small{font-size:12px;line-height:1.6;margin-top:6px;overflow-wrap:anywhere}
 .analysis-inbox button{font-size:13px}
 .materials-organize{margin-top:4px}
 .materials-organize>summary{font-size:14px}

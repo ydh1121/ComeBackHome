@@ -2,7 +2,7 @@
 
 This is a test map, not a whole-project acceptance declaration. The accepted PR108 baseline is `4f91d85eba42fe89b90fc270ce9849b696e8d34c`: **535 local contract/model checks**, client/worker typechecks, [full product CI 12/12](https://github.com/ydh1121/ComeBackHome/actions/runs/40557273432), and [private module CI 3/3](https://github.com/ydh1121/ComeBackHome/actions/runs/40557273261). Its Chromium/WebKit and isolated-D1 flows passed. Final synthetic evidence contains 86 screenshots; representative mobile/desktop/light/dark screens were visually inspected.
 
-The table below records that baseline coverage. `BASELINE_PASS` does not accept subsequent changes automatically. The current closeout adds v2 specialist mapping, reviewed Drive organization, authenticated draft receipt and MAIN private-CI gating. Those changes are **IMPLEMENTATION_IN_PROGRESS / EXACT_HEAD_VERIFICATION_PENDING** until their own results are recorded. A previous passing PR or deployment is not evidence for the new source.
+The table below records that baseline coverage. `BASELINE_PASS` does not accept subsequent changes automatically. The current closeout adds v2 specialist mapping, reviewed Drive organization, authenticated draft receipt and MAIN private-CI gating. Those changes are **IMPLEMENTED**; their exact-source verification and release results are recorded in PR108 and CURRENT SNAPSHOT. A previous passing PR or deployment is not evidence for the new source.
 
 `NOT_RUN` identifies an actual private-source, external-provider or physical-device check without accepted evidence. Synthetic fixtures never substitute for those checks.
 

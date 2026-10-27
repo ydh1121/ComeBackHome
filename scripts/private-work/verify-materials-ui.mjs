@@ -195,8 +195,27 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   assert.equal(received.status(),202,'bearer grants staging only');
   assert.deepEqual((await snapshot()).records,specializedSaved.records,'external receipt writes no business record');
   await page.waitForFunction(()=>[...document.querySelectorAll('.analysis-receipts button')].some(b=>b.textContent==='받은 답변 확인'&&!b.disabled));
+  const inboxResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/analysis-receipts'&&response.request().method()==='GET');
   await inbox.getByRole('button',{name:'받은 답변 확인',exact:true}).click();
-  await inbox.getByRole('button',{name:'답변 가져와 검토',exact:true}).first().click();
+  const refreshed=await inboxResponse;assert.equal(refreshed.status(),200);
+  const receiptRows=(await refreshed.json()).receipts;
+  const oldReceipt=receiptRows.find(row=>row.id!==createdBody.id&&row.status==='received');
+  if(label==='webkit'&&oldReceipt){
+    const previousResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/analysis-receipts/'+oldReceipt.id&&response.request().method()==='GET');
+    await inbox.locator('[data-analysis-receipt="'+oldReceipt.id+'"]').getByRole('button',{name:'답변 가져와 검토',exact:true}).click();
+    const previousBody=await(await previousResponse).json();
+    assert.equal(previousBody.stale,true,'prior browser session receipt remains invalid');
+    assert.equal(previousBody.result,null,'invalid receipt cannot expose an applicable draft');
+    await inbox.getByRole('status').filter({hasText:'자료를 다시 선택해 새 요청을 준비해 주세요.'}).waitFor();
+    assert.equal(await review.locator('.analysis-proposal').count(),0,'old receipt does not become a current proposal');
+  }
+  const currentRow=inbox.locator('[data-analysis-receipt="'+createdBody.id+'"]');
+  assert((await currentRow.textContent()).includes(fixture('first').name),'inbox identifies the selected original names');
+  const detailResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/analysis-receipts/'+createdBody.id&&response.request().method()==='GET');
+  await currentRow.getByRole('button',{name:'답변 가져와 검토',exact:true}).click();
+  const detail=await detailResponse;assert.equal(detail.status(),200);
+  const detailBody=await detail.json();assert.equal(detailBody.stale,false);
+  assert.equal(detailBody.result.suggestions[0].title,fromTool.suggestions[0].title,'review loads this request, not an older received row');
   await review.locator('.analysis-proposal').filter({hasText:'Synthetic received task '+label}).waitFor();
   assert.deepEqual((await snapshot()).records,specializedSaved.records,'loading inbox result still writes zero business records');
   await review.getByRole('button',{name:'선택한 1개 새 기록으로 저장',exact:true}).click();

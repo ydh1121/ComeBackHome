@@ -199,6 +199,6 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
     {handoff&&<AnalysisRequest value={handoff} change={setHandoff} close={()=>setHandoff('')}/>}
     {!!selectedDocuments.length&&<details className="private-card materials-organize"><summary>선택한 파일을 분야별로 정리</summary><OrganizationReview data={data} proposals={selectedDocuments.map(d=>({documentId:d.id,category:'other' as const}))} reload={reload}/></details>}
     <AnalysisReview data={data} reload={reload} incoming={incomingAnalysis}/>
-    <AnalysisReceipts documentIds={selectedDocuments.map(d=>d.id)} notes={selectedNotes.map(r=>({id:r.id,revision:r.revision}))} onReview={setIncomingAnalysis}/>
+    <AnalysisReceipts sourceNames={Object.fromEntries(data.documents.map(d=>[d.id,d.filename]))} documentIds={selectedDocuments.map(d=>d.id)} notes={selectedNotes.map(r=>({id:r.id,revision:r.revision}))} onReview={setIncomingAnalysis}/>
   </section>;
 }
