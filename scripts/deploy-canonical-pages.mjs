@@ -15,19 +15,32 @@ export async function deployCanonicalPages({ env, fetcher = fetch, sleep = ms =>
     if (url.startsWith(cf) && body.success !== true) throw new Error('Cloudflare metadata unavailable');
     return url.startsWith(cf) ? body.result : body;
   }
-  let requiredRun;
+  let requiredRun, privateRun;
   for (let i = 0; i < attempts; i++) {
-    const runs = await json(git + '/actions/runs?head_sha=' + sha + '&event=push&per_page=100', env.GITHUB_TOKEN);
-    const run = runs.workflow_runs.filter(r => r.name === 'Phase 5G Local Integration').sort((a,b) => b.id-a.id)[0];
+    const runs = await json(git + '/actions/runs?head_sha=' + sha + '&per_page=100', env.GITHUB_TOKEN);
+    const exactRuns = runs.workflow_runs.filter(r => r.head_sha === sha);
+    const run = exactRuns.filter(r => r.name === 'Phase 5G Local Integration' && r.event === 'push').sort((a,b) => b.id-a.id)[0];
     if (run?.status === 'completed') {
       if (run.conclusion !== 'success') throw new Error('Required CI failed; deployment not requested');
       const { jobs } = await json(git + '/actions/runs/' + run.id + '/jobs?per_page=100', env.GITHUB_TOKEN);
       if (jobs.filter(j => j.conclusion === 'success').length !== 12 || jobs.some(j => !['success','skipped'].includes(j.conclusion))) throw new Error('Required 12-job acceptance mismatch');
-      requiredRun = run.id; break;
+      requiredRun = run.id;
+    } else requiredRun = undefined;
+    const privateCheck = exactRuns.filter(r => r.name === 'Private work modules (isolated only)' && ['push','workflow_dispatch'].includes(r.event)).sort((a,b) => b.id-a.id)[0];
+    if (privateCheck?.status === 'completed') {
+      if (privateCheck.conclusion !== 'success') throw new Error('Private module CI failed; deployment not requested');
+      const { jobs } = await json(git + '/actions/runs/' + privateCheck.id + '/jobs?per_page=100', env.GITHUB_TOKEN);
+      const expected = ['windows-password','contracts','browser-d1'];
+      if (jobs.length !== expected.length || expected.some(name => jobs.filter(j => j.name === name && j.conclusion === 'success').length !== 1)) throw new Error('Private 3-job acceptance mismatch');
+      privateRun = privateCheck.id;
+    } else privateRun = undefined;
+    if (requiredRun && privateRun) {
+      break;
     }
     await sleep(10000);
   }
   if (!requiredRun) throw new Error('Required CI not completed; deployment not requested');
+  if (!privateRun) throw new Error('Private module CI not completed; deployment not requested');
   const branch = await json(git + '/branches/main', env.GITHUB_TOKEN);
   if (branch.commit.sha !== sha) throw new Error('MAIN advanced; stale deployment not requested');
   const project = await json(cf, env.CLOUDFLARE_API_TOKEN);
@@ -61,7 +74,7 @@ export async function deployCanonicalPages({ env, fetcher = fetch, sleep = ms =>
     if (live?.id === id && matches(live) && live.latest_stage?.status === 'success') {
       const response = await fetcher('https://come-back-home.pages.dev/api/health', {method:'GET',cache:'no-store',signal:AbortSignal.timeout(10000)}).catch(() => null);
       const health = await response?.json().catch(() => null);
-      if (response?.ok && health?.ok === true && health.commitSha === sha) return { deploymentId:id, commit:sha, requiredRun, requested, exactHealth:true, settingsChanged:0, appWrites:0, schedulerTicksSent:0 };
+      if (response?.ok && health?.ok === true && health.commitSha === sha) return { deploymentId:id, commit:sha, requiredRun, privateRun, requested, exactHealth:true, settingsChanged:0, appWrites:0, schedulerTicksSent:0 };
     }
     const current = p.latest_deployment;
     if (current?.id === id && ['failure','canceled'].includes(current.latest_stage?.status)) throw new Error('Pages deployment did not succeed: ' + current.latest_stage.status);

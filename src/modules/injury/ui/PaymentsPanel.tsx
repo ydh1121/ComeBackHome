@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { privateRequest } from "../../auth/client";
 import { summarizeLedger } from "../domain/calculations";
 import { todaySeoul } from "../domain/dates";
 import type { CaseData } from "./types";
+import { paymentDayDisplay, tracksPaymentDays } from "../materials/management-ux";
+import "../materials/management-ux.css";
 export const money = (value: number | null) =>
-  value === null ? "미입력" : Math.round(value).toLocaleString("ko-KR") + "원";
+  value === null ? "아직 확인하지 않았어요" : Math.round(value).toLocaleString("ko-KR") + "원";
 export function PaymentsPanel({
   data,
   reload,
@@ -15,7 +17,12 @@ export function PaymentsPanel({
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [type, setType] = useState("decision"),
-    [claimId, setClaimId] = useState("");
+    [claimId, setClaimId] = useState(""),
+    [step,setStep] = useState(0),
+    [message,setMessage] = useState(""),
+    [saveAttempted,setSaveAttempted] = useState(false),
+    [review,setReview] = useState({amount:"",date:"",days:"",reference:""});
+  const formRef=useRef<HTMLFormElement>(null),lock=useRef(false),draftReference=useRef("entry-"+crypto.randomUUID());
   const claims = data.records.filter(
       (r) => r.kind === "benefit_claim" && !r.archivedAt,
     ),
@@ -27,12 +34,29 @@ export function PaymentsPanel({
           ? r.payload.certainty === "official"
           : ["documented", "official"].includes(r.payload.certainty)),
     );
+  const selectedClaim=claims.some(c=>c.id===claimId)?claimId:claims.length===1?claims[0].id:"";
+  const selectedTracksDays=tracksPaymentDays(claims.find(c=>c.id===selectedClaim)?.payload.data.benefitType);
+  const correction=["refund","decision_adjustment"].includes(type);
+  const eventNames:Record<string,string>={decision:"기관에서 정한 금액",deposit:"통장에 들어온 돈",decision_adjustment:"결정 금액·일수 정정",refund:"돌려준 돈"};
+  const validateStep=(index:number)=>{
+    const fields=formRef.current?.querySelectorAll<HTMLInputElement|HTMLSelectElement>(`[data-payment-step="${index}"] input,[data-payment-step="${index}"] select`);
+    for(const field of fields??[])if(!field.checkValidity()){setStep(index);const details=field.closest('details');if(details)details.open=true;requestAnimationFrame(()=>field.reportValidity());return false;}
+    return true;
+  };
+  const next=()=>{
+    if(!validateStep(step))return;
+    if(step===1&&formRef.current){const f=new FormData(formRef.current);setReview({amount:String(f.get("amount")??""),date:String(f.get("date")??""),days:String(f.get("days")??""),reference:String(f.get("reference")??"")});}
+    setError("");setStep(v=>Math.min(2,v+1));
+  };
   return (
-    <section>
-      <h2>지급장부</h2>
+    <section className="payment-workspace" aria-label="받을 돈과 받은 돈">
+      <h2>받을 돈과 받은 돈</h2>
+      <p className="management-explanation">예상한 금액, 기관에서 정한 금액, 실제 들어온 돈을 나누어 확인해요.</p>
       {claims.map((claim) => {
         const d = claim.payload.data,
-          events = data.payments.filter((e) => e.claim_id === claim.id);
+          events = data.payments.filter((e) => e.claim_id === claim.id),
+          hasDecision = events.some(e=>["decision","decision_adjustment"].includes(e.event_type)),
+          hasPayment = events.some(e=>["deposit","refund"].includes(e.event_type));
         const sum = summarizeLedger(
           {
             benefitType: String(d.benefitType),
@@ -53,6 +77,7 @@ export function PaymentsPanel({
             recognizedDays: e.recognized_days,
           })),
         );
+        const dayDisplay=paymentDayDisplay(d,events,sum);
         return (
           <article className="private-card" key={claim.id}>
             <h3>{claim.payload.title}</h3>
@@ -60,18 +85,15 @@ export function PaymentsPanel({
               {(
                 [
                   ["예상 총액", money(sum.expectedTotal)],
-                  ["기관 지급결정액", money(sum.approvedTotal)],
-                  ["실제 입금액", money(sum.actualPaid)],
-                  ["결정 후 미입금", money(sum.approvedOutstanding)],
-                  ["남은 조건부 예상액", money(sum.conditionalRemaining)],
-                  ["기관 인정일수", sum.recognizedDays + "일"],
-                  [
-                    "잔여일수",
-                    sum.remainingDays === null
-                      ? "미산정"
-                      : sum.remainingDays + "일",
-                  ],
-                  ["법정 수급기간 만료일", String(d.expiresAt ?? "미입력")],
+                  ["기관에서 정한 금액", money(hasDecision?sum.approvedTotal:null)],
+                  ["실제 들어온 돈", money(hasPayment?sum.actualPaid:null)],
+                  ["결정액 중 입금 기록이 없는 금액", money(hasDecision?sum.approvedOutstanding:null)],
+                  ["아직 결정되지 않은 예상액", money(sum.conditionalRemaining)],
+                  ...(dayDisplay.applicable?[
+                    ["기관이 인정한 날짜 수", dayDisplay.recognizedDays===null?(hasDecision?"일수 확인 필요":"아직 확인하지 않았어요"):dayDisplay.recognizedDays + "일"],
+                    ["남은 날짜 수",dayDisplay.remainingDays===null?"아직 계산되지 않았어요":dayDisplay.remainingDays + "일"],
+                  ]:[]),
+                  ["받을 수 있는 기간의 마지막 날", String(d.expiresAt ?? "확인 필요")],
                 ] as const
               ).map(([label, value]) => (
                 <div key={label}>
@@ -82,15 +104,14 @@ export function PaymentsPanel({
             </dl>
             {sum.needsReconciliation || sum.overpayment > 0 ? (
               <p role="alert">
-                결정·입금·인정일수가 맞지 않습니다. 정정 내역을 확인해 주세요.
+                결정된 금액·입금액·날짜 수가 서로 맞지 않아요. 아래 내역을 확인해 주세요.
               </p>
             ) : null}
             <details>
               <summary>지급·정정 내역 {events.length}건</summary>
               {events.map((e) => (
                 <p key={e.id}>
-                  {e.event_date} · {e.dedupe_key} · {money(e.amount)} ·{" "}
-                  {e.recognized_days}일
+                  {e.event_date} · {eventNames[e.event_type]} · {money(e.amount)}{dayDisplay.applicable&&["decision","decision_adjustment"].includes(e.event_type)?" · "+(e.recognized_days===0?"일수 확인 필요":e.recognized_days+"일"):""}
                 </p>
               ))}
             </details>
@@ -98,142 +119,55 @@ export function PaymentsPanel({
         );
       })}
       {!claims.length ? (
-        <p className="empty-state">
-          급여 청구·수급자격 기록을 추가하면 예상과 실제 지급을 나누어 볼 수
-          있습니다.
-        </p>
+        <div className="payment-empty">
+          <h3>아직 정리한 청구 내역이 없어요</h3>
+          <p>통지서나 입금 내역을 받았다면 먼저 자료함에 보관해 주세요. 아래 ‘기록 추가’에서 어떤 급여에 관한 내용인지 정리한 뒤 연결할 수 있어요.</p>
+          <a href="/injury?section=documents">자료함 열기</a>
+        </div>
       ) : (
-        <details className="private-card">
-          <summary>지급결정·입금·정정 추가</summary>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const f = e.currentTarget,
-                d = new FormData(f);
-              setBusy(true);
-              setError("");
-              try {
-                await privateRequest("private/case/payments", "POST", {
-                  claimId,
-                  eventType: type,
-                  amount: Number(d.get("amount")),
-                  recognizedDays: ["deposit", "refund"].includes(type)
-                    ? 0
-                    : Number(d.get("days")),
-                  eventDate: d.get("date"),
-                  sourceRecordId: d.get("source"),
-                  correctsId: d.get("corrects"),
-                  reference: d.get("reference"),
-                });
-                f.reset();
-                await reload();
-              } catch (err) {
-                setError((err as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <label>
-              급여 청구
-              <select
-                value={claimId}
-                required
-                onChange={(e) => setClaimId(e.target.value)}
-              >
-                <option value="">선택</option>
-                {claims.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.payload.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              내역 종류
-              <select value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="decision">기관 지급결정</option>
-                <option value="deposit">실제 입금</option>
-                <option value="decision_adjustment">결정액·일수 정정</option>
-                <option value="refund">입금액 반환</option>
-              </select>
-            </label>
-            <label>
-              금액 (정정은 증감액)
-              <input
-                name="amount"
-                type="number"
-                step="1"
-                min={type === "decision_adjustment" ? -100000000000 : 0}
-                required
-              />
-            </label>
-            {!["deposit", "refund"].includes(type) && (
-              <label>
-                인정일수 (정정은 증감일)
-                <input
-                  name="days"
-                  type="number"
-                  step="1"
-                  min={type === "decision_adjustment" ? -1500 : 0}
-                  max={1500}
-                  defaultValue={0}
-                />
-              </label>
-            )}
-            <label>
-              내역 날짜
-              <input
-                name="date"
-                type="date"
-                defaultValue={todaySeoul()}
-                required
-              />
-            </label>
-            <label>
-              원본을 연결한 근거 기록
-              <select name="source" required>
-                <option value="">선택</option>
-                {sources.map((r) => (
-                  <option value={r.id} key={r.id}>
-                    {r.payload.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {["refund", "decision_adjustment"].includes(type) && (
-              <label>
-                정정할 이전 내역
-                <select name="corrects" required>
-                  <option value="">선택</option>
-                  {data.payments
-                    .filter(
-                      (p) =>
-                        p.claim_id === claimId &&
-                        (type === "refund"
-                          ? p.event_type === "deposit"
-                          : ["decision", "decision_adjustment"].includes(
-                              p.event_type,
-                            )),
-                    )
-                    .map((p) => (
-                      <option value={p.id} key={p.id}>
-                        {p.event_date} · {p.dedupe_key}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
-            <label>
-              중복 확인용 결정·거래 번호
-              <input name="reference" minLength={3} maxLength={150} required />
-            </label>
-            <p>
-              같은 번호·내용은 한 번만 저장됩니다. 정정은 이전 내역을 남기고
-              추가합니다.
-            </p>
-            <button disabled={busy}>내역 저장</button>
-            <p role="alert">{error}</p>
+        <details className="private-card payment-entry">
+          <summary>받은 통지서·입금 내역 추가</summary>
+          <form ref={formRef} noValidate onSubmit={async(e)=>{
+            e.preventDefault();if(lock.current)return;if(step<2){next();return;}
+            if(![0,1,2].every(validateStep))return;
+            const f=e.currentTarget,d=new FormData(f);
+            lock.current=true;setBusy(true);setError("");setMessage("");setSaveAttempted(true);
+            try{
+              await privateRequest("private/case/payments","POST",{
+                claimId:selectedClaim,eventType:type,amount:Number(d.get("amount")),
+                recognizedDays:!selectedTracksDays||["deposit","refund"].includes(type)?0:Number(d.get("days")),
+                eventDate:d.get("date"),sourceRecordId:d.get("source"),correctsId:d.get("corrects"),reference:String(d.get("reference")??"").trim()||draftReference.current,
+              });
+              f.reset();draftReference.current="entry-"+crypto.randomUUID();setStep(0);setType("decision");setSaveAttempted(false);setMessage("내역을 저장했어요. 기존 내역도 그대로 남아 있어요.");
+              try{await reload();}catch{setMessage("내역은 저장됐어요. 목록을 다시 불러오려면 새로고침해 주세요.");}
+            }catch(err){setError((err as Error).message.replace(/\s*\([A-Z_]+\)/g, "").replace(/오류 코드: [A-Z_]+/g, "")+" 입력한 내용은 그대로예요. 응답이 끊겼다면 다시 저장해 처리 결과를 확인할 수 있어요.");}
+            finally{lock.current=false;setBusy(false);}
+          }}>
+            <p className="payment-progress">{step+1} / 3 · {['내역 선택','금액과 날짜','근거 확인'][step]}</p>
+            <fieldset className="payment-step" data-payment-step="0" hidden={step!==0} disabled={busy}>
+              <h3>무엇을 확인했나요?</h3>
+              <div className="payment-choices">{(['decision','deposit'] as const).map(value=><button type="button" className="secondary" key={value} aria-pressed={type===value} onClick={()=>{setType(value);setError('');setMessage('');}}>{eventNames[value]}</button>)}</div>
+              <details open={correction}><summary>이전 내역을 정정하거나 돈을 돌려줬어요</summary><div className="payment-choices">{(['decision_adjustment','refund'] as const).map(value=><button type="button" className="secondary" key={value} aria-pressed={type===value} onClick={()=>{setType(value);setError('');setMessage('');}}>{eventNames[value]}</button>)}</div></details>
+              <label>어떤 급여에 관한 내용인가요?<select aria-label="어떤 급여에 관한 내용인가요?" value={selectedClaim} required onChange={e=>setClaimId(e.target.value)}><option value="">급여 선택</option>{claims.map(r=><option key={r.id} value={r.id}>{r.payload.title}</option>)}</select></label>
+            </fieldset>
+            <fieldset className="payment-step" data-payment-step="1" hidden={step!==1} disabled={busy}>
+              <h3>{eventNames[type]}을 확인해 주세요</h3>
+              <label>{type==='decision_adjustment'?'달라진 금액 (줄었다면 - 표시)':'확인한 금액 (원)'}<input name="amount" type="number" step="1" min={type==='decision_adjustment'?-100000000000:0} max={100000000000} required/></label>
+              {selectedTracksDays&&!['deposit','refund'].includes(type)&&<><label>{type==='decision_adjustment'?'달라진 날짜 수 (줄었다면 - 표시)':'기관이 인정한 날짜 수'}<input name="days" type="number" step="1" min={type==='decision_adjustment'?-1500:0} max={1500} defaultValue="" placeholder="아직 모르면 비워 두세요"/></label><p className="management-explanation">날짜 수는 확인했을 때만 적어 주세요. 비워 두어도 금액을 기록할 수 있어요.</p></>}
+              <label>통지서·입금 내역의 날짜<input name="date" type="date" defaultValue={todaySeoul()} required/></label>
+              <details><summary>번호를 따로 기록할게요 (선택)</summary><label>통지서·거래 내역에 적힌 번호<input name="reference" minLength={3} maxLength={150}/></label></details>
+              <p className="management-explanation">저장이 실패해도 입력한 내용은 유지돼요. 같은 화면에서 다시 시도하면 중복으로 저장되지 않아요.</p>
+            </fieldset>
+            <fieldset className="payment-step" data-payment-step="2" hidden={step!==2} disabled={busy}>
+              <h3>확인한 자료와 연결할게요</h3>
+              <dl className="payment-review"><div><dt>내역</dt><dd>{eventNames[type]}</dd></div><div><dt>금액</dt><dd>{money(Number(review.amount))}</dd></div><div><dt>날짜</dt><dd>{review.date}</dd></div>{selectedTracksDays&&!['deposit','refund'].includes(type)&&<div><dt>날짜 수</dt><dd>{review.days===""?"일수 확인 필요":review.days+"일"}</dd></div>}</dl>
+              <label>이 내용을 확인한 기록<select name="source" aria-label="이 내용을 확인한 기록" required><option value="">원본이 연결된 기록 선택</option>{sources.map(r=><option value={r.id} key={r.id}>{r.payload.title}</option>)}</select></label>
+              {!sources.length&&<p className="management-explanation">연결할 수 있는 근거 기록이 아직 없어요. <a href="/injury?section=documents">자료함에서 원본을 확인</a>하고 기록에 연결해 주세요. 지금은 저장하지 않았어요.</p>}
+              {correction&&<label>바로잡을 이전 내역<select name="corrects" aria-label="바로잡을 이전 내역" required><option value="">이전 내역 선택</option>{data.payments.filter(p=>p.claim_id===selectedClaim&&(type==='refund'?p.event_type==='deposit':['decision','decision_adjustment'].includes(p.event_type))).map(p=><option value={p.id} key={p.id}>{p.event_date} · {eventNames[p.event_type]} · {money(p.amount)}</option>)}</select></label>}
+              <p className="management-explanation">확인한 내역만 저장해요. 정정할 때도 이전 내역은 지우지 않아요.</p>
+            </fieldset>
+            <div className="private-actions">{step>0&&<button type="button" className="secondary" disabled={busy} onClick={()=>{setStep(v=>v-1);setError('');}}>이전</button>}<button type="button" className="secondary" disabled={busy} onClick={()=>{formRef.current?.reset();draftReference.current='entry-'+crypto.randomUUID();setStep(0);setType('decision');setError('');setMessage(saveAttempted?'입력을 취소했어요. 저장을 시도한 내역은 목록에서 처리 결과를 확인해 주세요.':'취소했어요. 내역은 저장하지 않았어요.');setSaveAttempted(false);}}>취소</button>{step<2?<button type="button" disabled={busy} onClick={next}>다음</button>:<button disabled={busy||!sources.length}>{busy?'저장 중…':'확인한 내역 저장'}</button>}</div>
+            <p role="alert">{error}</p><p role="status">{message}</p>
           </form>
         </details>
       )}

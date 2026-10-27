@@ -1,0 +1,12 @@
+.editable-guidance{position:relative;min-width:0}
+.guidance-toolbar{display:flex;gap:6px;justify-content:flex-end;position:sticky;top:calc(env(safe-area-inset-top) + 8px);z-index:2;pointer-events:none;margin-bottom:8px}
+.guidance-toolbar button{pointer-events:auto;font-size:12px!important;min-height:32px;padding:5px 10px!important}
+.guidance-provenance{display:block;margin-top:12px;font-size:12px;color:var(--cbh-muted)}
+.planning-review-list{display:grid;gap:16px;margin-top:16px}
+.planning-review-list>article{border-top:1px solid var(--cbh-line);padding-top:16px;min-width:0}
+.planning-review-list h3{font-size:16px!important;margin-top:0}
+.planning-review-list .record-body{font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+.planning-review-list select,.planning-review-list textarea{max-width:100%}
+.personal-review-status{font-size:12px;color:var(--cbh-muted);margin-bottom:8px}
+.personal-review-card .private-actions{margin-top:12px;flex-wrap:wrap}
+.planning-guides{display:grid;gap:16px}

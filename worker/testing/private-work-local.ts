@@ -11,9 +11,11 @@ export function createDriveFixture() {
       parents: string[];
       bytes: Uint8Array;
       total: number;
+      appProperties?: Record<string,string>;
     }
   >();
   let sequence = 0;
+  let moves = 0, loseMoveResponse = false, metadataVersion = 1;
   const expired = new Set<string>();
   let shared = false,
     corrupt = false,
@@ -87,9 +89,25 @@ export function createDriveFixture() {
           : {},
       });
     }
+    if (u.pathname === "/drive/v3/files" && init?.method === "POST") {
+      const body = JSON.parse(String(init.body));
+      if(files.has(body.id))return new Response(null,{status:409});
+      files.set(body.id,{...body,bytes:new Uint8Array(0),total:0});
+      return Response.json({id:body.id});
+    }
     const file = files.get(id);
     if (!file || file.bytes.length !== file.total)
       return new Response(null, { status: 404 });
+    const etag='"'+revision+':'+file.parents.join(',')+':'+metadataVersion+'"';
+    if(init?.method === "PATCH") {
+      const expected=new Headers(init.headers).get('If-Match');
+      if(expected && expected!==etag)return new Response(null,{status:412});
+      const from=u.searchParams.get('removeParents'),to=u.searchParams.get('addParents');
+      if(!from || !to || file.parents.length!==1 || file.parents[0]!==from || !files.has(to))return new Response(null,{status:409});
+      file.parents=[to];moves++;metadataVersion++;
+      if(loseMoveResponse){loseMoveResponse=false;throw Error('synthetic lost move response');}
+      return Response.json({id,parents:file.parents});
+    }
     if (u.searchParams.get("alt") === "media")
       return new Response(
         corrupt ? new Uint8Array(file.bytes.length) : file.bytes,
@@ -97,6 +115,7 @@ export function createDriveFixture() {
           headers: { "Content-Type": file.mimeType },
         },
       );
+    if(u.pathname.startsWith('/drive/v2/'))return Response.json({id,etag,headRevisionId:revision,version:String(metadataVersion),parents:file.parents.map(id=>({id})),labels:{trashed:false}});
     return Response.json({
       id,
       name: file.name,
@@ -105,7 +124,9 @@ export function createDriveFixture() {
       size: String(file.bytes.length),
       sha256Checksum: await digest(file.bytes.buffer as ArrayBuffer),
       headRevisionId: revision,
-    });
+      version: String(metadataVersion),
+      ...(file.appProperties?{appProperties:file.appProperties}:{}),
+    },{headers:{ETag:etag}});
   };
   return {
     fetcher: fakeDrive,
@@ -120,7 +141,13 @@ export function createDriveFixture() {
     },
     changeRevision(value: string) {
       revision = value;
+      metadataVersion++;
     },
+    changeMetadataVersion() { metadataVersion++; },
+    loseNextMoveResponse() { loseMoveResponse=true; },
+    moves() { return moves; },
+    parents(id:string) { return [...(files.get(id)?.parents??[])]; },
+    changeParents(id:string, parents:string[]) { const file=files.get(id);if(file)file.parents=parents; },
     ids() {
       return [...files.keys()];
     },

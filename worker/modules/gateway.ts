@@ -5,6 +5,7 @@ import { authenticate, handleAuth, authAudit } from "./auth/service";
 import { assertSameOrigin, PrivateError, privateJson } from "./auth/contracts";
 import { handleCase } from "./injury/service";
 import { driveFailure } from "./documents/oauth-result";
+import { receiveAnalysis } from "./injury/analysis-receipts";
 
 // This adapter alone connects independent private modules to the legacy API.
 export async function handleProductRequest(
@@ -30,6 +31,10 @@ export async function handleProductRequest(
   )
     return handleApiRequest(request, env, providers);
   try {
+    if (path.startsWith("/api/private/analysis-return/")) {
+      const id = path.slice("/api/private/analysis-return/".length);
+      return await receiveAnalysis(request, env, id);
+    }
     assertSameOrigin(request);
     if (
       !["GET", "HEAD", "OPTIONS"].includes(request.method) &&

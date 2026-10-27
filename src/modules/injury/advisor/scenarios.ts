@@ -14,6 +14,7 @@ export interface Scenario {
   script: string;
   question: string;
   options: readonly (readonly [string, string, string?])[];
+  replyGuidance?: Record<string, { title: string; body: string }>;
   caution: string;
 }
 
@@ -42,6 +43,11 @@ export const SCENARIOS: readonly Scenario[] = [
     materials: ['업무 제한에 대한 의사의 실제 설명', '회사에 문의한 문자와 답변'],
     script: '현재 하는 업무 중 몸에 부담이 되는 작업이 있어 상담을 요청드립니다. 당분간 작업을 조정하거나 병가·휴직을 사용할 수 있을까요? 가능한 방법과 기간을 알려주세요.',
     question: '회사에서 뭐라고 했나요?', options: [['allowed', '가능하다고 했어요', 'D'], ['refused', '어렵다고 했어요', 'D'], ['waiting', '아직 답이 없어요']],
+    replyGuidance: {
+      allowed: { title: '조정할 업무와 기간을 확인해 두세요', body: '어떤 업무를 조정할지, 병가 기간과 임금은 어떻게 처리되는지 회사에 확인하고 답변을 남겨 두세요.' },
+      refused: { title: '회사 답변과 의료진 의견을 함께 정리하세요', body: '어렵다고 한 이유와 의료진에게 들은 업무 제한을 구분해서 남겨 두세요. 산재 신청 준비는 별도로 확인할 수 있어요.' },
+      waiting: { title: '회사에 답변을 다시 요청해 보세요', body: '아직 답이 없는 상태로 남겨 두세요. 가능한 방법과 언제 답변을 받을 수 있을지 회사에 다시 물어보세요.' },
+    },
     caution: '회사의 답변만으로 퇴사 사유나 실업급여 수급 여부가 결정되지는 않아요.',
   },
   {
@@ -64,7 +70,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     id: 'F', category: '공단 조사', title: '추가로 필요한 자료와 제출일을 확인하세요',
-    reason: '공단이 요청한 자료부터 준비하면 조사에 필요한 내용을 빠뜨리지 않을 수 있어요.', recipient: '근로복지공단 담당자',
+    reason: '회사의 동의가 없어도 산재를 신청할 수 있어요. 공단이 실제로 요청한 자료와 기한부터 확인하세요.', recipient: '근로복지공단 담당자',
     steps: ['현재 진행 단계와 추가로 필요한 자료를 물어보세요.', '회사 의견과 다른 부분은 사실과 자료로 설명하세요.', '제출 방법과 기한을 확인하세요.'],
     materials: ['실제 작업 내용과 진료자료', '공단의 요청문과 회사 답변'],
     script: '산재 조사가 현재 어디까지 진행됐는지 알고 싶습니다. 추가로 필요한 자료와 제출 기한을 알려주세요. 회사 의견과 제 설명이 다른 부분은 어떤 자료로 설명하면 될까요?',

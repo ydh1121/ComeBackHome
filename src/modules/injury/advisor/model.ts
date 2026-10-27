@@ -14,7 +14,7 @@ export interface AdvisorProfile {
 export const emptyProfile = (): AdvisorProfile => ({ version: 1, answers: [null, null, null], cursor: 0, confirmed: false, deferred: false });
 export const profileId = (caseId: string) => "advisor-profile-v1-" + caseId;
 export const scriptId = (caseId: string) => "advisor-hospital-v1-" + caseId;
-export function isProfile(record: CaseRecord): boolean { return record.kind === "content" && ["advisor-profile/v1", "advisor-response/v1"].includes(String(record.payload.data.recipient)); }
+export function isProfile(record: CaseRecord): boolean { return record.kind === "content" && (["advisor-profile/v1", "advisor-response/v1"].includes(String(record.payload.data.recipient)) || String(record.payload.data.recipient).startsWith("planning-personal/v1:")); }
 export function readProfile(record?: CaseRecord): AdvisorProfile | null {
     if (!record || record.kind !== "content" || record.archivedAt || record.payload.data.recipient !== "advisor-profile/v1")
         return null;

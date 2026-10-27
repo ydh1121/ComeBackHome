@@ -10,54 +10,14 @@ import {
   type Field,
 } from "../domain/records";
 import type { CaseData } from "./types";
+import { fieldText, payloadText } from "./record-text";
+export { payloadText } from "./record-text";
 export const certaintyLabel = {
   reported: "직접 입력",
   estimated: "예상",
   documented: "문서 확인",
   official: "기관 확정",
 };
-export function payloadText(
-  payload: CasePayload,
-  kind: RecordKind,
-  data?: CaseData,
-): string {
-  const spec: RecordSpec = RECORD_SPECS[kind];
-  return [
-    payload.title,
-    payload.body,
-    ...spec.fields
-      .filter(
-        (f) => payload.data[f.key] !== undefined && payload.data[f.key] !== "",
-      )
-      .map((f) => `${f.label}: ${fieldText(f, payload.data[f.key], data)}`),
-  ].join("\n");
-}
-function fieldText(
-  field: Field,
-  value: string | number | boolean,
-  data?: CaseData,
-) {
-  if (
-    data &&
-    ["employmentId", "claimId", "relatedId", "relatedMessage"].includes(
-      field.key,
-    )
-  )
-    return (
-      data.records.find((r) => r.id === value)?.payload.title ??
-      "연결 기록 확인 필요"
-    );
-  if (data && field.key === "sourceDocument")
-    return (
-      data.documents.find((d) => d.id === value)?.filename ?? "원본 확인 필요"
-    );
-  if (data && field.key === "policyId")
-    return (
-      data.policies.find((p) => p.id === value)?.version ?? "정책 확인 필요"
-    );
-  if (field.type === "boolean") return value ? "예" : "아니요";
-  return field.options?.find((o) => o[0] === value)?.[1] ?? String(value);
-}
 export function CopyButton({ value }: { value: string }) {
   const [message, setMessage] = useState("복사");
   return (
@@ -181,23 +141,26 @@ function blank(kind: RecordKind): CasePayload {
 }
 export function RecordEditor({
   record,
+  draft,
   kind,
   data,
   close,
   saved,
 }: {
   record?: CaseRecord;
+  draft?: { id: string; payload: CasePayload };
   kind: RecordKind;
   data: CaseData;
   close: () => void;
   saved: () => Promise<void>;
 }) {
   const [payload, setPayload] = useState<CasePayload>(
-      record ? structuredClone(record.payload) : blank(kind),
+      record ? structuredClone(record.payload) : draft ? structuredClone(draft.payload) : blank(kind),
     ),
     [revision, setRevision] = useState(record?.revision ?? 0),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [advanced, setAdvanced] = useState(false),
     [conflict, setConflict] = useState<CaseRecord | null>(null),
     [history, setHistory] = useState<
       Array<{
@@ -207,7 +170,7 @@ export function RecordEditor({
         createdAt: string;
       }>
     >([]);
-  const id = useRef(record?.id ?? crypto.randomUUID()),
+  const id = useRef(record?.id ?? draft?.id ?? crypto.randomUUID()),
     form = useRef<HTMLFormElement>(null),
     initial = useRef(JSON.stringify(payload));
   const dirty = JSON.stringify(payload) !== initial.current;
@@ -385,6 +348,7 @@ export function RecordEditor({
               await saved();
               close();
             } catch (err) {
+              setAdvanced(true);
               setError(
                 err instanceof ApiError
                   ? err.message
@@ -418,9 +382,9 @@ export function RecordEditor({
             <div className="copy-toolbar">
               <CopyButton value={payloadText(payload, kind, data)} />
             </div>
-            <label>
-              본문·메모
+            <label htmlFor={'record-body-'+id.current}>본문·메모</label>
               <textarea
+                id={'record-body-'+id.current}
                 value={payload.body}
                 maxLength={60000}
                 rows={14}
@@ -428,20 +392,14 @@ export function RecordEditor({
                   setPayload({ ...payload, body: e.target.value })
                 }
               />
-            </label>
           </div>
           <div className="field-grid">
-            {spec.fields.map((f) => (
-              <label
-                key={f.key}
-                className={f.type === "boolean" ? "auth-check" : ""}
-              >
-                {f.label.replace(/ ID$/, "")}
-                {f.required ? " *" : ""}
-                {input(f)}
-              </label>
-            ))}
+            {spec.fields.filter(f=>f.required||["status","dueDate","from","to","appointmentAt"].includes(f.key)).map(f=><label key={f.key} className={f.type==="boolean"?"auth-check":""}>{f.label.replace(/ ID$/," ")}{f.required?" *":""}{input(f)}</label>)}
           </div>
+          <details className="editor-advanced" open={advanced} onToggle={e=>setAdvanced(e.currentTarget.open)}>
+            <summary>추가 정보·연결 자료</summary>
+            <p className="materials-caption">아는 내용만 입력하세요. 기관 확인 여부와 원본 연결도 여기에서 관리해요.</p>
+            <div className="field-grid">{spec.fields.filter(f=>!f.required&&!["status","dueDate","from","to","appointmentAt"].includes(f.key)).map(f=><label key={f.key} className={f.type==="boolean"?"auth-check":""}>{f.label.replace(/ ID$/," ")}{input(f)}</label>)}</div>
           <label>
             확인 수준
             <select
@@ -486,6 +444,7 @@ export function RecordEditor({
                 ))
             )}
           </fieldset>
+          </details>
           <p role="alert">{error}</p>
           {conflict && (
             <section className="conflict-panel">

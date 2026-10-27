@@ -6,6 +6,9 @@ import { AdvisorProfileForm, AnswerSummary } from './AdvisorProfile';
 import { AdvisorScript } from './AdvisorScript';
 import { AdvisorResponse } from './AdvisorResponse';
 import { adviceScriptId, recommend, SCENARIOS, scenario, type Advice } from './scenarios';
+import { EditableGuidance } from '../content/EditableGuidance';
+import { guidanceText } from '../content/model';
+import { PersonalHistoryReview, PlanningGuides } from '../content/PlanningReview';
 import './advisor.css';
 export { AnswerSummary } from './AdvisorProfile';
 
@@ -34,18 +37,18 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
   const spec = action ? scenario(action) : null;
   if (spec) return <section className="advisor-stack advisor-action" key={spec.id} aria-label={spec.category}>
     <button className="secondary advisor-back" onClick={() => open(null)}><Icon name="chevron-left"/>오늘로</button>
-    <header className="advisor-detail"><span className="advisor-eyebrow">{spec.category}</span><h2>{spec.title}</h2><p>{spec.reason}</p><span className="advisor-recipient">{spec.recipient}에게</span></header>
-    <section className="advisor-steps" aria-label="할 일"><h3>이 순서로 해보세요</h3><ol>{spec.steps.map((step, i) => <li key={step}><span aria-hidden="true">{i + 1}</span><p>{step}</p></li>)}</ol></section>
+    <header className="advisor-detail"><span className="advisor-eyebrow">{spec.category}</span><h2>{spec.title}</h2><EditableGuidance data={data} reload={reload} contentKey={spec.id+"-reason"} title="안내 이유" fallback={spec.reason}>{text=><p>{text}</p>}</EditableGuidance><span className="advisor-recipient">{spec.recipient}에게</span></header>
+    <section className="advisor-steps" aria-label="할 일"><h3>이 순서로 해보세요</h3><EditableGuidance data={data} reload={reload} contentKey={spec.id+"-steps"} title="안내 순서" fallback={spec.steps.join("\n")}>{text=><ol>{text.split("\n").filter(Boolean).map((step,i)=><li key={i}><span aria-hidden="true">{i+1}</span><p>{step}</p></li>)}</ol>}</EditableGuidance></section>
     <AdvisorScript key={spec.id} data={data} reload={reload} id={adviceScriptId(data.caseId, spec.id)} fallback={spec.script} recipient={spec.recipient}/>
-    <details className="advisor-materials"><summary>준비할 자료 <span>{spec.materials.length}가지</span></summary><ul>{spec.materials.map(item => <li key={item}>{item}</li>)}</ul><p>아직 없는 자료는 담당자에게 준비 방법을 물어보세요.</p></details>
+    <details className="advisor-materials"><summary>준비할 자료 <span>{spec.materials.length}가지</span></summary><EditableGuidance data={data} reload={reload} contentKey={spec.id+"-materials"} title="준비할 자료" fallback={spec.materials.join("\n")}>{text=><ul>{text.split("\n").filter(Boolean).map((item,i)=><li key={i}>{item}</li>)}</ul>}</EditableGuidance><p>아직 없는 자료는 담당자에게 준비 방법을 물어보세요.</p></details>
     <AdvisorResponse key={spec.id} data={data} spec={spec} reload={reload} onNext={open}/>
-    <p className="advisor-footnote">{spec.caution}</p>
+    <EditableGuidance data={data} reload={reload} contentKey={spec.id+"-caution"} title="참고할 내용" fallback={spec.caution}>{text=><p className="advisor-footnote">{text}</p>}</EditableGuidance>
     {advice.find(a => a.scenario.id === spec.id) && <Evidence advice={advice.find(a => a.scenario.id === spec.id)!} data={data}/>}
   </section>;
   return <section className="advisor-home" aria-label="오늘의 산재 도움">
     <article className="private-card advisor-primary">
       <div className="advisor-card-heading"><span className="advisor-eyebrow">지금 할 일</span><span className="advisor-category">{primary.scenario.category}</span></div>
-      <h2>{primary.scenario.title}</h2><p>{primary.scenario.reason}</p>
+      <h2>{primary.scenario.title}</h2><p>{guidanceText(data.records,data.caseId,primary.scenario.id+"-reason",primary.scenario.reason)}</p>
       <button className="advisor-main-cta" onClick={() => open(primary.scenario.id)}>물어볼 내용 보기<Icon name="chevron-right"/></button>
       <button className="secondary advisor-inline-link" onClick={() => setQuestions(true)}>{stored ? '내 상황 다시 확인' : '내 상황 알려주기'}<Icon name="chevron-right"/></button>
       <Evidence advice={primary} data={data}/>
@@ -57,6 +60,7 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
         <button className="secondary" onClick={() => navigate('progress')}><Icon name="calendar"/><span><strong>진행 상황 확인</strong><small>산재와 실업급여를 각각 확인해요</small></span><Icon name="chevron-right"/></button>
       </div>
       {advice.length > 1 && <div className="advisor-related"><h3>함께 확인할 일</h3>{advice.slice(1,3).map(a => <button className="secondary" key={a.scenario.id} onClick={() => open(a.scenario.id)}><span>{a.scenario.category}</span><Icon name="chevron-right"/></button>)}</div>}
+      <PersonalHistoryReview data={data} reload={reload}/><PlanningGuides data={data} reload={reload}/>
       <button className="secondary advisor-contact-link" onClick={() => navigate('help')}><Icon name="phone"/>기관 연락처 보기</button>
     </aside>
   </section>;
@@ -69,9 +73,9 @@ export function AdvisorProgress({ data, navigate }: { data: CaseData; navigate: 
     <article className="private-card"><span className="advisor-eyebrow">퇴사·실업급여</span><h3>퇴사 사유와 고용보험 이력을 확인하세요</h3><p>일할 수 있는 몸 상태인지도 함께 확인해야 해요. 수급 여부와 지급액은 고용센터의 결정에 따라 달라요.</p><button className="secondary" onClick={() => navigate('manage')}>직장·지급 기록 보기<Icon name="chevron-right"/></button></article>
   </section>;
 }
-export function AdvisorHelp({ onOpen }: { onOpen: (id: string) => void }) {
+export function AdvisorHelp({ onOpen, data, reload }: { onOpen: (id: string) => void; data:CaseData; reload:()=>Promise<void> }) {
   return <section className="advisor-stack"><header className="advisor-section-heading"><div><span className="advisor-eyebrow">상황별 도움말</span><h2>지금 필요한 내용을 찾아보세요</h2></div></header>
     <div className="advisor-help-list">{SCENARIOS.map(s => <button className="secondary" key={s.id} onClick={() => onOpen(s.id)}><span><small>{s.category}</small><strong>{s.title}</strong></span><Icon name="chevron-right"/></button>)}</div>
-    <article className="private-card advisor-contacts"><h3>기관에 문의하기</h3><a href="tel:15880075"><span><strong>근로복지공단</strong><small>산재 신청·심사 · 1588-0075</small></span><Icon name="phone"/></a><a href="tel:1350"><span><strong>고용노동부</strong><small>퇴사·고용보험 · 1350</small></span><Icon name="phone"/></a></article>
+    <article className="private-card advisor-contacts"><h3>기관에 문의하기</h3>{[['contact-work','근로복지공단\n산재 신청·심사\n1588-0075'],['contact-employment','고용노동부\n퇴사·고용보험\n1350']].map(([key,fallback])=><EditableGuidance key={key} data={data} reload={reload} contentKey={key} title="기관 연락처" fallback={fallback}>{text=>{const [name,description,phone]=text.split('\n');return phone&&/^[+\d(). -]{3,20}$/.test(phone)?<a href={'tel:'+phone.replace(/[^+\d]/g,'')}><span><strong>{name}</strong><small>{description} · {phone}</small></span><Icon name="phone"/></a>:<p className="record-body">{text}</p>;}}</EditableGuidance>)}</article>
   </section>;
 }

@@ -4,6 +4,7 @@ import type { CaseData } from '../ui/types';
 import type { CaseRecord } from '../domain/records';
 import { currentResponse, readResponse, responseBasis, responseId, responsePayload, type Scenario } from './scenarios';
 import { latestAdvisorRecord, saveAdvisorRecord } from './storage';
+import { EditableGuidance } from '../content/EditableGuidance';
 
 export function AdvisorResponse({ data, spec, reload, onNext }: { data: CaseData; spec: Scenario; reload: () => Promise<void>; onNext: (id: string) => void }) {
   const id = responseId(data.caseId, spec.id), stored = data.records.find(r => r.id === id), value = currentResponse(data, spec.id);
@@ -21,6 +22,7 @@ export function AdvisorResponse({ data, spec, reload, onNext }: { data: CaseData
     } finally { latch.current = false; setBusy(false); }
   };
   const nextId = saved && !saved.deferred ? spec.options.find(([key]) => key === saved.answer)?.[2] : undefined;
+  const followup = saved && !saved.deferred && saved.answer ? spec.replyGuidance?.[saved.answer] : undefined;
   return <article className="private-card advisor-response">
     <h3>{spec.question}</h3><p>실제로 들은 답을 골라 주세요.</p>
     <fieldset className="advisor-radio-list" disabled={busy || !!conflict || blocked}><legend className="advisor-sr-only">{spec.question}</legend>{spec.options.map(([key, label]) => <label key={key} className={answer === key ? 'selected' : ''}><input type="radio" name={`reply-${spec.id}`} value={key} checked={answer === key} onChange={() => { setAnswer(key); setError(''); }}/><span>{label}</span></label>)}</fieldset>
@@ -29,6 +31,7 @@ export function AdvisorResponse({ data, spec, reload, onNext }: { data: CaseData
     {error && <p role="alert">{error}</p>}
     {conflict && <div className="conflict-panel"><h4>다른 기기에서 답변을 바꿨어요</h4><p>{spec.options.find(([key]) => key === readResponse(conflict)?.answer)?.[1] ?? '아직 답변 전이에요'}</p><button className="secondary" onClick={() => { setBase(conflict); setConflict(null); }}>내 선택 유지</button></div>}
     <p role="status">{busy ? '답변 저장 중…' : saved?.deferred ? '나중에 이어서 볼 수 있어요.' : saved ? '내 답변을 저장했어요. 기관에 신청한 것은 아니에요.' : ''}</p>
+    {followup && <section className="advisor-reply-guidance"><h4>{followup.title}</h4><EditableGuidance data={data} reload={reload} contentKey={spec.id+'-reply-'+saved!.answer} title="답변 후 안내" fallback={followup.body}/></section>}
     {nextId && <button className="secondary advisor-next" onClick={() => onNext(nextId)}>다음 안내 보기</button>}
   </article>;
 }

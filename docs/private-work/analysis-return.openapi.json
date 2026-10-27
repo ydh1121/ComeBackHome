@@ -1,0 +1,449 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ComeBackHome reviewed analysis result receiver",
+    "version": "1.0.0",
+    "description": "Stages a bounded draft for the issuing user to review. It does not read source files, apply case records, move files or alter the ledger. Create the short-lived receipt in the signed-in PWA. Ordinary ChatGPT conversations are not connected by this schema."
+  },
+  "servers": [
+    {
+      "url": "https://come-back-home.pages.dev"
+    }
+  ],
+  "paths": {
+    "/api/private/analysis-return/{receiptId}": {
+      "post": {
+        "operationId": "submitAnalysisDraft",
+        "summary": "Submit one analysis draft for user review",
+        "x-openai-isConsequential": true,
+        "security": [
+          {
+            "receiptBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receiptId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^analysis-receipt-[A-Za-z0-9-]+$"
+            },
+            "description": "The id returned by the signed-in PWA for this grant."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Maximum 180,000 UTF-8 JSON bytes. No approval/control fields.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AnalysisV1"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AnalysisV2"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Draft staged, or identical retry acknowledged; explicit PWA review remains required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accepted",
+                    "duplicate",
+                    "reviewRequired"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "const": true
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "reviewRequired": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid schema or a source outside the grant."
+          },
+          "401": {
+            "description": "Invalid grant token or revoked account/session."
+          },
+          "403": {
+            "description": "Case permission or request-origin check failed."
+          },
+          "409": {
+            "description": "Source changed, receipt already used for a different result, or concurrent update."
+          },
+          "410": {
+            "description": "Grant expired or revoked."
+          },
+          "413": {
+            "description": "Request is too large."
+          },
+          "415": {
+            "description": "Content-Type must be application/json."
+          },
+          "503": {
+            "description": "Private service or writes unavailable."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "receiptBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Source-scoped, single-result capability issued by the PWA; expires after one hour. It grants no source-read or case-apply authority."
+      }
+    },
+    "schemas": {
+      "Memo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "body",
+          "sourceIds"
+        ],
+        "properties": {
+          "type": {
+            "const": "memo"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 60000
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "IDs of verified documents selected when this receipt was created; never invented IDs."
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "body",
+          "sourceIds"
+        ],
+        "properties": {
+          "type": {
+            "const": "task"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 60000
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "IDs of verified documents selected when this receipt was created; never invented IDs."
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Recommended check date only."
+          }
+        }
+      },
+      "Record": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "kind",
+          "title",
+          "body",
+          "sourceIds",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "const": "record"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "content",
+              "task",
+              "intake",
+              "employer_opinion",
+              "agency_request",
+              "treatment",
+              "benefit_claim",
+              "unemployment_activity",
+              "expense",
+              "disability",
+              "additional_claim",
+              "employment",
+              "paid_day",
+              "resignation",
+              "payroll",
+              "exposure",
+              "simulation",
+              "severance_leave",
+              "incident"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 60000
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "IDs of verified documents selected when this receipt was created; never invented IDs."
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Fields/options from the current request RECORD_SPECS. Required unknown facts must become a memo or question. All accepted values remain reported; authoritative fields are held for review. employmentId, claimId, relatedId and relatedMessage may use @ref to link another suggestion in the same batch; missing, cyclic and wrong-kind dependencies are rejected."
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,47}$",
+            "description": "Optional unique key for another suggestion in this v2 batch to reference using @key."
+          }
+        }
+      },
+      "DocumentMove": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "documentId",
+          "category"
+        ],
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]{8,80}$"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "application",
+              "medical",
+              "employment",
+              "payments",
+              "correspondence",
+              "other"
+            ]
+          }
+        }
+      },
+      "AnalysisV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "suggestions"
+        ],
+        "properties": {
+          "version": {
+            "const": "cbh-analysis/v1"
+          },
+          "suggestions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 40,
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Memo"
+                },
+                {
+                  "$ref": "#/components/schemas/Task"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "AnalysisV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "suggestions"
+        ],
+        "properties": {
+          "version": {
+            "const": "cbh-analysis/v2"
+          },
+          "suggestions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 40,
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/MemoV2"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskV2"
+                },
+                {
+                  "$ref": "#/components/schemas/Record"
+                }
+              ]
+            }
+          },
+          "documentMoves": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/DocumentMove"
+            }
+          }
+        },
+        "description": "At least one suggestion or move required. Document moves are suggestions only; a separate signed-in review action applies them.",
+        "anyOf": [
+          {
+            "properties": {
+              "suggestions": {
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "required": [
+              "documentMoves"
+            ]
+          }
+        ]
+      },
+      "MemoV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "body",
+          "sourceIds"
+        ],
+        "properties": {
+          "type": {
+            "const": "memo"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 60000
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "IDs of verified documents selected when this receipt was created; never invented IDs."
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,47}$",
+            "description": "Optional unique key for another suggestion in this v2 batch to reference using @key."
+          }
+        }
+      },
+      "TaskV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "body",
+          "sourceIds"
+        ],
+        "properties": {
+          "type": {
+            "const": "task"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 60000
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "IDs of verified documents selected when this receipt was created; never invented IDs."
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Recommended check date only."
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,47}$",
+            "description": "Optional unique key for another suggestion in this v2 batch to reference using @key."
+          }
+        }
+      }
+    }
+  }
+}

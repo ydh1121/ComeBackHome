@@ -13,6 +13,7 @@ const vite = await createServer({
 });
 const sql = new DatabaseSync(":memory:");
 let beforeStatement = null;
+let d1Queries=0, batchDepth=0;
 const db = {
   prepare(source) {
     let args = [];
@@ -22,6 +23,7 @@ const db = {
         return this;
       },
       compile() {
+        if(!batchDepth)d1Queries++;
         if (beforeStatement) beforeStatement(source);
         const bound = [];
         const text = source.replace(/\?(\d+)/g, (_, n) => {
@@ -46,6 +48,7 @@ const db = {
     };
   },
   async batch(statements) {
+    d1Queries++;batchDepth++;
     sql.exec("BEGIN");
     try {
       const result = [];
@@ -55,7 +58,7 @@ const db = {
     } catch (e) {
       sql.exec("ROLLBACK");
       throw e;
-    }
+    } finally { batchDepth--; }
   },
 };
 const load = (p) => vite.ssrLoadModule("/" + p),
@@ -586,6 +589,33 @@ try {
     beforeAudit,
     "batch rollback also rolls back audit and history",
   );
+
+  const analysis = { version: "cbh-analysis/v1", suggestions: [
+    {type:"memo",title:"Synthetic batch summary",body:"Synthetic observations",sourceIds:[]},
+    {type:"task",title:"Synthetic batch action",body:"Confirm a missing item",sourceIds:[],dueDate:"2026-12-30"},
+  ]};
+  check((await call("private/case/analysis","POST",analysis,member)).status,400,"AI output does not approve itself");
+  check((await call("private/case/analysis","POST",{...analysis,approved:true},admin)).status,403,"admin without case consent cannot import analysis");
+  check((await call("private/case/analysis","POST",{...analysis,approved:true},secondCookie)).status,401,"revoked device cannot import analysis");
+  for(const suggestion of [
+    {...analysis.suggestions[0],type:"decision"},
+    {...analysis.suggestions[0],certainty:"official"},
+    {...analysis.suggestions[1],dueDate:"2026-02-30"},
+  ]) check((await call("private/case/analysis","POST",{...analysis,approved:true,suggestions:[analysis.suggestions[0],suggestion]},member)).status,400,"mixed invalid proposals produce no partial writes");
+  check((await call("private/case/analysis","POST",{...analysis,approved:true,suggestions:[{...analysis.suggestions[0],sourceIds:["foreign-document"]}]},member)).status,400,"unverified or foreign source denied");
+  check(sql.prepare("SELECT count(*) n FROM case_records").get().n,beforeCount,"analysis validation writes zero");
+  inserts=0;
+  beforeStatement=source=>{if(source.startsWith("INSERT INTO case_records")&&++inserts===2){beforeStatement=null;throw Error("synthetic analysis batch failure");}};
+  check((await call("private/case/analysis","POST",{...analysis,approved:true},member)).status,503,"analysis batch failure is reported");
+  check(sql.prepare("SELECT count(*) n FROM case_records").get().n,beforeCount,"analysis rollback keeps all old records");
+  check(sql.prepare("SELECT count(*) n FROM case_audit WHERE action='record-create'").get().n,beforeAudit,"analysis rollback includes audit");
+  for(const expected of [2,0]){
+    const response=await call("private/case/analysis","POST",{...analysis,approved:true},member);
+    check(response.status,200,"approved analysis accepted");
+    check((await response.json()).inserted,expected,"analysis retry is idempotent");
+  }
+  const analysisRows=sql.prepare("SELECT payload_json FROM case_records WHERE id LIKE 'import-%'").all();
+  check(analysisRows.every(r=>JSON.parse(r.payload_json).certainty==="reported"),true,"AI proposals never become official facts");
 
   const { createDriveFixture } = await load(
     "worker/testing/private-work-local.ts",
@@ -1554,6 +1584,8 @@ try {
   );
   check(validFilePrefix(file.buffer, "application/pdf"), true, "PDF magic");
   check(validFilePrefix(file.buffer, "image/png"), false, "mismatched MIME");
+  const {verifyAnalysisV2Contract}=await import('./private-work/verify-analysis-v2-contract.mjs');
+  await verifyAnalysisV2Contract({sql,call,member,load,queryCount:{get:()=>d1Queries,reset:()=>{d1Queries=0;}},setBeforeStatement:fn=>{beforeStatement=fn;}});
   assert(serverKdfCalls > 0, "server relief exercised under production iteration cap");
   console.log(
     "PRIVATE_WORK_CONTRACT_PASS checks=" +
