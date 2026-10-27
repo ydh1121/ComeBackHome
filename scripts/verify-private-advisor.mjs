@@ -6,7 +6,7 @@ try {
     const { validatePayload } = await vite.ssrLoadModule('/src/modules/injury/domain/records.ts');
     let checks = 0;
     const check = (actual, expected) => { assert.deepEqual(actual, expected); checks++; };
-    check(m.advisorSummary([], null), { label: '현재 단계 확인이 필요해요', review: false, source: '입력하지 않아도 안내를 볼 수 있어요' });
+    check(m.advisorSummary([], null), { label: '아직 신청 단계를 확인하지 않았어요', review: false, source: '내 상황을 알려주면 다음에 할 일을 안내해요' });
     check(m.QUESTIONS.length, 3);
     const blank = m.emptyProfile();
     check(blank.answers, [null, null, null]);
@@ -26,7 +26,7 @@ try {
     check(m.advisorSummary([], reported).label, '결과를 받았어요');
     const existing = [{ ...record, kind: 'intake', payload: { title: 'synthetic claim', body: 'synthetic', certainty: 'reported', sourceIds: [], data: { status: 'filed' } } }];
     const before = structuredClone(existing);
-    check(m.advisorSummary(existing, reported).label, '공단 접수를 확인하는 단계');
+    check(m.advisorSummary(existing, reported).label, '공단 접수 확인 중');
     check(existing, before);
     assert(!/승인|퇴사|지급/.test(m.advisorSummary([], blank).label));
     checks++;
@@ -35,6 +35,7 @@ try {
     checks++;
     assert(!/7월|엽떡|신이본|MRI|330/.test(m.HOSPITAL_SCRIPT));
     checks++;
+    await (await import('./private-work/verify-advisor-r2-model.mjs')).verifyAdvisorR2Model(vite);
     console.log('PRIVATE_ADVISOR_R1_MODEL_PASS checks=' + checks + ' empty_case_unknown_not_false_reported_not_official_existing_records_unchanged_no_private_seed');
 }
 finally {

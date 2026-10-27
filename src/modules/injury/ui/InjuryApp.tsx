@@ -15,6 +15,7 @@ import type { CaseData } from "./types";
 import { reviewCaseSeed, type CaseSeed } from "../domain/imports";
 import { AdvisorHelp, AdvisorHome, AdvisorProgress } from "../advisor/AdvisorHome";
 import { isProfile } from "../advisor/model";
+import { Icon } from "../../../shared/components/Icon";
 
 const tabs = [
   ["tasks", "할 일"],
@@ -64,6 +65,7 @@ export function InjuryApp() {
       const value = new URLSearchParams(location.search).get("section");
       return tabs.some((t) => t[0] === value) ? (value as Section) : "tasks";
     }),
+    [pageKey, setPageKey] = useState(0),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<{
       kind: RecordKind;
@@ -115,6 +117,7 @@ export function InjuryApp() {
     history.replaceState(null, "", "/injury?section=" + value);
   };
   const navigate = (value: AdvisorRoute) => {
+    setPageKey(key => key + 1);
     if(value === "manage") choose(section);
     else { setView(value);history.replaceState(null,"","/injury?section="+value); }
     window.scrollTo(0,0);
@@ -131,24 +134,22 @@ export function InjuryApp() {
           )),
     ) ?? [];
   return (
-    <main className="private-page" data-page="InjuryApp">
+    <main className="private-page advisor-shell" data-page="InjuryApp" data-advisor-view={view}>
       <header className="private-header">
         <a href="/">ComeBackHome</a>
         <a href="/account">내 계정</a>
       </header>
       <div className="private-title">
         <div>
-          <h1>나의 산재 도우미</h1>
+          <span className="advisor-brand-caption">치료 · 신청 · 생활비</span><h1>산재 도우미</h1>
         </div>
-        <button className="secondary" onClick={() => void reload()}>
-          새로고침
-        </button>
+        <button className="secondary advisor-refresh" onClick={() => void reload()} aria-label="새로고침" title="새로고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 4M4 14l3 4a7 7 0 0 0 11-1"/></svg></button>
       </div>
-      <p className="advisor-page-subtitle">오늘 무엇부터 하면 되는지 하나씩 알려드릴게요.</p>
+
       <nav className="private-tabs advisor-top-nav" aria-label="산재 메뉴">
         {([["today","오늘"],["progress","진행 상황"],["library","내 자료"]] as const).map(([key,title])=><button key={key} aria-current={view===key?"page":undefined} onClick={()=>navigate(key)}>{title}</button>)}
       </nav>
-      <div className="advisor-utilities"><button onClick={()=>navigate("help")}>전체 도움말</button><button onClick={()=>navigate("manage")}>내 관리함</button></div>
+      <div className="advisor-utilities"><button onClick={()=>navigate("help")}>상황별 도움말</button><button onClick={()=>navigate("manage")}>내 관리함<Icon name="chevron-right"/></button></div>
       {view === "manage" && <><h2 className="advisor-manage-title">내 관리함</h2><nav className="private-tabs" aria-label="기록 관리 메뉴">
         {tabs.map(([value, title]) => (
           <button
@@ -178,10 +179,10 @@ export function InjuryApp() {
       {view === "manage" && section === "settings" && consent && (
         <ConsentPanel consent={consent} reload={reload} />
       )}
-      {data && view === "today" && <AdvisorHome data={data} reload={reload} navigate={navigate}/>}
+      {data && view === "today" && <AdvisorHome key={pageKey} data={data} reload={reload} navigate={navigate}/>}
       {data && view === "progress" && <AdvisorProgress data={data} navigate={navigate}/>}
-      {data && view === "library" && <section className="advisor-stack"><article className="private-card"><h2>어떤 서류인지 몰라도 괜찮아요</h2><p>아래에서 연결·보관 상태를 먼저 확인해 주세요. 파일을 선택한 것만으로 원본이 저장되지는 않아요.</p></article><DocumentsPanel data={data} reload={reload}/><button className="secondary" onClick={()=>choose("documents")}>기존 문서·메모 모두 보기</button></section>}
-      {data && view === "help" && <AdvisorHelp/>}
+      {data && view === "library" && <section className="advisor-stack"><article className="private-card"><h2>받은 서류를 한곳에</h2><p>사진이나 PDF로 보관하세요. 업로드가 끝나면 보관 여부를 확인할 수 있어요.</p></article><DocumentsPanel data={data} reload={reload}/><button className="secondary" onClick={()=>choose("documents")}>기존 문서·메모 모두 보기</button></section>}
+      {data && view === "help" && <AdvisorHelp onOpen={id=>{ navigate("today"); history.replaceState(null,"","/injury?section=today&action="+id); }}/>}
       {data && view === "manage" && (
         <>
           {section === "tasks" && (

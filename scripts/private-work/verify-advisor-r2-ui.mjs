@@ -1,0 +1,72 @@
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
+export async function verifyAdvisorR2(page,ctx,base,label) {
+  const api = async (path,method='GET',data) => ctx.request.fetch(base+'/api/'+path,{method,headers:{Origin:base},...(data===undefined?{}:{data})});
+  const before=await (await api('private/case')).json();
+  await page.getByRole('button',{name:'오늘',exact:true}).click();
+  const getMenu=()=>page.getByRole('button',{name:'상황별 도움말',exact:true});
+  let writes=0;
+  const count=request=>{if(request.method()==='PUT' && request.url().includes('/api/private/case/records/')) writes++;};
+  page.on('request',count);
+  for(let i=0;i<12;i++) {
+    await getMenu().click();
+    assert.equal(await page.locator('.advisor-help-list button').count(),12);
+    await page.locator('.advisor-help-list button').nth(i).click();
+    await page.locator('.advisor-action').waitFor();
+    assert.equal(await page.locator('.advisor-steps li').count(),3);
+    assert(await page.locator('.advisor-script-body').innerText());
+    await page.getByText('준비할 자료',{exact:false}).click();
+    assert.equal(await page.locator('.advisor-materials li').count(),2);
+    assert.equal(await page.getByRole('button',{name:'답변 남기기',exact:true}).isEnabled(),false);
+    assert(await page.locator('.advisor-footnote').innerText());
+  }
+  assert.equal(writes,0,'viewing twelve guides never writes a case record');
+  await page.getByRole('button',{name:'오늘',exact:true}).click();
+  await page.locator('.advisor-primary').waitFor();
+  assert.equal(await page.locator('.advisor-action').count(),0,'Today tab resets an open action');
+  await page.goto(base+'/injury?section=today&action=A');
+  await page.locator('.advisor-response').waitFor();
+  await page.getByRole('radio',{name:'쉬거나 일을 줄이라고 했어요',exact:true}).check();
+  assert.equal(writes,0,'selecting a reply alone does not save');
+  const path='**/api/private/case/records/advisor-response-v1-*';
+  await page.route(path,r=>r.request().method()==='PUT'?r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'PRIVATE_SERVICE_UNAVAILABLE'})}):r.continue());
+  await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'답변을 저장하지 못했어요'}).waitFor();
+  assert(await page.getByRole('radio',{name:'쉬거나 일을 줄이라고 했어요',exact:true}).isChecked());
+  await page.unroute(path);
+  await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
+  await page.getByRole('button',{name:'다음 안내 보기',exact:true}).waitFor();
+  const saved=await (await api('private/case')).json(), response=saved.records.find(r=>r.id==='advisor-response-v1-'+saved.caseId+'-A');
+  assert.equal(response.payload.certainty,'reported');assert.deepEqual(response.payload.sourceIds,[]);
+  assert.equal(JSON.parse(response.payload.body).answer,'restriction');
+  await page.reload();
+  await page.getByRole('button',{name:'다음 안내 보기',exact:true}).click();
+  await page.getByRole('heading',{name:'업무 조정이나 병가가 가능한지 물어보세요',exact:true}).waitFor();
+  await page.waitForFunction(() => { const el = document.querySelector('.advisor-action'); return el && getComputedStyle(el).opacity === '1' && el.getAnimations().every(a => a.playState === 'finished'); });
+  await page.screenshot({path:resolve('artifacts/private-work',`${label}-advisor-company-390.png`),fullPage:true,animations:'disabled'});
+  await page.getByRole('radio',{name:'아직 답이 없어요',exact:true}).check();
+  await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'내 답변을 저장했어요'}).waitFor();
+  const current=await (await api('private/case')).json(), company=current.records.find(r=>r.id==='advisor-response-v1-'+current.caseId+'-C');
+  const other=await api('private/case/records/'+company.id,'PUT',{kind:'content',revision:company.revision,payload:{...company.payload,body:JSON.stringify({...JSON.parse(company.payload.body),answer:'refused'})}});
+  assert.equal(other.status(),200);
+  await page.getByRole('radio',{name:'가능하다고 했어요',exact:true}).check();
+  await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
+  await page.getByRole('heading',{name:'다른 기기에서 답변을 바꿨어요',exact:true}).waitFor();
+  assert(await page.getByRole('radio',{name:'가능하다고 했어요',exact:true}).isChecked());
+  await page.getByRole('button',{name:'내 선택 유지',exact:true}).click();
+  await page.getByRole('button',{name:'답변 남기기',exact:true}).click();
+  await page.getByRole('button',{name:'다음 안내 보기',exact:true}).waitFor();
+  const after=await (await api('private/case')).json();
+  for(const record of before.records.filter(r=> !['A','C'].some(id=>r.id==='advisor-response-v1-'+before.caseId+'-'+id))) assert.deepEqual(after.records.find(r=>r.id===record.id),record,'unrelated record retained');
+  for(const id of ['A','C']) {
+    const r=after.records.find(r=>r.id==='advisor-response-v1-'+after.caseId+'-'+id);
+    assert.equal(after.records.filter(a=>a.id===r.id).length,1);
+    const reset=await api('private/case/records/'+r.id,'PUT',{kind:'content',revision:r.revision,payload:{...r.payload,body:JSON.stringify({...JSON.parse(r.payload.body),answer:null,deferred:true})}});
+    assert.equal(reset.status(),200);
+  }
+  page.off('request',count);
+  await page.getByRole('button',{name:'내 관리함',exact:true}).click();
+  await page.getByRole('button',{name:'할 일',exact:true}).click();
+  console.log('PRIVATE_ADVISOR_R2_UI_PASS '+label+' 12_guides_no_view_writes_explicit_reply_503_reload_branch_409_dedup_existing_records_unchanged');
+}
