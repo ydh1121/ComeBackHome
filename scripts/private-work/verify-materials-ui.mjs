@@ -179,7 +179,11 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await inbox.locator('summary').click();
   const createReceipt=inbox.getByRole('button',{name:'선택한 자료의 답변 받을 연결 만들기',exact:true});
   await page.waitForFunction(()=>{const buttons=[...document.querySelectorAll('.analysis-receipts button')];return buttons.some(b=>b.textContent==='선택한 자료의 답변 받을 연결 만들기'&&!b.disabled);});
+  const createdResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/analysis-receipts'&&response.request().method()==='POST');
   await createReceipt.click();
+  const created=await createdResponse,createdBody=await created.json();
+  assert.equal(created.status(),201,'receipt creation status/error: '+JSON.stringify({status:created.status(),error:typeof createdBody.error==='string'&&/^[A-Z_]+$/.test(createdBody.error)?createdBody.error:undefined}));
+  assert.equal(await inbox.locator('label[for="analysis-connection-info"]').textContent(),'연결 정보','connection input has an explicit stable accessible label');
   await inbox.getByLabel('연결 정보',{exact:true}).waitFor();
   const connection=JSON.parse(await inbox.getByLabel('연결 정보',{exact:true}).inputValue());
   await inbox.locator('summary').click();
