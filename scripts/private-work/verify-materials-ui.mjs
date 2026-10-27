@@ -12,6 +12,10 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await page.goto(base+'/injury?section=library');
   const input=page.locator('.materials-upload input[type=file]');
   await input.waitFor();
+  const choose=async files=>{
+    await page.waitForFunction(()=>document.querySelector('.materials-upload input[type=file]')?.disabled===false);
+    await input.setInputFiles(files);
+  };
   assert.equal(await input.getAttribute('multiple'),'');
   const fixture=n=>({name:`synthetic-batch-${label}-${n}.pdf`,mimeType:'application/pdf',buffer:Buffer.from('%PDF-synthetic-multi-'+label+'-'+n)});
   let failed=false,registrations=0;
@@ -23,7 +27,7 @@ async function verifyMaterialsFlow(page,ctx,base,label){
     await route.continue();
   });
   const before=await snapshot();
-  await input.setInputFiles([fixture('first'),fixture('retry'),fixture('last')]);
+  await choose([fixture('first'),fixture('retry'),fixture('last')]);
   assert.equal((await snapshot()).documents.length,before.documents.length,'selection alone does not create D1 documents');
   await page.getByRole('button',{name:'선택한 3개 파일 보관',exact:true}).click();
   await page.getByRole('status').filter({hasText:'2개 보관 완료 · 1개'}).waitFor();
@@ -33,14 +37,14 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await page.getByRole('status').filter({hasText:'원본 보관 확인 완료 · 1개'}).waitFor();
   assert.equal(await page.locator('[data-upload-state=done]').count(),3);
   assert.equal(registrations,4,'only failed original is retried');
-  await input.setInputFiles(fixture('first'));
+  await choose(fixture('first'));
   await page.getByRole('button',{name:'선택한 1개 파일 보관',exact:true}).click();
   await page.getByRole('status').filter({hasText:'원본 보관 확인 완료 · 1개'}).waitFor();
   const stored=await snapshot();
   assert.equal(stored.documents.length,before.documents.length+3,'same content is not duplicated');
   assert(stored.documents.filter(d=>d.filename.includes('synthetic-batch-'+label)).every(d=>d.status==='ready'));
   await page.unroute('**/api/private/case/documents');
-  await input.setInputFiles({name:'synthetic-invalid.html',mimeType:'text/html',buffer:Buffer.from('<p>synthetic</p>')});
+  await choose({name:'synthetic-invalid.html',mimeType:'text/html',buffer:Buffer.from('<p>synthetic</p>')});
   await page.locator('[data-upload-state=failed]').filter({hasText:'synthetic-invalid.html'}).waitFor();
   assert.equal((await snapshot()).documents.length,stored.documents.length,'invalid type creates no document');
   await page.getByRole('button',{name:'synthetic-invalid.html 선택 해제',exact:true}).click();
@@ -50,7 +54,7 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await page.route('**/api/private/case/documents',async route=>{
     if(route.request().method()==='POST'){started();await held;await route.abort('aborted').catch(()=>{});}else await route.continue();
   });
-  await input.setInputFiles([fixture('cancel'),fixture('after-cancel')]);
+  await choose([fixture('cancel'),fixture('after-cancel')]);
   await page.getByRole('button',{name:'선택한 2개 파일 보관',exact:true}).click();
   await seen;
   await page.getByRole('button',{name:'전송 취소',exact:true}).click();release();

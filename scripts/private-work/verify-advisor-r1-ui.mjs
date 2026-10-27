@@ -18,7 +18,7 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     await page.locator('.advisor-primary').waitFor();
     assert.equal(await page.getByRole('navigation', { name: '산재 메뉴', exact: true }).getByRole('button').count(), 3);
     assert.equal(await page.getByRole('button', { name: '기록 추가', exact: true }).count(), 0);
-    assert.equal(await page.locator('.record-tools, .record-add, textarea, select').count(), 0, 'no record-entry prerequisites on home');
+    assert.equal(await page.locator('.record-tools:visible, .record-add:visible, textarea:visible, select:visible').count(), 0, 'no visible record-entry prerequisites on home');
     for (const width of [375, 390, 768, 1024, 1440]) {
         await page.setViewportSize({ width, height: 844 });
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));

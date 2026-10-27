@@ -18,12 +18,28 @@ export async function verifyContentModel(vite){
   check(m.planningSeed(prepared,[record]).records,[]);
   check(m.planningSeed(prepared,[{...record,payload:m.personalAnswer(record,'different','Synthetic correction')}]).records,[]);
   check(m.planningSeed(prepared,[{...record,archivedAt:'2026-10-28'}]).records,[]);
+  const second={kind:'content',payload:m.guidancePayload('Synthetic second guide','Synthetic second instruction')};
+  const expanded=await m.preparePlanning({version:'cbh-case-seed/v1',records:[guide,second]}),reordered=await m.preparePlanning({version:'cbh-case-seed/v1',records:[second,guide]});
+  check(expanded[0].key,prepared[0].key);
+  check(reordered[1].key,prepared[0].key);
+  check(reordered[0].key,expanded[1].key);
+  const answered={...record,payload:m.personalAnswer(record,'different','Synthetic current correction')};
+  check(m.planningSeed(reordered,[answered]).records.length,1);
+  check(m.planningSeed(reordered,[answered]).records[0].payload.title,second.payload.title);
+  check(m.planningSeed([...prepared,...prepared],[]).records.length,1);
+  check((await m.preparePlanning({version:'cbh-case-seed/v1',records:[{...guide,payload:{...guide.payload,data:{medium:'none',category:'guide'}}}]}))[0].key,prepared[0].key);
   check(prepared,untouched);
   for(const [answer,note] of [['pending',''],['different',''],['same','x'.repeat(20001)]]){assert.throws(()=>m.personalAnswer(record,answer,note));checks++;}
   check(m.readPersonalReview({...record,payload:{...record.payload,body:'invalid'}}),null);
   check(m.readPersonalReview({...record,archivedAt:'2026-10-28'}),null);
   const groups=[{...prepared[0],group:'guide'}];
   const general=m.planningSeed(groups,[]);check(general.records[0].payload.body,guide.payload.body);check(general.records[0].payload.certainty,'reported');
+  const editedGuide={...record,payload:{...general.records[0].payload,body:'Synthetic user-edited guidance'}};
+  const editedSnapshot=structuredClone(editedGuide);
+  check(m.planningSeed(reordered.map(e=>({...e,group:'guide'})),[editedGuide]).records.length,1);
+  check(m.planningSeed(reordered.map(e=>({...e,group:'guide'})),[editedGuide]).records[0].payload.title,second.payload.title);
+  check(m.planningSeed([...groups,...groups],[]).records.length,1);
+  check(editedGuide,editedSnapshot);
   check(m.planningSeed(groups,[{...record,payload:guide.payload}]).records,[]);
   check(m.planningSeed([{...prepared[0],group:'hold'}],[]).records,[]);
   const manifest={version:'cbh-planning-preparation/v1',sourceSha256:'a'.repeat(64),records:[{...guide,group:'guide'}]};

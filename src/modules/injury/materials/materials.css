@@ -99,3 +99,8 @@
 .advisor-shell .record-card .copy-toolbar{top:calc(env(safe-area-inset-top) + 8px)}
 .editor-advanced .field-grid{margin:16px 0}
 .editor-advanced>label{margin-bottom:18px}
+
+.upload-result{margin-top:18px}
+.upload-result>summary{font-size:13px;color:var(--cbh-muted)}
+.upload-result .upload-queue{margin-top:8px}
+.materials-file-label input::file-selector-button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:8px 12px;margin-right:10px;background:var(--cbh-surface-soft,var(--cbh-bg));color:var(--cbh-ink);cursor:pointer}

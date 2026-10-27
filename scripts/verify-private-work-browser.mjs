@@ -16,7 +16,7 @@ const root = process.cwd(),
   config = resolve(".tmp-private-work-test.jsonc"),
   wrangler = resolve("node_modules/.bin/wrangler"),
   base = "https://127.0.0.1:18874";
-let worker;
+let worker, activePage;
 const run = (cmd, args, extra = {}) =>
   new Promise((yes, no) => {
     const p = spawn(cmd, args, {
@@ -187,6 +187,7 @@ try {
       };
     });
     const page = await ctx.newPage();
+    activePage = page;
     let ready = false;
     for (let i = 0; i < 100; i++) {
       try {
@@ -750,6 +751,9 @@ try {
         " responsive_375_390_768_1024_1440 login_first_change_cookie_conflict_longpress_copy_drive_verify_policy_calculation_consent_revocation_logout_back",
     );
   }
+} catch (error) {
+  await activePage?.screenshot({path:resolve('artifacts/private-work','private-browser-failure.png'),fullPage:true}).catch(()=>{});
+  throw error;
 } finally {
   if (worker) {
     try {

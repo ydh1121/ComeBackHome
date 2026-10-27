@@ -422,9 +422,9 @@ export function RecordEditor({
             <div className="copy-toolbar">
               <CopyButton value={payloadText(payload, kind, data)} />
             </div>
-            <label>
-              본문·메모
+            <label htmlFor={'record-body-'+id.current}>본문·메모</label>
               <textarea
+                id={'record-body-'+id.current}
                 value={payload.body}
                 maxLength={60000}
                 rows={14}
@@ -432,7 +432,6 @@ export function RecordEditor({
                   setPayload({ ...payload, body: e.target.value })
                 }
               />
-            </label>
           </div>
           <div className="field-grid">
             {spec.fields.filter(f=>f.required||["status","dueDate","from","to","appointmentAt"].includes(f.key)).map(f=><label key={f.key} className={f.type==="boolean"?"auth-check":""}>{f.label.replace(/ ID$/," ")}{f.required?" *":""}{input(f)}</label>)}

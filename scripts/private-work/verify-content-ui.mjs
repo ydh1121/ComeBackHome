@@ -33,6 +33,26 @@ export async function verifyContent(page,ctx,base,label){
   const history=await(await api('private/case/records/'+guide.id+'/history')).json();assert(history.history.length>=3);
   await page.reload();await block.getByText('Synthetic own guidance '+label,{exact:true}).waitFor();
 
+  const activeGuide=(await snapshot()).records.find(r=>r.id===guide.id);
+  const archive=await api('private/case/records/'+guide.id,'DELETE',{revision:activeGuide.revision});assert.equal(archive.status(),200);
+  await page.reload();await block.getByText('저장한 안내를 숨겨 기본 안내를 보여드려요.',{exact:false}).waitFor();
+  assert(await block.getByRole('button',{name:'안내 이유 편집',exact:true}).isDisabled(),'archived guidance is not recreated under the same identity');
+  const fallback=await block.locator('p').first().textContent();assert(fallback.trim().length>0&&!fallback.includes('Synthetic own guidance'),'archived override uses the original fallback');
+  const archivedGuide=(await snapshot()).records.find(r=>r.id===guide.id);assert(archivedGuide.archivedAt);
+  assert.equal(archivedGuide.payload.body,activeGuide.payload.body,'fallback display does not rewrite hidden content');
+  await block.getByRole('link',{name:'자료함의 ‘숨긴 자료’에서 복원',exact:true}).click();
+  await page.getByRole('checkbox',{name:'숨긴 자료',exact:true}).check();
+  const hiddenGuide=page.locator('[data-material-record="'+guide.id+'"]');await hiddenGuide.locator('summary').click();
+  await hiddenGuide.getByRole('button',{name:'메모 복원',exact:true}).click();await hiddenGuide.waitFor({state:'hidden'});
+  const restoredGuide=(await snapshot()).records.find(r=>r.id===guide.id);
+  assert.equal(restoredGuide.archivedAt,null);assert.equal(restoredGuide.revision,archivedGuide.revision+1);assert.equal(restoredGuide.payload.body,activeGuide.payload.body);
+  await page.goto(base+'/injury?section=today&action=A');await block.getByText('Synthetic own guidance '+label,{exact:true}).waitFor();
+  await block.getByRole('button',{name:'안내 이유 편집',exact:true}).click();
+  await editor.locator('textarea').fill('Synthetic restored guidance '+label);
+  await editor.getByRole('button',{name:'저장',exact:true}).click();await editor.waitFor({state:'hidden'});
+  const editedRestoredGuide=(await snapshot()).records.find(r=>r.id===guide.id);
+  assert.equal(editedRestoredGuide.revision,restoredGuide.revision+1);assert.equal(editedRestoredGuide.payload.body,'Synthetic restored guidance '+label);
+
   const original={kind:'content',payload:{title:'Synthetic prior note '+label,body:'Synthetic prior statement, not confirmed.',certainty:'reported',sourceIds:[],data:{category:'reference',medium:'none'}}};
   const review={version:1,origin:'synthetic-origin-'+label,original,answer:'pending',note:''};
   const payload={title:original.payload.title,body:JSON.stringify(review),certainty:'reported',sourceIds:[],data:{category:'reference',medium:'none',recipient:'planning-personal/v1:synthetic-'+label}};
@@ -79,5 +99,11 @@ export async function verifyContentAdmin(page,ctx,base,label){
   assert.equal(await panel.getByRole('button',{name:'미등록 내용 0개 적용',exact:true}).isDisabled(),true);
   const final=await snapshot();assert.equal(final.records.length,after.records.length);assert.equal(final.records.find(r=>r.id===guide.id).payload.body,'Synthetic owner-edited guide');
   for(const old of before.records)assert.deepEqual(final.records.find(r=>r.id===old.id),old);
+  const expanded={...prepared,records:[{kind:'content',payload:{...payload,title:'Synthetic added guide '+label,body:'Synthetic added instruction'},group:'guide'},prepared.records[0],prepared.records[0]]};
+  await panel.getByLabel('관리자 분류 자료',{exact:true}).setInputFiles({name:'synthetic-expanded.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(expanded))});
+  await panel.getByRole('button',{name:'미등록 내용 1개 적용',exact:true}).click();
+  await panel.getByRole('status').filter({hasText:'새 내용 1개를 적용했어요'}).waitFor();
+  const extended=await snapshot();assert.equal(extended.records.length,final.records.length+1);
+  for(const old of final.records)assert.deepEqual(extended.records.find(r=>r.id===old.id),old,'reordered additions and repeats preserve edited records');
   console.log('PRIVATE_CONTENT_ADMIN_UI_PASS '+label+' one_time_preparation_explicit_save_existing_edits_preserved');
 }

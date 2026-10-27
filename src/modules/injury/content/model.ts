@@ -26,12 +26,15 @@ export async function preparePlanning(value: unknown): Promise<PlanningEntry[]> 
   const prepared = candidate?.version === 'cbh-planning-preparation/v1';
   if (prepared && (typeof candidate.sourceSha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(candidate.sourceSha256))) throw Error('원본 파일의 확인값을 확인해 주세요.');
   const seed = reviewCaseSeed(prepared ? {...candidate,version:'cbh-case-seed/v1'} : value);
-  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(seed)))), b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
-  return seed.records.map((r,i)=>{
+  return Promise.all(seed.records.map(async(r,i)=>{
     const group = prepared ? candidate.records?.[i]?.group : r.payload.certainty === 'official' ? 'hold' : 'personal';
     if (!['guide','personal','hold'].includes(String(group)) || (group==='guide' && (r.kind!=='content'||r.payload.certainty==='official'))) throw Error('초안 분류를 확인해 주세요.');
-    return {key:digest+'-'+i,...r,group:group as PlanningGroup};
-  });
+    // Identity follows the normalized original, independent of file order,
+    // surrounding entries, classification, or later edits to the saved copy.
+    const original={kind:r.kind,payload:{...r.payload,sourceIds:[...r.payload.sourceIds].sort(),data:Object.fromEntries(Object.entries(r.payload.data).sort(([a],[b])=>a.localeCompare(b)))}};
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(original)))),b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
+    return {key:digest,...r,group:group as PlanningGroup};
+  }));
 }
 const entryKey = (record: CaseRecord) => String(record.payload.data.recipient ?? '').replace(/^(planning-personal|planning-guide)\/v1:/,'');
 export function planningSeed(entries: PlanningEntry[], records: CaseRecord[]): CaseSeed {
@@ -55,6 +58,7 @@ export function planningSeed(entries: PlanningEntry[], records: CaseRecord[]): C
         data:{category:'reference',medium:'none',recipient:personalPrefix+entry.key},
       })});
     } else throw Error('분류를 확인해 주세요.');
+    existing.add(entry.key);
   }
   const seed: CaseSeed = {version:'cbh-case-seed/v1',records:result};
   if (!withinRequestLimit({...seed,approved:true})) throw Error('자료가 너무 커요. 일부 항목을 보류하고 나누어 적용해 주세요.');
