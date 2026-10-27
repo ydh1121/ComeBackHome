@@ -61,6 +61,8 @@ export async function verifyMaterials(page,ctx,base,label){
     {name:`synthetic-note-${label}-one.txt`,mimeType:'text/plain',buffer:Buffer.from('Synthetic first memo')},
     {name:`synthetic-note-${label}-two.md`,mimeType:'text/markdown',buffer:Buffer.from('Synthetic second memo')},
   ]);
+  await page.waitForFunction(()=>document.querySelectorAll('.notes-composer textarea').length===2 || (!!document.querySelector('.notes-composer [role=status]')?.textContent && !document.querySelector('.notes-composer [role=status]')?.textContent.includes('읽는 중')));
+  assert.equal(await composer.locator('textarea').count(),2,'memo files loaded: '+await composer.getByRole('status').textContent());
   await composer.getByLabel('메모 2 내용',{exact:true}).waitFor();
   const beforeNotes=await snapshot();
   assert.equal(beforeNotes.records.length,stored.records.length,'memo files require separate save');
