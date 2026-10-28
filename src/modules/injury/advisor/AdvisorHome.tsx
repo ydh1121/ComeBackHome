@@ -54,10 +54,10 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
       <Evidence advice={primary} data={data}/>
     </article>
     <aside className="advisor-side">
-      <div className="advisor-section-heading"><h2>필요할 때 바로</h2></div>
+      <div className="advisor-section-heading"><h2>바로가기</h2></div>
       <div className="advisor-shortcuts">
-        <button className="secondary" onClick={() => navigate('library')}><Icon name="file"/><span><strong>받은 서류 보관하기</strong><small>사진이나 PDF를 모아두세요</small></span><Icon name="chevron-right"/></button>
-        <button className="secondary" onClick={() => navigate('progress')}><Icon name="calendar"/><span><strong>진행 상황 확인</strong><small>산재와 실업급여를 각각 확인해요</small></span><Icon name="chevron-right"/></button>
+        <button className="secondary" onClick={() => navigate('library')}><Icon name="file"/><span><strong>받은 서류 보관하기</strong></span><Icon name="chevron-right"/></button>
+        <button className="secondary" onClick={() => navigate('progress')}><Icon name="calendar"/><span><strong>진행 상황 확인</strong></span><Icon name="chevron-right"/></button>
       </div>
       {advice.length > 1 && <div className="advisor-related"><h3>함께 확인할 일</h3>{advice.slice(1,3).map(a => <button className="secondary" key={a.scenario.id} onClick={() => open(a.scenario.id)}><span>{a.scenario.category}</span><Icon name="chevron-right"/></button>)}</div>}
       <PersonalHistoryReview data={data} reload={reload}/><PlanningGuides data={data} reload={reload}/>
@@ -68,13 +68,13 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
 export function AdvisorProgress({ data, navigate }: { data: CaseData; navigate: (route: Route) => void }) {
   const profile = readProfile(data.records.find(r => r.id === profileId(data.caseId))), summary = advisorSummary(data.records, profile);
   return <section className="advisor-stack advisor-progress">
-    <header className="advisor-section-heading"><div><span className="advisor-eyebrow">내 진행 상황</span><h2>어디까지 진행했는지 확인하세요</h2></div></header>
+    <header className="advisor-section-heading"><div><h2>진행 상황</h2></div></header>
     <article className="private-card"><span className="advisor-eyebrow">산재</span><h3>{summary.label}</h3><p>{summary.source}</p>{profile?.confirmed && <details><summary>내가 남긴 답변</summary><AnswerSummary profile={profile}/></details>}<button className="secondary" onClick={() => navigate('manage')}>산재 기록 보기<Icon name="chevron-right"/></button></article>
     <article className="private-card"><span className="advisor-eyebrow">퇴사·실업급여</span><h3>퇴사 사유와 고용보험 이력을 확인하세요</h3><p>일할 수 있는 몸 상태인지도 함께 확인해야 해요. 수급 여부와 지급액은 고용센터의 결정에 따라 달라요.</p><button className="secondary" onClick={() => navigate('manage')}>직장·지급 기록 보기<Icon name="chevron-right"/></button></article>
   </section>;
 }
 export function AdvisorHelp({ onOpen, data, reload }: { onOpen: (id: string) => void; data:CaseData; reload:()=>Promise<void> }) {
-  return <section className="advisor-stack"><header className="advisor-section-heading"><div><span className="advisor-eyebrow">상황별 도움말</span><h2>지금 필요한 내용을 찾아보세요</h2></div></header>
+  return <section className="advisor-stack"><header className="advisor-section-heading"><div><h2>상황별 도움말</h2></div></header>
     <div className="advisor-help-list">{SCENARIOS.map(s => <button className="secondary" key={s.id} onClick={() => onOpen(s.id)}><span><small>{s.category}</small><strong>{s.title}</strong></span><Icon name="chevron-right"/></button>)}</div>
     <article className="private-card advisor-contacts"><h3>기관에 문의하기</h3>{[['contact-work','근로복지공단\n산재 신청·심사\n1588-0075'],['contact-employment','고용노동부\n퇴사·고용보험\n1350']].map(([key,fallback])=><EditableGuidance key={key} data={data} reload={reload} contentKey={key} title="기관 연락처" fallback={fallback}>{text=>{const [name,description,phone]=text.split('\n');return phone&&/^[+\d(). -]{3,20}$/.test(phone)?<a href={'tel:'+phone.replace(/[^+\d]/g,'')}><span><strong>{name}</strong><small>{description} · {phone}</small></span><Icon name="phone"/></a>:<p className="record-body">{text}</p>;}}</EditableGuidance>)}</article>
   </section>;

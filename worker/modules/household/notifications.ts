@@ -1,4 +1,4 @@
-import type { HouseholdState } from '../../../src/modules/household/domain/model';
+import type { HouseholdState, ReminderRecipient } from '../../../src/modules/household/domain/model';
 import type { D1DatabaseLike, WorkerEnv } from '../../runtime-types';
 import type { NotificationPayload, NotificationRetryPolicy, PushDeliveryGateway, StoredPushSubscription } from '../../contracts';
 import { PushDeliveryError } from '../../contracts';
@@ -9,17 +9,17 @@ import { digest } from '../auth/crypto';
 import { PrivateError, privateJson, readJson, type Principal } from '../auth/contracts';
 import { seal, unseal } from '../documents/drive';
 
-interface Reminder { id: string; dueAt: string }
+interface Reminder { id: string; dueAt: string; recipient?: ReminderRecipient }
 interface Projection { revision: number; daily_enabled: number; todo_enabled: number; reminders_json: string }
-interface Binding { endpoint_hash: string; subscription_encrypted: string; user_id: string; session_hash: string; auth_epoch: number; created_at: string; updated_at: string }
+interface Binding { role: 'admin' | 'member'; endpoint_hash: string; subscription_encrypted: string; user_id: string; session_hash: string; auth_epoch: number; created_at: string; updated_at: string }
 interface Job { id: string; endpoint_hash: string; event_key: string; kind: 'ledger' | 'todo'; source_id: string | null; due_at: string; expires_at: string; attempts: number; claim_token: string }
-export interface HouseholdReminderEvent { key: string; kind: 'ledger' | 'todo'; sourceId: string | null; dueAt: string; expiresAt: string }
+export interface HouseholdReminderEvent { key: string; kind: 'ledger' | 'todo'; sourceId: string | null; dueAt: string; expiresAt: string; recipient: ReminderRecipient }
 const HOUR = 3_600_000;
 const memberSql = `u.disabled=0 AND u.must_change_password=0 AND u.login_id IN ('ydh1121','yvonne') AND u.auth_epoch=b.auth_epoch AND s.auth_epoch=b.auth_epoch AND s.user_id=b.user_id AND s.revoked_at IS NULL AND s.expires_at>?1 AND julianday(s.last_seen_at)>julianday(?1)-p.idle_hours/24.0`;
 
 /** Tiny scheduler projection. Drive remains the only source of memo contents. */
 export async function projectHouseholdReminders(db: D1DatabaseLike, state: HouseholdState): Promise<void> {
-  const reminders = state.todos.filter(t => !t.completedAt && t.remind && t.dueAt).map(t => ({ id: t.id, dueAt: t.dueAt! }));
+  const reminders = state.todos.filter(t => !t.archivedAt && !t.completedAt && t.remind && t.dueAt).map(t => ({ id: t.id, dueAt: t.dueAt!, recipient: t.reminderRecipient ?? 'both' }));
   await db.prepare(`INSERT INTO household_notification_projection(id,revision,daily_enabled,todo_enabled,reminders_json) VALUES(1,?1,?2,?3,?4)
     ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,daily_enabled=excluded.daily_enabled,todo_enabled=excluded.todo_enabled,reminders_json=excluded.reminders_json
     WHERE household_notification_projection.revision<=excluded.revision`)
@@ -33,12 +33,13 @@ export function householdReminderEvents(projection: Projection, nowIso: string):
   // KST midnight, with a one-hour catch-up window when a scheduler tick is late.
   const date = new Date(now + 9 * HOUR).toISOString().slice(0, 10);
   const midnight = Date.parse(date + 'T00:00:00+09:00');
-  if (projection.daily_enabled && now >= midnight && now < midnight + HOUR) result.push({ key: 'ledger:' + date, kind: 'ledger', sourceId: null, dueAt: new Date(midnight).toISOString(), expiresAt: new Date(midnight + HOUR).toISOString() });
+  if (projection.daily_enabled && now >= midnight && now < midnight + HOUR) result.push({ key: 'ledger:' + date, kind: 'ledger', sourceId: null, dueAt: new Date(midnight).toISOString(), expiresAt: new Date(midnight + HOUR).toISOString(), recipient: 'both' });
   if (projection.todo_enabled) {
     const reminders = JSON.parse(projection.reminders_json) as Reminder[];
     for (const reminder of reminders) {
-      const due = Date.parse(reminder.dueAt);
-      if (due <= now && now < due + HOUR) result.push({ key: 'todo:' + reminder.id + ':' + reminder.dueAt, kind: 'todo', sourceId: reminder.id, dueAt: reminder.dueAt, expiresAt: new Date(due + HOUR).toISOString() });
+      const due = Date.parse(reminder.dueAt), recipient = reminder.recipient ?? 'both';
+      if (!['both', 'admin', 'member'].includes(recipient)) continue;
+      if (due <= now && now < due + HOUR) result.push({ key: 'todo:' + reminder.id + ':' + reminder.dueAt, kind: 'todo', sourceId: reminder.id, dueAt: reminder.dueAt, expiresAt: new Date(due + HOUR).toISOString(), recipient });
     }
   }
   return result;
@@ -90,16 +91,16 @@ export async function handleHouseholdPushSubscription(request: Request, env: Wor
 function payload(job: Job): NotificationPayload {
   return job.kind === 'ledger'
     ? { title: '생활비 기록', body: '어제 쓴 돈을 빠뜨리지 않았는지 확인해 보세요.', tag: job.event_key, path: '/household?section=ledger' }
-    : { title: '함께 할 일', body: '알림을 설정한 할 일이 있어요.', tag: job.event_key, path: '/household?section=notes' };
+    : { title: '할 일 알림', body: '알림을 설정한 할 일이 있어요.', tag: job.event_key, path: '/household?section=notes' };
 }
 
 async function activeBindings(db: D1DatabaseLike, now: string): Promise<Binding[]> {
-  return (await db.prepare(`SELECT b.* FROM household_push_bindings b JOIN auth_users u ON u.id=b.user_id JOIN auth_sessions s ON s.token_hash=b.session_hash CROSS JOIN auth_policy p WHERE p.id='default' AND b.active=1 AND ${memberSql} ORDER BY b.endpoint_hash LIMIT 20`).bind(now).all<Binding>()).results;
+  return (await db.prepare(`SELECT b.*,u.role FROM household_push_bindings b JOIN auth_users u ON u.id=b.user_id JOIN auth_sessions s ON s.token_hash=b.session_hash CROSS JOIN auth_policy p WHERE p.id='default' AND b.active=1 AND ${memberSql} ORDER BY b.endpoint_hash LIMIT 20`).bind(now).all<Binding>()).results;
 }
 
-async function eligible(db: D1DatabaseLike, job: Job, now: string): Promise<boolean> {
+async function eligible(db: D1DatabaseLike, job: Job, now: string, role: Binding['role']): Promise<boolean> {
   const projection = await db.prepare(`SELECT * FROM household_notification_projection WHERE id=1`).first<Projection>();
-  return !!projection && householdReminderEvents(projection, now).some(e => e.key === job.event_key);
+  return !!projection && householdReminderEvents(projection, now).some(e => e.key === job.event_key && (e.recipient === 'both' || e.recipient === role));
 }
 
 export interface HouseholdNotificationResult { status: 'disabled' | 'not-configured' | 'processed'; planned: number; sent: number; retry: number; cancelled: number; failed: number }
@@ -123,12 +124,16 @@ export async function runHouseholdNotificationCycle(env: WorkerEnv, scheduledTim
   const bindings = await activeBindings(env.DB, now), byHash = new Map(bindings.map(b => [b.endpoint_hash, b]));
   const events = householdReminderEvents(projection, now);
   // One deterministic row per event and device. Repeated ticks never resend an acknowledged device.
+  // A recipient removed then re-added can resume an unsent, cancelled reminder in its original window.
   if (events.length && bindings.length) {
-    const queued = await env.DB.prepare(`INSERT OR IGNORE INTO household_notification_outbox(id,endpoint_hash,event_key,kind,source_id,due_at,expires_at,status,next_attempt_at)
+    const queued = await env.DB.prepare(`INSERT INTO household_notification_outbox(id,endpoint_hash,event_key,kind,source_id,due_at,expires_at,status,next_attempt_at)
       SELECT b.endpoint_hash||':'||json_extract(e.value,'$.key'), b.endpoint_hash, json_extract(e.value,'$.key'), json_extract(e.value,'$.kind'), json_extract(e.value,'$.sourceId'),json_extract(e.value,'$.dueAt'),json_extract(e.value,'$.expiresAt'),'pending',json_extract(e.value,'$.dueAt')
       FROM household_push_bindings b JOIN auth_users u ON u.id=b.user_id JOIN auth_sessions s ON s.token_hash=b.session_hash CROSS JOIN auth_policy p CROSS JOIN json_each(?2) e
       WHERE p.id='default' AND b.active=1 AND ${memberSql}
-      AND NOT EXISTS(SELECT 1 FROM household_notification_outbox o WHERE o.endpoint_hash=b.endpoint_hash AND o.event_key=json_extract(e.value,'$.key')) LIMIT 80`)
+      AND (json_extract(e.value,'$.recipient')='both' OR json_extract(e.value,'$.recipient')=u.role)
+      AND NOT EXISTS(SELECT 1 FROM household_notification_outbox o WHERE o.endpoint_hash=b.endpoint_hash AND o.event_key=json_extract(e.value,'$.key') AND o.status<>'cancelled') LIMIT 80
+      ON CONFLICT(endpoint_hash,event_key) DO UPDATE SET status='pending',attempts=0,next_attempt_at=excluded.next_attempt_at,claim_token=NULL,lease_until=NULL,error_code=NULL
+      WHERE household_notification_outbox.status='cancelled'`)
       .bind(now, JSON.stringify(events)).run();
     result.planned = Number(queued.meta?.changes ?? 0);
   }
@@ -143,8 +148,8 @@ export async function runHouseholdNotificationCycle(env: WorkerEnv, scheduledTim
     }
     let binding = byHash.get(job.endpoint_hash);
     // Recheck revocation immediately before delivery, including other-device logout.
-    const valid = binding && await env.DB.prepare(`SELECT b.* FROM household_push_bindings b JOIN auth_users u ON u.id=b.user_id JOIN auth_sessions s ON s.token_hash=b.session_hash CROSS JOIN auth_policy p WHERE p.id='default' AND b.endpoint_hash=?2 AND b.active=1 AND ${memberSql}`).bind(now, job.endpoint_hash).first<Binding>();
-    if (!valid || Date.parse(job.expires_at) <= scheduledTime || !(await eligible(env.DB, job, now))) {
+    const valid = binding && await env.DB.prepare(`SELECT b.*,u.role FROM household_push_bindings b JOIN auth_users u ON u.id=b.user_id JOIN auth_sessions s ON s.token_hash=b.session_hash CROSS JOIN auth_policy p WHERE p.id='default' AND b.endpoint_hash=?2 AND b.active=1 AND ${memberSql}`).bind(now, job.endpoint_hash).first<Binding>();
+    if (!valid || Date.parse(job.expires_at) <= scheduledTime || !(await eligible(env.DB, job, now, valid.role))) {
       await env.DB.prepare(`UPDATE household_notification_outbox SET status='cancelled',claim_token=NULL,lease_until=NULL WHERE id=?1 AND claim_token=?2`).bind(job.id, claim).run(); result.cancelled++; continue;
     }
     binding = valid;

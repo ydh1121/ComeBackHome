@@ -159,35 +159,41 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
       const key=JSON.stringify(sources);
       if(requestDraft.current?.key!==key)requestDraft.current={key,id:crypto.randomUUID()};
       const value=await privateRequest<{prompt:string}>(base+'/chat-exchanges','POST',{...sources,requestId:requestDraft.current.id},abort.signal);
-      if(mounted.current){setHandoff(value.prompt);setView('answers');setExchangeChange(v=>v+1);setMessage('요청문을 ChatGPT 대화에 전달해 주세요. 답변은 이곳에서 함께 볼 수 있어요.');}
+      if(mounted.current){setHandoff(value.prompt);setView('answers');setExchangeChange(v=>v+1);setMessage('요청문을 복사해 ChatGPT 대화에 전달해 주세요.');}
     }catch(e){if(mounted.current)setMessage(abort.signal.aborted?'요청문 준비를 취소했어요.':(e as Error).message);}
     finally{controller.current=null;lock.current=false;if(mounted.current)setBusy(false);}
   };
   const pendingCount=queue.filter(q=>q.file&&q.state!=='done').length;
-  return <section className="materials-workspace" aria-label="자료·메모 보관함">
-    <div className="materials-heading"><div><h2>자료함</h2><p>{status?.analyst?'자료를 모아 물어보고, 답변은 함께 확인해요.':'서류와 메모를 올리면 정리된 답변을 함께 볼 수 있어요.'}</p></div><small>{data.documents.filter(d=>d.status!=='trashed').length}개 파일 · {notes.filter(r=>!r.archivedAt).length}개 메모</small></div>
-    <div className="materials-view-switch" role="group" aria-label="자료함 보기"><button aria-pressed={view==='materials'} onClick={()=>setView('materials')}>자료 올리기</button><button aria-pressed={view==='answers'} onClick={()=>setView('answers')}>답변 보기</button></div>
-    <p role="status" className="materials-feedback">{message}</p>
-    {view==='materials'&&<>
-    <details className="materials-connection" open={!status?.folderSelected||!!new URLSearchParams(location.search).get('drive')}>
-      <summary>{status?.folderSelected?'Google Drive 연결됨':'원본 보관 연결'}</summary>
+  const connection = (<details className="materials-connection" open={!status?.folderSelected||!!new URLSearchParams(location.search).get('drive')}>
+      <summary><Icon name="settings"/><span>{status?.folderSelected?'Google Drive 연결됨':'원본 보관 연결'}</span><Icon name="chevron-down"/></summary><div className="materials-disclosure-body">
       {!status?<p>연결을 확인하고 있어요…</p>:!status.configured?<p>관리자가 Google Drive 설정을 완료하면 파일을 보관할 수 있어요. 메모는 지금도 작성할 수 있어요.</p>:<>
         <p className="materials-caption">{status.folderSelected?'원본 파일은 연결한 비공개 Drive 폴더에 보관해요.':status.connected?'Google 계정이 연결됐어요. 보관할 폴더를 선택해 주세요.':'Google 계정을 연결하고 비공개 보관 폴더를 선택해 주세요.'}</p>
         {status.owner&&<div className="private-actions"><button className="secondary" disabled={busy} onClick={()=>void connect()}>{status.connected?'Google 계정 다시 연결':'Google Drive 연결'}</button>{status.connected&&<button className="secondary" disabled={busy} onClick={()=>void folder()}>보관 폴더 선택</button>}</div>}
       </>}
-    </details>
+    </div></details>);
+  return <section className="materials-workspace" aria-label="자료·메모 보관함">
+    <div className="materials-heading"><h2>자료함</h2><small>{data.documents.filter(d=>d.status!=='trashed').length}개 파일 · {notes.filter(r=>!r.archivedAt).length}개 메모</small></div>
+    <div className="materials-view-switch" role="group" aria-label="자료함 보기"><button aria-pressed={view==='materials'} onClick={()=>setView('materials')}>자료 올리기</button><button aria-pressed={view==='answers'} onClick={()=>setView('answers')}>답변 보기</button></div>
+    <p role="status" className="materials-feedback">{message}</p>
+    {view==='materials'&&<>
+    {!status?.folderSelected&&connection}
+    <section className="materials-add" aria-label="자료 추가">
+      <h3>자료 추가</h3>
     {status?.folderSelected&&<div className="materials-upload private-card">
-      <label className="materials-file-label"><span><Icon name="upload"/><strong>파일 여러 개 추가</strong></span><small>PDF·사진 · 파일당 20MB · 한 번에 20개</small><input type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp" disabled={busy} onChange={e=>{chooseFiles(Array.from(e.target.files??[]));e.currentTarget.value='';}}/></label>
+      <label className="materials-file-label"><span><Icon name="upload"/><strong>파일 여러 개 추가</strong></span><small>PDF·사진 · 파일당 20MB · 한 번에 20개</small><input type="file" aria-label="파일 여러 개 추가" multiple accept="application/pdf,image/png,image/jpeg,image/webp" disabled={busy} onChange={e=>{chooseFiles(Array.from(e.target.files??[]));e.currentTarget.value='';}}/></label>
       {!!queue.length&&<details className="upload-result" open={busy||queue.some(q=>q.state!=='done')}><summary>파일 {queue.length}개 · 보관 완료 {queue.filter(q=>q.state==='done').length}개</summary><ul className="upload-queue" aria-label="선택한 파일">{queue.map(q=><li key={q.key} data-upload-state={q.state}><div><strong>{q.name}</strong><small>{q.state==='done'?'보관 완료':q.error??(q.state==='uploading'?`보관 중 ${q.progress}%`:'보관 대기')}</small>{q.state==='uploading'&&<progress value={q.progress} max={100} aria-label={q.name+' 전송률'}/>}</div>{q.file&&['failed','cancelled'].includes(q.state)&&<button className="secondary" disabled={busy} onClick={()=>void upload([q.key])}>재시도</button>}<button className="secondary" aria-label={q.name+' 선택 해제'} disabled={busy} onClick={()=>setQueue(v=>v.filter(n=>n.key!==q.key))}><Icon name="close"/></button></li>)}</ul></details>}
       <div className="private-actions">{!!pendingCount&&<button disabled={busy} onClick={()=>void upload()}>선택한 {pendingCount}개 파일 보관</button>}{busy&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>전송 취소</button>}</div>
     </div>}
     <NotesComposer reload={reload}/>
-    {createRecord&&<details className="private-card materials-record-create"><summary>다른 내용 기록하기</summary><div className="management-kind-list">{([
+    {createRecord&&<details className="private-card materials-record-create"><summary><Icon name="edit"/><span>다른 내용 기록하기</span><Icon name="chevron-down"/></summary><div className="management-kind-list materials-disclosure-body">{([
       ['agency_request','기관에 요청한 서류'],
       ['exposure','몸 상태·일한 내용'],
       ['incident','회사와 나눈 대화'],
       ['content','안내·연락처·전달문'],
     ] as const).map(([kind,title])=><button className="secondary" key={kind} disabled={busy} onClick={()=>createRecord(kind)}>{title}<Icon name="chevron-right"/></button>)}</div></details>}
+    </section>
+    <section className="materials-saved" aria-label="보관한 자료">
+    <h3>보관한 자료</h3>
     <div className="materials-tools"><label>자료 찾기<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="파일 이름·메모 내용 검색"/></label><label className="auth-check"><input type="checkbox" checked={hidden} disabled={busy} onChange={e=>{setHidden(e.target.checked);setSelected(new Set());setHandoff('');}}/>숨긴 자료</label></div>
     <div className="materials-filters" role="group" aria-label="자료 종류">{[['all','전체'],['files','파일'],['notes','메모·기록']].map(([key,title])=><button className="secondary" aria-pressed={filter===key} onClick={()=>setFilter(key)} key={key}>{title}</button>)}{!hidden&&!!visibleKeys.length&&<button className="secondary materials-select-all" disabled={busy} onClick={()=>setSelected(v=>{const n=new Set(v),all=visibleKeys.every(k=>n.has(k));for(const k of visibleKeys)all?n.delete(k):n.add(k);return n;})}>{visibleKeys.every(k=>selected.has(k))?'선택 해제':'보이는 자료 모두 선택'}</button>}</div>
     <div className="document-list materials-list">
@@ -202,6 +208,8 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
     </div>
     {!!selectedCount&&status?.analyst&&<section className="private-card materials-batch" aria-label="선택한 자료로 할 일"><div className="materials-batch-heading"><strong>{selectedCount}개 선택</strong><button className="secondary" disabled={busy} onClick={()=>{setSelected(new Set());setHandoff('');}}>선택 해제</button></div><label>궁금한 점 <small>선택사항</small><input disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} placeholder="빠진 서류와 다음에 할 일을 알려줘"/></label><button disabled={busy} onClick={()=>void prepare()}>ChatGPT에 물어보기 준비</button></section>}
     {!!selectedDocuments.length&&<details className="private-card materials-organize"><summary>선택한 파일을 분야별로 정리</summary><OrganizationReview data={data} proposals={selectedDocuments.map(d=>({documentId:d.id,category:'other' as const}))} reload={reload}/></details>}
+    </section>
+    {status?.folderSelected&&connection}
     </>}
     {view==='answers'&&<>
       {handoff&&<AnalysisRequest value={handoff} change={setHandoff} close={()=>setHandoff('')}/>}

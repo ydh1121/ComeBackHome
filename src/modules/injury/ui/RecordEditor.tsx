@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { ApiError, privateRequest } from "../../auth/client";
+import { PrivateSheet } from "../../shared/PrivateSheet";
 import {
   RECORD_SPECS,
   validatePayload,
@@ -184,42 +185,8 @@ export function RecordEditor({
     window.addEventListener("beforeunload", unload);
     return () => window.removeEventListener("beforeunload", unload);
   }, [dirty]);
-  useEffect(() => {
-    const previous =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    form.current?.querySelector<HTMLInputElement>("input")?.focus();
-    return () => previous?.focus();
-  }, []);
-  useEffect(() => {
-    const dialog = form.current?.closest('[role="dialog"]');
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) {
-        event.preventDefault();
-        if (!dirty || confirm("저장하지 않은 입력을 취소할까요?")) close();
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const controls = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          "button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href]",
-        ),
-      ).filter((e) => e.getClientRects().length);
-      const first = controls[0],
-        last = controls.at(-1);
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, [dirty, busy, close]);
   const dismiss = () => {
-    if (!dirty || confirm("저장하지 않은 입력을 취소할까요?")) close();
+    if (!busy && (!dirty || confirm("저장하지 않은 입력을 취소할까요?"))) close();
   };
   const spec: RecordSpec = RECORD_SPECS[kind];
   const change = (field: Field, value: string | number | boolean) =>
@@ -311,27 +278,7 @@ export function RecordEditor({
     );
   };
   return (
-    <div className="editor-overlay" role="presentation">
-      <section
-        className="record-editor"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="record-editor-title"
-      >
-        <header>
-          <h2 id="record-editor-title">
-            {spec.title}
-            {record ? " 수정" : " 추가"}
-          </h2>
-          <button
-            type="button"
-            className="secondary"
-            onClick={dismiss}
-            aria-label="편집 닫기"
-          >
-            ×
-          </button>
-        </header>
+    <PrivateSheet title={spec.title + (record ? " 수정" : " 추가")} onClose={dismiss} onSessionChange={close} busy={busy} closeLabel="편집 닫기" className="record-editor private-sheet--record" scopeClassName="private-page">
         <form
           ref={form}
           onSubmit={async (e) => {
@@ -473,7 +420,7 @@ export function RecordEditor({
             <button disabled={busy || !!conflict} type="submit">
               {busy ? "저장 중…" : "저장"}
             </button>
-            <button type="button" className="secondary" onClick={dismiss}>
+            <button type="button" className="secondary" onClick={dismiss} disabled={busy}>
               취소
             </button>
           </footer>
@@ -505,6 +452,7 @@ export function RecordEditor({
               <button
                 type="button"
                 className="secondary"
+                disabled={busy}
                 onClick={async () => {
                   if (
                     !confirm(
@@ -512,6 +460,7 @@ export function RecordEditor({
                     )
                   )
                     return;
+                  setBusy(true);
                   try {
                     await privateRequest(
                       "private/case/records/" + id.current,
@@ -522,6 +471,8 @@ export function RecordEditor({
                     close();
                   } catch (e) {
                     setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
                   }
                 }}
               >
@@ -530,7 +481,6 @@ export function RecordEditor({
             </details>
           )}
         </form>
-      </section>
-    </div>
+    </PrivateSheet>
   );
 }

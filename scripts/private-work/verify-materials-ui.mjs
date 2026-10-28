@@ -370,12 +370,36 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   }
 
   await page.reload();await page.locator('.materials-list').waitFor();
-  await page.getByLabel('자료 찾기',{exact:true}).fill('synthetic-batch-'+label);
+  await page.locator('.materials-upload input[type=file]').waitFor();
+  // Expand the complete entry/settings hierarchy and representative stored file
+  // and note. This exercises the crowded state reported on real iPhone screens.
+  // All data belongs to this isolated synthetic D1 fixture; opening writes none.
+  const beforeExpanded=await snapshot();let disclosureWrites=0;
+  const countDisclosureWrites=request=>{if(new URL(request.url()).pathname.startsWith('/api/private/case')&&['POST','PUT','PATCH','DELETE'].includes(request.method()))disclosureWrites++;};
+  page.on('request',countDisclosureWrites);
+  const disclosures=[page.locator('.materials-connection'),page.locator('.notes-composer'),page.locator('.materials-record-create'),page.locator('[data-document-id] > details').first(),page.locator('[data-material-record] > details').first()];
+  for(const disclosure of disclosures){
+    await disclosure.waitFor();
+    if(!await disclosure.evaluate(el=>el.open))await disclosure.locator(':scope > summary').click();
+    assert(await disclosure.evaluate(el=>el.open),'the intended material disclosure is expanded');
+  }
   for(const width of [375,390,768,1024,1440]){
     await page.setViewportSize({width,height:844});
-    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'materials width '+width);
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded materials width '+width);
+    assert(await page.locator('.materials-workspace').evaluate(el=>el.scrollWidth<=el.clientWidth+1),'expanded material content stays in its own width '+width);
+    const fields=await page.locator('.materials-workspace').evaluate(el=>[...el.querySelectorAll('input:not([type=checkbox]):not([type=file]),textarea,select')].filter(field=>field.getClientRects().length).map(field=>({font:parseFloat(getComputedStyle(field).fontSize),width:field.getBoundingClientRect().width,height:field.getBoundingClientRect().height,label:!!(field.labels?.length||field.getAttribute('aria-label'))})));
+    assert(fields.length>=3,'expanded memo exposes editable labelled fields');
+    assert(fields.every(field=>field.font>=16&&field.height>=44&&field.width>0&&field.label),'visible inputs remain labelled and avoid iOS focus zoom at '+width);
+    const fileTarget=page.locator('.materials-upload .materials-file-label');
+    assert(await fileTarget.evaluate(el=>el.getBoundingClientRect().height>=44),'single upload target remains touchable');
+    assert(await input.evaluate(el=>el.tabIndex>=0&&getComputedStyle(el).display!=='none'&&el.getBoundingClientRect().width<=1),'custom file input remains keyboard accessible without duplicate native chooser');
+    assert(await page.locator('.materials-connection').evaluate(el=>el.getBoundingClientRect().top>document.querySelector('.materials-saved').getBoundingClientRect().top),'connected settings follow the primary material workflow');
+    await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-${width}.png`),fullPage:true,animations:'disabled'});
   }
+  page.off('request',countDisclosureWrites);
+  assert.equal(disclosureWrites,0,'opening and resizing disclosures writes no case or source data');
+  const afterExpanded=await snapshot();assert.deepEqual(afterExpanded.records,beforeExpanded.records);assert.deepEqual(afterExpanded.documents,beforeExpanded.documents);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>document.documentElement.dataset.theme='dark');
   await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});
@@ -396,5 +420,5 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await page.getByRole('button',{name:'내 관리함으로',exact:true}).click();
   await page.getByRole('button',{name:/자료·메모/}).click();
   await page.getByRole('heading',{name:'Synthetic reviewed summary '+label,exact:true}).waitFor();
-  console.log('PRIVATE_MATERIALS_UI_PASS '+label+' batch_upload_partial_retry_cancel_dedupe_utf8_memos_multi_handoff_draft_review_approval_rollback_replay_5_widths_dark');
+  console.log('PRIVATE_MATERIALS_UI_PASS '+label+' expanded_disclosures_5_widths_16px_inputs_zero_writes batch_upload_partial_retry_cancel_dedupe_utf8_memos_multi_handoff_draft_review_approval_rollback_replay_5_widths_dark');
 }

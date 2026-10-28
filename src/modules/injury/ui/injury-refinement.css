@@ -1,0 +1,125 @@
+/* Private injury surfaces only. The accepted schedule shell and tokens stay intact. */
+.advisor-shell { --injury-gap: 20px; }
+.advisor-shell[data-advisor-view="library"],
+.advisor-shell[data-advisor-view="manage"],
+.advisor-shell[data-advisor-view="progress"],
+.advisor-shell[data-advisor-view="help"] { max-width: 760px; }
+.advisor-shell .injury-page-heading { margin-bottom: 8px; min-height: 48px; }
+.advisor-shell .injury-page-heading h1 { margin: 0; font-size: 28px; line-height: 1.35; letter-spacing: -.6px; }
+.injury-page-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.advisor-shell .injury-page-actions :is(a,button) { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 11px; border: 0; border-radius: 50%; color: var(--cbh-muted); background: transparent; }
+.injury-page-actions svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.advisor-shell .advisor-utilities { margin: 0 0 16px; }
+.advisor-shell .advisor-utilities button { font-size: 14px; padding: 8px 0 8px 12px; }
+.advisor-shell :is(.materials-workspace,.management-home) { padding-top: 0; gap: 24px; }
+.advisor-shell :is(.materials-heading,.management-section-head) h2 { margin: 0; font-size: 22px; line-height: 1.4; letter-spacing: -.4px; }
+.advisor-shell .materials-heading { display: flex; align-items: center; gap: 16px; margin: 0; }
+.advisor-shell .materials-heading > small { margin: 0; padding: 0; font-size: 13px; }
+.advisor-shell .materials-view-switch { margin-top: -8px; }
+.advisor-shell .materials-view-switch button { min-height: 44px; }
+.advisor-shell :is(.materials-add,.materials-saved) { display: grid; gap: 16px; min-width: 0; }
+.advisor-shell .materials-add { padding: 20px; background: var(--cbh-paper); border: 1px solid var(--cbh-line); border-radius: 18px; gap: 0; }
+.advisor-shell :is(.materials-add,.materials-saved) > h3 { margin: 0; font-size: 16px; line-height: 1.5; font-weight: 600; }
+.advisor-shell .materials-add > h3 { margin-bottom: 16px; }
+.advisor-shell .materials-add .materials-upload { border: 0; border-radius: 0; background: transparent; padding: 0 0 16px!important; }
+.advisor-shell .materials-file-label { position: relative; display: grid; gap: 8px; align-content: center; min-height: 96px; margin: 0; padding: 16px; border: 1px dashed var(--cbh-line-strong); border-radius: 12px; cursor: pointer; background: var(--cbh-surface-soft,var(--cbh-bg)); }
+.advisor-shell .materials-file-label > span { padding: 0; justify-content: center; gap: 10px; font-size: 16px; line-height: 1.5; }
+.advisor-shell .materials-file-label > small { font-size: 13px; text-align: center; }
+.advisor-shell .materials-file-label:focus-within { outline: 3px solid var(--cbh-blue); outline-offset: 3px; }
+.advisor-shell .materials-file-label:has(input:disabled) { opacity: .6; cursor: wait; }
+/* Keep the native input available to keyboard and assistive technology without
+   displaying a second browser-specific file button inside the upload target. */
+.advisor-shell .materials-file-label input[type="file"] { position: absolute; width: 1px; height: 1px; min-height: 0; max-height: 1px; padding: 0; margin: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.advisor-shell .materials-workspace :is(.notes-composer,.materials-record-create) { margin: 0; padding: 0!important; border: 0!important; border-top: 1px solid var(--cbh-line)!important; border-radius: 0; background: transparent!important; box-shadow: none; }
+.advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection) > summary { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 0; margin: 0; list-style: none; color: var(--cbh-ink); font-size: 15px; font-weight: 500; line-height: 1.5; }
+.advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection) > summary::-webkit-details-marker { display: none; }
+.advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection) > summary > span { flex: 1; min-width: 0; }
+.advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection) > summary > svg { width: 18px; height: 18px; color: var(--cbh-muted); }
+.advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection) > summary > svg:last-child { width: 16px; height: 16px; transition: transform .18s ease; }
+.advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection)[open] > summary > svg:last-child { transform: rotate(180deg); }
+.advisor-shell .materials-disclosure-body { padding: 4px 0 20px; min-width: 0; }
+.advisor-shell .materials-disclosure-body > :first-child { margin-top: 0; }
+.advisor-shell .materials-disclosure-body > :last-child { margin-bottom: 0; }
+.advisor-shell .materials-disclosure-body > .private-actions { margin-top: 16px; }
+.advisor-shell .materials-memo-file { min-height: 72px; padding: 12px; border-style: solid; }
+.advisor-shell .materials-memo-file > span { font-size: 14px; }
+.advisor-shell .note-draft { padding: 16px; margin: 16px 0; gap: 8px; border: 1px solid var(--cbh-line); border-radius: 12px; background: var(--cbh-paper); }
+.advisor-shell .note-draft label { font-size: 14px; font-weight: 500; }
+.advisor-shell .note-draft label:not(:first-child) { margin-top: 8px; }
+.advisor-shell .note-draft textarea { min-height: 144px; font-size: 16px; }
+.advisor-shell .note-draft .copy-toolbar { padding: 0 0 8px; margin-bottom: 0; }
+.advisor-shell .materials-connection { border: 1px solid var(--cbh-line); border-radius: 14px; padding: 0 16px; background: var(--cbh-paper); }
+.advisor-shell .materials-connection > summary { font-size: 14px; }
+.advisor-shell .materials-connection p { font-size: 14px; line-height: 1.65; }
+.advisor-shell .materials-connection .private-actions { margin-bottom: 0; }
+.advisor-shell .materials-tools { gap: 12px; }
+.advisor-shell .materials-tools > .auth-check { min-height: 44px; font-size: 14px; }
+.advisor-shell .materials-filters { gap: 8px; margin-top: 0; }
+.advisor-shell .materials-filters button { min-height: 44px; font-size: 14px; }
+.advisor-shell .materials-list { padding: 0 16px; }
+.advisor-shell .material-row { gap: 12px; }
+.advisor-shell .material-row summary { min-height: 80px; gap: 12px; padding-block: 18px; }
+.advisor-shell .material-row h3 { font-size: 16px; line-height: 1.5; font-weight: 600; margin-bottom: 4px; }
+.advisor-shell .material-row summary small { font-size: 13px; line-height: 1.5; }
+.advisor-shell .material-row details > .private-actions { padding: 0 0 20px; gap: 8px; }
+.advisor-shell .material-row details > .private-actions :is(a,button) { min-height: 44px; font-size: 14px; }
+.advisor-shell .materials-workspace .copy-button { min-height: 44px; padding: 10px 12px; }
+.advisor-shell .materials-select-all { padding-inline: 8px; }
+.advisor-shell .materials-batch { padding: 20px; gap: 16px; box-shadow: none; }
+.advisor-shell .materials-batch-heading button { min-height: 44px; font-size: 14px; }
+.advisor-shell :is(.materials-organize,.materials-advanced,.management-calculator,.management-kinds) > summary { font-size: 15px; min-height: 44px; line-height: 1.5; }
+.advisor-shell .materials-empty { padding: 32px 16px; }
+.advisor-shell .materials-empty h3 { font-size: 16px; font-weight: 500; }
+.advisor-shell .materials-empty p { font-size: 14px; }
+.advisor-shell .management-home { max-width: none; }
+.advisor-shell .management-list { padding-inline: 20px; }
+.advisor-shell .management-row { gap: 14px; padding-block: 20px; }
+.advisor-shell .management-row strong { font-size: 16px; line-height: 1.5; }
+.advisor-shell .management-row small { font-size: 14px; line-height: 1.5; margin-top: 4px; }
+.advisor-shell .management-section-head { margin: 0 0 24px; gap: 12px; }
+.advisor-shell .management-section-head > button { min-height: 44px; font-size: 14px; }
+.advisor-shell .management-kind-list { gap: 0; border: 1px solid var(--cbh-line); border-radius: 12px; overflow: hidden; }
+.advisor-shell .management-kind-list button { border: 0; border-bottom: 1px solid var(--cbh-line); border-radius: 0; padding: 14px 16px; min-height: 48px; font-size: 15px; font-weight: 500; line-height: 1.5; }
+.advisor-shell .management-kind-list button:last-child { border-bottom: 0; }
+.advisor-shell .materials-record-create > .management-kind-list { margin-bottom: 16px; padding: 0; }
+.advisor-shell .management-kinds { padding: 12px 0; margin: 12px 0 24px; border-block: 1px solid var(--cbh-line); }
+.advisor-shell .management-add-row { gap: 16px; }
+.advisor-shell .management-add-row > small { font-size: 14px; }
+.advisor-shell .record-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
+.advisor-shell .record-grid .record-card { margin: 0; padding: 20px; }
+.advisor-shell .record-heading { align-items: center; }
+.advisor-shell .record-heading h3 { font-size: 18px; line-height: 1.5; margin: 0; }
+.advisor-shell .record-body { font-size: 16px; line-height: 1.75; }
+.advisor-shell .record-card .copy-toolbar { padding: 8px 0; }
+.advisor-shell .record-card dl { border-top: 1px solid var(--cbh-line); margin-top: 16px; }
+.advisor-shell .record-card dl > div { gap: 16px; padding-block: 12px; line-height: 1.6; }
+.advisor-shell .advisor-primary h2 { font-size: clamp(24px,3vw,30px); line-height: 1.4; }
+.advisor-shell .advisor-card-heading { margin-bottom: 20px; }
+.advisor-shell .advisor-primary > p { margin-bottom: 24px; font-size: 16px; }
+.advisor-shell .advisor-shortcuts strong { font-size: 15px; }
+.advisor-shell .advisor-shortcuts button { min-height: 64px; }
+.advisor-shell :is(.advisor-progress,.advisor-help-list) { line-height: 1.65; }
+.advisor-shell :is(.analysis-request,.analysis-connection) textarea { font-size: 16px; }
+.advisor-shell :is(.materials-workspace,.management-home) [role="status"]:empty { display: none; }
+@media (max-width:480px) {
+  .advisor-shell .injury-page-heading h1 { font-size: 26px; }
+  .advisor-shell .materials-heading { flex-wrap: wrap; gap: 8px; }
+  .advisor-shell .materials-heading > small { font-size: 13px; }
+  .advisor-shell .materials-add { padding: 16px; }
+  .advisor-shell .materials-tools { flex-wrap: wrap; align-items: center; }
+  .advisor-shell .materials-tools > label:first-child { flex-basis: 100%; }
+  .advisor-shell .materials-tools > .auth-check { margin-left: auto; }
+  .advisor-shell .materials-filters .materials-select-all { margin-left: auto; }
+  .advisor-shell .material-row { gap: 8px; }
+  .advisor-shell .material-row summary { gap: 8px; }
+  .advisor-shell .material-row h3 { font-size: 15px; }
+  .advisor-shell .material-icon { width: 32px; height: 38px; }
+  .advisor-shell .materials-list { padding-inline: 12px; }
+  .advisor-shell .management-list { padding-inline: 16px; }
+  .advisor-shell .management-row small { font-size: 14px; }
+  .advisor-shell .record-card dl > div { grid-template-columns: minmax(0,1fr); gap: 4px; }
+  .advisor-shell .record-grid .record-card { padding: 16px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .advisor-shell :is(.notes-composer,.materials-record-create,.materials-connection) > summary > svg:last-child { transition: none; }
+}

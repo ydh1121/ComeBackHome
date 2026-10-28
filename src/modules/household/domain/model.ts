@@ -37,13 +37,14 @@ export interface PlanInput {
   plannedIncome: number;
   allocations: Array<{ id: string; label: string; amount: number }>;
 }
-export interface TodoInput { id: string; text: string; dueAt: string | null; remind: boolean }
+export type ReminderRecipient = 'both' | 'admin' | 'member';
+export interface TodoInput { id: string; text: string; dueAt: string | null; remind: boolean; reminderRecipient?: ReminderRecipient }
 export interface HouseholdPreferences { dailyLedgerReminder: boolean; todoReminders: boolean }
 interface Audit { createdAt: string; createdBy: string; updatedAt: string; updatedBy: string }
 export interface HouseholdCard extends CardInput, Audit { initialLimit: number }
 export interface HouseholdEntry extends EntryInput, Audit { voidedAt: string | null; voidedBy: string | null }
 export interface SalaryPlan extends PlanInput, Audit {}
-export interface HouseholdTodo extends TodoInput, Audit { completedAt: string | null; completedBy: string | null }
+export interface HouseholdTodo extends TodoInput, Audit { completedAt: string | null; completedBy: string | null; archivedAt?: string | null; archivedBy?: string | null }
 export interface HouseholdState {
   schemaVersion: typeof HOUSEHOLD_SCHEMA_VERSION;
   revision: number;
@@ -64,9 +65,10 @@ export type HouseholdEvent =
   | { type: 'plan.save'; plan: PlanInput }
   | { type: 'todo.save'; todo: TodoInput }
   | { type: 'todo.complete'; id: string; done: boolean }
+  | { type: 'todo.archive'; id: string }
   | { type: 'preferences.save'; preferences: HouseholdPreferences };
 export interface HouseholdCommand { id: string; expectedRevision: number; event: HouseholdEvent }
-export type HouseholdErrorCode = 'INVALID_INPUT' | 'REVISION_CONFLICT' | 'NOT_FOUND' | 'DUPLICATE_ID' | 'CARD_IN_USE' | 'CARD_ARCHIVED' | 'INVALID_CARD_OPERATION';
+export type HouseholdErrorCode = 'INVALID_INPUT' | 'REVISION_CONFLICT' | 'NOT_FOUND' | 'DUPLICATE_ID' | 'CARD_IN_USE' | 'CARD_ARCHIVED' | 'INVALID_CARD_OPERATION' | 'TODO_ARCHIVED' | 'TODO_NOT_COMPLETED';
 export class HouseholdError extends Error {
   constructor(public readonly code: HouseholdErrorCode, public readonly field?: string) { super(code); this.name = 'HouseholdError'; }
 }
@@ -140,10 +142,11 @@ export function parsePlanInput(value: unknown): PlanInput {
   return { id: id(v.id), month: v.month, plannedIncome: money(v.plannedIncome, 'plannedIncome'), allocations };
 }
 export function parseTodoInput(value: unknown): TodoInput {
-  const v = object(value, ['id', 'text', 'dueAt', 'remind'], 'todo');
+  const v = object(value, ['id', 'text', 'dueAt', 'remind', 'reminderRecipient'], 'todo');
   const dueAt = v.dueAt === null ? null : parseHouseholdInstant(v.dueAt, 'dueAt'), remind = boolean(v.remind, 'remind');
   if (remind && !dueAt) return fail('dueAt');
-  return { id: id(v.id), text: string(v.text, 'text', 4000), dueAt, remind };
+  if (v.reminderRecipient !== undefined && (typeof v.reminderRecipient !== 'string' || !['both', 'admin', 'member'].includes(v.reminderRecipient))) return fail('reminderRecipient');
+  return { id: id(v.id), text: string(v.text, 'text', 4000), dueAt, remind, ...(v.reminderRecipient === undefined ? {} : { reminderRecipient: v.reminderRecipient as ReminderRecipient }) };
 }
 export function parseHouseholdPreferences(value: unknown): HouseholdPreferences {
   const v = object(value, ['dailyLedgerReminder', 'todoReminders'], 'preferences');
@@ -159,6 +162,7 @@ export function parseHouseholdEvent(value: unknown): HouseholdEvent {
   if (type === 'plan.save') { const v = object(value, ['type', 'plan'], 'event'); return { type, plan: parsePlanInput(v.plan) }; }
   if (type === 'todo.save') { const v = object(value, ['type', 'todo'], 'event'); return { type, todo: parseTodoInput(v.todo) }; }
   if (type === 'todo.complete') { const v = object(value, ['type', 'id', 'done'], 'event'); return { type, id: id(v.id), done: boolean(v.done, 'done') }; }
+  if (type === 'todo.archive') { const v = object(value, ['type', 'id'], 'event'); return { type, id: id(v.id) }; }
   if (type === 'preferences.save') { const v = object(value, ['type', 'preferences'], 'event'); return { type, preferences: parseHouseholdPreferences(v.preferences) }; }
   return fail('event.type');
 }
@@ -226,11 +230,23 @@ export function applyHouseholdCommand(state: HouseholdState, raw: HouseholdComma
     result.plans = previous ? state.plans.map(item => item.id === plan.id ? plan : item) : [...state.plans, plan];
   } else if (event.type === 'todo.save') {
     const previous = state.todos.find(todo => todo.id === event.todo.id);
-    const todo = { ...event.todo, ...audit(previous), completedAt: previous?.completedAt ?? null, completedBy: previous?.completedBy ?? null };
+    if (previous?.archivedAt) throw new HouseholdError('TODO_ARCHIVED');
+    // Preserve absent legacy metadata so a pre-upgrade pending commit hashes identically on recovery.
+    const reminderRecipient = event.todo.reminderRecipient ?? previous?.reminderRecipient;
+    const todo = { ...event.todo, ...(reminderRecipient === undefined ? {} : { reminderRecipient }), ...audit(previous), completedAt: previous?.completedAt ?? null, completedBy: previous?.completedBy ?? null };
     result.todos = previous ? state.todos.map(item => item.id === todo.id ? todo : item) : [...state.todos, todo];
   } else if (event.type === 'todo.complete') {
-    if (!state.todos.some(todo => todo.id === event.id)) throw new HouseholdError('NOT_FOUND');
+    const previous = state.todos.find(todo => todo.id === event.id);
+    if (!previous) throw new HouseholdError('NOT_FOUND');
+    if (previous.archivedAt) throw new HouseholdError('TODO_ARCHIVED');
     result.todos = state.todos.map(todo => todo.id === event.id ? { ...todo, ...audit(todo), completedAt: event.done ? now : null, completedBy: event.done ? actor : null } : todo);
+  } else if (event.type === 'todo.archive') {
+    const previous = state.todos.find(todo => todo.id === event.id);
+    if (!previous) throw new HouseholdError('NOT_FOUND');
+    if (previous.archivedAt) throw new HouseholdError('TODO_ARCHIVED');
+    if (!previous.completedAt) throw new HouseholdError('TODO_NOT_COMPLETED');
+    // Keep the original row and audit trail; private Sheets rows are append-only.
+    result.todos = state.todos.map(todo => todo.id === event.id ? { ...todo, ...audit(todo), archivedAt: now, archivedBy: actor } : todo);
   } else result.preferences = event.preferences;
   if (event.type === 'entry.add' || event.type === 'entry.correct') {
     let grossRecorded = 0;
@@ -323,5 +339,5 @@ export function dueHouseholdTodos(state: HouseholdState, nowIso: string, graceMi
   const now = Date.parse(parseHouseholdInstant(nowIso));
   if (!Number.isInteger(graceMinutes) || graceMinutes < 0 || graceMinutes > 1440) return fail('graceMinutes');
   if (!state.preferences.todoReminders) return [];
-  return state.todos.filter(todo => !todo.completedAt && todo.remind && todo.dueAt && Date.parse(todo.dueAt) <= now && (graceMinutes === 0 ? Date.parse(todo.dueAt) === now : Date.parse(todo.dueAt) > now - graceMinutes * 60_000));
+  return state.todos.filter(todo => !todo.archivedAt && !todo.completedAt && todo.remind && todo.dueAt && Date.parse(todo.dueAt) <= now && (graceMinutes === 0 ? Date.parse(todo.dueAt) === now : Date.parse(todo.dueAt) > now - graceMinutes * 60_000));
 }

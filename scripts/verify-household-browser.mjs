@@ -20,6 +20,19 @@ const evidence = [];
 let activePage;
 async function visible(locator) { await locator.waitFor({ state: 'visible' }); assertions++; }
 async function noDialog(page) { await page.getByRole('dialog').waitFor({ state: 'hidden' }); }
+async function loadedCardArt(page) {
+  await page.waitForFunction(()=>{const image=document.querySelector('.hh-card-art img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth===24;}); assertions++;
+}
+async function modalErgonomics(page, label) {
+  const result = await page.getByRole('dialog').evaluate(dialog => ({
+    titleFocus: document.activeElement === dialog.querySelector('h2'),
+    bodyLocked: document.body.style.position === 'fixed' && document.documentElement.style.overflow === 'hidden',
+    horizontalOverflow: dialog.scrollWidth > dialog.clientWidth + 1,
+    fields: [...dialog.querySelectorAll('input:not([type=radio]):not([type=checkbox]):not([type=file]),select,textarea')].every(el=>parseFloat(getComputedStyle(el).fontSize)>=16),
+    closeSize: (()=>{const r=dialog.querySelector('.private-sheet__close').getBoundingClientRect();return r.width>=44&&r.height>=44;})(),
+  }));
+  check(result,{titleFocus:true,bodyLocked:true,horizontalOverflow:false,fields:true,closeSize:true},`${label}: modal focus, scroll containment, touch size and no-zoom fields`);
+}
 async function setSection(page, label) { await page.getByRole('navigation', { name: '생활비·할 일 메뉴' }).getByRole('link', { name: label, exact: true }).click(); }
 async function settleNavigation(page) {
   await page.waitForFunction(()=>{
@@ -56,7 +69,7 @@ try {
     const makeContext = async role => {
       const context = await browser.newContext({ viewport:{width:390,height:844}, timezoneId:'Asia/Seoul', locale:'ko-KR', serviceWorkers:'block' }); contexts.push(context);
       const identity = { logged:true, role }, user = () => ({ id:identity.role+'-browser',loginId:identity.role==='admin'?'ydh1121':'yvonne',role:identity.role,mustChangePassword:false });
-      const traffic = { documents:0, sessions:0, scheduleWrites:0 };
+      const traffic = { documents:0, sessions:0, scheduleWrites:0, artReads:0, artWrites:0 };
       await context.addInitScript(fixed => {
         const NativeDate=Date; class SyntheticDate extends NativeDate { constructor(...args) { super(...(args.length?args:[fixed])); } static now(){return new NativeDate(fixed).getTime();} }
         window.Date=SyntheticDate;
@@ -97,7 +110,12 @@ try {
             return json(response());
           } catch(error) { return json({error:'HOUSEHOLD_'+error.code},error.code==='REVISION_CONFLICT'?409:400); }
         }
-        if(/^\/api\/private\/household\/cards\/[^/]+\/art$/.test(path))return req.method()==='POST'?json({imageFileId:'synthetic-art-'+state.cards[0].id}):route.fulfill({status:200,contentType:'image/png',body:png});
+        if(/^\/api\/private\/household\/cards\/[^/]+\/art$/.test(path)){
+          if(req.method()==='POST'){traffic.artWrites++;return json({imageFileId:'synthetic-art-'+state.cards[0].id+'-'+traffic.artWrites});}
+          traffic.artReads++;const current=state.cards.find(card=>path.includes('/'+card.id+'/'));
+          if(url.searchParams.get('image')!==current?.imageFileId)return json({error:'HOUSEHOLD_IMAGE_CHANGED'},409);
+          return route.fulfill({status:200,contentType:'image/png',headers:{'Cache-Control':'private, no-store'},body:png});
+        }
         if(path==='/api/private/household/push-subscription')return json({registered:false});
         if(path==='/api/private/case/consent')return json({owner:true,adminAccess:true,consent:null});
         if(path==='/api/private/case')return json({caseId:'synthetic-case',owner:true,actors:[],records:[],policies:[],documents:[],payments:[],deadlines:[],overlaps:[]});
@@ -126,14 +144,32 @@ try {
       check(await page.getByRole('alert').count(),0,'successful initialization clears setup error');
       await setSection(page,'카드'); await page.getByRole('button',{name:'첫 카드 추가',exact:true}).click();
       let dialog=page.getByRole('dialog');
+      await modalErgonomics(page,'card creation');
       await dialog.getByLabel('카드 이름',{exact:true}).fill('테스트 카드 A');
       await dialog.locator('input[name=limit]').fill('100000'); await dialog.locator('input[name=remaining]').fill('60000');
       await dialog.getByRole('button',{name:'세로형',exact:true}).click(); await dialog.getByRole('button',{name:'카드 저장',exact:true}).click();await noDialog(page);
       check(domain.getCardSummary(state,state.cards[0].id).remaining,60000,'initial remaining is independently entered');
       check(state.cards[0].orientation,'portrait','portrait card preserved');
-      await page.locator('.hh-upload-label input[type=file]').setInputFiles({name:'synthetic-card.png',mimeType:'image/png',buffer:png});
-      await page.locator('.hh-card-art img').waitFor();
-      await page.waitForFunction(()=>{const image=document.querySelector('.hh-card-art img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth===24;});assertions++;
+      check(await page.locator('.hh-upload-label input[type=file]').count(),0,'photo editing is absent from the main card view');
+      check(await page.locator('.hh-card-name').count(),0,'no redundant card caption or selection bar under photos');
+      await visible(page.getByRole('button',{name:'테스트 카드 A',exact:true}));
+      await page.getByRole('button',{name:'수정',exact:true}).click();dialog=page.getByRole('dialog');
+      await modalErgonomics(page,'card editing');
+      await dialog.locator('.hh-upload-label input[type=file]').setInputFiles({name:'synthetic-card.png',mimeType:'image/png',buffer:png});
+      await visible(dialog.getByText('사진을 변경했습니다.',{exact:true}));
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);await loadedCardArt(page);
+      const firstArtReads=member.traffic.artReads;
+      check(firstArtReads,1,'initial card image makes one authenticated read');
+      await setSection(page,'가계부');await setSection(page,'카드');await loadedCardArt(page);
+      check(member.traffic.artReads,firstArtReads,'same image uses cache after panel remount');
+      await page.reload();await loadedCardArt(page);
+      check(member.traffic.artReads,firstArtReads,'same image persists across a verified page reload');
+      await page.getByRole('button',{name:'수정',exact:true}).click();dialog=page.getByRole('dialog');
+      await dialog.locator('.hh-upload-label input[type=file]').setInputFiles({name:'synthetic-replacement.png',mimeType:'image/png',buffer:png});
+      await visible(dialog.getByText('사진을 변경했습니다.',{exact:true}));
+      await dialog.getByRole('button',{name:'카드 저장',exact:true}).click();await noDialog(page);await loadedCardArt(page);
+      check(member.traffic.artReads,firstArtReads+1,'replacement image invalidates by image ID exactly once');
+      check(state.cards[0].imageFileId.endsWith('-2'),true,'saving card metadata preserves newly uploaded art');
       await page.getByRole('button',{name:'사용 기록',exact:true}).click(); dialog=page.getByRole('dialog');
       await dialog.locator('input[name=amount]').fill('12000'); await dialog.locator('select:has(option[value="식비"])').selectOption('식비');
       await dialog.getByText('어디서 썼는지 자세히 적기',{exact:true}).click();
@@ -144,6 +180,7 @@ try {
       await page.getByRole('button',{name:'상환 기록',exact:true}).click(); dialog=page.getByRole('dialog');await dialog.locator('input[name=amount]').fill('20000');await dialog.getByRole('button',{name:'기록 저장',exact:true}).click();await noDialog(page);
       check(domain.getCardSummary(state,state.cards[0].id).remaining,68000,'repayment restores capacity');
       check(domain.summarizeLedger(state,'2026-10-01','2026-11-01').netExpense,12000,'repayment is not another expense');
+      check(member.traffic.artReads,firstArtReads+1,'financial records do not reload unchanged card art');
       await setSection(page,'가계부');await visible(page.getByRole('heading',{name:'가계부',exact:true}));
       // Historical labels must describe the selected period, including a week crossing years.
       check(await page.locator('.hh-total > strong').textContent(),'12,000원','current month includes the recorded purchase');
@@ -193,10 +230,47 @@ try {
       await other.close();await page.reload();await visible(page.getByRole('heading',{name:'월급 나누기',exact:true}));
       await setSection(page,'할 일');await page.getByLabel('새 할 일이나 메모',{exact:true}).fill('합성 할 일');await page.getByRole('button',{name:'메모 남기기',exact:true}).click();
       await visible(page.locator('.hh-note__body').filter({hasText:'합성 할 일'}));await page.locator('.hh-note__body').filter({hasText:'합성 할 일'}).click();dialog=page.getByRole('dialog');
-      await dialog.getByRole('switch',{name:'이 시간에 둘에게 알리기',exact:true}).click();await dialog.getByRole('button',{name:'메모 저장',exact:true}).click();await noDialog(page);
+      await modalErgonomics(page,'memo editing');
+      await dialog.getByRole('switch',{name:'알림',exact:true}).click();
+      check(await dialog.getByRole('radio',{name:'둘 다',exact:true}).isChecked(),true,'legacy/default reminder targets both accounts');
+      await dialog.getByRole('button',{name:'메모 저장',exact:true}).click();await noDialog(page);
       check(state.todos[0].remind,true,'explicit shared todo reminder');assert(state.todos[0].dueAt);assertions++;
+      await page.locator('.hh-note__body').filter({hasText:'합성 할 일'}).click();dialog=page.getByRole('dialog');
+      await dialog.getByRole('radio',{name:'나에게',exact:true}).check();await dialog.getByRole('button',{name:'메모 저장',exact:true}).click();await noDialog(page);
+      check(state.todos[0].reminderRecipient,'member','self recipient stores the stable member identity');
+      const peer=await admin.context.newPage();await peer.goto(base+'/household?section=notes');
+      await peer.locator('.hh-note__body').filter({hasText:'합성 할 일'}).click();let peerDialog=peer.getByRole('dialog');
+      check(await peerDialog.getByRole('radio',{name:'상대방에게',exact:true}).isChecked(),true,'other account sees the same stable recipient as partner');
+      await peerDialog.getByRole('radio',{name:'나에게',exact:true}).check();await peerDialog.getByRole('button',{name:'메모 저장',exact:true}).click();await noDialog(peer);
+      check(state.todos[0].reminderRecipient,'admin','administrator can retarget shared reminder to their account');
+      await page.reload();await page.locator('.hh-note__body').filter({hasText:'합성 할 일'}).click();dialog=page.getByRole('dialog');
+      check(await dialog.getByRole('radio',{name:'상대방에게',exact:true}).isChecked(),true,'recipient does not change meaning after another account edits');
+      await dialog.getByRole('radio',{name:'둘 다',exact:true}).check();await dialog.getByRole('button',{name:'메모 저장',exact:true}).click();await noDialog(page);
+      check(state.todos[0].reminderRecipient,'both','both recipient can be restored explicitly');
       await page.getByRole('button',{name:'합성 할 일 완료',exact:true}).click();await visible(page.getByText('완료한 일 1개',{exact:true}));check(Boolean(state.todos[0].completedAt),true,'completion saved');
       await page.getByText('완료한 일 1개',{exact:true}).click();await page.getByRole('button',{name:'합성 할 일 다시 할 일로 옮기기',exact:true}).click();await visible(page.getByRole('button',{name:'합성 할 일 완료',exact:true}));
+      // Quick capture exposes reminder options without making a separate edit.
+      await page.getByLabel('새 할 일이나 메모',{exact:true}).fill('삭제할 합성 메모');
+      await page.getByRole('button',{name:'알림 설정',exact:true}).click();
+      await page.getByRole('radio',{name:'상대방에게',exact:true}).check();
+      check(await page.getByLabel('새 할 일이나 메모',{exact:true}).evaluate(el=>parseFloat(getComputedStyle(el).fontSize)>=16),true,'memo input avoids iPhone focus zoom');
+      await screenshot(page,`${name}-notes-reminder-390.png`);
+      await page.getByRole('button',{name:'메모 남기기',exact:true}).click();
+      check(state.todos[1].reminderRecipient,'admin','quick capture saves selected partner recipient');
+      await page.getByRole('button',{name:'삭제할 합성 메모 완료',exact:true}).click();
+      await page.getByText('완료한 일 1개',{exact:true}).click();
+      await page.getByRole('button',{name:'삭제할 합성 메모 삭제',exact:true}).click();dialog=page.getByRole('dialog',{name:'완료한 항목 삭제',exact:true});
+      const rowsBeforeArchive=state.todos.length;
+      await dialog.getByRole('button',{name:'취소',exact:true}).click();await noDialog(page);
+      check(Boolean(state.todos[1].archivedAt),false,'cancel leaves the completed memo unchanged');
+      await page.getByRole('button',{name:'삭제할 합성 메모 삭제',exact:true}).click();dialog=page.getByRole('dialog',{name:'완료한 항목 삭제',exact:true});
+      await dialog.getByRole('button',{name:'삭제',exact:true}).click();await noDialog(page);
+      check(state.todos.length,rowsBeforeArchive,'completed delete preserves append-only storage rows');
+      check(Boolean(state.todos[1].archivedAt),true,'completed delete records an archive');
+      check(await page.locator('.hh-note__body').filter({hasText:'삭제할 합성 메모'}).count(),0,'archived memo disappears from sender list');
+      await peer.reload();await visible(peer.getByRole('heading',{name:'할 일·메모',exact:true}));
+      check(await peer.locator('.hh-note__body').filter({hasText:'삭제할 합성 메모'}).count(),0,'archived memo disappears from the other account list');
+      await peer.close();
       await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');await dialog.getByRole('switch',{name:'매일 밤 12시에 가계부 기록 알림',exact:true}).click();
       await page.waitForFunction(()=>document.querySelector('[role="switch"][aria-checked="true"]')?.textContent?.includes('매일 밤'));
       check(state.preferences.dailyLedgerReminder,true,'shared midnight preference saved without sending a push');await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);
@@ -217,6 +291,13 @@ try {
         for(const width of [375,390,768,1024,1440])await layout(page,width,`${name}-${section}`);
         await page.setViewportSize({width:390,height:844});await screenshot(page,`${name}-${section==='카드'?'cards':section==='가계부'?'ledger':section==='월급'?'income':'notes'}-390.png`);
       }
+      await setSection(page,'카드');await loadedCardArt(page);const beforeArtClear=member.traffic.artReads;
+      await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');
+      await dialog.getByRole('button',{name:'보관한 내용 비우기',exact:true}).click();
+      check(await page.locator('.hh-card-art img').count(),0,'clearing private cache revokes the mounted card photo');
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);
+      await setSection(page,'가계부');await setSection(page,'카드');await loadedCardArt(page);
+      check(member.traffic.artReads,beforeArtClear+1,'next card visit reloads exactly once after explicit cache clear');
       await setSection(page,'가계부');await page.setViewportSize({width:1440,height:900});await screenshot(page,`${name}-ledger-1440.png`);
       await page.setViewportSize({width:375,height:812});await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await page.evaluate(()=>document.documentElement.dataset.theme='dark');
       await screenshot(page,`${name}-ledger-dark-375.png`);
@@ -257,6 +338,11 @@ try {
       check(await page.getByRole('alert').count(),0,'successful refresh clears a transient read error');
       await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');await dialog.getByRole('switch',{name:'이 기기에 최근 내용 보관',exact:true}).click();
       check(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.'))),false,'cache OFF erases private local copy');
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);
+      const uncachedArtReads=member.traffic.artReads;
+      await setSection(page,'카드');await loadedCardArt(page);await setSection(page,'할 일');await setSection(page,'카드');await loadedCardArt(page);
+      check(member.traffic.artReads,uncachedArtReads+2,'cache OFF does not retain card photo bytes between visits');
+      await setSection(page,'할 일');await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');
       await dialog.getByRole('switch',{name:'이 기기에 최근 내용 보관',exact:true}).click();await dialog.getByRole('button',{name:'최신 내용 불러오기',exact:true}).click();await page.waitForFunction(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.')));
       await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);
       rejectRead=true;await page.reload();await visible(page.getByRole('alert'));
@@ -267,7 +353,7 @@ try {
       await page.goto(base+'/account');await page.getByRole('button',{name:'현재 기기 로그아웃',exact:true}).click();await visible(page.getByText('내 계정으로 로그인',{exact:true}));
       check(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.'))),false,'logout clears cached household data');
       check(errors,[],'no uncaught browser runtime errors');check(failures,[],'all private UI requests covered explicitly');
-      evidence.push({engine:name,widths:[375,390,768,1024,1440],screenshots:6,commands:commands.length,appliedCommands:applied.length,provider:'synthetic API with actual domain transitions',livePush:0,liveSheets:0,status:'PASS'});
+      evidence.push({engine:name,widths:[375,390,768,1024,1440],screenshots:7,commands:commands.length,appliedCommands:applied.length,provider:'synthetic API with actual domain transitions',livePush:0,liveSheets:0,status:'PASS'});
     }catch(error){await activePage?.screenshot({path:resolve(output,`${name}-failure.png`),fullPage:true}).catch(()=>{});console.error('HOUSEHOLD_FAILURE',name,await activePage?.locator('body').innerText().catch(()=>''));throw error;}
     finally{for(const context of contexts)await context.close();await browser.close();}
   }

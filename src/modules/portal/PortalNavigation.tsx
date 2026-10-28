@@ -51,10 +51,11 @@ export function PortalHeader({ active, onNavigate }: { active: PortalModule; onN
     return () => { abort.abort(); window.removeEventListener('cbh-shortcut-preference', read); };
   }, [auth.enabled, auth.user?.id]);
   if (!auth.enabled || !auth.user || auth.user.mustChangePassword) return null;
-  return <nav ref={bar} className="portal-nav portal-top" style={{gridTemplateColumns: injuryVisible || active === 'injury' ? '1fr 1.45fr 1fr' : '1fr 1.45fr'}} aria-label="공간 선택">
+  const privateStandalone = active !== 'schedule' && (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return <>{privateStandalone && <div className="portal-private-status-background" aria-hidden="true" />}<nav ref={bar} className="portal-nav portal-top" style={{gridTemplateColumns: injuryVisible || active === 'injury' ? '1fr 1.45fr 1fr' : '1fr 1.45fr'}} aria-label="공간 선택">
     <span ref={pill} className="portal-pill" aria-hidden="true" />
     {modules.filter(item => item.id !== 'injury' || injuryVisible || active === 'injury').map(item => <a key={item.id} href={item.href} onClick={event => handlePortalLink(event,item.href,onNavigate)} aria-current={item.id === active ? 'page' : undefined}><Icon name={item.icon}/><span>{item.label}</span></a>)}
-  </nav>;
+  </nav></>;
 }
 
 const quickActions: Array<{ id: string; label: string; href: string; icon: IconName }> = [

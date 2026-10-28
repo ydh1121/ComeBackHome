@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { DismissibleSheet } from '../../../../packages/portable/react/DismissibleSheet';
+import { PrivateSheet } from '../../shared/PrivateSheet';
 import { Icon } from '../../../shared/components/Icon';
 import type { HouseholdController } from '../client';
 
@@ -23,7 +23,7 @@ export function HouseholdIcon({ name }: { name: 'card' | 'ledger' | 'income' | '
 }
 
 export function FormSheet({ title, children, onClose, busy = false }: { title: string; children: ReactNode; onClose(): void; busy?: boolean }) {
-  return <DismissibleSheet label={title} closeLabel="닫기" closeIcon={<Icon name="close" />} onClose={() => { if (!busy) onClose(); }} classes={{ portal: 'household-sheet-portal', dialog: 'household-sheet', drag: 'household-sheet__drag', handle: 'household-sheet__handle', head: 'household-sheet__head', close: 'icon-btn' }}>{children}</DismissibleSheet>;
+  return <PrivateSheet title={title} busy={busy} onClose={onClose} className="household-sheet">{children}</PrivateSheet>;
 }
 
 export function SaveFeedback({ model }: { model: HouseholdController }) {
