@@ -22,6 +22,8 @@ import { SchedulePage } from '../pages/SchedulePage';
 import { ScheduleHistoryPage } from '../pages/ScheduleHistoryPage';
 import { TodayPage } from '../pages/TodayPage';
 import { AppShell } from '../shared/layout/AppShell';
+import { ScheduleServices } from './ScheduleServices';
+import { AccountRoute, HouseholdRoute, InjuryRoute } from './PrivateModuleRoutes';
 
 function componentFor(path: string) {
   if (path === '/') return TodayPage;
@@ -80,12 +82,20 @@ const qaRouteEntries = import.meta.env.DEV
   : [];
 
 export const router = createBrowserRouter([
+  { path: '/household/*', Component: HouseholdRoute },
+  { path: '/injury/*', Component: InjuryRoute },
+  { path: '/account', Component: AccountRoute },
   {
-    Component: AppShell,
+    Component: ScheduleServices,
     children: [
-      ...productRouteEntries,
-      ...qaRouteEntries,
-      { path: '*', element: <Navigate to="/" replace /> },
+      {
+        Component: AppShell,
+        children: [
+          ...productRouteEntries,
+          ...qaRouteEntries,
+          { path: '*', element: <Navigate to="/" replace /> },
+        ],
+      },
     ],
   },
 ]);

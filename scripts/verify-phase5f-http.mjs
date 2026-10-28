@@ -11,7 +11,7 @@ const composition = await read('../src/app/composition.ts');
 const runtimeContracts = await read('../src/application/contracts/runtime.ts');
 const scheduleService = await read('../src/application/services/ApplicationActions.ts');
 const workerApi = await readImplementationSource('worker/api.ts');
-const main = await read('../src/main.tsx');
+const scheduleBootstrap = await read('../src/app/ScheduleServices.tsx');
 const today = await read('../src/pages/TodayPage.tsx');
 const qa = await read('../src/pages/QaStateMatrixPage.tsx');
 const docs = await read('../docs/runtime-modes.md');
@@ -124,7 +124,7 @@ for (const text of [
   "setError('시작하지 못했습니다. 연결 상태를 확인한 뒤 새로고침해 주세요.')",
   'role="status"',
 ]) {
-  if (!main.includes(text)) failures.push('main runtime bootstrap missing ' + text);
+  if (!scheduleBootstrap.includes(text)) failures.push('schedule runtime bootstrap missing ' + text);
 }
 
 if (today.includes('services.runtime.persistence') || today.includes('services.runtime.providerData')) failures.push('developer runtime source label leaked into Today');

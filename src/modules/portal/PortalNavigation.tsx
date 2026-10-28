@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthRoot';
 import { privateRequest } from '../auth/client';
 import { Icon, type IconName } from '../../shared/components/Icon';
@@ -34,7 +34,12 @@ export function useNavigationPill(selected: string) {
   return { bar, pill };
 }
 
-export function PortalHeader({ active }: { active: PortalModule }) {
+function handlePortalLink(event: MouseEvent<HTMLAnchorElement>, href: string, navigate: (href: string) => void) {
+  // Preserve open-in-new-tab/window and ordinary link affordances.
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault(); navigate(href);
+}
+export function PortalHeader({ active, onNavigate }: { active: PortalModule; onNavigate(href: string): void }) {
   const auth = useAuth();
   const [injuryVisible, setInjuryVisible] = useState(true);
   const { bar, pill } = useNavigationPill(active + injuryVisible);
@@ -48,7 +53,7 @@ export function PortalHeader({ active }: { active: PortalModule }) {
   if (!auth.enabled || !auth.user || auth.user.mustChangePassword) return null;
   return <nav ref={bar} className="portal-nav portal-top" style={{gridTemplateColumns: injuryVisible || active === 'injury' ? '1fr 1.45fr 1fr' : '1fr 1.45fr'}} aria-label="공간 선택">
     <span ref={pill} className="portal-pill" aria-hidden="true" />
-    {modules.filter(item => item.id !== 'injury' || injuryVisible || active === 'injury').map(item => <a key={item.id} href={item.href} aria-current={item.id === active ? 'page' : undefined}><Icon name={item.icon}/><span>{item.label}</span></a>)}
+    {modules.filter(item => item.id !== 'injury' || injuryVisible || active === 'injury').map(item => <a key={item.id} href={item.href} onClick={event => handlePortalLink(event,item.href,onNavigate)} aria-current={item.id === active ? 'page' : undefined}><Icon name={item.icon}/><span>{item.label}</span></a>)}
   </nav>;
 }
 
@@ -58,13 +63,14 @@ const quickActions: Array<{ id: string; label: string; href: string; icon: IconN
   { id: 'materials', label: '자료 올리기', href: '/injury?section=library', icon: 'upload' },
   { id: 'schedule', label: '근무표 가져오기', href: '/import', icon: 'calendar' },
 ];
-export function FavoriteActions() {
+export function FavoriteActions({ onNavigate, path }: { onNavigate(href: string): void; path: string }) {
   const { user, enabled } = useAuth();
   const [open, setOpen] = useState(false), [editing, setEditing] = useState(false);
   const [favorites, setFavorites] = useState<string[]>(['expense', 'note', 'materials']);
   const holder = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null), held = useRef(false);
   const key = 'cbh.portal.favorites.' + user?.id;
+  useEffect(() => { setOpen(false); }, [path]);
   useEffect(() => {
     setFavorites(['expense', 'note', 'materials']);
     try { const ids: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
@@ -87,7 +93,7 @@ export function FavoriteActions() {
       <div className="portal-favorite-heading"><strong>자주 쓰는 기능</strong><button onClick={() => setEditing(!editing)}>{editing ? '완료' : '편집'}</button></div>
       {(editing ? quickActions : quickActions.filter(a => favorites.includes(a.id))).map(action => editing
         ? <label key={action.id}><input type="checkbox" checked={favorites.includes(action.id)} onChange={event => { const next = event.target.checked ? [...favorites, action.id] : favorites.filter(id => id !== action.id); setFavorites(next); try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* Keep this session usable when device storage is unavailable. */ } }}/><Icon name={action.icon}/>{action.label}</label>
-        : <a key={action.id} href={action.href}><Icon name={action.icon}/>{action.label}</a>)}
+        : <a key={action.id} href={action.href} onClick={event => { handlePortalLink(event,action.href,onNavigate); if(event.defaultPrevented)setOpen(false); }}><Icon name={action.icon}/>{action.label}</a>)}
       {!editing && !favorites.length && <p>편집에서 자주 쓰는 기능을 골라 주세요.</p>}
     </section>}
     <button ref={trigger} className="portal-favorite-trigger" aria-label="즐겨찾는 기능 열기" aria-expanded={open} aria-controls="portal-favorite-actions"

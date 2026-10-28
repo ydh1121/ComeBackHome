@@ -11,7 +11,7 @@ const runtimeConfig = await read('../src/config/runtime.ts');
 const runtimeContracts = await read('../src/application/contracts/runtime.ts');
 const httpProviders = await read('../src/providers/http/HttpDataProviders.ts');
 const composition = await read('../src/app/composition.ts');
-const main = await read('../src/main.tsx');
+const scheduleBootstrap = await read('../src/app/ScheduleServices.tsx');
 const workerTypes = await readImplementationSource('worker/runtime-types.ts');
 const workerApi = await readImplementationSource('worker/api.ts');
 const wranglerLocal = JSON.parse(await read('../wrangler.local.jsonc'));
@@ -73,9 +73,9 @@ for (const text of [
   'const runtimeMode = resolveRuntimeMode()',
   'const providerMode = resolveProviderRuntimeMode()',
   "import.meta.env.DEV && runtimeMode === 'mock'",
-  "import('./app/mockComposition')",
+  "import('./mockComposition')",
 ]) {
-  expect(main.includes(text), 'main provider bootstrap missing ' + text);
+  expect(scheduleBootstrap.includes(text), 'schedule provider bootstrap missing ' + text);
 }
 
 expect(workerTypes.includes('PROVIDER_RUNTIME_ENABLED?: string;'), 'Worker provider activation env contract missing');

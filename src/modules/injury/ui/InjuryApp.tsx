@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from "../../auth/AuthRoot";
 import { privateRequest } from "../../auth/client";
 import {
@@ -56,18 +57,20 @@ interface Consent {
     updated_at: string;
   };
 }
+function advisorLocation(search: string): {view: AdvisorRoute; section: Section} {
+  const value = new URLSearchParams(search).get('section');
+  const section = tabs.some(([key]) => key === value) ? value as Section : 'overview';
+  const view = value === 'documents' ? 'library' : value === 'manage' || value === 'overview' || tabs.some(([key]) => key === value)
+    ? 'manage' : ['progress', 'library', 'help'].includes(value ?? '') ? value as AdvisorRoute : 'today';
+  return { view, section };
+}
 export function InjuryApp() {
+  const routeLocation = useLocation(), navigateRoute = useNavigate();
   const auth = useAuth(),
     [data, setData] = useState<CaseData | null>(null),
     [consent, setConsent] = useState<Consent | null>(null),
-    [view, setView] = useState<AdvisorRoute>(() => {
-      const value=new URLSearchParams(location.search).get("section");
-      return value === "documents" ? "library" : value === "manage" || tabs.some(([key])=>key===value) ? "manage" : ["progress","library","help"].includes(value ?? "") ? value as AdvisorRoute : "today";
-    }),
-    [section, setSection] = useState<Section>(() => {
-      const value = new URLSearchParams(location.search).get("section");
-      return tabs.some((t) => t[0] === value) ? (value as Section) : "overview";
-    }),
+    [view, setView] = useState<AdvisorRoute>(() => advisorLocation(routeLocation.search).view),
+    [section, setSection] = useState<Section>(() => advisorLocation(routeLocation.search).section),
     [pageKey, setPageKey] = useState(0),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<{
@@ -79,11 +82,17 @@ export function InjuryApp() {
       () =>
         (Object.entries(RECORD_SPECS).find(
           ([, spec]) =>
-            spec.group === new URLSearchParams(location.search).get("section"),
+            spec.group === new URLSearchParams(routeLocation.search).get("section"),
         )?.[0] ?? "task") as RecordKind,
     ),
     [archived, setArchived] = useState(false);
   const { bar: moduleBar, pill: modulePill } = useNavigationPill(view);
+  useEffect(() => {
+    const selected = advisorLocation(routeLocation.search);
+    setView(selected.view); setSection(selected.section);
+    const next = Object.entries(RECORD_SPECS).find(([, spec]) => spec.group === selected.section)?.[0];
+    if (next) setKind(next as RecordKind);
+  }, [routeLocation.search]);
   const reload = useCallback(async () => {
     try {
       const c = await privateRequest<Consent>("private/case/consent");
@@ -118,12 +127,13 @@ export function InjuryApp() {
       ([, spec]) => spec.group === value,
     )?.[0];
     if (next) setKind(next as RecordKind);
-    history.replaceState(null, "", "/injury?section=" + value);
+    void navigateRoute('/injury?section=' + value, { replace: true });
   };
   const navigate = (value: AdvisorRoute) => {
     setPageKey(key => key + 1);
-    if(value === "manage") { choose("overview"); history.replaceState(null,"","/injury?section=manage"); }
-    else { setView(value);history.replaceState(null,"","/injury?section="+value); }
+    if(value === "manage") { setView('manage'); setSection('overview'); setQuery(''); setArchived(false); }
+    else setView(value);
+    void navigateRoute('/injury?section=' + value, { replace: true });
     window.scrollTo(0,0);
   };
   const records =
@@ -140,8 +150,8 @@ export function InjuryApp() {
   return (
     <main className="private-page advisor-shell" data-page="InjuryApp" data-advisor-view={view}>
       <header className="private-header">
-        <a href="/">ComeBackHome</a>
-        <a href="/account">내 계정</a>
+        <Link to="/">ComeBackHome</Link>
+        <Link to="/account">내 계정</Link>
       </header>
       <div className="private-title">
         <div>
@@ -179,7 +189,7 @@ export function InjuryApp() {
       {data && view === "library" && <DocumentsPanel data={data} reload={reload} openRecord={record=>setEditing({kind:record.kind,record})} createRecord={kind=>setEditing({kind})}/>}
       {data && view === "manage" && section === "overview" && <ManageHome data={data} choose={choose}/>}
 
-      {data && view === "help" && <AdvisorHelp data={data} reload={reload} onOpen={id=>{ navigate("today"); history.replaceState(null,"","/injury?section=today&action="+id); }}/>}
+      {data && view === "help" && <AdvisorHelp data={data} reload={reload} onOpen={id=>{ setPageKey(key => key + 1); setView('today'); void navigateRoute('/injury?section=today&action=' + id, {replace:true}); window.scrollTo(0,0); }}/>}
       {data && view === "manage" && section !== "overview" && (
         <>
           {section === "tasks" && (

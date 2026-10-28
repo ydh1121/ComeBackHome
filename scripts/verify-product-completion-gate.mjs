@@ -37,6 +37,7 @@ const [
   manifest,
   router,
   main,
+  scheduleServices,
   runtimeConfig,
   composition,
   commuteManual,
@@ -56,6 +57,7 @@ const [
   read('../src/application/route-manifest.ts'),
   read('../src/app/router.tsx'),
   read('../src/main.tsx'),
+  read('../src/app/ScheduleServices.tsx'),
   read('../src/config/runtime.ts'),
   read('../src/app/composition.ts'),
   read('../src/pages/CommuteManualPage.tsx'),
@@ -84,8 +86,9 @@ expect(!router.includes("import { QaDesktopDropPage }"), 'QA desktop page is sta
 expect(router.includes('{ path: \'*\', element: <Navigate to="/" replace /> }'), 'unknown routes must redirect to product home');
 expect(!composition.includes('/mocks/'), 'production composition imports mock modules');
 expect(!composition.includes('MOCK_FIXTURE'), 'production composition contains mock fixture');
-expect(main.includes("import.meta.env.DEV && runtimeMode === 'mock'"), 'mock application is not DEV-gated');
-expect(main.includes("import('./app/mockComposition')"), 'DEV mock composition split missing');
+expect(scheduleServices.includes("import.meta.env.DEV && runtimeMode === 'mock'"), 'mock application is not DEV-gated');
+expect(scheduleServices.includes("import('./mockComposition')"), 'DEV mock composition split missing');
+expect(router.includes('Component: ScheduleServices') && main.includes('<RouterProvider router={router}/>'), 'shared router must retain the isolated schedule service layout');
 expect(runtimeConfig.includes("import.meta.env.DEV ? 'mock' : 'api'"), 'production runtime does not fail-safe to API');
 expect(composition.includes("providerData: providerMode === 'api' ? 'worker-api' : 'disabled'"), 'provider-disabled runtime still uses mock data');
 

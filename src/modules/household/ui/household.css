@@ -56,3 +56,11 @@
 @media(prefers-reduced-motion:reduce){.hh-primary,.hh-secondary,.hh-meter>span,.hh-chart__track>i,.hh-card-art,.hh-toggle,.hh-toggle:after{transition:none}.hh-card-art{transform:none!important}.hh-primary:active,.hh-secondary:active{transform:none}}
 
 .hh-card-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}.hh-alert>p{margin:0 0 8px}.hh-alert>p:last-child{margin-bottom:0}
+.household-page[data-section=cards] .hh-total{margin:12px 0 8px}
+.household-page[data-section=cards] .hh-card-totals{margin-top:10px;gap:8px 20px}
+.household-page[data-section=cards] .hh-card-rail{padding-top:0;padding-bottom:0}
+.household-page[data-section=cards] .hh-card-art.is-portrait{width:81px;height:128px}
+.household-page[data-section=cards] .hh-card-name{margin-top:6px}
+.household-page[data-section=cards] .hh-card-detail .hh-section-title{margin-top:4px}
+.household-page[data-section=cards] .hh-balance{margin:10px 0}
+.household-page[data-section=cards] .hh-actions{margin:12px 0 10px}

@@ -21,16 +21,31 @@ let activePage;
 async function visible(locator) { await locator.waitFor({ state: 'visible' }); assertions++; }
 async function noDialog(page) { await page.getByRole('dialog').waitFor({ state: 'hidden' }); }
 async function setSection(page, label) { await page.getByRole('navigation', { name: '생활비·할 일 메뉴' }).getByRole('link', { name: label, exact: true }).click(); }
+async function settleNavigation(page) {
+  await page.waitForFunction(()=>{
+    const bars=[...document.querySelectorAll('.portal-nav')];
+    return bars.length>0&&bars.every(bar=>{
+      const pill=bar.querySelector('.portal-pill'),active=bar.querySelector('[aria-current="page"]');
+      if(!pill||!active||pill.getAnimations().some(animation=>animation.playState==='running'||animation.pending))return false;
+      const p=pill.getBoundingClientRect(),a=active.getBoundingClientRect();
+      return ['x','y','width','height'].every(key=>Math.abs(p[key]-a[key])<=1);
+    });
+  });
+}
+async function screenshot(page,file) { await settleNavigation(page);await page.screenshot({path:resolve(output,file),animations:'disabled'}); }
 async function layout(page, width, label) {
   await page.setViewportSize({ width, height: 844 });
   await page.evaluate(()=>window.scrollTo(0,0));
+  await settleNavigation(page);
   const bounds = await page.evaluate(() => {
     const rect = selector => { const r = document.querySelector(selector)?.getBoundingClientRect(); return r ? { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height } : null; };
-    return { overflow: document.documentElement.scrollWidth > innerWidth + 1, top:rect('.portal-top'), bottom:rect('.portal-bottom'), heading:rect('.household-page h1') };
+    return { overflow: document.documentElement.scrollWidth > innerWidth + 1, top:rect('.portal-top'), bottom:rect('.portal-bottom'), heading:rect('.household-page h1'), actions:rect('.hh-card-detail .hh-actions'), pills:[...document.querySelectorAll('.portal-nav')].map(bar=>{const p=bar.querySelector('.portal-pill').getBoundingClientRect(),a=bar.querySelector('[aria-current="page"]').getBoundingClientRect();return ['x','y','width','height'].every(key=>Math.abs(p[key]-a[key])<=1);}) };
   });
   check(bounds.overflow, false, `${label}: no horizontal overflow at ${width}`);
   assert(bounds.top && bounds.bottom && bounds.top.x >= 0 && bounds.top.right <= width + 1 && bounds.bottom.x >= 0 && bounds.bottom.right <= width + 1, `${label}: fixed navigation stays in viewport`); assertions++;
   assert(bounds.heading && bounds.heading.y >= bounds.top.bottom - 1, `${label}: title stays below top navigation`); assertions++;
+  check(bounds.pills,[true,true],`${label}: selected pills align within 1px after motion at ${width}`);
+  if(bounds.actions&&width<=390){assert(bounds.actions.bottom<=bounds.bottom.y,`${label}: card actions stay above bottom navigation at ${width}`);assertions++;}
 }
 try {
   for (const [engine, name] of [[chromium,'chromium'],[webkit,'webkit']]) {
@@ -41,19 +56,25 @@ try {
     const makeContext = async role => {
       const context = await browser.newContext({ viewport:{width:390,height:844}, timezoneId:'Asia/Seoul', locale:'ko-KR', serviceWorkers:'block' }); contexts.push(context);
       const identity = { logged:true, role }, user = () => ({ id:identity.role+'-browser',loginId:identity.role==='admin'?'ydh1121':'yvonne',role:identity.role,mustChangePassword:false });
+      const traffic = { documents:0, sessions:0, scheduleWrites:0 };
       await context.addInitScript(fixed => {
         const NativeDate=Date; class SyntheticDate extends NativeDate { constructor(...args) { super(...(args.length?args:[fixed])); } static now(){return new NativeDate(fixed).getTime();} }
         window.Date=SyntheticDate;
       },stamp);
-      await context.route('**/*',route=>new URL(route.request().url()).origin===base?route.continue():route.abort('blockedbyclient'));
+      await context.route('**/*',route=>{
+        if(route.request().resourceType()==='document')traffic.documents++;
+        return new URL(route.request().url()).origin===base?route.continue():route.abort('blockedbyclient');
+      });
       await context.route('**/api/**',async route=>{
         const req=route.request(), url=new URL(req.url()), path=url.pathname;
         const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',headers:{'Cache-Control':'private, no-store'},body:JSON.stringify(body)});
-        if(path==='/api/auth/session')return json({enabled:true,user:identity.logged?user():null,legacyAccess:'write'});
+        if(path==='/api/auth/session'){traffic.sessions++;return json({enabled:true,user:identity.logged?user():null,legacyAccess:'write'});}
         if(path==='/api/auth/logout'||path==='/api/auth/logout-all'){identity.logged=false;return json({ok:true});}
         if(path==='/api/auth/preferences')return json({shortcutVisible:true});
         if(path==='/api/auth/devices')return json({devices:[]});
         if(!identity.logged)return json({error:'LOGIN_REQUIRED'},401);
+        if(path.startsWith('/api/people')&&req.method()!=='GET')traffic.scheduleWrites++;
+        if(path==='/api/people'&&req.method()==='GET')return json({people:[]});
         if(path==='/api/private/household'&&req.method()==='GET'){
           if(rejectRead)return json({error:'HOUSEHOLD_ACCESS_REQUIRED'},403);
           if(getFailure)return route.abort('failed');
@@ -84,7 +105,7 @@ try {
         if(path==='/api/notifications/client-key')return json({configured:false,publicKey:null});
         failures.push(req.method()+' '+path);return json({error:'UNEXPECTED_SYNTHETIC_ROUTE'},404);
       });
-      return {context,identity};
+      return {context,identity,traffic};
     };
     try {
       const member=await makeContext('member'),page=await member.context.newPage(); activePage=page;
@@ -158,19 +179,40 @@ try {
       for(const [section,title] of [['카드','카드'],['가계부','가계부'],['월급','월급 나누기'],['할 일','할 일·메모']]){
         await setSection(page,section);await visible(page.getByRole('heading',{name:title,exact:true}));
         for(const width of [375,390,768,1024,1440])await layout(page,width,`${name}-${section}`);
-        await page.setViewportSize({width:390,height:844});await page.screenshot({path:resolve(output,`${name}-${section==='카드'?'cards':section==='가계부'?'ledger':section==='월급'?'income':'notes'}-390.png`),animations:'disabled'});
+        await page.setViewportSize({width:390,height:844});await screenshot(page,`${name}-${section==='카드'?'cards':section==='가계부'?'ledger':section==='월급'?'income':'notes'}-390.png`);
       }
-      await setSection(page,'가계부');await page.setViewportSize({width:1440,height:900});await page.screenshot({path:resolve(output,`${name}-ledger-1440.png`),animations:'disabled'});
+      await setSection(page,'가계부');await page.setViewportSize({width:1440,height:900});await screenshot(page,`${name}-ledger-1440.png`);
       await page.setViewportSize({width:375,height:812});await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await page.evaluate(()=>document.documentElement.dataset.theme='dark');
-      await page.screenshot({path:resolve(output,`${name}-ledger-dark-375.png`),animations:'disabled'});
+      await screenshot(page,`${name}-ledger-dark-375.png`);
       check(await page.locator('.portal-pill').first().evaluate(el=>getComputedStyle(el).transitionDuration),'0s','reduced motion removes navigation movement');
       await page.evaluate(()=>delete document.documentElement.dataset.theme);await page.emulateMedia({colorScheme:'light',reducedMotion:'no-preference'});
+      // Module navigation must retain the shared shell and authenticated session.
+      // Compare the actual DOM node, not a marker that could survive a reload in storage.
+      const persistentHeader=await page.locator('.portal-top').elementHandle(), beforeNavigation={...member.traffic};
+      assert(persistentHeader);assertions++;
+      const shellPersists=async note=>{
+        check(await persistentHeader.evaluate(node=>node.isConnected&&node===document.querySelector('.portal-top')),true,note+': same header DOM node');
+        check(member.traffic.documents,beforeNavigation.documents,note+': no full document navigation');
+        check(member.traffic.sessions,beforeNavigation.sessions,note+': no repeated authentication request');
+      };
       const favorite=page.getByRole('button',{name:'즐겨찾는 기능 열기',exact:true});const box=await favorite.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await visible(page.getByRole('region',{name:'즐겨찾는 기능',exact:true}));await page.mouse.up();
       await page.getByRole('region',{name:'즐겨찾는 기능'}).getByRole('link',{name:'메모 남기기',exact:true}).click();await visible(page.getByRole('heading',{name:'할 일·메모',exact:true}));
+      await page.waitForFunction(()=>document.querySelector('.hh-note-compose textarea')===document.activeElement);
       check(await page.getByLabel('새 할 일이나 메모',{exact:true}).evaluate(el=>el===document.activeElement),true,'favorite opens focused quick capture');
+      await shellPersists('favorite navigation');
       await page.getByRole('navigation',{name:'공간 선택',exact:true}).getByRole('link',{name:'산재',exact:true}).click();await visible(page.getByRole('heading',{name:'산재 도우미',exact:true}));
-      check(await page.locator('.portal-top a[aria-current=page]').innerText(),'산재','top module navigation changes module');
+      check(await page.getByRole('navigation',{name:'공간 선택',exact:true}).getByRole('link',{name:'산재',exact:true}).getAttribute('aria-current'),'page','top module navigation changes module');
+      await shellPersists('injury module navigation');
+      await page.goBack();await visible(page.getByRole('heading',{name:'할 일·메모',exact:true}));await shellPersists('browser back');
+      await page.goForward();await visible(page.getByRole('heading',{name:'산재 도우미',exact:true}));await shellPersists('browser forward');
+      await page.getByRole('navigation',{name:'공간 선택',exact:true}).getByRole('link',{name:'일정',exact:true}).click();await visible(page.locator('[data-page="TodayPage"][data-state="NO_SCHEDULE_TODAY"]'));
+      check(await page.getByRole('navigation',{name:'주요 탐색',exact:true}).getByRole('link').allTextContents(),['오늘','일정','가져오기','사람'],'accepted schedule navigation remains intact');
+      await shellPersists('schedule module entry');
+      await page.getByRole('navigation',{name:'주요 탐색',exact:true}).getByRole('link',{name:'일정',exact:true}).click();await visible(page.locator('[data-page="SchedulePage"][data-state="EMPTY"]'));await shellPersists('existing schedule route');
+      await page.getByRole('navigation',{name:'주요 탐색',exact:true}).getByRole('link',{name:'오늘',exact:true}).click();await visible(page.locator('[data-page="TodayPage"][data-state="NO_SCHEDULE_TODAY"]'));await shellPersists('existing schedule return');
+      check(member.traffic.scheduleWrites,0,'module switching never mutates existing schedule data');
       await page.getByRole('navigation',{name:'공간 선택',exact:true}).getByRole('link',{name:'생활비·할 일',exact:true}).click();await visible(page.getByRole('heading',{name:'가계부',exact:true}));
+      await shellPersists('return to household');await persistentHeader.dispose();
       check(await page.getByRole('navigation',{name:'생활비·할 일 메뉴'}).getByRole('link').allTextContents(),['카드','가계부','월급','할 일'],'household bottom navigation is independent');
       getFailure=true;await page.reload();await visible(page.getByText('최근 저장한 내용',{exact:true}));
       await setSection(page,'할 일');check(await page.getByLabel('새 할 일이나 메모',{exact:true}).isDisabled(),true,'offline cached snapshot is read-only');
