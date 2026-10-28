@@ -145,6 +145,19 @@ try {
       check(domain.getCardSummary(state,state.cards[0].id).remaining,68000,'repayment restores capacity');
       check(domain.summarizeLedger(state,'2026-10-01','2026-11-01').netExpense,12000,'repayment is not another expense');
       await setSection(page,'가계부');await visible(page.getByRole('heading',{name:'가계부',exact:true}));
+      // Historical labels must describe the selected period, including a week crossing years.
+      check(await page.locator('.hh-total > strong').textContent(),'12,000원','current month includes the recorded purchase');
+      await page.getByLabel('조회 날짜',{exact:true}).fill('2025-02-03');
+      await visible(page.getByText('2025년 2월 지출',{exact:true}));
+      check(await page.locator('.hh-total > strong').textContent(),'0원','historical month excludes the current purchase');
+      await page.getByRole('button',{name:'일',exact:true}).click();await visible(page.getByText('2025년 2월 3일 지출',{exact:true}));
+      await page.getByRole('button',{name:'년',exact:true}).click();await visible(page.getByText('2025년 지출',{exact:true}));
+      await page.getByLabel('조회 날짜',{exact:true}).fill('2026-01-01');
+      await page.getByRole('button',{name:'주',exact:true}).click();await visible(page.getByText('2025.12.29 ~ 2026.1.4 지출',{exact:true}));
+      check(await page.locator('.hh-total > strong').textContent(),'0원','cross-year week excludes the October purchase');
+      await page.getByLabel('조회 날짜',{exact:true}).fill('2026-10-28');
+      await page.getByRole('button',{name:'월',exact:true}).click();await visible(page.getByText('2026년 10월 지출',{exact:true}));
+      check(await page.locator('.hh-total > strong').textContent(),'12,000원','restoring current month restores its total');
       await page.getByRole('slider',{name:'보기 상세 수준'}).focus();await page.keyboard.press('End');
       await visible(page.getByRole('figure',{name:'세부 지출'}));
       await page.getByRole('button',{name:'기록',exact:true}).click(); dialog=page.getByRole('dialog');await dialog.locator('input[name=amount]').fill('-1');
@@ -159,6 +172,18 @@ try {
       await dialog.getByLabel('생활비 금액',{exact:true}).fill('100000');await dialog.getByLabel('저축 금액',{exact:true}).fill('50000');await dialog.getByRole('button',{name:'분배 계획 저장',exact:true}).click();await noDialog(page);
       check(domain.getSalaryPlan(state,'2026-10').unallocatedFromPlan,50000,'allocation calculator');
       check(domain.summarizeLedger(state,'2026-10-01','2026-11-01').netExpense,15000,'allocation does not become spending');
+      await page.getByLabel('월 선택',{exact:true}).fill('2025-02');await visible(page.getByText('2025년 2월 들어온 돈',{exact:true}));
+      check(await page.locator('.hh-total > strong').textContent(),'0원','historical salary month excludes current income');
+      await page.getByRole('button',{name:'분배 계획 세우기',exact:true}).click();dialog=page.getByRole('dialog',{name:'2025년 2월 분배 계획',exact:true});await visible(dialog);
+      await dialog.getByRole('spinbutton',{name:'예상 수입 원',exact:true}).fill('10000');await dialog.getByLabel('생활비 금액',{exact:true}).fill('5000');await dialog.getByLabel('저축 금액',{exact:true}).fill('3000');
+      await dialog.getByRole('button',{name:'분배 계획 저장',exact:true}).click();await noDialog(page);
+      await visible(page.getByText('가계부에 기록한 2025년 2월 지출',{exact:true}));
+      check(await page.locator('.hh-plan-actual > strong').textContent(),'0원','historical plan shows its own expense total');
+      check(domain.getSalaryPlan(state,'2025-02').unallocatedFromPlan,2000,'historical plan saves to the selected month');
+      await page.getByLabel('월 선택',{exact:true}).fill('2026-10');await visible(page.getByText('2026년 10월 들어온 돈',{exact:true}));
+      check(await page.locator('.hh-total > strong').textContent(),'200,000원','restoring current month restores its income');
+      check(await page.locator('.hh-plan-actual > strong').textContent(),'15,000원','restoring current month restores its expense total');
+      check(domain.getSalaryPlan(state,'2026-10').unallocatedFromPlan,50000,'historical plan leaves current plan unchanged');
       // The other existing account edits the same income, using the actual UI.
       const admin=await makeContext('admin'),other=await admin.context.newPage();await other.goto(base+'/household?section=ledger');
       await other.locator('.hh-ledger-row').filter({hasText:'수입'}).click();await other.getByRole('button',{name:'내용 수정',exact:true}).click();

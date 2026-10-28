@@ -8,6 +8,7 @@ export const localDateTime = (iso = new Date().toISOString()) => new Date(new Da
 export const fromSeoulInput = (value: string) => new Date(value + ':00+09:00').toISOString();
 export const shortWhen = (iso: string) => new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 export const monthNow = () => localDateTime().slice(0, 7);
+export const monthLabel = (month: string) => `${Number(month.slice(0, 4))}년 ${Number(month.slice(5, 7))}월`;
 
 export function HouseholdIcon({ name }: { name: 'card' | 'ledger' | 'income' | 'notes' | 'bell' | 'refresh' | 'arrow' }) {
   return <svg className="svg" viewBox="0 0 24 24" aria-hidden="true">

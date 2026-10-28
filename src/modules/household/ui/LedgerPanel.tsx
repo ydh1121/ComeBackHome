@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../shared/components/Icon';
 import type { HouseholdController } from '../client';
 import { cardUsesCredit, householdPeriod, seoulDate, summarizeLedger, type EntryKind, type HouseholdEntry, type HouseholdState, type LedgerPeriod } from '../domain/model';
-import { AmountField, BarChart, EmptyState, FormSheet, fromSeoulInput, localDateTime, shortWhen, won, SaveFeedback } from './shared';
+import { AmountField, BarChart, EmptyState, FormSheet, fromSeoulInput, localDateTime, monthLabel, shortWhen, won, SaveFeedback } from './shared';
 
 export const entryKinds: Record<EntryKind, string> = { expense: '지출', income: '수입', refund: '환불', repayment: '카드 상환', borrowing: '카드대출', transfer: '충전·이체' };
 const categories = ['식비', '장보기', '교통', '주거', '생활', '쇼핑', '건강', '여가', '기타'];
@@ -11,10 +11,14 @@ const foodDetails = ['한식', '중식', '일식', '양식', '분식', '카페·
 export function LedgerPanel({ state, onAdd, model }: { state: HouseholdState; model: HouseholdController; onAdd(): void }) {
   const [date, setDate] = useState(seoulDate(new Date().getTime())), [period, setPeriod] = useState<LedgerPeriod>('month'), [detail, setDetail] = useState(0), [selected, setSelected] = useState<HouseholdEntry | null>(null), [correcting, setCorrecting] = useState<HouseholdEntry | null>(null);
   const range = householdPeriod(date, period), report = summarizeLedger(state, range.from, range.to);
+  const periodLabel = period === 'week'
+    ? `${range.from.split('-').map(Number).join('.')} ~ ${range.to.split('-').map(Number).join('.')}`
+    : period === 'year' ? `${date.slice(0, 4)}년`
+    : `${monthLabel(date)}${period === 'day' ? ` ${Number(date.slice(8, 10))}일` : ''}`;
   return <>
     <div className="hh-title-row"><h1 className="page-title">가계부</h1><button className="hh-text" type="button" onClick={onAdd}><Icon name="plus" /> 기록</button></div>
     <div className="hh-period"><div className="hh-segment" aria-label="조회 기간">{(['day', 'week', 'month', 'year'] as const).map((value, index) => <button type="button" key={value} aria-pressed={period === value} onClick={() => setPeriod(value)}>{['일', '주', '월', '년'][index]}</button>)}</div><label><span className="sr-only">조회 날짜</span><input type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }} /></label></div>
-    <section className="hh-total"><span>{period === 'day' ? date.slice(5).replace('-', '월 ') + '일 지출' : period === 'month' ? Number(date.slice(5, 7)) + '월 지출' : period === 'year' ? date.slice(0, 4) + '년 지출' : '이번 주 지출'}</span><strong>{won(report.netExpense)}</strong><div className="hh-total__detail"><span>수입 <b>{won(report.income)}</b></span><span>환불 <b>{won(report.refunded)}</b></span></div></section>
+    <section className="hh-total"><span>{periodLabel} 지출</span><strong>{won(report.netExpense)}</strong><div className="hh-total__detail"><span>수입 <b>{won(report.income)}</b></span><span>환불 <b>{won(report.refunded)}</b></span></div></section>
     <label className="hh-detail-range"><span>간략히</span><input type="range" min="0" max="2" step="1" value={detail} onChange={event => setDetail(Number(event.target.value))} aria-label="보기 상세 수준" aria-valuetext={['간략히', '분야별', '세부 내역'][detail]} /><span>자세히</span></label>
     {detail > 0 && <BarChart label={detail === 1 ? '어디에 많이 썼나요?' : '세부 지출'} rows={(detail === 1 ? report.categories : report.subcategories).slice(0, 12).map(row => ({ label: row.label, value: row.amount }))} />}
     {detail === 2 && <dl className="hh-stat-list"><div><dt>카드 상환</dt><dd>{won(report.repayment)}</dd></div><div><dt>카드대출</dt><dd>{won(report.borrowing)}</dd></div><div><dt>충전·이체</dt><dd>{won(report.transfer)}</dd></div></dl>}
