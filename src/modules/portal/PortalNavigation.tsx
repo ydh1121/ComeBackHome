@@ -66,6 +66,7 @@ export function FavoriteActions() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null), held = useRef(false);
   const key = 'cbh.portal.favorites.' + user?.id;
   useEffect(() => {
+    setFavorites(['expense', 'note', 'materials']);
     try { const ids: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
       if (Array.isArray(ids)) setFavorites(ids.filter(id => typeof id === 'string' && quickActions.some(a => a.id === id)));
     } catch { /* Use the short default list. */ }
@@ -85,7 +86,7 @@ export function FavoriteActions() {
     {open && <section id="portal-favorite-actions" className="portal-favorite-menu" aria-label="즐겨찾는 기능">
       <div className="portal-favorite-heading"><strong>자주 쓰는 기능</strong><button onClick={() => setEditing(!editing)}>{editing ? '완료' : '편집'}</button></div>
       {(editing ? quickActions : quickActions.filter(a => favorites.includes(a.id))).map(action => editing
-        ? <label key={action.id}><input type="checkbox" checked={favorites.includes(action.id)} onChange={event => { const next = event.target.checked ? [...favorites, action.id] : favorites.filter(id => id !== action.id); setFavorites(next); localStorage.setItem(key, JSON.stringify(next)); }}/><Icon name={action.icon}/>{action.label}</label>
+        ? <label key={action.id}><input type="checkbox" checked={favorites.includes(action.id)} onChange={event => { const next = event.target.checked ? [...favorites, action.id] : favorites.filter(id => id !== action.id); setFavorites(next); try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* Keep this session usable when device storage is unavailable. */ } }}/><Icon name={action.icon}/>{action.label}</label>
         : <a key={action.id} href={action.href}><Icon name={action.icon}/>{action.label}</a>)}
       {!editing && !favorites.length && <p>편집에서 자주 쓰는 기능을 골라 주세요.</p>}
     </section>}

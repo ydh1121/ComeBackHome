@@ -7,7 +7,10 @@ export async function invokePagesScheduler(env: SchedulerWorkerEnv, scheduledTim
   const token = (env.PRESENCE_EVENT_INGEST_TOKEN ?? '').trim();
   if (origin !== CANONICAL_PAGES_ORIGIN) throw new Error('Scheduler target must be canonical Pages.');
   if (!token) throw new Error('Scheduler authentication is unavailable.');
-  const response = await fetch(origin + '/api/internal/scheduler-tick', {
+  // A distinct path fails closed on older Pages releases. An old endpoint may
+  // ignore a new JSON field and accidentally run the legacy scheduler twice.
+  const path = channel === 'household' ? '/api/internal/household-scheduler-tick' : '/api/internal/scheduler-tick';
+  const response = await fetch(origin + path, {
     method: 'POST',
     headers: {
       Accept: 'application/json',

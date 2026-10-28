@@ -206,7 +206,7 @@ export async function handleApiRequest(
     if (
       segments.length === 3 &&
       segments[1] === 'internal' &&
-      segments[2] === 'scheduler-tick' &&
+      (segments[2] === 'scheduler-tick' || segments[2] === 'household-scheduler-tick') &&
       request.method === 'POST'
     ) {
       const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
@@ -217,7 +217,8 @@ export async function handleApiRequest(
       if (!Number.isFinite(scheduledTime) || scheduledTime <= 0) return json({ error: 'scheduledTime is invalid.' }, 400);
       // Separate authenticated invocation keeps each module within the Free-tier
       // subrequest budget and does not couple household reminders to transit ETA.
-      if (body.channel === 'household') {
+      if (segments[2] === 'household-scheduler-tick') {
+        if (body.channel !== 'household') return json({ error: 'Unknown scheduler channel.' }, 400);
         return json({ result: await runHouseholdNotificationCycle(env, scheduledTime) });
       }
       if (body.channel !== undefined) return json({ error: 'Unknown scheduler channel.' }, 400);

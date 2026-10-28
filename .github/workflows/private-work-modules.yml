@@ -80,6 +80,7 @@ jobs:
       - run: node scripts/verify-chat-drive-exchange.mjs
       - run: node scripts/verify-private-advisor.mjs
       - run: node --test test/private-work/login-db-setup.test.mjs
+      - run: node --test test/private-work/household-db-setup.test.mjs
       - run: node --test test/private-work/auth-runtime.test.mjs
       - run: node --test test/private-work/password-relief.test.mjs
       - run: node --test test/private-work/drive-runtime.test.mjs
@@ -98,11 +99,13 @@ jobs:
       - run: npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.58.2
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: npm run build
+        id: production-build
         env:
           VITE_CBH_RUNTIME: api
           VITE_CBH_PROVIDER_RUNTIME: api
       - run: node scripts/verify-private-work-browser.mjs
       - run: node scripts/verify-household-browser.mjs
+        if: ${{ !cancelled() && steps.production-build.outcome == 'success' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -110,4 +113,5 @@ jobs:
           path: |
             artifacts/private-work/*.png
             artifacts/household/*.png
+            artifacts/household/result.json
           retention-days: 7

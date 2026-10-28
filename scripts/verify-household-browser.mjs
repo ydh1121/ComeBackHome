@@ -13,7 +13,7 @@ const domain = await modelServer.ssrLoadModule('/src/modules/household/domain/mo
 const server = await preview({ logLevel: 'error', preview: { host: '127.0.0.1', port: 18876, strictPort: true } });
 const base = 'http://127.0.0.1:18876';
 const stamp = '2026-10-28T09:00:00.000Z';
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6rSIAAAAASUVORK5CYII=', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABgAAAAmCAIAAABRZcxyAAAAK0lEQVR4nGM0iGpioAZgooopowaNGjRq0KhBowaNGjRq0KhBowaNGkQGAAD87AFYIn1XYAAAAABJRU5ErkJggg==', 'base64');
 let assertions = 0;
 const check = (actual, expected, note) => { assert.deepEqual(actual, expected, note); assertions++; };
 const evidence = [];
@@ -101,6 +101,7 @@ try {
       check(state.cards[0].orientation,'portrait','portrait card preserved');
       await page.locator('.hh-upload-label input[type=file]').setInputFiles({name:'synthetic-card.png',mimeType:'image/png',buffer:png});
       await page.locator('.hh-card-art img').waitFor();
+      await page.waitForFunction(()=>{const image=document.querySelector('.hh-card-art img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth===24;});assertions++;
       await page.getByRole('button',{name:'사용 기록',exact:true}).click(); dialog=page.getByRole('dialog');
       await dialog.locator('input[name=amount]').fill('12000'); await dialog.locator('select:has(option[value="식비"])').selectOption('식비');
       await dialog.getByText('어디서 썼는지 자세히 적기',{exact:true}).click();

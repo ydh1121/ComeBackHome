@@ -27,8 +27,9 @@
 .portal-content .advisor-bottom { display:grid; }
 .portal-content .advisor-bottom button { padding:5px 2px;margin:0;border:0;background:transparent;box-shadow:none;letter-spacing:0; }
 .portal-content .advisor-bottom button[aria-current] { background:transparent;color:var(--cbh-accent); }
-.portal-content .advisor-shell .copy-toolbar { top:calc(env(safe-area-inset-top) + 68px); }
+.portal-content .advisor-shell .copy-toolbar,.portal-content .advisor-copy-bar,.portal-content .guidance-toolbar { top:calc(env(safe-area-inset-top) + 68px); }
 @media(min-width:601px) { .portal-content .app-shell,.portal-content .app-shell__app { min-height:calc(100dvh - var(--portal-top-space) - 32px); } .portal-top { top:24px; } .portal-bottom { bottom:32px; } .portal-favorites { bottom:116px; } }
 @media(min-width:601px) { .household-shell { margin:16px auto;border-radius:30px;min-height:calc(100dvh - 92px);padding-top:16px;box-shadow:0 16px 45px var(--cbh-shadow); } }
+@media(min-width:601px) { .portal-content .advisor-shell .copy-toolbar,.portal-content .advisor-copy-bar,.portal-content .guidance-toolbar { top:84px; } }
 @media(prefers-reduced-motion:reduce) { .portal-pill { transition:none; } .portal-favorite-trigger:active { transform:none; } }
 @media(prefers-reduced-transparency:reduce) { .portal-nav::before { background:var(--cbh-surface);backdrop-filter:none;-webkit-backdrop-filter:none; } }

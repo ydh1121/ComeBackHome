@@ -57,6 +57,15 @@ try {
     null,
   );
   expect(denied.status === 401, 'scheduler endpoint must reject unauthenticated requests');
+  const channelRequest = (path, authorized = true) => new Request('https://come-back-home.pages.dev/api/internal/' + path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(authorized ? { Authorization: 'Bearer fixture-secret' } : {}) },
+    body: JSON.stringify({ scheduledTime: Date.now(), channel: 'household' }),
+  });
+  const disabledHouseholdEnv = { MUTATIONS_ENABLED: '1', PRIVATE_WORK_ENABLED: '0', PRESENCE_EVENT_INGEST_TOKEN: 'fixture-secret' };
+  expect((await api.handleApiRequest(channelRequest('household-scheduler-tick', false), disabledHouseholdEnv)).status === 401, 'household endpoint also authenticates before processing');
+  expect((await api.handleApiRequest(channelRequest('scheduler-tick'), disabledHouseholdEnv)).status === 400, 'household payload never enters the legacy cycle');
+  const householdDisabled = await api.handleApiRequest(channelRequest('household-scheduler-tick'), disabledHouseholdEnv);
+  expect(householdDisabled.status === 200 && (await householdDisabled.json()).result.status === 'disabled', 'disabled household channel performs no DB or push work');
 
   const originalFetch = globalThis.fetch;
   const schedulerRequests = [];
@@ -78,6 +87,7 @@ try {
   expect(schedulerRequests.length === 2, 'scheduler invokes independent schedule and household requests within separate Free-tier budgets');
   expect(JSON.parse(schedulerRequests[0].init.body).channel === undefined, 'legacy scheduler payload is preserved');
   expect(JSON.parse(schedulerRequests[1].init.body).channel === 'household', 'household has its own explicit channel');
+  expect(schedulerRequests[1]?.url === 'https://come-back-home.pages.dev/api/internal/household-scheduler-tick', 'household must fail closed on older Pages, never double-invoke the legacy endpoint');
   expect(schedulerRequests[0]?.url === 'https://come-back-home.pages.dev/api/internal/scheduler-tick', 'scheduler target mismatch');
   expect(schedulerRequests[0]?.init?.headers?.Authorization === 'Bearer scheduler-secret', 'scheduler auth mismatch');
 

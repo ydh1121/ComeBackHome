@@ -17,7 +17,7 @@ All amounts are integer KRW. Card opening values do not create fictional expense
 
 ## Reminders
 
-The existing scheduler Worker sends two independently authenticated requests to the same Pages endpoint. `channel: household` isolates the new outbox from legacy transit readiness and the per-invocation Free-tier request budget. Existing schedule jobs and subscriptions are not repurposed.
+The existing scheduler Worker sends two independently authenticated requests to the same Pages project. The dedicated `/api/internal/household-scheduler-tick` path and `channel: household` isolate the new outbox from legacy transit readiness and the per-invocation Free-tier request budget. The new path returns not-found on an older Pages release instead of invoking the legacy cycle twice. Existing schedule jobs and subscriptions are not repurposed.
 
 Each user opts in on their own device. KST midnight ledger reminders and due shared notes have deterministic per-device keys, one-hour expiry, OFF/completion/time-change checks, session revocation and retry handling. Notification bodies do not include memo text or financial amounts. Upstream lost acknowledgements still have normal Web Push at-least-once delivery limitations.
 

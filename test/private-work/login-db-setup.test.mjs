@@ -4,7 +4,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { assessState, validateSource, rows, main, prepareLoginDb, MIGRATION, LEDGER_QUERY, SCHEMA_QUERY } from '../../scripts/private-work/prepare-login-db.mjs';
 
-const files = readdirSync('db/migrations').filter((f) => f.endsWith('.sql')).sort();
+const repositoryFiles = readdirSync('db/migrations').filter((f) => f.endsWith('.sql')).sort();
+// Exercise the historical 0012 installer against its original exact source set.
+// Later migrations belong to their separately guarded rollout, never this runner.
+const files = repositoryFiles.filter((f) => f < '0013');
 const sql = readFileSync('db/migrations/' + MIGRATION, 'utf8');
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
 const objects = validateSource(config, files, sql);
@@ -33,6 +36,7 @@ function snapshotLegacy(db) {
     .map(({ name }) => [name, db.prepare('SELECT * FROM "' + name + '"').all()]);
 }
 test('wrong project/database/source or a later migration stops before any remote call', () => {
+  assert.throws(() => validateSource(config, repositoryFiles, sql), /UNEXPECTED_REPOSITORY_MIGRATIONS/, 'the legacy production runner still rejects the complete later checkout');
   for (const wrong of [ { ...config, name: 'another-project' }, { ...config, d1_databases: [] }, { ...config, d1_databases: [{ ...config.d1_databases[0], database_id: 'another-db' }] }, { ...config, d1_databases: [{ ...config.d1_databases[0], migrations_pattern: 'other/*.sql' }] } ])
     assert.throws(() => validateSource(wrong, files, sql), /CANONICAL_DATABASE_MISMATCH/);
   assert.throws(() => validateSource(config, files, sql + '\nDROP TABLE people;'), /UNREVIEWED_MIGRATION/);
