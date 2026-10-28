@@ -44,6 +44,9 @@ async function ready(){
 // Playwright's networkidle load state is sticky after SPA navigation, so it
 // cannot prove that a later schedule/latest-import request has completed.
 const readBarriers=new WeakMap();
+const diagnosticRoute=path=>path==='/api/people'?'/api/people':
+  /^\/api\/people\/[^/]+$/.test(path)?'/api/people/:person':
+  /^\/api\/people\/[^/]+\/schedules(?:\/[^/]+)?$/.test(path)?'/api/people/:person/schedules':'other-local-api';
 function observeApiReads(page){
   const pending=new Set(),started=new WeakMap(),statuses=new WeakMap();let lastActivity=Date.now();
   page.on('request',request=>{
@@ -69,7 +72,7 @@ function observeApiReads(page){
     }catch(error){
       // Synthetic acceptance only: never print bodies, headers, queries or IDs.
       console.error('PHASE_B_PENDING_READS',JSON.stringify({count:pending.size,reads:[...pending].slice(0,8).map(request=>({
-        route:new URL(request.url()).pathname.replace(/\/people\/[^/]+/, '/people/:person'),
+        route:diagnosticRoute(new URL(request.url()).pathname),
         elapsedMs:Date.now()-(started.get(request)??Date.now()),status:statuses.get(request)??null,
       }))}));
       throw error;
