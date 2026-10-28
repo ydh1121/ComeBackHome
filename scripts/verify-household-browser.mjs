@@ -175,7 +175,7 @@ try {
       await page.getByLabel('월 선택',{exact:true}).fill('2025-02');await visible(page.getByText('2025년 2월 들어온 돈',{exact:true}));
       check(await page.locator('.hh-total > strong').textContent(),'0원','historical salary month excludes current income');
       await page.getByRole('button',{name:'분배 계획 세우기',exact:true}).click();dialog=page.getByRole('dialog',{name:'2025년 2월 분배 계획',exact:true});await visible(dialog);
-      await dialog.getByLabel('예상 수입',{exact:true}).fill('10000');await dialog.getByLabel('생활비 금액',{exact:true}).fill('5000');await dialog.getByLabel('저축 금액',{exact:true}).fill('3000');
+      await dialog.getByRole('spinbutton',{name:'예상 수입 원',exact:true}).fill('10000');await dialog.getByLabel('생활비 금액',{exact:true}).fill('5000');await dialog.getByLabel('저축 금액',{exact:true}).fill('3000');
       await dialog.getByRole('button',{name:'분배 계획 저장',exact:true}).click();await noDialog(page);
       await visible(page.getByText('가계부에 기록한 2025년 2월 지출',{exact:true}));
       check(await page.locator('.hh-plan-actual > strong').textContent(),'0원','historical plan shows its own expense total');
