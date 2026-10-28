@@ -63,11 +63,15 @@ export function useHousehold() {
   const [data, setData] = useState<HouseholdResponse | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [stale, setStale] = useState(false), [error, setError] = useState(''), [needsRecovery, setNeedsRecovery] = useState(false);
   const current = useRef<HouseholdResponse | null>(null), identity = useRef<string | null>(null), generation = useRef(0), lock = useRef(false), identityEpoch = useRef(0), operationToken = useRef(0), activeOperation = useRef<AbortController | null>(null);
+  const setupError = useRef('');
   const pending = useRef<{ fingerprint: string; command: HouseholdCommand } | null>(null);
   const pendingArt = useRef<{ cardId: string; hash: string; operationId: string; imageFileId?: string; command?: HouseholdCommand } | null>(null);
   const accept = useCallback((value: HouseholdResponse, userId: string) => {
     if (identity.current !== userId) return;
-    current.current = value; setData(value); setStale(false); setLoading(false); setError(''); setNeedsRecovery(Boolean(value.pending)); writeCache(userId, value);
+    // A successful status read may still say 'not created'. It does not resolve
+    // a Sheets setup failure from the user's initialization attempt.
+    if (value.ready) setupError.current = '';
+    current.current = value; setData(value); setStale(false); setLoading(false); setError(setupError.current); setNeedsRecovery(Boolean(value.pending)); writeCache(userId, value);
   }, []);
   const reload = useCallback(async () => {
     const userId = identity.current;
@@ -81,15 +85,15 @@ export function useHousehold() {
     } catch (err) {
       if (serial === generation.current && epoch === identityEpoch.current && identity.current === userId) {
         if (err instanceof ApiError && err.code === 'HOUSEHOLD_SYNC_REQUIRED') setNeedsRecovery(true);
-        if (err instanceof ApiError && [401,403].includes(err.status)) { clearHouseholdCache(); current.current = null; setData(null); }
+        if (err instanceof ApiError && [401,403].includes(err.status)) { setupError.current = ''; clearHouseholdCache(); current.current = null; setData(null); }
         if (err instanceof ApiError && err.code === 'LOGIN_REQUIRED') window.dispatchEvent(new Event('cbh-auth-expired'));
-        setError(householdError(err)); setStale(Boolean(current.current?.snapshot)); setLoading(false);
+        setError(setupError.current || householdError(err)); setStale(Boolean(current.current?.snapshot)); setLoading(false);
       }
     }
   }, [accept]);
   useEffect(() => {
     generation.current++; identityEpoch.current++; operationToken.current++; activeOperation.current?.abort(); lock.current = false; setBusy(false); pending.current = null; pendingArt.current = null; identity.current = user?.id ?? null;
-    current.current = null; setData(null); setError(''); setStale(false); setNeedsRecovery(false); setLoading(Boolean(user));
+    current.current = null; setupError.current = ''; setData(null); setError(''); setStale(false); setNeedsRecovery(false); setLoading(Boolean(user));
     if (!user) { clearHouseholdCache(); return; }
     // Authentication has already been checked by AuthRoot before any private cache is shown.
     const cached = readCache(user.id);
@@ -100,12 +104,12 @@ export function useHousehold() {
     window.addEventListener('online', refresh); window.addEventListener('focus', refresh);
     return () => { generation.current++; identityEpoch.current++; activeOperation.current?.abort(); identity.current = null; current.current = null; window.clearInterval(timer); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); };
   }, [user?.id, reload]);
-  const operation = async (run: (signal: AbortSignal) => Promise<HouseholdResponse>) => {
+  const operation = async (run: (signal: AbortSignal) => Promise<HouseholdResponse>, initializing = false) => {
     const userId = identity.current;
     if (!userId || lock.current) return false;
     const epoch = identityEpoch.current, token = ++operationToken.current, abort = new AbortController();
     const isCurrent = () => epoch === identityEpoch.current && token === operationToken.current && identity.current === userId;
-    generation.current++; activeOperation.current = abort; lock.current = true; setBusy(true); setError('');
+    generation.current++; activeOperation.current = abort; lock.current = true; setupError.current = ''; setBusy(true); setError('');
     try { const value = await run(abort.signal); if (!isCurrent()) return false; accept(value, userId); return true; }
     catch (err) {
       if (!isCurrent()) return false;
@@ -113,7 +117,11 @@ export function useHousehold() {
       if (err instanceof ApiError && err.code === 'HOUSEHOLD_SYNC_REQUIRED') { setNeedsRecovery(true); setStale(true); }
       if (err instanceof ApiError && [401,403].includes(err.status)) { clearHouseholdCache(); current.current = null; setData(null); }
       if (err instanceof ApiError && err.code === 'LOGIN_REQUIRED') window.dispatchEvent(new Event('cbh-auth-expired'));
-      if (isCurrent()) setError(householdError(err));
+      if (isCurrent()) {
+        const message = householdError(err);
+        if (initializing && err instanceof ApiError && ['SHEETS_API_DISABLED', 'SHEETS_ACCESS_REQUIRED', 'HOUSEHOLD_SHEETS_ACCESS_REQUIRED'].includes(err.code)) setupError.current = message;
+        setError(message);
+      }
       return false;
     } finally { if (isCurrent()) { lock.current = false; activeOperation.current = null; setBusy(false); } }
   };
@@ -126,7 +134,7 @@ export function useHousehold() {
     pending.current = null;
     return value;
   });
-  const initialize = () => operation(signal => request('/initialize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal }));
+  const initialize = () => operation(signal => request('/initialize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal }), true);
   const recover = () => operation(async signal => { const value = await request('/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal }); signal.throwIfAborted(); pending.current = null; return value; });
   const uploadArt = (cardId: string, file: File) => operation(async signal => {
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error(errors.HOUSEHOLD_INVALID_IMAGE);
@@ -147,6 +155,6 @@ export function useHousehold() {
     pendingArt.current = null;
     return result;
   });
-  return { data, loading, busy, stale, error, needsRecovery, reload, mutate, initialize, recover, uploadArt, clearError: () => setError('') };
+  return { data, loading, busy, stale, error, needsRecovery, reload, mutate, initialize, recover, uploadArt, clearError: () => { setupError.current = ''; setError(''); } };
 }
 export type HouseholdController = ReturnType<typeof useHousehold>;

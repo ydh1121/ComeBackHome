@@ -52,7 +52,7 @@
 .material-row .record-card .copy-toolbar{top:8px}
 .material-row details>.secondary{margin:0 0 16px}
 .materials-empty{text-align:center;padding:40px 16px;color:var(--cbh-muted)}
-.materials-empty>svg{width:32px;height:32px;margin-bottom:12px}
+.materials-empty>svg{display:block;width:32px;height:32px;margin:0 auto 12px}
 .private-page .materials-empty h3{font-size:17px}
 .materials-empty p{font-size:14px;margin-bottom:0}
 .materials-batch{display:grid;gap:16px;border-color:var(--cbh-line-strong);box-shadow:0 6px 20px #00000006}

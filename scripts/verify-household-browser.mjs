@@ -50,7 +50,7 @@ async function layout(page, width, label) {
 try {
   for (const [engine, name] of [[chromium,'chromium'],[webkit,'webkit']]) {
     const browser = await engine.launch({ headless:true });
-    let state = domain.createHouseholdState(), ready=false, getFailure=false, nextFailure=null, rejectRead=false, deferRead=false, releaseRead=null, deferredArrived=null;
+    let state = domain.createHouseholdState(), ready=false, initializeFailure=true, initializeAttempts=0, getFailure=false, nextFailure=null, rejectRead=false, deferRead=false, releaseRead=null, deferredArrived=null;
     const commands=[], applied=[], failures=[], contexts=[];
     const response = () => ({ ready, connected:true, snapshot:ready?state:null, revision:state.revision, pending:false, spreadsheetUrl:ready?'https://docs.google.com/spreadsheets/d/synthetic-household-private/edit':null });
     const makeContext = async role => {
@@ -81,7 +81,7 @@ try {
           if(deferRead){deferRead=false;const captured=structuredClone(response());deferredArrived?.();await new Promise(done=>{releaseRead=done;});return json(captured);}
           return json(response());
         }
-        if(path==='/api/private/household/initialize'){ready=true;return json(response());}
+        if(path==='/api/private/household/initialize'){initializeAttempts++;if(initializeFailure)return json({error:'HOUSEHOLD_SHEETS_ACCESS_REQUIRED'},503);ready=true;return json(response());}
         if(path==='/api/private/household/recover')return json(response());
         if(path==='/api/private/household/events'){
           const command=req.postDataJSON();commands.push(structuredClone(command));
@@ -112,7 +112,18 @@ try {
       const errors=[]; page.on('pageerror',error=>errors.push(error.message));
       await page.goto(base+'/household'); await visible(page.getByRole('button',{name:'가계부 시작하기',exact:true}));
       check(state.revision,0,'opening page does not write household');
-      await page.getByRole('button',{name:'가계부 시작하기',exact:true}).click(); await visible(page.getByRole('heading',{name:'가계부',exact:true}));
+      await page.getByRole('button',{name:'가계부 시작하기',exact:true}).click();
+      const setupGuide=page.getByRole('link',{name:'시트 연결 안내 보기',exact:true});
+      await visible(setupGuide);check(await setupGuide.getAttribute('href'),'/guides/household-drive-setup.html','initialization Sheets failure shows actionable setup guide');
+      const passiveRead=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/private/household'&&r.request().method()==='GET');
+      await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await passiveRead;
+      await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+      check(await setupGuide.isVisible(),true,'passive not-ready refresh preserves initialization setup guide');
+      check(initializeAttempts,1,'passive refresh does not retry initialization or write');
+      check(state.revision,0,'failed initialization and passive refresh do not write household records');
+      initializeFailure=false;await page.getByRole('button',{name:'가계부 시작하기',exact:true}).click();await visible(page.getByRole('heading',{name:'가계부',exact:true}));
+      check(await setupGuide.count(),0,'successful initialization clears setup guide');
+      check(await page.getByRole('alert').count(),0,'successful initialization clears setup error');
       await setSection(page,'카드'); await page.getByRole('button',{name:'첫 카드 추가',exact:true}).click();
       let dialog=page.getByRole('dialog');
       await dialog.getByLabel('카드 이름',{exact:true}).fill('테스트 카드 A');
@@ -218,6 +229,7 @@ try {
       await setSection(page,'할 일');check(await page.getByLabel('새 할 일이나 메모',{exact:true}).isDisabled(),true,'offline cached snapshot is read-only');
       getFailure=false;await page.getByRole('button',{name:'새로고침',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.hh-cache-banner'));
       check(await page.getByLabel('새 할 일이나 메모',{exact:true}).isEnabled(),true,'fresh confirmed snapshot restores editing');
+      check(await page.getByRole('alert').count(),0,'successful refresh clears a transient read error');
       await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');await dialog.getByRole('switch',{name:'이 기기에 최근 내용 보관',exact:true}).click();
       check(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.'))),false,'cache OFF erases private local copy');
       await dialog.getByRole('switch',{name:'이 기기에 최근 내용 보관',exact:true}).click();await dialog.getByRole('button',{name:'최신 내용 불러오기',exact:true}).click();await page.waitForFunction(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.')));
