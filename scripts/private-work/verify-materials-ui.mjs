@@ -2,10 +2,30 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { specialistAnalysisFixture } from './materials-ui-fixtures.mjs';
 export async function verifyMaterials(page,ctx,base,label,shared){
+  // Diagnose a saved analysis whose follow-up reload leaves the editor busy.
+  // Never log request bodies, headers, queries, responses, or private content.
+  const started=performance.now(), trace=[], requests=new WeakMap();
+  const trackedPaths=new Set(['/api/private/case/analysis','/api/private/case/consent','/api/private/case']);
+  const record=(request,status)=>{
+    const path=new URL(request.url()).pathname;
+    if(!trackedPaths.has(path))return;
+    const now=performance.now(), prior=requests.get(request)??now;
+    requests.set(request,prior);
+    trace.push({method:request.method(),path,atMs:Math.round(now-started),elapsedMs:Math.round(now-prior),status});
+    if(trace.length>80)trace.shift();
+  };
+  const onRequest=request=>record(request,'started');
+  const onResponse=response=>record(response.request(),'response:'+response.status());
+  const onFinished=request=>record(request,'finished');
+  const onFailed=request=>record(request,'failed');
+  page.on('request',onRequest);page.on('response',onResponse);page.on('requestfinished',onFinished);page.on('requestfailed',onFailed);
   try { await verifyMaterialsFlow(page,ctx,base,label,shared); }
   catch(error) {
+    console.error('PRIVATE_MATERIALS_REQUEST_TRACE',JSON.stringify({elapsedMs:Math.round(performance.now()-started),events:trace}));
     await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-failure.png`),fullPage:true,mask:[page.locator('.analysis-connection textarea')]}).catch(()=>{});
     throw error;
+  }finally{
+    page.off('request',onRequest);page.off('response',onResponse);page.off('requestfinished',onFinished);page.off('requestfailed',onFailed);
   }
 }
 async function verifyMaterialsFlow(page,ctx,base,label,shared){
