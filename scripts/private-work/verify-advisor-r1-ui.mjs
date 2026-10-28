@@ -16,12 +16,17 @@ export async function verifyAdvisorR1(page, ctx, base, label) {
 async function verifyAdvisorR1Flow(page, ctx, base, label) {
     const api = async (path, method = 'GET', data) => ctx.request.fetch(base + '/api/' + path, { method, headers: { Origin: base }, ...(data === undefined ? {} : { data }) });
     await page.locator('.advisor-primary').waitFor();
-    assert.equal(await page.getByRole('navigation', { name: '산재 메뉴', exact: true }).getByRole('button').count(), 3);
+    const moduleNavigation=page.getByRole('navigation', { name: '산재 메뉴', exact: true });
+    assert.deepEqual(await moduleNavigation.getByRole('button').allTextContents(), ['오늘','진행 상황','내 자료','내 관리함'], 'the injury module has exactly its four intended destinations');
+    assert.equal(await moduleNavigation.getByRole('button',{name:'오늘',exact:true}).getAttribute('aria-current'),'page');
     assert.equal(await page.getByRole('button', { name: '기록 추가', exact: true }).count(), 0);
     assert.equal(await page.locator('.record-tools:visible, .record-add:visible, textarea:visible, select:visible').count(), 0, 'no visible record-entry prerequisites on home');
     for (const width of [375, 390, 768, 1024, 1440]) {
         await page.setViewportSize({ width, height: 844 });
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        const navigationBox=await moduleNavigation.boundingBox();
+        assert(navigationBox&&navigationBox.x>=0&&navigationBox.x+navigationBox.width<=width+1&&navigationBox.y>=0&&navigationBox.y+navigationBox.height<=844,'four module destinations remain inside the viewport at '+width);
+        assert.equal(await moduleNavigation.getByRole('button').count(),4,'all module destinations stay visible at '+width);
         if ([375,390,1440].includes(width)) await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-home-${width}.png`), animations: 'disabled' });
     }
     await page.setViewportSize({width:390,height:844});
@@ -32,7 +37,7 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
     await page.screenshot({ path: resolve('artifacts/private-work', `${label}-advisor-home-390-full.png`), fullPage: true, animations: 'disabled' });
     // Explicit disconnected status: guidance remains usable; no file is claimed saved.
-    await page.route('**/api/private/case/documents/status', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ owner: true, configured: false, connected: false, folderSelected: false, maxBytes: 20971520, chunkBytes: 1048576 }) }));
+    await page.route('**/api/private/case/documents/status', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ owner: true, analyst: false, configured: false, connected: false, folderSelected: false, maxBytes: 20971520, chunkBytes: 1048576 }) }));
     await page.getByRole('button', { name: '내 자료', exact: true }).click();
     await page.getByText('메모는 지금도 작성할 수 있어요.', { exact: false }).waitFor();
     assert.equal(await page.locator('.materials-upload input[type=file]').count(), 0);
@@ -75,7 +80,8 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     const position = await page.locator('.advisor-script').evaluate(el => ({ top: el.getBoundingClientRect().top + scrollY, height: el.getBoundingClientRect().height }));
     await page.evaluate(top => window.scrollTo(0, top + 250), position.top);
     const button = await page.getByRole('button', { name: '문장 복사', exact: true }).boundingBox(), card = await page.locator('.advisor-script').boundingBox();
-    assert(button.y >= 0 && button.y < 80 && button.y + button.height <= card.y + card.height, 'copy follows page within its card');
+    const portalBar=await page.locator('.portal-top').boundingBox();
+    assert(button.y >= (portalBar?portalBar.y+portalBar.height:0) && button.y < 120 && button.y + button.height <= card.y + card.height, 'copy follows page below module navigation and within its card');
     assert.equal(await page.locator('.advisor-script').evaluate(el => getComputedStyle(el).overflowY), 'visible', 'no nested script scrolling');
     await page.getByRole('button', { name: '문장 편집', exact: true }).click();
     await page.getByLabel('전달할 문장', { exact: true }).fill('내가 작성한 합성 문장 ' + label);
@@ -134,5 +140,5 @@ async function verifyAdvisorR1Flow(page, ctx, base, label) {
     assert.equal(restored.status(), 200);
     await page.getByRole('button', { name: '내 관리함', exact: true }).click();
     await page.getByRole('button', { name: /준비할 일/, exact: false }).click();
-    console.log('PRIVATE_ADVISOR_R1_UI_PASS ' + label + ' empty_home_three_tabs_copy_edit_cancel_conflict_persistent_unknown_retry_defer_legacy_access');
+    console.log('PRIVATE_ADVISOR_R1_UI_PASS ' + label + ' empty_home_four_destinations_copy_edit_cancel_conflict_persistent_unknown_retry_defer_legacy_access');
 }

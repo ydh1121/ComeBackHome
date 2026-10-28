@@ -6,6 +6,7 @@ import { assertSameOrigin, PrivateError, privateJson } from "./auth/contracts";
 import { handleCase } from "./injury/service";
 import { driveFailure } from "./documents/oauth-result";
 import { receiveAnalysis } from "./injury/analysis-receipts";
+import { handleHousehold } from "./household/service";
 
 // This adapter alone connects independent private modules to the legacy API.
 export async function handleProductRequest(
@@ -45,6 +46,8 @@ export async function handleProductRequest(
     if (path.startsWith("/api/auth/"))
       return await handleAuth(request, env, path.slice("/api/auth/".length));
     const principal = await authenticate(request, env);
+    if (path === "/api/private/household" || path.startsWith("/api/private/household/"))
+      return await handleHousehold(request, env, principal, path.slice("/api/private/household".length).split("/").filter(Boolean), driveFetch);
     if (path === "/api/private/case" || path.startsWith("/api/private/case/"))
       return await handleCase(
         request,

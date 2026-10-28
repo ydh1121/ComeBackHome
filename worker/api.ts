@@ -24,6 +24,7 @@ import { verifyVapidKeyPair } from './vapid-pair-validation';
 import { PushDeliveryError } from './contracts';
 import { classifyPushProviderFailure, pushSubscriptionKeyShapeValid } from './push/WebPushDeliveryGateway';
 import { processNotificationOutbox, runScheduledNotificationCycle } from './scheduler';
+import { runHouseholdNotificationCycle } from './modules/household/notifications';
 
 import { json, isObject, readObject, asString, asOptionalString, asBoolean, type JsonObject } from '../packages/portable/http/server';
 
@@ -205,7 +206,7 @@ export async function handleApiRequest(
     if (
       segments.length === 3 &&
       segments[1] === 'internal' &&
-      segments[2] === 'scheduler-tick' &&
+      (segments[2] === 'scheduler-tick' || segments[2] === 'household-scheduler-tick') &&
       request.method === 'POST'
     ) {
       const configuredToken = env.PRESENCE_EVENT_INGEST_TOKEN?.trim();
@@ -214,6 +215,13 @@ export async function handleApiRequest(
       const body = await readObject(request);
       const scheduledTime = Number(body.scheduledTime);
       if (!Number.isFinite(scheduledTime) || scheduledTime <= 0) return json({ error: 'scheduledTime is invalid.' }, 400);
+      // Separate authenticated invocation keeps each module within the Free-tier
+      // subrequest budget and does not couple household reminders to transit ETA.
+      if (segments[2] === 'household-scheduler-tick') {
+        if (body.channel !== 'household') return json({ error: 'Unknown scheduler channel.' }, 400);
+        return json({ result: await runHouseholdNotificationCycle(env, scheduledTime) });
+      }
+      if (body.channel !== undefined) return json({ error: 'Unknown scheduler channel.' }, 400);
       const readiness = createNotificationActivationReadiness(env, providerRuntime);
       if (!readiness.ready) return json({ error: 'Scheduled notification runtime is not ready.', missing: readiness.missing }, 503);
       const result = await runScheduledNotificationCycle(env, scheduledTime, readiness.dependencies);

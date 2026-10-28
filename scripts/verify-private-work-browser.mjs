@@ -440,7 +440,7 @@ try {
       .locator(".document-list")
       .getByRole("heading", { name: "synthetic-" + label + ".pdf" })
       .waitFor({ state: "visible", timeout: 15000 });
-    await verifyMaterials(page,ctx,base,label);
+
     await verifyContent(page,ctx,base,label);
     // A second real browser session exercises owner consent and the admin UI.
     await page.getByRole("button", { name: "내 관리함", exact: true }).click();
@@ -574,6 +574,8 @@ try {
       .getByRole("heading", { name: "산재 도우미", exact: true })
       .waitFor();
     await adminPage.getByRole("button",{name:"내 관리함",exact:true}).click();
+    await verifyMaterials(adminPage,adminContext,base,label,{memberPage:page,memberContext:ctx});
+    await adminPage.goto(base+"/injury?section=manage");
     await verifyContentAdmin(adminPage,adminContext,base,label);
     await adminPage.goto(base+"/injury?section=settings");
     await adminPage.getByText("계산 정책과 공식 근거", { exact: true }).click();
@@ -726,6 +728,7 @@ try {
       0,
       "revoked admin private content removed",
     );
+    assert.equal((await adminContext.request.post(base+"/api/auth/logout",{headers:{Origin:base},data:{}})).status(),200,"admin session revoked before browser closes");
     await adminContext.close();
     await page.getByRole("link", { name: "내 계정", exact: true }).click();
     await page

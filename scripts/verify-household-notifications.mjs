@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFile } from 'node:fs/promises';
+import { createServer } from 'vite';
+const vite = await createServer({ appType: 'custom', logLevel: 'error', server: { middlewareMode: true } });
+const sql = new DatabaseSync(':memory:');
+let queries = 0;
+let beforeStatement = null;
+const db = { prepare(source) { let values = []; return {
+  bind(...v) { values = v; return this; },
+  compile() { queries++; if(beforeStatement)beforeStatement(source); const bound = []; const text = source.replace(/\?(\d+)/g, (_, n) => { bound.push(values[Number(n) - 1]); return '?'; }); return [sql.prepare(text), bound]; },
+  async all() { const [q, v] = this.compile(); return { results: q.all(...v), success: true }; },
+  async first() { return (await this.all()).results[0] ?? null; },
+  async run() { const [q, v] = this.compile(); return { success: true, meta: q.run(...v) }; },
+}; }, async batch(statements) { sql.exec('BEGIN'); try { const results = []; for (const s of statements) results.push(await s.run()); sql.exec('COMMIT'); return results; } catch (e) { sql.exec('ROLLBACK'); throw e; } } };
+let checks = 0;
+function check(a, b, message) { assert.deepEqual(a, b, message); checks++; }
+try {
+  const mod = await vite.ssrLoadModule('/worker/modules/household/notifications.ts');
+  const { PushDeliveryError } = await vite.ssrLoadModule('/worker/contracts.ts');
+  const { FixedDelayNotificationRetryPolicy } = await vite.ssrLoadModule('/worker/notification-retry-policy.ts');
+  const { createHouseholdState } = await vite.ssrLoadModule('/src/modules/household/domain/model.ts');
+  sql.exec(await readFile('db/migrations/0012_private_work_modules.sql', 'utf8'));
+  sql.exec(await readFile('db/migrations/0015_household_notifications.sql', 'utf8'));
+  sql.exec("CREATE TABLE household_workspace(id TEXT PRIMARY KEY,pending_id TEXT,spreadsheet_id TEXT); INSERT INTO household_workspace VALUES('shared',NULL,'synthetic-sheet')");
+  const instant = '2026-10-28T15:00:00.000Z', now = Date.parse(instant);
+  for (const [id, login, role] of [['admin','ydh1121','admin'],['member','yvonne','member']]) {
+    sql.prepare('INSERT INTO auth_users VALUES(?,?,?,0,0,0,?)').run(id,login,role,instant);
+    sql.prepare('INSERT INTO auth_sessions VALUES(?,?,0,?,1,?,?,?,NULL)').run(id+'-session',id,'Synthetic device',instant,instant,'2099-01-01T00:00:00.000Z');
+  }
+  const principal = id => ({ id, loginId: id==='admin'?'ydh1121':'yvonne', role: id==='admin'?'admin':'member', sessionHash: id+'-session', authEpoch: 0, mustChangePassword: false });
+  const env = { DB: db, PRIVATE_WORK_ENABLED: '1', PUSH_DELIVERY_ENABLED: '1', PRIVATE_DRIVE_TOKEN_KEY: Buffer.alloc(32,9).toString('base64') };
+  const sub = id => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/synthetic-'+id, keys: { p256dh: Buffer.alloc(65,4).toString('base64url'), auth: Buffer.alloc(16,3).toString('base64url') } });
+  const request = (method, body) => new Request('https://local.invalid/api/private/household/push-subscription',{ method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  for (const id of ['admin','member']) check((await mod.handleHouseholdPushSubscription(request('PUT',sub(id)),env,principal(id))).status,200,'bind own permitted device');
+  const encrypted = sql.prepare('SELECT subscription_encrypted FROM household_push_bindings').all();
+  check(encrypted.every(r => !r.subscription_encrypted.includes('fcm.googleapis.com')),true,'endpoint and keys encrypted at rest');
+  const state = createHouseholdState(); state.revision=1; state.preferences.dailyLedgerReminder=true;
+  await mod.projectHouseholdReminders(db,state);
+  let sent=[]; let fail=null;
+  const injected = { gateway: { async send(subscription,payload) { if (fail?.(subscription,payload)) throw new PushDeliveryError('synthetic provider error','transient'); sent.push({endpoint: subscription.endpoint,payload}); } }, retryPolicy: new FixedDelayNotificationRetryPolicy([60,120]) };
+  const projection = sql.prepare('SELECT * FROM household_notification_projection').get();
+  check(mod.householdReminderEvents(projection,'2026-10-28T14:59:59.999Z').length,0,'before KST midnight');
+  check(mod.householdReminderEvents(projection,instant)[0].key,'ledger:2026-10-29','KST day instead of UTC day');
+  check(mod.householdReminderEvents(projection,'2026-10-28T15:59:59.000Z').length,1,'late tick caught up');
+  check(mod.householdReminderEvents(projection,'2026-10-28T16:00:00.000Z').length,0,'expired reminder never sent hours late');
+  let result=await mod.runHouseholdNotificationCycle(env,now,injected);
+  check(result.sent,2,'both existing accounts receive independently');
+  check(sent.every(x=>!x.payload.body.includes('synthetic')&&x.payload.path==='/household?section=ledger'),true,'generic lockscreen text and correct destination');
+  check((await mod.runHouseholdNotificationCycle(env,now+60_000,injected)).sent,0,'repeat tick does not duplicate');
+  const todo = { id:'todo-one',text:'Synthetic private note',dueAt:'2026-10-28T15:02:00.000Z',remind:true,completedAt:null,completedBy:null,createdAt:instant,updatedAt:instant,createdBy:'member',updatedBy:'member' };
+  state.revision++; state.todos=[todo]; await mod.projectHouseholdReminders(db,state);
+  check(sql.prepare('SELECT reminders_json FROM household_notification_projection').get().reminders_json.includes(todo.text),false,'projection excludes memo text');
+  fail=s=>s.endpoint.endsWith('member');
+  result=await mod.runHouseholdNotificationCycle(env,now+120_000,injected);
+  check([result.sent,result.retry],[1,1],'successful device acknowledged while second device retries');
+  fail=null;
+  result=await mod.runHouseholdNotificationCycle(env,now+180_000,injected);
+  check([result.sent,result.retry],[1,0],'retry only unsuccessful device');
+  check(sent.filter(s=>s.payload.tag.includes('todo-one')).length,2,'no repeat for previously successful device');
+  state.revision++; state.todos=[{...todo,id:'todo-two',dueAt:'2026-10-28T15:04:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  fail=()=>true; await mod.runHouseholdNotificationCycle(env,now+240_000,injected);
+  state.revision++; state.preferences.todoReminders=false; await mod.projectHouseholdReminders(db,state); fail=null;
+  result=await mod.runHouseholdNotificationCycle(env,now+300_000,injected);
+  check([result.sent,result.cancelled],[0,2],'turn OFF cancels pending retry');
+  state.revision++; state.preferences.todoReminders=true; state.todos=[{...todo,id:'todo-three',dueAt:'2026-10-28T15:06:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  fail=()=>true; await mod.runHouseholdNotificationCycle(env,now+360_000,injected);
+  state.revision++; state.todos[0].completedAt='2026-10-28T15:06:30.000Z'; await mod.projectHouseholdReminders(db,state); fail=null;
+  check((await mod.runHouseholdNotificationCycle(env,now+420_000,injected)).cancelled,2,'completion cancels due reminder');
+  state.revision++; state.todos=[{...todo,id:'todo-four',dueAt:'2026-10-28T15:08:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  sql.exec("UPDATE auth_sessions SET revoked_at='2026-10-28T15:07:00.000Z' WHERE user_id='member'");
+  check((await mod.runHouseholdNotificationCycle(env,now+480_000,injected)).sent,1,'logged-out account excluded');
+  state.revision++; state.todos=[{...todo,id:'todo-five',dueAt:'2026-10-28T15:09:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  sql.exec("UPDATE household_workspace SET pending_id='synthetic-pending'");
+  check((await mod.runHouseholdNotificationCycle(env,now+540_000,injected)).sent,0,'uncertain Sheet commit never dispatches stale reminder');
+  sql.exec('UPDATE household_workspace SET pending_id=NULL');
+  check((await mod.runHouseholdNotificationCycle(env,now+600_000,injected)).sent,1,'completed commit resumes');
+  const revision = state.revision; await mod.projectHouseholdReminders(db,{...state,revision:revision-1,preferences:{dailyLedgerReminder:false,todoReminders:false}});
+  check(sql.prepare('SELECT revision,todo_enabled FROM household_notification_projection').get().todo_enabled,1,'old projection cannot overwrite new revision');
+  const before=sent.length;
+  await mod.runHouseholdNotificationCycle({...env,PUSH_DELIVERY_ENABLED:'0'},now,injected);
+  await mod.runHouseholdNotificationCycle({...env,MUTATIONS_ENABLED:'0'},now,injected);
+  check(sent.length,before,'release flags disable all household sends');
+  await assert.rejects(()=>mod.handleHouseholdPushSubscription(request('PUT',{...sub('admin'),endpoint:'https://127.0.0.1/internal'}),env,principal('admin')),e=>e.code==='INVALID_PUSH_SUBSCRIPTION');checks++;
+  await assert.rejects(()=>mod.handleHouseholdPushSubscription(request('PUT',{...sub('admin'),keys:{p256dh:'invalid',auth:'invalid'}}),env,principal('admin')),e=>e.code==='INVALID_PUSH_SUBSCRIPTION');checks++;
+  await assert.rejects(()=>mod.handleHouseholdPushSubscription(request('PUT',sub('admin')),env,{...principal('admin'),sessionHash:'member-session'}),e=>e.code==='LOGIN_REQUIRED');checks++;
+  await assert.rejects(()=>mod.handleHouseholdPushSubscription(request('PUT',sub('admin')),env,{...principal('admin'),loginId:'outsider'}),e=>e.code==='HOUSEHOLD_ACCESS_REQUIRED');checks++;
+  await assert.rejects(()=>mod.handleHouseholdPushSubscription(request('PUT',sub('admin')),env,{...principal('admin'),authEpoch:1}),e=>e.code==='LOGIN_REQUIRED');checks++;
+  sql.exec("UPDATE auth_sessions SET revoked_at=NULL WHERE user_id='member'");
+  check((await mod.handleHouseholdPushSubscription(request('DELETE',{endpoint:sub('admin').endpoint}),env,principal('member'))).status,200,'other account DELETE cannot alter binding');
+  check((await (await mod.handleHouseholdPushSubscription(request('POST',{endpoint:sub('admin').endpoint}),env,principal('admin'))).json()).registered,true,'binding remains for actual owner');
+  sql.exec("UPDATE auth_sessions SET revoked_at='2026-10-28T15:07:00.000Z' WHERE user_id='member'");
+  state.revision++; state.todos=[{...todo,id:'rescheduled',dueAt:'2026-10-28T15:11:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  fail=()=>true; await mod.runHouseholdNotificationCycle(env,now+660_000,injected);
+  state.revision++; state.todos[0].dueAt='2026-10-28T15:13:00.000Z'; await mod.projectHouseholdReminders(db,state); fail=null;
+  check((await mod.runHouseholdNotificationCycle(env,now+720_000,injected)).cancelled,1,'changing due time cancels obsolete job');
+  check((await mod.runHouseholdNotificationCycle(env,now+780_000,injected)).sent,1,'changed due time gets its own new reminder');
+  state.revision++; state.todos=[{...todo,id:'lease',dueAt:'2026-10-28T15:14:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  fail=()=>true; await mod.runHouseholdNotificationCycle(env,now+840_000,injected); fail=null;
+  sql.prepare("UPDATE household_notification_outbox SET status='processing',lease_until=?,claim_token='abandoned' WHERE source_id='lease'").run('2026-10-28T15:15:00.000Z');
+  check((await mod.runHouseholdNotificationCycle(env,now+870_000,injected)).sent,0,'active processing lease is not double-claimed');
+  check((await mod.runHouseholdNotificationCycle(env,now+900_000,injected)).sent,1,'abandoned lease can safely resume');
+  state.revision++; state.todos=[{...todo,id:'expired-device',dueAt:'2026-10-28T15:16:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  const terminalRuntime={...injected,gateway:{async send(){throw new PushDeliveryError('synthetic expired device','terminal-subscription',410);}}};
+  check((await mod.runHouseholdNotificationCycle(env,now+960_000,terminalRuntime)).failed,1,'expired endpoint terminal failure');
+  check(sql.prepare("SELECT active FROM household_push_bindings WHERE user_id='admin'").get().active,0,'expired endpoint deactivated');
+  await mod.handleHouseholdPushSubscription(request('PUT',sub('admin')),env,principal('admin'));
+  state.revision++; state.todos=Array.from({length:10},(_,i)=>({...todo,id:'budget-'+i,dueAt:'2026-10-28T15:17:00.000Z'})); await mod.projectHouseholdReminders(db,state);
+  queries=0; const sentBefore=sent.length; result=await mod.runHouseholdNotificationCycle(env,now+1_020_000,injected);
+  check(result.sent,6,'bounded delivery batch protects Free-tier request budget');
+  check(queries+(sent.length-sentBefore)<=50,true,'standalone household cycle stays below Free-tier subrequest budget');
+  check((await mod.runHouseholdNotificationCycle(env,now+1_080_000,injected)).sent,4,'remaining jobs delivered on next tick without duplicates');
+  state.revision++; state.todos=[{...todo,id:'commit-race',dueAt:'2026-10-28T15:19:00.000Z'}]; await mod.projectHouseholdReminders(db,state);
+  let pendingReads=0;
+  beforeStatement=source=>{if(source.includes("SELECT id FROM household_workspace")&&++pendingReads===2)sql.exec("UPDATE household_workspace SET pending_id='concurrent-write'");};
+  check((await mod.runHouseholdNotificationCycle(env,now+1_140_000,injected)).sent,0,'write beginning after claim suppresses delivery');
+  beforeStatement=null; sql.exec('UPDATE household_workspace SET pending_id=NULL');
+  check((await mod.runHouseholdNotificationCycle(env,now+1_200_000,injected)).sent,1,'write race defers rather than permanently dropping reminder');
+  for(let i=0;i<9;i++)await mod.handleHouseholdPushSubscription(request('PUT',sub('extra-'+i)),env,principal('admin'));
+  await assert.rejects(()=>mod.handleHouseholdPushSubscription(request('PUT',sub('over-capacity')),env,principal('admin')),e=>e.code==='HOUSEHOLD_PUSH_DEVICE_LIMIT');checks++;
+  check(sql.prepare("SELECT COUNT(*) AS n FROM household_push_bindings WHERE user_id='admin' AND active=1").get().n,10,'atomic registration cap bounds devices per account');
+  check(sql.prepare("SELECT name FROM sqlite_master WHERE name='push_subscriptions'").get(),undefined,'does not require or mutate legacy subscription storage');
+  console.log(JSON.stringify({status:'PASS',checks,livePushCalls:0,storage:'isolated SQLite',coverage:'KST, both accounts, encrypted bindings, per-device retries, OFF/complete, logout, pending commit, dedupe, SSRF guard'}));
+} finally { sql.close(); await vite.close(); }

@@ -48,6 +48,14 @@ export function createDriveFixture() {
       });
     if (u.pathname.startsWith("/upload/")) {
       if (init?.method === "POST") {
+        if(u.searchParams.get('uploadType')==='multipart'){
+          const parts=String(init.body).split('\r\n\r\n');
+          const metadata=JSON.parse(parts[1].split('\r\n--')[0]);
+          if(metadata.mimeType!=='application/vnd.google-apps.document')return new Response(null,{status:400});
+          const bytes=new TextEncoder().encode(parts[2].split('\r\n--')[0]),id='synthetic-chat-'+ ++sequence;
+          files.set(id,{...metadata,bytes,total:bytes.length});metadataVersion++;
+          return Response.json({id});
+        }
         const body = JSON.parse(String(init.body));
         expired.delete(body.id);
         files.set(body.id, {
@@ -89,6 +97,10 @@ export function createDriveFixture() {
           : {},
       });
     }
+    if(u.pathname==='/drive/v3/files'&&init?.method!=='POST'){
+      const exchange=u.searchParams.get('q')?.match(/key='cbhChatExchange' and value='([^']+)'/)?.[1];
+      return Response.json({files:[...files.entries()].filter(([,file])=>file.appProperties?.cbhChatExchange===exchange).map(([id])=>({id}))});
+    }
     if (u.pathname === "/drive/v3/files" && init?.method === "POST") {
       const body = JSON.parse(String(init.body));
       if(files.has(body.id))return new Response(null,{status:409});
@@ -115,6 +127,7 @@ export function createDriveFixture() {
           headers: { "Content-Type": file.mimeType },
         },
       );
+    if(u.pathname.endsWith('/export'))return new Response(file.bytes,{headers:{'Content-Type':'text/plain; charset=utf-8'}});
     if(u.pathname.startsWith('/drive/v2/'))return Response.json({id,etag,headRevisionId:revision,version:String(metadataVersion),parents:file.parents.map(id=>({id})),labels:{trashed:false}});
     return Response.json({
       id,
@@ -125,6 +138,7 @@ export function createDriveFixture() {
       sha256Checksum: await digest(file.bytes.buffer as ArrayBuffer),
       headRevisionId: revision,
       version: String(metadataVersion),
+      permissions:shared?[permission,{id:'public',type:'anyone',role:'reader'}]:[permission],
       ...(file.appProperties?{appProperties:file.appProperties}:{}),
     },{headers:{ETag:etag}});
   };
@@ -151,11 +165,25 @@ export function createDriveFixture() {
     ids() {
       return [...files.keys()];
     },
+    answerChat(id:string,answer:string,result:unknown){
+      const file=files.get(id);
+      if(!file?.appProperties?.cbhChatExchange||answer.length>40000)return false;
+      const initial=JSON.parse(new TextDecoder().decode(file.bytes));
+      file.bytes=new TextEncoder().encode(JSON.stringify({version:'cbh-chat-response/v1',requestId:file.appProperties.cbhChatExchange,sourceFingerprint:initial.sourceFingerprint,status:'ready',answer,result}));
+      file.total=file.bytes.length;metadataVersion++;return true;
+    },
   };
 }
-const fakeDrive = createDriveFixture().fetcher;
+const driveFixture=createDriveFixture(),fakeDrive=driveFixture.fetcher;
 export default {
   async fetch(request: Request, env: WorkerEnv) {
+    const url=new URL(request.url);
+    // Only the isolated local test entry exposes synthetic provider control.
+    // This file is excluded from canonical configs and production bundles.
+    if(url.hostname==='127.0.0.1'&&url.pathname==='/api/__test/chat-response'&&request.method==='POST'){
+      const body=await request.json() as {id:string;answer:string;result:unknown};
+      return Response.json({ok:driveFixture.answerChat(body.id,body.answer,body.result)});
+    }
     if (new URL(request.url).pathname.startsWith("/api/"))
       return handleProductRequest(request, env, null, fakeDrive);
     return env.ASSETS!.fetch(request);

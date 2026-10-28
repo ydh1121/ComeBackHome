@@ -71,27 +71,52 @@ export async function verifyFollowupUi({ page, api, id, base, todayKst }) {
   await page.locator('[data-page="SettingsPage"]').waitFor();
   assert.equal(await page.locator('[data-page="AlarmPage"]').count(),0,'production route must not expose deferred Clock actions');
 
-  // A real File input cancellation and retry. Delay read without mocking the
-  // application action; abort must prevent any late review publication.
+  // Keep the real File read in flight until the actual cancel/navigation action.
+  // A fixed one-second delay races browser scrolling, layout and click dispatch:
+  // the read can finish between pointerdown and pointerup. The explicit gate
+  // exercises cancellation regardless of runner speed, without mocking an action.
+  const holdNextFileRead = name => page.evaluate(name => {
+    const original = File.prototype.arrayBuffer;
+    const gate = { entered: false, finished: false, release: null, restore: () => { File.prototype.arrayBuffer = original; } };
+    window.__cbhFollowupFileRead = gate;
+    File.prototype.arrayBuffer = async function () {
+      if (this.name !== name || gate.entered) return original.call(this);
+      gate.entered = true;
+      await new Promise(resolve => { gate.release = resolve; });
+      try { return await original.call(this); }
+      finally { gate.finished = true; }
+    };
+  }, name);
+  const releaseFileRead = async () => {
+    await page.evaluate(() => { window.__cbhFollowupFileRead.release(); window.__cbhFollowupFileRead.restore(); });
+    await page.waitForFunction(() => window.__cbhFollowupFileRead.finished);
+    await page.waitForLoadState('networkidle');
+  };
   await open('/import');await page.locator('input[accept=".xlsx"]').waitFor();
-  await page.evaluate(()=>{
-    const original=File.prototype.arrayBuffer;
-    File.prototype.arrayBuffer=async function(){await new Promise(r=>setTimeout(r,1000));return original.call(this);};
-  });
+  await holdNextFileRead('cancel-fixture.xlsx');
   await page.locator('input[accept=".xlsx"]').setInputFiles({name:'cancel-fixture.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic invalid workbook')});
+  await page.waitForFunction(() => window.__cbhFollowupFileRead.entered);
+  await page.locator('.file-row').filter({hasText:'cancel-fixture.xlsx'}).waitFor();
+  assert.equal(await page.evaluate(() => window.__cbhFollowupFileRead.finished),false,'cancel must happen during the real File read');
   await page.getByRole('button',{name:'가져오기 취소',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'취소'}).waitFor();
-  await page.waitForTimeout(1200);
+  await releaseFileRead();
   assert.equal(await page.locator('input[accept=".xlsx"]').inputValue(),'');
   assert.equal(await page.getByRole('button',{name:'인식 결과 보기'}).isDisabled(),true);
+  assert.equal(await page.locator('.file-row').count(),0,'late File completion cannot republish a cancelled draft');
   await page.locator('input[accept=".xlsx"]').setInputFiles({name:'cancel-fixture.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic invalid workbook')});
   await page.getByRole('alert').filter({hasText:'일정을 인식하지 못했습니다.'}).waitFor();
   assert.equal(await page.locator('input[accept=".xlsx"]').inputValue(),'');
+  await holdNextFileRead('leave-fixture.xlsx');
   await page.locator('input[accept=".xlsx"]').setInputFiles({name:'leave-fixture.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic invalid workbook')});
+  await page.waitForFunction(() => window.__cbhFollowupFileRead.entered);
   await page.getByRole('button',{name:'가져오기 취소',exact:true}).waitFor();
-  await open('/');
+  // SPA navigation keeps the pending File promise alive, unlike page.goto.
+  // Release it after unmount to prove late completion cannot restore the draft.
+  await page.getByRole('navigation',{name:'주요 탐색',exact:true}).getByRole('link',{name:'오늘',exact:true}).click();
   await page.locator('[data-page="TodayPage"][data-state="WORKING"]').waitFor();
-  await open('/import');
+  await releaseFileRead();
+  await page.getByRole('navigation',{name:'주요 탐색',exact:true}).getByRole('link',{name:'가져오기',exact:true}).click();
   await page.locator('input[accept=".xlsx"]').waitFor();
   assert.equal(await page.getByRole('button',{name:'인식 결과 보기'}).isDisabled(),true,'page exit cancels unfinished import');
   await open('/');

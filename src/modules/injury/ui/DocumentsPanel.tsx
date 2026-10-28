@@ -5,13 +5,14 @@ import { driveConnectionNotice } from "../domain/drive-connection";
 import { Icon } from "../../../shared/components/Icon";
 import { RECORD_SPECS, type CaseRecord, type RecordKind } from "../domain/records";
 import { isProfile } from "../advisor/model";
-import { RecordCard, payloadText } from "./RecordEditor";
-import { analysisPrompt, documentError, MAX_FILES, MAX_BATCH_BYTES } from "../materials/model";
+import { RecordCard } from "./RecordEditor";
+import { documentError, MAX_FILES, MAX_BATCH_BYTES } from "../materials/model";
 import { uploadOriginal } from "../materials/upload";
 import { NotesComposer } from "../materials/NotesComposer";
 import { AnalysisReview, AnalysisRequest, type IncomingAnalysis } from "../materials/AnalysisReview";
 import { AnalysisReceipts } from "../materials/AnalysisReceipts";
 import { OrganizationReview } from "../materials/OrganizationReview";
+import { ChatAnswers } from "../materials/ChatAnswers";
 import "../materials/materials.css";
 const base = "private/case/documents";
 declare global {
@@ -62,10 +63,12 @@ async function loadPicker() {
 type UploadItem = { key:string; file?:File; name:string; state:'waiting'|'uploading'|'done'|'failed'|'cancelled'; progress:number; error?:string };
 const documentState:Record<string,string> = {ready:'보관 완료',pending:'전송 대기',uploading:'전송 중단 · 재시도 가능',verifying:'원본 확인 중',failed:'원본 확인 필요',missing:'원본 찾기 필요',trashed:'숨긴 자료'};
 export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseData;reload:()=>Promise<void>;openRecord?:(record:CaseRecord)=>void;createRecord?:(kind:RecordKind)=>void}) {
-  const [status,setStatus]=useState<{configured:boolean;owner:boolean;connected:boolean;folderSelected:boolean}|null>(null);
+  const [status,setStatus]=useState<{configured:boolean;owner:boolean;analyst:boolean;connected:boolean;folderSelected:boolean}|null>(null);
   const [message,setMessage]=useState(()=>driveConnectionNotice(new URLSearchParams(location.search).get('drive')));
   const [busy,setBusy]=useState(false),[queue,setQueue]=useState<UploadItem[]>([]),[selected,setSelected]=useState<Set<string>>(new Set()),[query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[hidden,setHidden]=useState(false),[question,setQuestion]=useState(''),[handoff,setHandoff]=useState('');
   const [incomingAnalysis,setIncomingAnalysis]=useState<IncomingAnalysis|null>(null);
+  const [view,setView]=useState<'materials'|'answers'>('materials'),[exchangeChange,setExchangeChange]=useState(0);
+  const requestDraft=useRef<{key:string;id:string}|null>(null);
   const controller=useRef<AbortController|null>(null),lock=useRef(false),mounted=useRef(true);
   const refresh=()=>privateRequest<NonNullable<typeof status>>(base+'/status').then(setStatus);
   useEffect(()=>{
@@ -149,20 +152,23 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
     if(lock.current||!selectedCount)return;lock.current=true;setBusy(true);setHandoff('');setMessage('원본을 확인하고 요청문을 묶는 중…');
     const abort=new AbortController();controller.current=abort;
     try{
-      const documents=[];
       for(const d of selectedDocuments){
-        const verified=await privateRequest<{url:string;sha256:string}>(base+'/'+d.id+'/handoff','GET',undefined,abort.signal);
-        documents.push({id:d.id,filename:d.filename,...verified});
+        await privateRequest(base+'/'+d.id+'/handoff','GET',undefined,abort.signal);
       }
-      const value=analysisPrompt(documents,selectedNotes.map(r=>({id:r.id,title:r.payload.title,body:payloadText(r.payload,r.kind,data),revision:r.revision})),question);
-      if(value.length>180000)throw Error('요청문이 너무 길어요. 자료를 나눠 선택해 주세요.');
-      if(mounted.current){setHandoff(value);setMessage(`${selectedCount}개 자료를 하나의 요청문으로 준비했어요.`);}
+      const sources={documentIds:selectedDocuments.map(d=>d.id),notes:selectedNotes.map(r=>({id:r.id,revision:r.revision})),question};
+      const key=JSON.stringify(sources);
+      if(requestDraft.current?.key!==key)requestDraft.current={key,id:crypto.randomUUID()};
+      const value=await privateRequest<{prompt:string}>(base+'/chat-exchanges','POST',{...sources,requestId:requestDraft.current.id},abort.signal);
+      if(mounted.current){setHandoff(value.prompt);setView('answers');setExchangeChange(v=>v+1);setMessage('요청문을 ChatGPT 대화에 전달해 주세요. 답변은 이곳에서 함께 볼 수 있어요.');}
     }catch(e){if(mounted.current)setMessage(abort.signal.aborted?'요청문 준비를 취소했어요.':(e as Error).message);}
     finally{controller.current=null;lock.current=false;if(mounted.current)setBusy(false);}
   };
   const pendingCount=queue.filter(q=>q.file&&q.state!=='done').length;
   return <section className="materials-workspace" aria-label="자료·메모 보관함">
-    <div className="materials-heading"><div><h2>내 자료</h2><p>받은 서류와 적어 둔 메모를 한곳에서</p></div><small>{data.documents.filter(d=>d.status!=='trashed').length}개 파일 · {notes.filter(r=>!r.archivedAt).length}개 메모·기록</small></div>
+    <div className="materials-heading"><div><h2>자료함</h2><p>{status?.analyst?'자료를 모아 물어보고, 답변은 함께 확인해요.':'서류와 메모를 올리면 정리된 답변을 함께 볼 수 있어요.'}</p></div><small>{data.documents.filter(d=>d.status!=='trashed').length}개 파일 · {notes.filter(r=>!r.archivedAt).length}개 메모</small></div>
+    <div className="materials-view-switch" role="group" aria-label="자료함 보기"><button aria-pressed={view==='materials'} onClick={()=>setView('materials')}>자료 올리기</button><button aria-pressed={view==='answers'} onClick={()=>setView('answers')}>답변 보기</button></div>
+    <p role="status" className="materials-feedback">{message}</p>
+    {view==='materials'&&<>
     <details className="materials-connection" open={!status?.folderSelected||!!new URLSearchParams(location.search).get('drive')}>
       <summary>{status?.folderSelected?'Google Drive 연결됨':'원본 보관 연결'}</summary>
       {!status?<p>연결을 확인하고 있어요…</p>:!status.configured?<p>관리자가 Google Drive 설정을 완료하면 파일을 보관할 수 있어요. 메모는 지금도 작성할 수 있어요.</p>:<>
@@ -182,7 +188,6 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
       ['incident','회사와 나눈 대화'],
       ['content','안내·연락처·전달문'],
     ] as const).map(([kind,title])=><button className="secondary" key={kind} disabled={busy} onClick={()=>createRecord(kind)}>{title}<Icon name="chevron-right"/></button>)}</div></details>}
-    <p role="status" className="materials-feedback">{message}</p>
     <div className="materials-tools"><label>자료 찾기<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="파일 이름·메모 내용 검색"/></label><label className="auth-check"><input type="checkbox" checked={hidden} disabled={busy} onChange={e=>{setHidden(e.target.checked);setSelected(new Set());setHandoff('');}}/>숨긴 자료</label></div>
     <div className="materials-filters" role="group" aria-label="자료 종류">{[['all','전체'],['files','파일'],['notes','메모·기록']].map(([key,title])=><button className="secondary" aria-pressed={filter===key} onClick={()=>setFilter(key)} key={key}>{title}</button>)}{!hidden&&!!visibleKeys.length&&<button className="secondary materials-select-all" disabled={busy} onClick={()=>setSelected(v=>{const n=new Set(v),all=visibleKeys.every(k=>n.has(k));for(const k of visibleKeys)all?n.delete(k):n.add(k);return n;})}>{visibleKeys.every(k=>selected.has(k))?'선택 해제':'보이는 자료 모두 선택'}</button>}</div>
     <div className="document-list materials-list">
@@ -195,10 +200,14 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
       {visibleNotes.map(r=><article className="material-row" key={r.id} data-material-record={r.id}><label className="material-select"><input type="checkbox" aria-label={r.payload.title+' 선택'} disabled={busy||!!r.archivedAt} checked={selected.has('r:'+r.id)} onChange={()=>toggle('r:'+r.id)}/></label><details><summary><span className="material-icon"><Icon name="edit"/></span><span><h3>{r.payload.title}</h3><small>{RECORD_SPECS[r.kind].title} · {new Date(r.updatedAt).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul'})}</small></span><Icon name="chevron-down"/></summary><RecordCard record={r} data={data} open={!r.archivedAt&&openRecord?()=>openRecord(r):undefined}/>{r.archivedAt&&<button className="secondary" disabled={busy} onClick={async()=>{try{await privateRequest('private/case/records/'+r.id+'/restore','POST',{revision:r.revision});await reload();}catch(e){setMessage((e as Error).message);}}}>메모 복원</button>}</details></article>)}
       {!documents.length&&!visibleNotes.length&&<div className="materials-empty"><Icon name="file"/><h3>{query?'찾는 자료가 없어요':hidden?'숨긴 자료가 없어요':'아직 보관한 자료가 없어요'}</h3><p>{query?'다른 검색어로 찾아보세요.':'파일을 추가하거나 메모를 적어 두세요.'}</p></div>}
     </div>
-    {!!selectedCount&&<section className="private-card materials-batch" aria-label="선택한 자료로 할 일"><div className="materials-batch-heading"><strong>{selectedCount}개 선택</strong><button className="secondary" disabled={busy} onClick={()=>{setSelected(new Set());setHandoff('');}}>선택 해제</button></div><label>궁금한 점 <small>선택사항</small><input disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} placeholder="예: 빠진 서류와 다음에 할 일을 알려줘"/></label><button disabled={busy} onClick={()=>void prepare()}>GPT 분석 요청 한 번에 준비</button></section>}
-    {handoff&&<AnalysisRequest value={handoff} change={setHandoff} close={()=>setHandoff('')}/>}
+    {!!selectedCount&&status?.analyst&&<section className="private-card materials-batch" aria-label="선택한 자료로 할 일"><div className="materials-batch-heading"><strong>{selectedCount}개 선택</strong><button className="secondary" disabled={busy} onClick={()=>{setSelected(new Set());setHandoff('');}}>선택 해제</button></div><label>궁금한 점 <small>선택사항</small><input disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} placeholder="빠진 서류와 다음에 할 일을 알려줘"/></label><button disabled={busy} onClick={()=>void prepare()}>ChatGPT에 물어보기 준비</button></section>}
     {!!selectedDocuments.length&&<details className="private-card materials-organize"><summary>선택한 파일을 분야별로 정리</summary><OrganizationReview data={data} proposals={selectedDocuments.map(d=>({documentId:d.id,category:'other' as const}))} reload={reload}/></details>}
-    <AnalysisReview data={data} reload={reload} incoming={incomingAnalysis}/>
-    <AnalysisReceipts sourceNames={Object.fromEntries(data.documents.map(d=>[d.id,d.filename]))} documentIds={selectedDocuments.map(d=>d.id)} notes={selectedNotes.map(r=>({id:r.id,revision:r.revision}))} onReview={setIncomingAnalysis}/>
+    </>}
+    {view==='answers'&&<>
+      {handoff&&<AnalysisRequest value={handoff} change={setHandoff} close={()=>setHandoff('')}/>}
+      <ChatAnswers analyst={!!status?.analyst} changed={exchangeChange} onReview={setIncomingAnalysis} onRequest={setHandoff}/>
+      <AnalysisReview data={data} reload={reload} incoming={incomingAnalysis}/>
+      {status?.analyst&&<details className="materials-advanced"><summary>기타 연결 방법</summary><AnalysisReceipts sourceNames={Object.fromEntries(data.documents.map(d=>[d.id,d.filename]))} documentIds={selectedDocuments.map(d=>d.id)} notes={selectedNotes.map(r=>({id:r.id,revision:r.revision}))} onReview={setIncomingAnalysis}/></details>}
+    </>}
   </section>;
 }
