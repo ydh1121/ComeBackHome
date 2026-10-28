@@ -18,6 +18,7 @@ import { reviewCaseSeed, type CaseSeed } from "../domain/imports";
 import { AdvisorHelp, AdvisorHome, AdvisorProgress } from "../advisor/AdvisorHome";
 import { isProfile } from "../advisor/model";
 import { Icon } from "../../../shared/components/Icon";
+import { useNavigationPill } from "../../portal/PortalNavigation";
 
 const tabs = [
   ["tasks", "할 일"],
@@ -82,6 +83,7 @@ export function InjuryApp() {
         )?.[0] ?? "task") as RecordKind,
     ),
     [archived, setArchived] = useState(false);
+  const { bar: moduleBar, pill: modulePill } = useNavigationPill(view);
   const reload = useCallback(async () => {
     try {
       const c = await privateRequest<Consent>("private/case/consent");
@@ -148,10 +150,11 @@ export function InjuryApp() {
         <button className="secondary advisor-refresh" onClick={() => void reload()} aria-label="새로고침" title="새로고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 4M4 14l3 4a7 7 0 0 0 11-1"/></svg></button>
       </div>
 
-      <nav className="private-tabs advisor-top-nav" aria-label="산재 메뉴">
-        {([["today","오늘"],["progress","진행 상황"],["library","내 자료"]] as const).map(([key,title])=><button key={key} aria-current={view===key?"page":undefined} onClick={()=>navigate(key)}>{title}</button>)}
+      <nav ref={moduleBar} className="portal-nav portal-bottom advisor-bottom" aria-label="산재 메뉴">
+        <span ref={modulePill} className="portal-pill" aria-hidden="true"/>
+        {([["today","오늘","home"],["progress","진행 상황","check"],["library","내 자료","file"],["manage","내 관리함","people"]] as const).map(([key,title,icon])=><button key={key} aria-current={view===key?"page":undefined} onClick={()=>navigate(key)}><Icon name={icon}/><span>{title}</span></button>)}
       </nav>
-      <div className="advisor-utilities"><button onClick={()=>navigate("help")}>상황별 도움말</button><button onClick={()=>navigate("manage")}>내 관리함<Icon name="chevron-right"/></button></div>
+      <div className="advisor-utilities"><button onClick={()=>navigate("help")}>상황별 도움말</button></div>
       {view === "manage" && section !== "overview" && <div className="management-section-head"><button className="secondary" onClick={()=>navigate("manage")}><Icon name="chevron-left"/>내 관리함으로</button><h2>{managementSections.find(s=>s.id===section)?.title??"자료 설정"}</h2></div>}
       {error && (
         <p className="private-card" role="alert">

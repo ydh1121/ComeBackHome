@@ -2,6 +2,8 @@ import { StrictMode, Suspense, lazy, useEffect, useState } from 'react';
 import {AuthRoot,AccountPage,useAuth} from './modules/auth/AuthRoot';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
+import { BrowserRouter } from 'react-router';
+import { PortalHeader, FavoriteActions, currentPortalModule } from './modules/portal/PortalNavigation';
 import { ApplicationServicesProvider } from './app/ApplicationServicesContext';
 import { createApplicationServices } from './app/composition';
 import { resolveProviderRuntimeMode, resolveRuntimeMode } from './config/runtime';
@@ -15,11 +17,16 @@ if (!rootNode) throw new Error('ComeBackHome root element was not found.');
 const root: HTMLElement = rootNode;
 
 const InjuryApp=lazy(()=>import('./modules/injury/ui/InjuryApp').then(m=>({default:m.InjuryApp})));
+const HouseholdApp=lazy(()=>import('./modules/household/ui/HouseholdApp').then(m=>({default:m.HouseholdApp})));
 function ProductApplication(){
   const auth=useAuth();
-  if(auth.enabled&&location.pathname.startsWith('/injury'))return <Suspense fallback={<p className="auth-loading">산재 자료를 여는 중…</p>}><InjuryApp/></Suspense>;
-  if(auth.enabled&&(location.pathname==='/account'||!auth.legacyAccess))return <AccountPage/>;
-  return <LegacyApplication/>;
+  let content;
+  if(auth.enabled&&location.pathname.startsWith('/injury')) content=<Suspense fallback={<p className="auth-loading">산재 자료를 여는 중…</p>}><InjuryApp/></Suspense>;
+  else if(auth.enabled&&location.pathname.startsWith('/household')) content=<BrowserRouter><Suspense fallback={<p className="auth-loading" role="status">생활비와 할 일을 여는 중…</p>}><HouseholdApp/></Suspense></BrowserRouter>;
+  else if(auth.enabled&&(location.pathname==='/account'||!auth.legacyAccess)) content=<AccountPage/>;
+  else content=<LegacyApplication/>;
+  const showPortal = auth.enabled && !!auth.user && !auth.user.mustChangePassword;
+  return <><PortalHeader active={currentPortalModule(location.pathname)}/><div className={showPortal ? 'portal-content' : undefined}>{content}</div><FavoriteActions/></>;
 }
 function LegacyApplication(){
   const [services,setServices]=useState<Awaited<ReturnType<typeof createApplicationServices>>|null>(null);

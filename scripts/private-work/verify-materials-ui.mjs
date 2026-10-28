@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { specialistAnalysisFixture } from './materials-ui-fixtures.mjs';
-export async function verifyMaterials(page,ctx,base,label){
-  try { await verifyMaterialsFlow(page,ctx,base,label); }
+export async function verifyMaterials(page,ctx,base,label,shared){
+  try { await verifyMaterialsFlow(page,ctx,base,label,shared); }
   catch(error) {
     await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-failure.png`),fullPage:true,mask:[page.locator('.analysis-connection textarea')]}).catch(()=>{});
     throw error;
   }
 }
-async function verifyMaterialsFlow(page,ctx,base,label){
+async function verifyMaterialsFlow(page,ctx,base,label,shared){
   const snapshot=async()=>await(await ctx.request.get(base+'/api/private/case')).json();
   await page.goto(base+'/injury?section=library');
   const input=page.locator('.materials-upload input[type=file]');
@@ -88,16 +88,49 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   let handoffs=0,writes=0;
   const requests=request=>{if(request.url().includes('/handoff'))handoffs++;if(request.url().includes('/api/private/case')&&['POST','PUT','DELETE'].includes(request.method()))writes++;};
   page.on('request',requests);
-  await page.getByRole('button',{name:'GPT 분석 요청 한 번에 준비',exact:true}).click();
-  await page.getByRole('heading',{name:'요청문이 준비됐어요',exact:true}).waitFor();
+  const exchangeResponse=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/private/case/documents/chat-exchanges'&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'ChatGPT에 물어보기 준비',exact:true}).click();
+  const exchange=await(await exchangeResponse).json();
+  await page.getByRole('heading',{name:'ChatGPT에 전달해 주세요',exact:true}).waitFor();
+  await page.getByText('요청문 내용 보기',{exact:true}).click();
   const prompt=await page.getByLabel('분석 요청문',{exact:true}).inputValue();
   for(const text of [fixture('first').name,fixture('last').name,'Synthetic first memo','cbh-analysis/v1'])assert(prompt.includes(text));
-  assert.equal(handoffs,2,'one user action verifies both originals');assert.equal(writes,0,'prepare does not write records or transmit to GPT');
+  assert.equal(handoffs,2,'one user action verifies both originals');assert.equal(writes,1,'prepare creates only the private Drive mailbox metadata, never business records or GPT API requests');
   page.off('request',requests);
   assert.deepEqual((await snapshot()).records,afterNotes.records,'preparation preserves all records');
   await page.locator('.analysis-request').getByRole('button',{name:'닫기',exact:true}).click();
 
-  const review=page.locator('.analysis-review');await review.locator('summary').click();
+  const driveSource=stored.documents.find(d=>d.filename===fixture('first').name).id;
+  const bridgeResult={version:'cbh-analysis/v2',suggestions:[{type:'memo',title:'Synthetic Drive answer '+label,body:'Synthetic source review',sourceIds:[driveSource]}]};
+  const answerText='Synthetic shared Drive answer '+label;
+  const fixtureAnswer=await ctx.request.post(base+'/__test/chat-response',{data:{id:new URL(exchange.url).pathname.split('/')[3],answer:answerText,result:bridgeResult}});
+  assert.equal((await fixtureAnswer.json()).ok,true,'synthetic ChatGPT writes same app-owned private Doc');
+  const exchangeRow=page.locator('[data-chat-request="'+exchange.id+'"]');
+  await exchangeRow.getByRole('button',{name:'답변 확인',exact:true}).click();
+  await page.locator('.chat-answer .record-body').filter({hasText:answerText}).waitFor();
+  assert.deepEqual((await snapshot()).records,afterNotes.records,'reading Drive answer stages receipt but writes zero business records');
+  if(shared){
+    const previous=shared.memberPage.url();
+    await shared.memberPage.goto(base+'/injury?section=library');
+    await shared.memberPage.getByRole('button',{name:'답변 보기',exact:true}).click();
+    assert.equal(await shared.memberPage.getByRole('button',{name:'ChatGPT에 물어보기 준비',exact:true}).count(),0,'member uploads and reads without owner-only ChatGPT preparation controls');
+    const sharedRow=shared.memberPage.locator('[data-chat-request="'+exchange.id+'"]');
+    await sharedRow.getByRole('button',{name:'답변 읽기',exact:true}).click();
+    await shared.memberPage.locator('.chat-answer .record-body').filter({hasText:answerText}).waitFor();
+    const memberState=await(await shared.memberContext.request.get(base+'/api/private/case')).json();
+    assert.deepEqual(memberState.records,afterNotes.records,'second account reads same answer without automatic approval');
+    await shared.memberPage.goto(previous);
+    await shared.memberPage.getByLabel('관리자의 읽기·수정 허용').waitFor();
+  }
+  await page.getByRole('button',{name:'추가할 내용 확인',exact:true}).click();
+  const review=page.locator('.analysis-review');
+  await review.locator('.analysis-proposal').filter({hasText:bridgeResult.suggestions[0].title}).waitFor();
+  assert.deepEqual((await snapshot()).records,afterNotes.records,'Drive proposal preview requires explicit separate approval');
+  await review.getByRole('button',{name:'취소',exact:true}).click();
+  if(await review.getAttribute('open')===null)await review.locator(':scope > summary').click();
+  const manual=review.locator('.analysis-manual');
+  if(await manual.getAttribute('open')===null)await manual.locator(':scope > summary').click();
+
   const source=stored.documents.find(d=>d.filename===fixture('first').name).id;
   const result={version:'cbh-analysis/v1',approved:true,suggestions:[
     {type:'memo',title:'Synthetic reviewed summary '+label,body:'Synthetic source summary',sourceIds:[source]},
@@ -182,7 +215,8 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   // Optional API-capable analysis tools can return a bounded draft. The inbox
   // still requires an authenticated user to review and explicitly save it.
   const inbox=page.locator('.analysis-receipts');
-  await inbox.locator('summary').click();
+  await page.locator('.materials-advanced > summary').click();
+  await inbox.locator(':scope > summary').click();
   const createReceipt=inbox.getByRole('button',{name:'선택한 자료의 답변 받을 연결 만들기',exact:true});
   await page.waitForFunction(()=>{const buttons=[...document.querySelectorAll('.analysis-receipts button')];return buttons.some(b=>b.textContent==='선택한 자료의 답변 받을 연결 만들기'&&!b.disabled);});
   const createdResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/analysis-receipts'&&response.request().method()==='POST');
@@ -205,7 +239,7 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await inbox.getByRole('button',{name:'받은 답변 확인',exact:true}).click();
   const refreshed=await inboxResponse;assert.equal(refreshed.status(),200);
   const receiptRows=(await refreshed.json()).receipts;
-  const oldReceipt=receiptRows.find(row=>row.id!==createdBody.id&&row.status==='received');
+  const oldReceipt=receiptRows.find(row=>row.id!==createdBody.id&&row.status==='received'&&row.id.length==='analysis-receipt-'.length+36);
   if(label==='webkit'&&oldReceipt){
     const previousResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/analysis-receipts/'+oldReceipt.id&&response.request().method()==='GET');
     await inbox.locator('[data-analysis-receipt="'+oldReceipt.id+'"]').getByRole('button',{name:'답변 가져와 검토',exact:true}).click();
@@ -231,6 +265,14 @@ async function verifyMaterialsFlow(page,ctx,base,label){
   await inbox.getByLabel('연결 정보',{exact:true}).waitFor({state:'detached'});
   assert.equal(await inbox.getByLabel('연결 정보',{exact:true}).count(),0,'closing optional connection removes the one-time secret from DOM');
 
+  const sourceNote=(await snapshot()).records.find(r=>r.payload.title===`synthetic-note-${label}-one`);
+  const changedNote=await ctx.request.put(base+'/api/private/case/records/'+sourceNote.id,{headers:{Origin:base},data:{kind:sourceNote.kind,revision:sourceNote.revision,payload:{...sourceNote.payload,body:sourceNote.payload.body+'\nSynthetic edit after analysis'}}});
+  assert.equal(changedNote.status(),200);
+  await exchangeRow.getByRole('button',{name:'답변 읽기',exact:true}).click();
+  await page.locator('.chat-answers [role=status]').filter({hasText:'자료가 바뀌었어요'}).waitFor();
+  assert.equal(await page.locator('.chat-answer').count(),0,'changed source hides the stale Drive answer');
+  console.log('PRIVATE_CHAT_DRIVE_UI_PASS '+label+' app_owned_doc_shared_accounts_plain_answer_no_auto_write_source_change_block');
+  await page.getByRole('button',{name:'자료 올리기',exact:true}).click();
   const beforeOrganization=await snapshot();
   const organize=page.locator('.materials-organize');
   await organize.locator('summary').click();

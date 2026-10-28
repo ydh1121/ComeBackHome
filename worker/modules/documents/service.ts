@@ -11,6 +11,7 @@ import { CaseRepository } from "../injury/repository";
 import { driveReturn } from "./oauth-result";
 import { driveOAuthStep, type DriveOAuthStep } from "./oauth-step";
 import { organizeDocuments } from "./organization";
+import { handleChatExchanges } from "./chat-exchange";
 import { ORGANIZATION_CATEGORIES } from "../../../src/modules/injury/materials/organization";
 import {
   DriveArchive,
@@ -79,12 +80,15 @@ export async function handleDocuments(
     return privateJson({
       configured: configured(env),
       owner,
+      analyst: p.role === "admin",
       connected: !!c,
       folderSelected: !!c?.folder_id,
       maxBytes: MAX_BYTES,
       chunkBytes: CHUNK_BYTES,
     });
   }
+  if (path[0] === "chat-exchanges")
+    return handleChatExchanges(request, p, repo, path.slice(1), drive);
   if (path[0] === "oauth") {
     if (!owner) throw new PrivateError(403, "OWNER_ONLY");
     if (!configured(env)) throw new PrivateError(503, "DRIVE_NOT_CONFIGURED");

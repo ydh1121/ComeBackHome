@@ -11,6 +11,7 @@ import { ApiError, privateRequest } from "./client";
 import { loginWithPassword, changeWithPassword } from "./password";
 import { invalidateLocalReads } from "../../pwa/localCache";
 import { releasePrivateImportImage } from "../../application/services/WorkbookImportFileSelectionAction";
+import { clearHouseholdCache } from "../household/cache";
 import "./auth.css";
 export interface User {
   id: string;
@@ -34,7 +35,8 @@ const AuthContext = createContext<AuthState>({
   logout: async () => {},
 });
 export const useAuth = () => useContext(AuthContext);
-function clearPersonalMemory() {
+function clearPersonalMemory(clearHousehold = true) {
+  if (clearHousehold) clearHouseholdCache();
   invalidateLocalReads();
   releasePrivateImportImage();
   for (const key of ["cbh:import-batches:v1", "cbh:import-batches:v2"])
@@ -61,7 +63,9 @@ export function AuthRoot({
       current.current?.user?.id !== next.user?.id ||
       current.current?.enabled !== next.enabled
     )
-      clearPersonalMemory();
+      // A first verified session may read only its own persisted cache. Actual
+      // identity changes and every logout still erase all private local copies.
+      clearPersonalMemory(current.current !== null || !next.user);
     current.current = next;
     setSession(next);
   }, []);
@@ -149,8 +153,9 @@ export function AuthRoot({
     };
     const originalFetch = window.fetch;
     const guardedFetch: typeof fetch = async (...args) => {
+      const requestGeneration = generation.current;
       const response = await originalFetch(...args);
-      if (response.headers.get("X-CBH-Session") === "invalid")
+      if (requestGeneration === generation.current && response.headers.get("X-CBH-Session") === "invalid")
         window.dispatchEvent(new Event("cbh-auth-expired"));
       return response;
     };
@@ -417,6 +422,7 @@ export function AccountPage() {
                   shortcutVisible: value,
                 });
                 setVisible(value);
+                window.dispatchEvent(new Event('cbh-shortcut-preference'));
               } catch (err) {
                 setError((err as Error).message);
               }
@@ -457,25 +463,4 @@ export function AccountPage() {
       <PasswordChange />
     </main>
   );
-}
-export function InjuryShortcut() {
-  const auth = useAuth(),
-    [visible, setVisible] = useState(false);
-  useEffect(() => {
-    if (!auth.enabled || !auth.user || auth.user.mustChangePassword) return;
-    let active = true;
-    privateRequest<{ shortcutVisible: boolean }>("auth/preferences")
-      .then((v) => {
-        if (active) setVisible(v.shortcutVisible);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [auth.enabled, auth.user?.id]);
-  return visible ? (
-    <a className="injury-shortcut" href="/injury" aria-label="산재 관리 열기">
-      산재
-    </a>
-  ) : null;
 }

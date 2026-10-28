@@ -75,7 +75,9 @@ try {
   } finally {
     globalThis.fetch = originalFetch;
   }
-  expect(schedulerRequests.length === 1, 'minimal scheduler must invoke Pages once');
+  expect(schedulerRequests.length === 2, 'scheduler invokes independent schedule and household requests within separate Free-tier budgets');
+  expect(JSON.parse(schedulerRequests[0].init.body).channel === undefined, 'legacy scheduler payload is preserved');
+  expect(JSON.parse(schedulerRequests[1].init.body).channel === 'household', 'household has its own explicit channel');
   expect(schedulerRequests[0]?.url === 'https://come-back-home.pages.dev/api/internal/scheduler-tick', 'scheduler target mismatch');
   expect(schedulerRequests[0]?.init?.headers?.Authorization === 'Bearer scheduler-secret', 'scheduler auth mismatch');
 

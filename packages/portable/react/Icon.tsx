@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip' | 'phone' | 'close' | 'cake' | 'image' | 'file' | 'sun' | 'moon' | 'monitor';
+export type IconName = 'home' | 'calendar' | 'upload' | 'people' | 'settings' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'check' | 'map' | 'bus' | 'train' | 'edit' | 'walk' | 'plus' | 'search' | 'grip' | 'phone' | 'close' | 'cake' | 'image' | 'file' | 'sun' | 'moon' | 'monitor' | 'wallet' | 'chart';
 
 interface IconProps {
   name: IconName;
@@ -9,6 +9,10 @@ export function Icon({ name, className }: IconProps) {
   const common = { className: ['svg', className].filter(Boolean).join(' '), viewBox: '0 0 24 24', 'aria-hidden': true } as const;
 
   switch (name) {
+    case 'wallet':
+      return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 9h18M6 15h4"/></svg>;
+    case 'chart':
+      return <svg {...common}><path d="M4 3v17h17M8 16v-5M13 16V6M18 16v-8"/></svg>;
     case 'close':
       return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
     case 'cake':

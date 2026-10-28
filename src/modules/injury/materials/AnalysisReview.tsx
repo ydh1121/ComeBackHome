@@ -6,22 +6,26 @@ import { payloadFields } from '../ui/record-text';
 import { reviewAnalysis, suggestionLabel, suggestionRecord, suggestionDependencies, type AnalysisResult } from './model';
 import { OrganizationReview } from './OrganizationReview';
 import type { OrganizationProposal } from './organization';
+import { unwrapManualReply } from './chat-contract';
 
 export interface IncomingAnalysis { id: string; result: unknown }
 export function AnalysisReview({ data, reload, incoming }: { data: CaseData; reload: () => Promise<void>; incoming?: IncomingAnalysis | null }) {
   const [text,setText]=useState(''),[candidate,setCandidate]=useState<AnalysisResult|null>(null),[selected,setSelected]=useState<number[]>([]),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
   const [moves,setMoves]=useState<OrganizationProposal[]>([]),[receiptId,setReceiptId]=useState<string|undefined>();
+  const [manualAnswer,setManualAnswer]=useState('');
   const lock=useRef(false),panel=useRef<HTMLDetailsElement>(null);
-  const reset=(value:string)=>{setText(value);setCandidate(null);setSelected([]);setMoves([]);setReceiptId(undefined);setMessage('');};
+  const reset=(value:string)=>{setText(value);setCandidate(null);setSelected([]);setMoves([]);setReceiptId(undefined);setMessage('');setManualAnswer('');};
   const reviewValue=(value:string)=>{
-    setCandidate(null);setSelected([]);setMoves([]);
+    setCandidate(null);setSelected([]);setMoves([]);setManualAnswer('');
     try {
       const raw=value.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'');
-      const result=reviewAnalysis(JSON.parse(raw)).result;
+      const {answer,value:parsed}=unwrapManualReply(JSON.parse(raw));
+      if(parsed===null&&answer){setManualAnswer(answer);setMessage('답변을 불러왔어요. 새로 저장할 항목은 없어요.');return;}
+      const result=reviewAnalysis(parsed).result;
       const ids=new Set(data.documents.filter(d=>d.status==='ready').map(d=>d.id));
       const proposedMoves=result.version==='cbh-analysis/v2'?result.documentMoves??[]:[];
       if(result.suggestions.some(s=>s.sourceIds.some(id=>!ids.has(id)))||proposedMoves.some(p=>!ids.has(p.documentId))) throw Error('source');
-      setCandidate(result);setSelected(result.suggestions.map((_,i)=>i));setMoves(proposedMoves);setMessage('아직 저장하지 않았어요. 내용을 확인해 주세요.');
+      setManualAnswer(answer);setCandidate(result);setSelected(result.suggestions.map((_,i)=>i));setMoves(proposedMoves);setMessage('아직 저장하지 않았어요. 내용을 확인해 주세요.');
     } catch {setMessage('분석 결과의 형식이나 연결 원본을 확인해 주세요. 저장하지 않았어요.');}
   };
   useEffect(()=>{
@@ -69,11 +73,14 @@ export function AnalysisReview({ data, reload, incoming }: { data: CaseData; rel
     finally{lock.current=false;setBusy(false);}
   };
   return <details ref={panel} className="private-card analysis-review">
-    <summary>GPT 답변을 준비할 일·메모로 가져오기</summary>
-    <p className="materials-caption">답변의 JSON을 붙여 넣거나 파일을 선택하세요. 일한 내용·진료·서류 등은 알맞은 곳에 나눠 담고, 저장 전 한 번에 확인할 수 있어요.</p>
+    <summary>{incoming?'답변에서 추가할 내용 확인':'답변 직접 가져오기'}</summary>
+    <details className="analysis-manual" open={!incoming}><summary>파일이나 복사한 답변 사용</summary>
+    <p className="materials-caption">Drive에 답변을 남기지 못했을 때 사용하세요. ChatGPT가 준 분석 결과 JSON을 선택하거나 붙여 넣으면 됩니다.</p>
     <label className="analysis-file">분석 결과 파일 가져오기<input type="file" accept=".json,application/json" disabled={busy} onChange={e=>{void loadFile(e.target.files?.[0]);e.currentTarget.value='';}}/></label>
     <label htmlFor="analysis-result">GPT 분석 결과</label><textarea id="analysis-result" rows={5} value={text} disabled={busy} maxLength={180000} onChange={e=>reset(e.target.value)}/>
     <button className="secondary" disabled={busy||!text.trim()} onClick={()=>reviewValue(text)}>내용 확인</button>
+    </details>
+    {manualAnswer&&<article className="chat-answer"><h3>직접 가져온 답변</h3><div className="copy-toolbar"><CopyButton value={manualAnswer}/></div><p className="record-body">{manualAnswer}</p></article>}
     {candidate&&<div className="analysis-proposals">
       {candidate.suggestions.map((s,i)=>{
         const record=suggestionRecord(s),fields=s.type==='record'?payloadFields(record.payload,record.kind,data).map(field=>{
@@ -99,7 +106,7 @@ export function AnalysisReview({ data, reload, incoming }: { data: CaseData; rel
 export function AnalysisRequest({value,change,close}:{value:string;change:(v:string)=>void;close:()=>void}) {
   return <article className="private-card analysis-request" aria-label="GPT 분석 요청문">
     <div className="copy-toolbar"><CopyButton value={value}/><button className="secondary" onClick={close}>닫기</button></div>
-    <h2>요청문이 준비됐어요</h2><p className="materials-caption">복사해서 ChatGPT에 한 번에 전달하세요. 파일과 메모가 자동 전송되지는 않아요. 답변은 아래에서 파일로 가져오거나 붙여 넣으면 돼요.</p>
-    <label htmlFor="analysis-request">분석 요청문</label><textarea id="analysis-request" rows={10} value={value} onChange={e=>change(e.target.value)}/>
+    <h2>ChatGPT에 전달해 주세요</h2><p className="materials-caption">위의 복사 버튼을 누르고 평소 사용하는 ChatGPT 대화에 붙여 넣으세요. ChatGPT가 연결된 Drive 문서에 답변을 남기면 여기서 확인할 수 있어요.</p>
+    <details><summary>요청문 내용 보기</summary><label htmlFor="analysis-request">분석 요청문</label><textarea id="analysis-request" rows={10} value={value} onChange={e=>change(e.target.value)}/></details>
   </article>;
 }

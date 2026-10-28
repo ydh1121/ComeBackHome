@@ -21,6 +21,8 @@ on:
       - 'scripts/verify-private-work*'
       - 'scripts/verify-private-advisor.mjs'
       - 'scripts/private-work/**'
+      - 'scripts/verify-household*.mjs'
+      - 'scripts/verify-chat-drive-exchange.mjs'
       - 'test/private-work/**'
       - '.github/workflows/deploy-canonical-pages.yml'
       - '.github/workflows/private-work-modules.yml'
@@ -33,6 +35,8 @@ on:
       - 'scripts/verify-private-work*'
       - 'scripts/verify-private-advisor.mjs'
       - 'scripts/private-work/**'
+      - 'scripts/verify-household*.mjs'
+      - 'scripts/verify-chat-drive-exchange.mjs'
       - 'test/private-work/**'
       - '.github/workflows/private-work-modules.yml'
 permissions:
@@ -69,6 +73,11 @@ jobs:
       - run: node scripts/verify-private-work.mjs
       - run: node scripts/private-work/verify-analysis-receipts.mjs
       - run: node scripts/private-work/verify-organization.mjs
+      - run: node scripts/verify-household-domain.mjs
+      - run: node scripts/verify-household-cache.mjs
+      - run: node scripts/verify-household-storage.mjs
+      - run: node scripts/verify-household-notifications.mjs
+      - run: node scripts/verify-chat-drive-exchange.mjs
       - run: node scripts/verify-private-advisor.mjs
       - run: node --test test/private-work/login-db-setup.test.mjs
       - run: node --test test/private-work/auth-runtime.test.mjs
@@ -93,9 +102,12 @@ jobs:
           VITE_CBH_RUNTIME: api
           VITE_CBH_PROVIDER_RUNTIME: api
       - run: node scripts/verify-private-work-browser.mjs
+      - run: node scripts/verify-household-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: private-work-synthetic-browser-screenshots
-          path: artifacts/private-work/*.png
+          path: |
+            artifacts/private-work/*.png
+            artifacts/household/*.png
           retention-days: 7

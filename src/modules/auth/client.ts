@@ -8,6 +8,10 @@ export class ApiError extends Error {
 }
 export function errorText(code: string): string {
   const texts: Record<string, string> = {
+    CHAT_PREPARING: "요청을 준비하고 있어요. 잠시 후 다시 확인해 주세요.",
+    CHAT_DUPLICATE_MAILBOX: "같은 요청의 답변 문서가 여러 개예요. 원본은 보존했으니 보관 폴더를 확인해 주세요.",
+    CHAT_REPLY_CHANGED: "답변을 수정 중이에요. 잠시 후 다시 확인해 주세요.",
+    CHAT_REPLY_INVALID: "답변 형식을 확인해야 해요. 요청문에 적힌 형식으로 같은 Drive 문서에 다시 저장해 주세요.",
     LOGIN_REQUIRED: "다시 로그인해 주세요.",
     LOGIN_FAILED: "아이디 또는 비밀번호를 확인해 주세요.",
     AUTH_PASSWORD_RUNTIME_UNSUPPORTED:
