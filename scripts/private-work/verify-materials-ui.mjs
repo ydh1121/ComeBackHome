@@ -180,6 +180,9 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   assert.equal((await snapshot()).records.length,afterNotes.records.length);
   await review.getByRole('button',{name:'선택한 2개 새 기록으로 저장',exact:true}).click();
   await review.getByRole('status').filter({hasText:'새 기록 2개를 저장했어요'}).waitFor();
+  // The save message precedes its consent/case reload. Finish that read before
+  // changing interception; waiting only after unroute is too late.
+  await page.waitForFunction(()=>document.querySelector('.analysis-review textarea')?.disabled===false);
   await page.unroute('**/api/private/case/analysis');
   const accepted=await snapshot();
   assert.equal(accepted.records.length,afterNotes.records.length+2);

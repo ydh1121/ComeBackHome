@@ -44,17 +44,22 @@ async function ready(){
 // Playwright's networkidle load state is sticky after SPA navigation, so it
 // cannot prove that a later schedule/latest-import request has completed.
 const readBarriers=new WeakMap();
+const diagnosticRoute=path=>path==='/api/people'?'/api/people':
+  /^\/api\/people\/[^/]+$/.test(path)?'/api/people/:person':
+  /^\/api\/people\/[^/]+\/schedules(?:\/[^/]+)?$/.test(path)?'/api/people/:person/schedules':'other-local-api';
 function observeApiReads(page){
-  const pending=new Set();let lastActivity=Date.now();
+  const pending=new Set(),started=new WeakMap(),statuses=new WeakMap();let lastActivity=Date.now();
   page.on('request',request=>{
     if(request.method()==='GET'&&request.url().startsWith(origin+'/api/')){
-      pending.add(request);lastActivity=Date.now();
+      pending.add(request);started.set(request,Date.now());lastActivity=Date.now();
     }
   });
+  page.on('response',response=>{if(pending.has(response.request()))statuses.set(response.request(),response.status());});
   const finish=request=>{if(pending.delete(request))lastActivity=Date.now();};
   page.on('requestfinished',finish);page.on('requestfailed',finish);
   return async()=>{
     const deadline=Date.now()+18000;
+    try{
     // Flush React's loading effects before deciding that there are no reads.
     if(page.url().startsWith(origin)){
       await page.waitForFunction(()=>!document.querySelector('.page-reveal[aria-busy="true"]'));
@@ -63,6 +68,14 @@ function observeApiReads(page){
     while(pending.size||Date.now()-lastActivity<100){
       if(Date.now()>deadline)throw Error('Outstanding local API reads before navigation: '+pending.size);
       await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    }catch(error){
+      // Synthetic acceptance only: never print bodies, headers, queries or IDs.
+      console.error('PHASE_B_PENDING_READS',JSON.stringify({count:pending.size,reads:[...pending].slice(0,8).map(request=>({
+        route:diagnosticRoute(new URL(request.url()).pathname),
+        elapsedMs:Date.now()-(started.get(request)??Date.now()),status:statuses.get(request)??null,
+      }))}));
+      throw error;
     }
   };
 }
@@ -204,6 +217,8 @@ async function browserPass(kind,label,serial){
     assert(retryPosts===1,label+' repeated same-tick save clicks must issue one POST');
     assert((await api('/people')).body.people.filter(x=>x.name===retryName).length===1,
       label+' retry must create exactly one employee');
+    // Keep interception stable until the newly opened detail page finishes GETs.
+    await settleReads(page);
     await page.unroute('**/api/people');
     await update(page,'/people/'+a+'/edit');
     await page.locator('.person-form input').nth(1).fill('수정관계');
