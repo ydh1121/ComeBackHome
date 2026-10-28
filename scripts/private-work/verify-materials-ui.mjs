@@ -103,7 +103,9 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   const driveSource=stored.documents.find(d=>d.filename===fixture('first').name).id;
   const bridgeResult={version:'cbh-analysis/v2',suggestions:[{type:'memo',title:'Synthetic Drive answer '+label,body:'Synthetic source review',sourceIds:[driveSource]}]};
   const answerText='Synthetic shared Drive answer '+label;
-  const fixtureAnswer=await ctx.request.post(base+'/__test/chat-response',{data:{id:new URL(exchange.url).pathname.split('/')[3],answer:answerText,result:bridgeResult}});
+  const fixtureAnswer=await ctx.request.post(base+'/api/__test/chat-response',{data:{id:new URL(exchange.url).pathname.split('/')[3],answer:answerText,result:bridgeResult}});
+  assert.equal(fixtureAnswer.status(),200,'isolated worker receives synthetic provider control before static assets');
+  assert.match(fixtureAnswer.headers()['content-type']??'',/application\/json/,'synthetic provider control returns JSON');
   assert.equal((await fixtureAnswer.json()).ok,true,'synthetic ChatGPT writes same app-owned private Doc');
   const exchangeRow=page.locator('[data-chat-request="'+exchange.id+'"]');
   await exchangeRow.getByRole('button',{name:'답변 확인',exact:true}).click();

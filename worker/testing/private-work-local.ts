@@ -180,7 +180,7 @@ export default {
     const url=new URL(request.url);
     // Only the isolated local test entry exposes synthetic provider control.
     // This file is excluded from canonical configs and production bundles.
-    if(url.hostname==='127.0.0.1'&&url.pathname==='/__test/chat-response'&&request.method==='POST'){
+    if(url.hostname==='127.0.0.1'&&url.pathname==='/api/__test/chat-response'&&request.method==='POST'){
       const body=await request.json() as {id:string;answer:string;result:unknown};
       return Response.json({ok:driveFixture.answerChat(body.id,body.answer,body.result)});
     }
