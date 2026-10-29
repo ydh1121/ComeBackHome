@@ -12,7 +12,7 @@ export const managementSections = [
 export type ManagementSection = (typeof managementSections)[number]['id'];
 export function ManageHome({data,choose}:{data:CaseData;choose:(id:ManagementSection|'settings')=>void}) {
   return <section className="management-home" aria-label="내 관리함 목록">
-    <div className="materials-heading"><div><h2>내 관리함</h2><p>필요한 기록만 찾아서 확인하세요</p></div></div>
+    <div className="materials-heading"><div><h2>내 관리함</h2></div></div>
     <div className="management-list">{managementSections.map(s=>{
       const count=data.records.filter(r=>!r.archivedAt&&!isProfile(r)&&RECORD_SPECS[r.kind].group===s.id).length+(s.id==='documents'?data.documents.filter(d=>d.status!=='trashed').length:0);
       return <button key={s.id} className="management-row" onClick={()=>choose(s.id)}><span className="material-icon"><Icon name={s.icon as IconName}/></span><span><strong>{s.title}</strong><small>{s.description}</small></span><span className="management-count">{count}</span><Icon name="chevron-right"/></button>;

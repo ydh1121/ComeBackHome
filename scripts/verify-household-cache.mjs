@@ -9,10 +9,11 @@ Object.defineProperties(store, {
   removeItem: { configurable: true, value(key) { delete this[key]; } },
 });
 let blocked = false, events = 0;
+const clearReasons = [];
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { if (blocked) throw new DOMException('Storage blocked', 'SecurityError'); return store; } });
-Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent() { events++; } } });
+Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent(event) { events++; clearReasons.push(event.detail?.reason); } } });
 let checks = 0;
 const equal = (actual, expected, message) => { assert.deepEqual(actual, expected, message); checks++; };
 try {
@@ -30,6 +31,12 @@ try {
   const seed = (value, savedAt = Date.now()) => { cache.clearHouseholdCache(); store.setItem(key, JSON.stringify({ savedAt, value })); };
   equal(cache.householdCacheEnabled(), true);
   equal(cache.validHouseholdCacheResponse(response), true);
+  const legacyNoteResponse=structuredClone(response); delete legacyNoteResponse.snapshot.todos[0].reminderRecipient;
+  equal(cache.validHouseholdCacheResponse(legacyNoteResponse),true,'old snapshots without recipient remain usable');
+  const archivedNoteResponse=structuredClone(response);
+  Object.assign(archivedNoteResponse.snapshot.todos[0],{completedAt:'2028-01-01T00:00:00Z',completedBy:'synthetic-a',archivedAt:'2028-01-01T00:01:00Z',archivedBy:'synthetic-b',reminderRecipient:'member'});
+  equal(cache.validHouseholdCacheResponse(archivedNoteResponse),true,'complete archive metadata and chosen recipient survive private caching');
+
   cache.writeCache('synthetic-a', response);
   equal(cache.readCache('synthetic-a').value, response);
   equal(cache.readCache('synthetic-b'), null, 'another identity never receives a cached snapshot');
@@ -64,6 +71,12 @@ try {
     copy => { copy.snapshot.plans.push({ ...copy.snapshot.plans[0], id: 'plan-b' }); },
     copy => { copy.snapshot.todos[0].completedAt = '2028-01-01T00:00:00Z'; },
     copy => { copy.snapshot.todos[0].dueAt = null; },
+    copy => { copy.snapshot.todos[0].reminderRecipient = 'self'; },
+    copy => { copy.snapshot.todos[0].reminderRecipient = ['both']; },
+    copy => { copy.snapshot.todos[0].archivedAt = 'invalid'; },
+    copy => { copy.snapshot.todos[0].archivedBy = 'synthetic-a'; },
+    copy => { copy.snapshot.todos[0].archivedAt = '2028-01-01T00:00:00Z'; copy.snapshot.todos[0].archivedBy = 'synthetic-a'; },
+
     copy => { copy.spreadsheetUrl = 'javascript:alert(1)'; },
     copy => { copy.ready = 'true'; },
     copy => { copy.revision = -1; },
@@ -73,7 +86,11 @@ try {
     equal(cache.validHouseholdCacheResponse(changed), false);
     seed(changed); equal(cache.readCache('synthetic-a'), null, 'bad structure never reaches view calculation');
   }
-  cache.clearHouseholdCache(); store.setItem(key, '{malformed');
+  cache.clearHouseholdCache();
+  equal(clearReasons.at(-1),'security','unspecified purge cannot cause mounted private data to reload');
+  cache.clearHouseholdCache('user');
+  equal(clearReasons.at(-1),'user','explicit user clear permits a fresh authenticated image view');
+  store.setItem(key, '{malformed');
   equal(cache.readCache('synthetic-a'), null, 'invalid JSON falls back to network');
   equal(store.getItem(key), null, 'bad JSON is removed instead of failing again on every visit');
   store.setItem(key, 'x'.repeat(2 * 1024 * 1024 + 1));
@@ -81,6 +98,7 @@ try {
   store.setItem('unrelated-feature', 'keep');
   cache.writeCache('synthetic-a', response); cache.writeCache('synthetic-b', response);
   cache.setHouseholdCacheEnabled(false);
+  equal(clearReasons.at(-1),'user','cache OFF purges bytes without disabling mounted image viewing');
   equal(cache.householdCacheEnabled(), false);
   equal(cache.readCache('synthetic-a'), null);
   equal(store.getItem(key), null);
@@ -120,3 +138,5 @@ try {
   if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow); else delete globalThis.window;
   await vite.close();
 }
+
+await import('./verify-household-card-art.mjs');

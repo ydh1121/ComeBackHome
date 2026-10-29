@@ -30,6 +30,9 @@ export async function verifyMaterials(page,ctx,base,label,shared){
 }
 async function verifyMaterialsFlow(page,ctx,base,label,shared){
   const snapshot=async()=>await(await ctx.request.get(base+'/api/private/case')).json();
+  let closedOrganizationReads=0;
+  const observeClosedOrganization=request=>{if(request.method()==='GET'&&/^\/api\/private\/case\/documents\/[^/]+\/organization$/.test(new URL(request.url()).pathname))closedOrganizationReads++;};
+  page.on('request',observeClosedOrganization);
   await page.goto(base+'/injury?section=library');
   const input=page.locator('.materials-upload input[type=file]');
   await input.waitFor();
@@ -105,6 +108,9 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await composer.locator('summary').click();
   await page.locator('.materials-batch').getByRole('button',{name:'선택 해제',exact:true}).click();
   for(const name of [fixture('first').name,fixture('last').name,`synthetic-note-${label}-one`])await page.getByRole('checkbox',{name:name+' 선택',exact:true}).check();
+  assert.equal(await page.locator('.materials-organize').evaluate(el=>el.open),false);
+  assert.equal(closedOrganizationReads,0,'collapsed organization review performs no background status requests during uploads or selection changes');
+  page.off('request',observeClosedOrganization);
   let handoffs=0,writes=0;
   const requests=request=>{if(request.url().includes('/handoff'))handoffs++;if(request.url().includes('/api/private/case')&&['POST','PUT','DELETE'].includes(request.method()))writes++;};
   page.on('request',requests);
@@ -300,7 +306,14 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await page.getByRole('button',{name:'자료 올리기',exact:true}).click();
   const beforeOrganization=await snapshot();
   const organize=page.locator('.materials-organize');
+  const selectedOrganizationIds=await page.locator('[data-document-id]').evaluateAll(rows=>rows.filter(row=>row.querySelector('input[type=checkbox]')?.checked).map(row=>row.dataset.documentId));
+  assert.equal(selectedOrganizationIds.length,2,'two synthetic originals are selected for folder review');
+  const pendingOrganizationChecks=Promise.all(selectedOrganizationIds.map(id=>page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/documents/'+id+'/organization'&&response.request().method()==='GET')));
   await organize.locator('summary').click();
+  for(const response of await pendingOrganizationChecks){
+    assert.equal(response.status(),200,'opening folder review successfully checks pending state');
+    assert.equal(typeof(await response.json()).pending,'boolean','status response uses the existing pending-state contract');
+  }
   const organization=organize.getByRole('article',{name:'원본 폴더 정리',exact:true});
   await organization.waitFor();
   assert.equal(await organization.getByLabel('보관할 분야',{exact:true}).count(),2,'category names exclude the option text');
@@ -308,18 +321,28 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await organization.getByLabel('보관할 분야',{exact:true}).first().selectOption('medical');
   await organization.getByLabel('보관할 분야',{exact:true}).last().selectOption('employment');
   assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'folder preview moves no original');
-  let orgRelease,orgStarted,organizationRequests=0;
+  let orgRelease,orgStarted,organizationRequests=0,busyOrganizationReads=0;
+  const observeBusyOrganization=request=>{if(request.method()==='GET'&&/^\/api\/private\/case\/documents\/[^/]+\/organization$/.test(new URL(request.url()).pathname))busyOrganizationReads++;};
+  page.on('request',observeBusyOrganization);
   const orgHeld=new Promise(resolve=>{orgRelease=resolve;}),orgSeen=new Promise(resolve=>{orgStarted=resolve;});
   await page.route('**/api/private/case/documents/organize',async route=>{
     organizationRequests++;orgStarted();await orgHeld;await route.abort('aborted').catch(()=>{});
   });
   await organization.getByRole('button',{name:'선택한 파일 2개 정리',exact:true}).click();
   await orgSeen;
+  await organize.locator(':scope > summary').click();
+  assert.equal(await organize.evaluate(el=>el.open),false);
+  await organize.locator(':scope > summary').click();
+  await organization.getByRole('button',{name:'정리 중지',exact:true}).waitFor();
+  assert.equal(await organization.getByRole('button',{name:'정리 중지',exact:true}).isEnabled(),true,'collapsing the review preserves the in-progress operation and its explicit stop control');
+  assert.equal(organizationRequests,1,'reopening does not restart the approved operation');
   await organization.getByRole('button',{name:'정리 중지',exact:true}).click();orgRelease();
   await organization.getByRole('status').filter({hasText:'정리를 중지했어요. 이미 이동한 원본'}).waitFor();
   await page.waitForFunction(()=>[...document.querySelectorAll('.materials-organize button')].some(button=>button.textContent==='미완료 2개 다시 확인'&&!button.disabled));
   assert.equal(organizationRequests,1,'stopping organization never starts the next file request');
   assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'stopping before provider dispatch preserves every original');
+  assert.equal(busyOrganizationReads,0,'reopening during an approved write does not race it with pending-state reads');
+  page.off('request',observeBusyOrganization);
   await page.unroute('**/api/private/case/documents/organize');
   await organization.getByRole('button',{name:'미완료 2개 다시 확인',exact:true}).click();
   await organization.getByRole('status').filter({hasText:'선택한 원본을 비공개 보관 폴더 안에서 정리했어요.'}).waitFor();
@@ -370,12 +393,36 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   }
 
   await page.reload();await page.locator('.materials-list').waitFor();
-  await page.getByLabel('자료 찾기',{exact:true}).fill('synthetic-batch-'+label);
+  await page.locator('.materials-upload input[type=file]').waitFor();
+  // Expand the complete entry/settings hierarchy and representative stored file
+  // and note. This exercises the crowded state reported on real iPhone screens.
+  // All data belongs to this isolated synthetic D1 fixture; opening writes none.
+  const beforeExpanded=await snapshot();let disclosureWrites=0;
+  const countDisclosureWrites=request=>{if(new URL(request.url()).pathname.startsWith('/api/private/case')&&['POST','PUT','PATCH','DELETE'].includes(request.method()))disclosureWrites++;};
+  page.on('request',countDisclosureWrites);
+  const disclosures=[page.locator('.materials-connection'),page.locator('.notes-composer'),page.locator('.materials-record-create'),page.locator('[data-document-id] > details').first(),page.locator('[data-material-record] > details').first()];
+  for(const disclosure of disclosures){
+    await disclosure.waitFor();
+    if(!await disclosure.evaluate(el=>el.open))await disclosure.locator(':scope > summary').click();
+    assert(await disclosure.evaluate(el=>el.open),'the intended material disclosure is expanded');
+  }
   for(const width of [375,390,768,1024,1440]){
     await page.setViewportSize({width,height:844});
-    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'materials width '+width);
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded materials width '+width);
+    assert(await page.locator('.materials-workspace').evaluate(el=>el.scrollWidth<=el.clientWidth+1),'expanded material content stays in its own width '+width);
+    const fields=await page.locator('.materials-workspace').evaluate(el=>[...el.querySelectorAll('input:not([type=checkbox]):not([type=file]),textarea,select')].filter(field=>field.getClientRects().length).map(field=>({font:parseFloat(getComputedStyle(field).fontSize),width:field.getBoundingClientRect().width,height:field.getBoundingClientRect().height,label:!!(field.labels?.length||field.getAttribute('aria-label'))})));
+    assert(fields.length>=3,'expanded memo exposes editable labelled fields');
+    assert(fields.every(field=>field.font>=16&&field.height>=44&&field.width>0&&field.label),'visible inputs remain labelled and avoid iOS focus zoom at '+width);
+    const fileTarget=page.locator('.materials-upload .materials-file-label');
+    assert(await fileTarget.evaluate(el=>el.getBoundingClientRect().height>=44),'single upload target remains touchable');
+    assert(await input.evaluate(el=>el.tabIndex>=0&&getComputedStyle(el).display!=='none'&&el.getBoundingClientRect().width<=1),'custom file input remains keyboard accessible without duplicate native chooser');
+    assert(await page.locator('.materials-connection').evaluate(el=>el.getBoundingClientRect().top>document.querySelector('.materials-saved').getBoundingClientRect().top),'connected settings follow the primary material workflow');
+    await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:resolve('artifacts/private-work',`${label}-materials-${width}.png`),fullPage:true,animations:'disabled'});
   }
+  page.off('request',countDisclosureWrites);
+  assert.equal(disclosureWrites,0,'opening and resizing disclosures writes no case or source data');
+  const afterExpanded=await snapshot();assert.deepEqual(afterExpanded.records,beforeExpanded.records);assert.deepEqual(afterExpanded.documents,beforeExpanded.documents);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>document.documentElement.dataset.theme='dark');
   await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});
@@ -396,5 +443,5 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await page.getByRole('button',{name:'내 관리함으로',exact:true}).click();
   await page.getByRole('button',{name:/자료·메모/}).click();
   await page.getByRole('heading',{name:'Synthetic reviewed summary '+label,exact:true}).waitFor();
-  console.log('PRIVATE_MATERIALS_UI_PASS '+label+' batch_upload_partial_retry_cancel_dedupe_utf8_memos_multi_handoff_draft_review_approval_rollback_replay_5_widths_dark');
+  console.log('PRIVATE_MATERIALS_UI_PASS '+label+' expanded_disclosures_5_widths_16px_inputs_zero_writes batch_upload_partial_retry_cancel_dedupe_utf8_memos_multi_handoff_draft_review_approval_rollback_replay_5_widths_dark');
 }

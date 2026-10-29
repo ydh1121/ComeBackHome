@@ -36,6 +36,8 @@ const errors: Record<string, string> = {
   HOUSEHOLD_SCHEMA_CHANGED: '장부의 열이나 시트 이름이 바뀌었어요. 원래 구조를 복원한 뒤 다시 확인해 주세요.',
   HOUSEHOLD_ARCHIVE_REQUIRED: '장부 보관 한도에 가까워졌어요. 기존 기록을 보존한 채 기간별 장부로 나누는 작업이 필요해요.',
   HOUSEHOLD_CARD_IN_USE: '사용 기록이 있는 카드의 시작 금액과 종류는 바꿀 수 없어요. 상환·충전 내역을 기록해 주세요.',
+  HOUSEHOLD_TODO_ARCHIVED: '삭제한 메모예요. 목록을 새로 불러와 주세요.',
+  HOUSEHOLD_TODO_NOT_COMPLETED: '완료한 항목만 삭제할 수 있어요.',
   HOUSEHOLD_CARD_ARCHIVED: '보관한 카드예요. 사용 중인 카드를 선택해 주세요.',
   HOUSEHOLD_ACCESS_DENIED: '이 계정에서 가계부를 사용할 수 없어요.',
   HOUSEHOLD_COMMAND_REUSED: '이전에 저장한 요청과 내용이 달라요. 최신 내용을 확인한 뒤 다시 입력해 주세요.',

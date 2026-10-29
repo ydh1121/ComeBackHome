@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { privateRequest } from '../../auth/client';
+import { Icon } from '../../../shared/components/Icon';
 import { CopyButton } from '../ui/RecordEditor';
 import { memoPayload, withinRequestLimit, MAX_FILES } from './model';
 type Note = {id:string;title:string;body:string};
@@ -44,9 +45,9 @@ export function NotesComposer({reload}:{reload:()=>Promise<void>}) {
     finally{lock.current=false;setBusy(false);}
   };
   return <details className="private-card notes-composer">
-    <summary>메모 한 번에 추가</summary>
-    <p className="materials-caption">적어 둔 내용이나 대화를 붙여 넣으세요. 텍스트 파일도 여러 개 가져올 수 있어요.</p>
-    <label className="materials-file-label">메모 파일 가져오기<input type="file" multiple accept=".txt,.md,text/plain,text/markdown" disabled={busy||reading} onChange={e=>{void files(Array.from(e.target.files??[]));e.currentTarget.value='';}}/></label>
+    <summary><Icon name="edit"/><span>메모 한 번에 추가</span><Icon name="chevron-down"/></summary>
+    <div className="materials-disclosure-body">
+    <label className="materials-file-label materials-memo-file"><span><Icon name="upload"/>메모 파일 가져오기</span><small>TXT·MD · 파일당 180KB</small><input type="file" aria-label="메모 파일 가져오기" multiple accept=".txt,.md,text/plain,text/markdown" disabled={busy||reading} onChange={e=>{void files(Array.from(e.target.files??[]));e.currentTarget.value='';}}/></label>
     {notes.map((n,i)=><div className="note-draft" key={n.id}>
       <div className="copy-toolbar"><CopyButton value={n.body}/>{notes.length>1&&<button className="secondary" disabled={busy||reading} onClick={()=>setNotes(v=>v.filter(x=>x.id!==n.id))} aria-label={`메모 ${i+1} 빼기`}>빼기</button>}</div>
       <label htmlFor={`memo-title-${n.id}`}>메모 {i+1} 제목</label><input id={`memo-title-${n.id}`} value={n.title} disabled={busy||reading} maxLength={160} placeholder="비워 두면 첫 줄을 제목으로 사용해요" onChange={e=>change(n.id,'title',e.target.value)}/>
@@ -54,5 +55,6 @@ export function NotesComposer({reload}:{reload:()=>Promise<void>}) {
     </div>)}
     <div className="private-actions"><button className="secondary" disabled={busy||reading||notes.length>=MAX_FILES} onClick={()=>setNotes(v=>[...v,blank()])}>메모 추가</button><button disabled={busy||reading||!notes.some(n=>n.title.trim()||n.body.trim())} onClick={()=>void save()}>{busy?'저장 중…':'메모 한 번에 저장'}</button></div>
     <p role="status">{reading?'메모 파일을 읽는 중…':message}</p>
+    </div>
   </details>;
 }

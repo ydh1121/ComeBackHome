@@ -1,3 +1,4 @@
+import { clearCardArtCache } from "./card-art-cache";
 import type { HouseholdResponse } from "./client";
 import { MAX_WON, parseCardInput, parseEntryInput, parseHouseholdInstant, parseHouseholdPreferences, parsePlanInput, parseTodoInput } from './domain/model';
 
@@ -22,16 +23,17 @@ export function householdCacheEnabled() {
   try { enabledWithoutStorage = localStorage.getItem(CACHE_SETTING) !== 'false'; } catch { /* A blocked store does not prevent memory caching or server reads. */ }
   return enabledWithoutStorage;
 }
-export function clearHouseholdCache() {
+export function clearHouseholdCache(reason: 'security' | 'user' = 'security') {
+  clearCardArtCache();
   memory.clear();
   pendingStoragePurge = !purgeStoredCopies();
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('cbh-household-cache-cleared'));
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cbh-household-cache-cleared', { detail: { reason } }));
 }
 export function setHouseholdCacheEnabled(enabled: boolean) {
   sessionChoice = enabled;
   enabledWithoutStorage = enabled;
   try { localStorage.setItem(CACHE_SETTING, String(enabled)); } catch { /* Keep this session's choice when storage is blocked. */ }
-  if (!enabled) clearHouseholdCache();
+  if (!enabled) clearHouseholdCache('user');
 }
 function audit(value: Record<string, unknown>): boolean {
   if (!validId(value.createdBy) || !validId(value.updatedBy)) return false;
@@ -72,9 +74,11 @@ export function validHouseholdCacheResponse(value: unknown): value is HouseholdR
     if (new Set(s.plans.map(p => p.month)).size !== s.plans.length) return false;
     for (const t of s.todos) {
       if (!record(t) || !audit(t)) return false;
-      parseTodoInput({ id:t.id,text:t.text,dueAt:t.dueAt,remind:t.remind });
+      parseTodoInput({ id:t.id,text:t.text,dueAt:t.dueAt,remind:t.remind,reminderRecipient:t.reminderRecipient });
       if (t.completedAt !== null) { parseHouseholdInstant(t.completedAt); if (!validId(t.completedBy)) return false; }
       else if (t.completedBy !== null) return false;
+      if (t.archivedAt != null) { parseHouseholdInstant(t.archivedAt); if (!validId(t.archivedBy) || t.completedAt === null) return false; }
+      else if (t.archivedBy != null) return false;
     }
     return true;
   } catch { return false; }

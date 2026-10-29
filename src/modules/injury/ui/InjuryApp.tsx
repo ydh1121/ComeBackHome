@@ -20,6 +20,7 @@ import { AdvisorHelp, AdvisorHome, AdvisorProgress } from "../advisor/AdvisorHom
 import { isProfile } from "../advisor/model";
 import { Icon } from "../../../shared/components/Icon";
 import { useNavigationPill } from "../../portal/PortalNavigation";
+import "./injury-refinement.css";
 
 const tabs = [
   ["tasks", "할 일"],
@@ -149,16 +150,13 @@ export function InjuryApp() {
     ) ?? [];
   return (
     <main className="private-page advisor-shell" data-page="InjuryApp" data-advisor-view={view}>
-      <header className="private-header">
-        <Link to="/">ComeBackHome</Link>
-        <Link to="/account">내 계정</Link>
-      </header>
-      <div className="private-title">
-        <div>
-          <span className="advisor-brand-caption">치료 · 신청 · 생활비</span><h1>산재 도우미</h1>
+      <header className="private-title injury-page-heading">
+        <h1>산재 도우미</h1>
+        <div className="injury-page-actions">
+          <Link className="injury-account" to="/account" aria-label="내 계정" title="내 계정"><Icon name="people"/></Link>
+          <button className="secondary advisor-refresh" onClick={() => void reload()} aria-label="새로고침" title="새로고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 4M4 14l3 4a7 7 0 0 0 11-1"/></svg></button>
         </div>
-        <button className="secondary advisor-refresh" onClick={() => void reload()} aria-label="새로고침" title="새로고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 4M4 14l3 4a7 7 0 0 0 11-1"/></svg></button>
-      </div>
+      </header>
 
       <nav ref={moduleBar} className="portal-nav portal-bottom advisor-bottom" aria-label="산재 메뉴">
         <span ref={modulePill} className="portal-pill" aria-hidden="true"/>

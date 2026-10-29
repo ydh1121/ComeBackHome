@@ -225,6 +225,9 @@ async function cardArt(request: Request, repo: HouseholdRepository, cardId: stri
         const state = await checkedState(api, row), card = state.cards.find(c => c.id === cardId);
         if (!card?.imageFileId)
             throw new PrivateError(404, 'CARD_IMAGE_NOT_FOUND');
+        const expectedImage = new URL(request.url).searchParams.get('image');
+        if (expectedImage && expectedImage !== card.imageFileId)
+            throw new PrivateError(409, 'CARD_IMAGE_CHANGED');
         const m = await verifyCardImage(api, card.imageFileId, row.root_id, permissions, cardId);
         const data = await readBounded(await api.drive.download(card.imageFileId), 5 * 1024 * 1024);
         if (!m.appProperties?.cbhImageHash || await digest(data) !== m.appProperties.cbhImageHash || m.sha256Checksum && m.sha256Checksum !== m.appProperties.cbhImageHash)

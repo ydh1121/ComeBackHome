@@ -25,12 +25,14 @@ interface Session {
   legacyAccess?: "read" | "write" | null;
 }
 interface AuthState extends Session {
+  checking: boolean;
   refresh: () => Promise<void>;
   logout: (all?: boolean) => Promise<void>;
 }
 const AuthContext = createContext<AuthState>({
   enabled: false,
   user: null,
+  checking: false,
   refresh: async () => {},
   logout: async () => {},
 });
@@ -180,6 +182,7 @@ export function AuthRoot({
   }, [session?.enabled, mock, apply, refresh]);
   const value: AuthState = {
     ...(session ?? { enabled: true, user: null }),
+    checking,
     refresh,
     logout,
   };

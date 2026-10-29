@@ -1,4 +1,7 @@
 .portal-content { --portal-top-space: 60px; padding-top: var(--portal-top-space); }
+/* Match the accepted schedule's opaque iOS status edge without shifting
+   private-page content or changing the schedule shell. */
+.portal-private-status-background { position:fixed;top:0;left:0;right:0;height:max(12px,env(safe-area-inset-top));background:var(--cbh-paper);pointer-events:none;z-index:30; }
 .portal-content .app-shell,.portal-content .app-shell__app { min-height:calc(100dvh - var(--portal-top-space)); }
 .household-shell { width:min(100%,var(--cbh-shell));margin:0 auto;min-height:calc(100dvh - 60px);padding-top:calc(env(safe-area-inset-top) + 8px);padding-bottom:calc(104px + env(safe-area-inset-bottom));background:var(--cbh-paper); }
 .portal-nav { position:fixed;left:50%;transform:translateX(-50%);z-index:45;isolation:isolate;display:grid;box-sizing:border-box;background:transparent;border-radius:32px;box-shadow:0 8px 24px var(--cbh-shadow); }

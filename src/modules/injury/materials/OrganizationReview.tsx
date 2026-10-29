@@ -4,7 +4,7 @@ import type { CaseData } from '../ui/types';
 import { ORGANIZATION_CATEGORIES, type OrganizationCategory, type OrganizationProposal } from './organization';
 
 interface Result { documentId: string; status: 'organized' | 'failed'; error?: string }
-export function OrganizationReview({ data, proposals, reload, receiptId }: { data: CaseData; proposals: OrganizationProposal[]; reload: () => Promise<void>; receiptId?: string }) {
+export function OrganizationReview({ data, proposals, reload, receiptId, active = true }: { data: CaseData; proposals: OrganizationProposal[]; reload: () => Promise<void>; receiptId?: string; active?: boolean }) {
   const signature = JSON.stringify(proposals), controlPrefix=useId();
   const [items,setItems] = useState(proposals), [selected,setSelected] = useState(proposals.map(p=>p.documentId));
   const [results,setResults] = useState<Result[]>([]), [busy,setBusy] = useState(false), [message,setMessage] = useState('');
@@ -13,6 +13,7 @@ export function OrganizationReview({ data, proposals, reload, receiptId }: { dat
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;operation.current?.abort();};},[]);
   useEffect(()=>{ if(!locked.current){setItems(JSON.parse(signature));setSelected(JSON.parse(signature).map((p:OrganizationProposal)=>p.documentId));setResults([]);setMessage('');} },[signature]);
   useEffect(()=>{
+    if(!active||locked.current)return;
     const abort=new AbortController();
     void Promise.all((JSON.parse(signature) as OrganizationProposal[]).map(async item=>{
       try {
@@ -20,14 +21,14 @@ export function OrganizationReview({ data, proposals, reload, receiptId }: { dat
         return state.pending&&state.category?{id:item.documentId,category:state.category}:null;
       }catch{return null;}
     })).then(values=>{
-      if(abort.signal.aborted||!mounted.current)return;
+      if(abort.signal.aborted||!mounted.current||locked.current)return;
       const pending=Object.fromEntries(values.filter(v=>v!==null).map(v=>[v.id,v.category]));
       setPendingCategories(pending);
       if(!receiptId)setItems(items=>items.map(item=>pending[item.documentId]?{...item,category:pending[item.documentId]}:item));
       if(Object.keys(pending).length)setMessage('중단된 정리가 있어요. 이전에 선택한 분야로 완료 여부부터 확인해요.');
     });
     return()=>abort.abort();
-  },[signature,receiptId]);
+  },[signature,receiptId,active]);
   const save = async () => {
     if(locked.current)return;
     const pending = items.filter(p=>selected.includes(p.documentId)&&!results.some(r=>r.documentId===p.documentId&&r.status==='organized'));

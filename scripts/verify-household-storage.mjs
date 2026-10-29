@@ -216,7 +216,36 @@ try {
     const imageResponse = await handleHousehold(new Request('https://local.invalid/api/private/household/cards/card-fixture/art'), env, admin, ['cards', 'card-fixture', 'art'], fetcher);
     check(new Uint8Array(await imageResponse.arrayBuffer()), imageBytes, 'authenticated image is exact verified bytes');
     check(imageResponse.headers.get('Cache-Control'), 'private, no-store', 'artwork never cached publicly');
+    await assert.rejects(() => handleHousehold(new Request('https://local.invalid/api/private/household/cards/card-fixture/art?image=obsolete-image'), env, admin, ['cards', 'card-fixture', 'art'], fetcher), e => e.code === 'CARD_IMAGE_CHANGED');
+    checks++;
+    const versionedImage = await handleHousehold(new Request('https://local.invalid/api/private/household/cards/card-fixture/art?image=' + uploaded.imageFileId), env, admin, ['cards', 'card-fixture', 'art'], fetcher);
+    check(new Uint8Array(await versionedImage.arrayBuffer()), imageBytes, 'versioned image returns only matching verified bytes');
     check((await new HouseholdSheets('synthetic', async () => response({ error: 'do not reflect' }, 403)).request('example').catch(e => e.code)), 'HOUSEHOLD_SHEETS_ACCESS_REQUIRED', 'provider permissions failure stays actionable and sanitized');
+    sql.exec("UPDATE auth_sessions SET revoked_at=NULL WHERE user_id='fixture-member'");
+    const todo = { id:'todo-fixture', text:'Synthetic private reminder', dueAt:'2028-01-01T00:00:00Z', remind:true, reminderRecipient:'admin' };
+    const noteSaved = await json(await invoke(admin,'/events',cmd('operation-note',4,{type:'todo.save',todo})));
+    check(noteSaved.snapshot.todos[0].reminderRecipient,'admin','stable recipient persisted in private Sheet JSON');
+    const legacyEdit = {...todo,text:'Synthetic revised reminder'}; delete legacyEdit.reminderRecipient;
+    const noteEdited = await json(await invoke(member,'/events',cmd('operation-note-edit',5,{type:'todo.save',todo:legacyEdit})));
+    check(noteEdited.snapshot.todos[0].reminderRecipient,'admin','other account legacy edit preserves selected recipient');
+    check(noteEdited.snapshot.todos[0].updatedBy,member.id,'shared editing still attributes actual author');
+    check(JSON.parse(sql.prepare('SELECT reminders_json FROM household_notification_projection').get().reminders_json)[0].recipient,'admin','projection carries stable recipient without note text');
+    await assert.rejects(()=>invoke(admin,'/events',cmd('operation-note-active-delete',6,{type:'todo.archive',id:todo.id})),e=>e.code==='HOUSEHOLD_TODO_NOT_COMPLETED'); checks++;
+    await invoke(member,'/events',cmd('operation-note-complete',6,{type:'todo.complete',id:todo.id,done:true}));
+    const noteRows=tabs.get(104).rows.length;
+    const archive=cmd('operation-note-archive',7,{type:'todo.archive',id:todo.id});
+    dropCommit=true;
+    await assert.rejects(()=>invoke(admin,'/events',archive),/response lost/); checks++;
+    sql.exec("UPDATE household_workspace SET lease_until='2000-01-01T00:00:00Z'");
+    const archiveRecovered=await json(await invoke(member,'/recover',{}));
+    check(archiveRecovered.revision,8,'lost archive response reconciled atomically');
+    check(archiveRecovered.snapshot.todos[0].archivedBy,admin.id,'archive recovery preserves original actor');
+    check(tabs.get(104).rows.length,noteRows,'archive retains existing Sheet rows');
+    check(archiveRecovered.snapshot.todos[0].text,legacyEdit.text,'archive retains private audit contents');
+    const archiveRetry=await json(await invoke(admin,'/events',archive));
+    check(archiveRetry.revision,8,'retry never archives twice');
+    check(sql.prepare('SELECT reminders_json FROM household_notification_projection').get().reminders_json,'[]','archived reminder no longer scheduled');
+    await assert.rejects(()=>invoke(member,'/events',cmd('operation-note-stale-edit',8,{type:'todo.save',todo})),e=>e.code==='HOUSEHOLD_TODO_ARCHIVED'); checks++;
     console.log(JSON.stringify({ suite: 'household-private-sheets-storage', checks, status: 'PASS', liveProvider: false, productionWrites: 0 }));
 }
 finally {

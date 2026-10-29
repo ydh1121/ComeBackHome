@@ -131,6 +131,25 @@ try {
   rejects(() => apply({ type: 'todo.complete', id: 'missing-todo', done: true }), 'NOT_FOUND');
   rejects(() => m.parseTodoInput({ id: 't', text: 'Synthetic', dueAt: null, remind: true }));
   equal(m.parseTodoInput({ id: 't', text: '  Synthetic  ', dueAt: null, remind: false }).text, 'Synthetic');
+  equal(state.todos[0].reminderRecipient, undefined, 'legacy commands preserve old snapshot hashes; absent recipient still means both');
+  for (const recipient of [null, '', 'self', ['both'], {}, 1]) rejects(() => m.parseTodoInput({ id: 't', text: 'Synthetic', dueAt: null, remind: false, reminderRecipient: recipient }));
+  apply({ type: 'todo.save', todo: { id: 'todo-a', text: 'Synthetic target', dueAt: now, remind: true, reminderRecipient: 'admin' } });
+  apply({ type: 'todo.save', todo: { id: 'todo-a', text: 'Synthetic edit by other member', dueAt: now, remind: true } }, 'synthetic-b');
+  equal(state.todos[0].reminderRecipient, 'admin', 'recipient remains stable when another member or older client edits');
+  rejects(() => apply({ type: 'todo.archive', id: 'todo-a' }), 'TODO_NOT_COMPLETED');
+  rejects(() => apply({ type: 'todo.archive', id: 'missing-todo' }), 'NOT_FOUND');
+  apply({ type: 'todo.complete', id: 'todo-a', done: true });
+  const beforeArchive = structuredClone(state), archiveCommand = command({ type: 'todo.archive', id: 'todo-a' });
+  state = m.applyHouseholdCommand(state, archiveCommand, 'synthetic-b', now);
+  equal(state.todos.map(todo => todo.id), beforeArchive.todos.map(todo => todo.id), 'soft archive preserves original row count and order');
+  equal([state.todos[0].archivedBy, state.todos[0].archivedAt], ['synthetic-b', '2027-12-31T15:00:00.000Z']);
+  equal(beforeArchive.todos[0].archivedAt, undefined, 'archive does not mutate earlier snapshots');
+  equal(m.applyHouseholdCommand(state, archiveCommand, 'synthetic-b', now), state, 'archive response retry is idempotent');
+  rejects(() => apply({ type: 'todo.complete', id: 'todo-a', done: false }), 'TODO_ARCHIVED');
+  rejects(() => apply({ type: 'todo.save', todo: { id: 'todo-a', text: 'Synthetic stale edit', dueAt: null, remind: false } }), 'TODO_ARCHIVED');
+  apply({ type: 'preferences.save', preferences: { dailyLedgerReminder: true, todoReminders: true } });
+  equal(m.dueHouseholdTodos({ ...state, todos: [{ ...state.todos[0], completedAt: null }] }, now).length, 0, 'archived reminders remain excluded independently of completion');
+
 
   equal(m.seoulDate('2027-12-31T14:59:59Z'), '2027-12-31');
   equal(m.seoulDate('2027-12-31T15:00:00Z'), '2028-01-01');
