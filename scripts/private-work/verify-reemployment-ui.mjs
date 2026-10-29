@@ -13,6 +13,9 @@ export async function verifyReemployment(page, ctx, base, label) {
     assert.equal(response.status(), 200);
     return response.json();
   };
+  const stubClipboard = () => page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async value => { window.__reemploymentCopied = value; } },
+  }));
   const payload = (title, data) => ({
     title: `Synthetic reemployment ${label} ${title}`, body: '', certainty: 'reported', sourceIds: [], data,
   });
@@ -148,9 +151,7 @@ export async function verifyReemployment(page, ctx, base, label) {
       const id = await section.locator('textarea').getAttribute('id');
       assert.equal(await section.locator(`label[for="${id}"]`).count(), 1, 'each delivery input keeps its own accessible label');
     }
-    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
-      configurable: true, value: { writeText: async value => { window.__reemploymentCopied = value; } },
-    }));
+    await stubClipboard();
     await doctor.getByRole('button', { name: '문장 복사', exact: true }).click();
     assert.equal(await page.evaluate(() => window.__reemploymentCopied), 'Synthetic doctor draft ' + label);
     await agency.locator(':scope > summary').click();
@@ -209,6 +210,9 @@ export async function verifyReemployment(page, ctx, base, label) {
     assert.deepEqual((await snapshot()).records, before.records, 'explicit editor cancellation preserves every record');
     cases.push('guidance_cancel');
 
+    // The section-link checks above navigate to new documents. Install this
+    // document's clipboard probe again before testing the guidance editor.
+    await stubClipboard();
     editor = await edit();
     await editor.locator('textarea').fill('Synthetic reemployment guidance ' + label);
     await editor.getByRole('button', { name: '복사', exact: true }).click();
