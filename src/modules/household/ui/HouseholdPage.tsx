@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthRoot';
-import { Icon } from '../../../shared/components/Icon';
 import { clearHouseholdCache, householdCacheEnabled, setHouseholdCacheEnabled } from '../cache';
 import { useHousehold } from '../client';
 import type { EntryKind } from '../domain/model';
@@ -29,13 +28,12 @@ export function HouseholdPage() {
   if (model.loading && !state) return <section className="household-page" aria-label="가계부 불러오는 중" role="status"><div className="hh-skeleton hh-skeleton--title" /><div className="hh-skeleton hh-skeleton--amount" /><div className="hh-skeleton hh-skeleton--row" /><div className="hh-skeleton hh-skeleton--row" /><span className="sr-only">불러오는 중…</span></section>;
   if (!state) return <section className="household-page"><h1 className="page-title">생활비·할 일</h1>{model.data ? <EmptyState icon="ledger" title="가계부 연결" action={model.data.connected ? model.busy ? '만드는 중…' : '가계부 시작하기' : undefined} onAction={() => void model.initialize()}>{model.data.connected ? ' 연결한 비공개 Drive에 시트로 보관해요.' : ' 먼저 자료를 보관할 Google Drive를 연결해 주세요.'}</EmptyState> : null}{model.data && !model.data.connected && <a className="hh-primary hh-link" href="/injury?section=library">Drive 연결하기</a>}<SaveFeedback model={model} />{!model.needsRecovery && model.error && <button type="button" className="hh-text" onClick={() => void model.reload()}>다시 확인</button>}</section>;
   return <section className="household-page" data-page="HouseholdPage" data-section={section}>
-    <div className="hh-utility"><span>{model.stale ? '최근 저장한 내용' : ''}</span><button className="icon-btn" type="button" aria-label="가계부 설정" onClick={() => setSettings(true)}><Icon name="settings" /></button></div>
     {model.stale && <div className="hh-cache-banner" role="status"><span>최신 내용을 확인해야 저장할 수 있어요.</span><button className="hh-text" type="button" onClick={() => void model.reload()}>새로고침</button></div>}
     {!entry && !settings && <SaveFeedback model={model} />}
-    {section === 'cards' && <CardsPanel state={state} model={model} onEntry={(cardId, kind) => { model.clearError(); setEntry({ cardId, kind }); }} />}
-    {section === 'ledger' && <LedgerPanel state={state} model={model} onAdd={() => { model.clearError(); setEntry({ kind: 'expense' }); }} />}
-    {section === 'income' && <IncomePanel state={state} model={model} onIncome={() => { model.clearError(); setEntry({ kind: 'income' }); }} />}
-    {section === 'notes' && <NotesPanel state={state} model={model} />}
+    {section === 'cards' && <CardsPanel state={state} model={model} onSettings={() => setSettings(true)} onEntry={(cardId, kind) => { model.clearError(); setEntry({ cardId, kind }); }} />}
+    {section === 'ledger' && <LedgerPanel state={state} model={model} onSettings={() => setSettings(true)} onAdd={() => { model.clearError(); setEntry({ kind: 'expense' }); }} />}
+    {section === 'income' && <IncomePanel state={state} model={model} onSettings={() => setSettings(true)} onIncome={() => { model.clearError(); setEntry({ kind: 'income' }); }} />}
+    {section === 'notes' && <NotesPanel state={state} model={model} onSettings={() => setSettings(true)} />}
     {entry && <EntryForm state={state} model={model} initialCardId={entry.cardId} initialKind={entry.kind} onClose={() => setEntry(null)} />}
     {settings && <FormSheet title="가계부 설정" onClose={() => setSettings(false)} busy={model.busy || push.busy}><div className="hh-form">
       <h3>알림</h3>

@@ -15,7 +15,10 @@ export function SettingsPage() {
       <BackButton fallbackTo="/" />
       <h1 className="page-title">설정</h1>
       <div className="settings-list">
-        {auth.enabled&&<a className="settings-row-button" href="/account"><b>계정·산재 설정</b><Icon name="chevron-right" /></a>}
+        {auth.enabled && auth.user && <>
+          <button type="button" className="settings-row-button" onClick={() => navigate('/account')}><b>내 계정</b><Icon name="chevron-right" /></button>
+          <button type="button" className="settings-row-button" onClick={() => navigate('/settings/favorites')}><b>즐겨찾기 버튼</b><Icon name="chevron-right" /></button>
+        </>}
         <button type="button" className="settings-row-button" onClick={() => navigate('/notifications')}>
           <b>알림</b>
           <Icon name="chevron-right" />

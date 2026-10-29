@@ -12,6 +12,7 @@ import { D1PresenceRepository } from '../repositories/D1PresenceRepository';
 import { D1SubscriptionStore } from '../repositories/D1SubscriptionStore';
 import type { WorkerEnv } from '../runtime-types';
 import { runScheduledNotificationCycle } from '../scheduler';
+import { D1NotificationRouteCache, NOTIFICATION_ROUTE_POLICY } from '../notification-route-cache';
 
 interface CycleRequest {
   scheduledTime: string;
@@ -555,6 +556,37 @@ async function probeArrivalPolicy(env: WorkerEnv): Promise<Response> {
   return json({ syntheticOnly: true, changedBlocked, offBlocked, ruleOffBlocked, staleBlocked, noEtaBlocked, claimedOnce, sentNotReplayed });
 }
 
+
+/** Exact cache reservation SQL on real local D1; no provider or delivery. */
+async function probeRouteCache(env: WorkerEnv): Promise<Response> {
+  const person = await new D1PersonRepository(env.DB).create({ name: 'Route cache synthetic', relation: 'test-only' });
+  const cache = new D1NotificationRouteCache(env.DB);
+  const now = new Date('2026-10-09T08:45:00.000Z');
+  const [first, parallel] = await Promise.all([
+    cache.acquire(person.id, 'fixture-context', now), cache.acquire(person.id, 'fixture-context', now),
+  ]);
+  const token = first ?? parallel;
+  if (!token) throw new Error('LOCAL_CACHE_LEASE_MISSING');
+  const exclusive = Number(!!first) + Number(!!parallel) === 1;
+  let reserved = 0;
+  for (let i = 0; i < 30; i++) if (await cache.reserveRequest(person.id, token, now)) reserved++;
+  const recovered = await cache.acquire(person.id, 'fixture-context', new Date(now.getTime() + 120_000));
+  if (!recovered) throw new Error('LOCAL_CACHE_LEASE_RECOVERY_MISSING');
+  await cache.complete(person.id, token, { id: 'stale-owner', totalMinutes: 999 }, now, now);
+  const fenced = (await cache.get(person.id))?.route === null;
+  await cache.complete(person.id, recovered, { id: 'fixture-route', totalMinutes: 40 }, new Date(now.getTime() + 120_000), now);
+  const reloaded = await new D1NotificationRouteCache(env.DB).get(person.id);
+  const hit = await cache.acquire(person.id, 'fixture-context', new Date(now.getTime() + 180_000));
+  const changed = await cache.acquire(person.id, 'changed-context', new Date(now.getTime() + 180_000));
+  const budgetSurvivesChange = !!changed && !await cache.reserveRequest(person.id, changed, new Date(now.getTime() + 180_000));
+  const nextDay = new Date(now.getTime() + 86_400_000);
+  const rolloverToken = await cache.acquire(person.id, 'changed-context', nextDay);
+  const rollover = !!rolloverToken && await cache.reserveRequest(person.id, rolloverToken, nextDay);
+  return json({ syntheticOnly: true, exclusive, dailyBudget: reserved === NOTIFICATION_ROUTE_POLICY.maxRequestsPerPersonDay,
+    recovered: !!recovered, fenced, persisted: reloaded?.route?.totalMinutes === 40, validHitNoLease: hit === null,
+    budgetSurvivesChange, rollover });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -571,6 +603,8 @@ export default {
     if (request.method === 'POST' && url.pathname === '/cycle') {
       return cycle(request, env);
     }
+
+    if (request.method === 'POST' && url.pathname === '/route-cache-probe') return probeRouteCache(env);
 
     if (request.method === 'POST' && url.pathname === '/arrival-policy-probe') return probeArrivalPolicy(env);
 

@@ -9,14 +9,15 @@ on:
         type: choice
         default: household-0013-0015
         options:
+          - transit-cache-0016
           - household-0013-0015
           - login-0012
       confirmation:
-        description: "생활비: APPLY_REMOTE_COMEBACKHOME_HOUSEHOLD_0013_0015 / 이전 로그인: APPLY_REMOTE_COMEBACKHOME_D1"
+        description: "교통 캐시: APPLY_REMOTE_COMEBACKHOME_TRANSIT_CACHE_0016 / 생활비: APPLY_REMOTE_COMEBACKHOME_HOUSEHOLD_0013_0015 / 이전 로그인: APPLY_REMOTE_COMEBACKHOME_D1"
         required: true
         type: string
       expected_sha:
-        description: "생활비 묶음의 승인된 40자리 커밋 SHA (다른 커밋이면 중단)"
+        description: "교통 캐시·생활비 묶음의 승인된 40자리 커밋 SHA (다른 커밋이면 중단)"
         required: false
         type: string
 
@@ -42,11 +43,20 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci --no-audit --no-fund
       - name: Verify setup safeguards locally (no production credentials)
-        run: node --test test/private-work/login-db-setup.test.mjs test/private-work/household-db-setup.test.mjs
+        run: node --test test/private-work/login-db-setup.test.mjs test/private-work/household-db-setup.test.mjs test/private-work/transit-cache-db-setup.test.mjs
       - name: Verify explicit batch selection
         env:
           CBH_D1_BATCH: ${{ inputs.batch }}
-        run: node --input-type=module -e 'if (!["household-0013-0015","login-0012"].includes(process.env.CBH_D1_BATCH)) throw new Error("APPROVED_BATCH_REQUIRED");'
+        run: node --input-type=module -e 'if (!["transit-cache-0016","household-0013-0015","login-0012"].includes(process.env.CBH_D1_BATCH)) throw new Error("APPROVED_BATCH_REQUIRED");'
+      - name: Check recovery point and apply only the reviewed notification route cache
+        if: inputs.batch == 'transit-cache-0016'
+        run: node scripts/private-work/prepare-transit-cache-db.mjs
+        env:
+          CBH_D1_BATCH: ${{ inputs.batch }}
+          CBH_D1_CONFIRMATION: ${{ inputs.confirmation }}
+          CBH_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Check recovery point and apply only the reviewed household batch
         if: inputs.batch == 'household-0013-0015'
         run: node scripts/private-work/prepare-household-db.mjs

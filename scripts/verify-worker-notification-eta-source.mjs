@@ -1,10 +1,13 @@
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
+import { cacheDatabase } from './testing/notification-route-cache-fixture.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 
+const database = await cacheDatabase();
+database.addPerson('person-1');
 const vite = await createViteServer({
   root,
   appType: 'custom',
@@ -14,6 +17,9 @@ const vite = await createViteServer({
 
 try {
   const etaModule = await vite.ssrLoadModule('/worker/notification-eta-source.ts');
+  const { D1NotificationRouteCache } = await vite.ssrLoadModule('/worker/notification-route-cache.ts');
+  const routeCache = new D1NotificationRouteCache(database.db);
+  const resetCache = () => database.sqlite.exec('DELETE FROM notification_route_cache');
 
   const schedules = {
     async getByDate(personId, date) {
@@ -96,6 +102,7 @@ try {
   };
 
   const source = new etaModule.ProviderNotificationEtaSource({
+    routeCache,
     schedules,
     places,
     presence,
@@ -103,11 +110,11 @@ try {
     providers,
   });
 
-  const beforeShiftEnd = await source.get('person-1', new Date('2026-10-06T12:00:00.000Z'));
+  const beforeShiftEnd = await source.get('person-1', new Date('2026-10-06T12:46:00.000Z'));
   expect(beforeShiftEnd?.arrivalAt === '2026-10-06T13:40:00.000Z', 'ETA must depart from scheduled 22:00 KST before shift end');
   expect(beforeShiftEnd?.confidence === 'FALLBACK', 'route-only ETA must stay FALLBACK');
   expect(routeCalls === 1, 'provider route should be called once');
-  expect(routeContexts[0] === '2026-10-06T12:00:00.000Z', 'first provider context timestamp mismatch');
+  expect(routeContexts[0] === '2026-10-06T12:46:00.000Z', 'first provider context timestamp mismatch');
 
   commute.getPreferredRouteCandidateId = async () => 'missing-route';
   const missingPreferred = await source.get('person-1', new Date('2026-10-06T14:00:00.000Z'));
@@ -132,9 +139,9 @@ try {
 
   // Early real departure must win over the later scheduled 22:00 clock.
   presenceState = { personId:'person-1', workDate:'2026-10-06',
-    leftWorkAt:'2026-10-06T12:00:00.000Z' };
-  const early = await source.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
-  expect(early?.arrivalAt === '2026-10-06T12:40:00.000Z',
+    leftWorkAt:'2026-10-06T12:46:00.000Z' };
+  const early = await source.get('person-1',new Date('2026-10-06T12:47:00.000Z'));
+  expect(early?.arrivalAt === '2026-10-06T13:26:00.000Z',
     'early LEFT_WORK must not be held until planned shift end');
 
   // Realtime arrival can influence a notification only if the discovered
@@ -155,19 +162,21 @@ try {
           routes:[{providerRouteId:'verified-bus-route',routeNo:'100',directionLabel:'검증방면'}]}],
         steps:[{type:'BUS',label:'버스 이동'}]}]; }},
     seoulBus:{...providers.seoulBus,async arrivals(){
-      busLookupCount++;return [{minutes:5,observedAt:'2026-10-06T12:00:00.000Z'}];}},
+      busLookupCount++;return [{minutes:5,observedAt:'2026-10-06T12:46:00.000Z'}];}},
   };
+  resetCache();
   const matchedSource = new etaModule.ProviderNotificationEtaSource({
-    schedules,places,presence,commute:matchedCommute,providers:matchedProviders});
-  const matched=await matchedSource.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
+    routeCache,schedules,places,presence,commute:matchedCommute,providers:matchedProviders});
+  const matched=await matchedSource.get('person-1',new Date('2026-10-06T12:47:00.000Z'));
   expect(matched?.confidence==='LIVE' &&
-    matched.arrivalAt==='2026-10-06T12:40:00.000Z',
+    matched.arrivalAt==='2026-10-06T13:26:00.000Z',
     'verified route/stop realtime must update notification ETA without double counting');
   expect(busLookupCount===1,'matched notification route should request one bus arrival');
   providerLegMatch=false;
-  const unrelated=await matchedSource.get('person-1',new Date('2026-10-06T12:01:00.000Z'));
+  resetCache();
+  const unrelated=await matchedSource.get('person-1',new Date('2026-10-06T12:47:00.000Z'));
   expect(unrelated?.confidence==='FALLBACK' &&
-    unrelated.arrivalAt==='2026-10-06T12:40:00.000Z',
+    unrelated.arrivalAt==='2026-10-06T13:26:00.000Z',
     'unrelated stop realtime must not change scheduled notification ETA');
   expect(busLookupCount===1,'unrelated stop must not issue extra live-arrival lookup');
 
@@ -182,17 +191,21 @@ try {
   expect(afterArrival === null, 'ARRIVED_HOME must stop scheduled ETA-change planning');
   presenceState = null;
 
+  resetCache();
   const noCoordinates = new etaModule.ProviderNotificationEtaSource({
+    routeCache,
     schedules,
     commute,
     presence,
     providers,
     places: { ...places, async get(_personId, kind) { return kind === 'origin' ? await places.get('person-1', kind) : null; } },
   });
-  const unknown = await noCoordinates.get('person-1', new Date('2026-10-06T12:00:00.000Z'));
+  const unknown = await noCoordinates.get('person-1', new Date('2026-10-06T12:46:00.000Z'));
   expect(unknown?.arrivalAt == null && unknown?.confidence === 'UNKNOWN', 'missing place geometry must fail closed to UNKNOWN');
 
+  resetCache();
   const failingProvider = new etaModule.ProviderNotificationEtaSource({
+    routeCache,
     schedules,
     places,
     presence,
@@ -205,10 +218,11 @@ try {
       },
     },
   });
-  const failed = await failingProvider.get('person-1', new Date('2026-10-06T12:00:00.000Z'));
+  const failed = await failingProvider.get('person-1', new Date('2026-10-06T12:46:00.000Z'));
   expect(failed?.arrivalAt == null && failed?.confidence === 'UNKNOWN', 'provider failure must fail closed to UNKNOWN');
 } finally {
   await vite.close();
+  database.close();
 }
 
 if (failures.length) {

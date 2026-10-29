@@ -23,6 +23,7 @@ on:
       - 'scripts/verify-private-sheet-browser.mjs'
       - 'scripts/private-work/**'
       - 'scripts/verify-household*.mjs'
+      - 'scripts/verify-portal-*.mjs'
       - 'scripts/verify-chat-drive-exchange.mjs'
       - 'test/private-work/**'
       - '.github/workflows/deploy-canonical-pages.yml'
@@ -38,6 +39,7 @@ on:
       - 'scripts/verify-private-sheet-browser.mjs'
       - 'scripts/private-work/**'
       - 'scripts/verify-household*.mjs'
+      - 'scripts/verify-portal-*.mjs'
       - 'scripts/verify-chat-drive-exchange.mjs'
       - 'test/private-work/**'
       - '.github/workflows/private-work-modules.yml'
@@ -79,10 +81,12 @@ jobs:
       - run: node scripts/verify-household-cache.mjs
       - run: node scripts/verify-household-storage.mjs
       - run: node scripts/verify-household-notifications.mjs
+      - run: node scripts/verify-portal-preferences.mjs
       - run: node scripts/verify-chat-drive-exchange.mjs
       - run: node scripts/verify-private-advisor.mjs
       - run: node --test test/private-work/login-db-setup.test.mjs
       - run: node --test test/private-work/household-db-setup.test.mjs
+      - run: node --test test/private-work/transit-cache-db-setup.test.mjs
       - run: node --test test/private-work/auth-runtime.test.mjs
       - run: node --test test/private-work/password-relief.test.mjs
       - run: node --test test/private-work/drive-runtime.test.mjs
@@ -112,6 +116,8 @@ jobs:
         if: ${{ !cancelled() && steps.production-build.outcome == 'success' }}
       - run: node scripts/verify-household-card-art-browser.mjs
         if: ${{ !cancelled() && steps.production-build.outcome == 'success' }}
+      - run: node scripts/verify-portal-navigation-browser.mjs
+        if: ${{ !cancelled() && steps.production-build.outcome == 'success' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -120,4 +126,6 @@ jobs:
             artifacts/private-work/*.png
             artifacts/household/*.png
             artifacts/household/result.json
+            artifacts/portal-navigation/*.png
+            artifacts/portal-navigation/result.json
           retention-days: 7
