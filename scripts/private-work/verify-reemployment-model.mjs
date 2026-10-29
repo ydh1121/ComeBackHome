@@ -2,9 +2,24 @@ import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 
 export async function verifyReemploymentModel(vite) {
-  const { getReemploymentContext: context } = await vite.ssrLoadModule('/src/modules/injury/advisor/reemployment.ts');
+  const { getReemploymentContext: context, reemploymentStorageKey } = await vite.ssrLoadModule('/src/modules/injury/advisor/reemployment.ts');
+  const { guidanceId } = await vite.ssrLoadModule('/src/modules/injury/content/model.ts');
+  const { adviceScriptId } = await vite.ssrLoadModule('/src/modules/injury/advisor/scenarios.ts');
   let checks = 0;
   const equal = (actual, expected, message) => { assert.deepEqual(actual, expected, message); checks++; };
+  const syntheticCaseId = '11111111-1111-4111-8111-111111111111';
+  const storageIds = [];
+  for (const stage of ['applied', 'treatment', 'ended', 'disability', 'unemployment', 'unknown']) {
+    for (const intent of ['planned', 'working']) {
+      const key = reemploymentStorageKey(stage, intent);
+      for (const suffix of ['reason', 'steps', 'caution', 'materials', 'physician', 'agency']) {
+        const id = (['physician', 'agency'].includes(suffix) ? adviceScriptId : guidanceId)(syntheticCaseId, key + '-' + suffix);
+        equal(id.length <= 80, true, `${stage}/${intent}/${suffix} record ID fits a real UUID case`);
+        storageIds.push(id);
+      }
+    }
+  }
+  equal(new Set(storageIds).size, 72, 'all stage, intent and content records have distinct IDs');
   const date = '2030-06-15';
   const record = (id, kind, data, certainty = 'reported') => ({
     id, caseId: 'synthetic-case', kind,
@@ -108,7 +123,7 @@ export async function verifyReemploymentModel(vite) {
   freeze(caseData);
   context(caseData.records, date);
   equal(caseData, before, 'viewing advice never modifies employment, approval, amounts, recognized days, or payment events');
-  console.log('PRIVATE_REEMPLOYMENT_MODEL_PASS checks=' + checks + ' inclusive_bounds_planned_actual_unknown_open_dates_source_certainty_immutable_ledger');
+  console.log('PRIVATE_REEMPLOYMENT_MODEL_PASS checks=' + checks + ' uuid_storage_ids_inclusive_bounds_planned_actual_unknown_open_dates_source_certainty_immutable_ledger');
   return checks;
 }
 

@@ -80,6 +80,12 @@ export async function verifyReemployment(page, ctx, base, label) {
     cases.push('help_entry_reuses_advisor');
     await enter();
     assert.equal(await region().locator('input,textarea,select').count(), 0, 'no complex form before the two questions');
+    for (const width of [375, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'first question fits at ' + width);
+      await page.screenshot({ path: resolve('artifacts/private-work', `${label}-reemployment-question-${width}.png`), animations: 'disabled' });
+      cases.push('first_question_' + width);
+    }
     for (const stage of stages) for (const intent of ['planned', 'working']) {
       const result = await choose(stage, intent);
       const prefix = `reemployment-${stage[0]}-${intent}-`;
@@ -120,6 +126,12 @@ export async function verifyReemployment(page, ctx, base, label) {
     cases.push('choices_not_persisted_or_inferred');
 
     const result = await choose(stages[1], 'working');
+    for (const width of [375, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: resolve('artifacts/private-work', `${label}-reemployment-result-collapsed-${width}.png`), animations: 'disabled' });
+      cases.push('collapsed_result_' + width);
+    }
     const notice = page.locator('[aria-label="취업 기간 확인"]');
     await notice.waitFor();
     await notice.locator('summary').click();
@@ -219,7 +231,8 @@ export async function verifyReemployment(page, ctx, base, label) {
     assert((await page.evaluate(() => window.__reemploymentCopied)).includes('Synthetic reemployment guidance ' + label));
     await editor.getByRole('button', { name: '저장', exact: true }).click();
     await editor.waitFor({ state: 'hidden' });
-    const guideId = 'guide-v1-' + key + '-' + before.caseId;
+    const guideId = 'guide-v1-reemp-tr-w-reason-' + before.caseId;
+    assert(guideId.length <= 80, 'guidance identity fits the existing record API with a UUID case');
     let guide = (await snapshot()).records.find(record => record.id === guideId);
     assert(guide, 'explicit save creates or updates only the existing editable-content contract');
     assert.equal(guide.payload.certainty, 'reported');
@@ -241,6 +254,34 @@ export async function verifyReemployment(page, ctx, base, label) {
     assert.deepEqual(final.payments, before.payments, 'guidance editing cannot alter decisions or deposits');
     assert.deepEqual(final.deadlines, before.deadlines, 'guidance editing cannot reschedule deadlines');
     cases.push('guidance_copy_save_409_history', 'guidance_retains_other_records_and_payments');
+
+    // Save both real delivery editors, not merely their browser-side drafts.
+    // The harness uses a UUID case ID to exercise the production record limit.
+    const scriptIds = [];
+    for (const [section, suffix, recipient] of [[doctor, 'physician', '의사'], [agency, 'agency', '근로복지공단']]) {
+      const scriptId = `advisor-script-v1-${before.caseId}-reemp-tr-w-${suffix}`;
+      scriptIds.push(scriptId);
+      assert(scriptId.length <= 80, 'delivery identity fits the existing record API with a UUID case');
+      if (await section.getAttribute('open') === null) await section.locator(':scope > summary').click();
+      const original = await section.locator('.advisor-script-body').textContent();
+      const body = `Synthetic saved ${suffix} delivery ${label}`;
+      await section.getByRole('button', { name: '문장 편집', exact: true }).click();
+      await section.locator('textarea').fill(body);
+      await section.getByRole('button', { name: '문장 저장', exact: true }).click();
+      await section.locator('.advisor-script-body').filter({ hasText: body }).waitFor();
+      const saved = (await snapshot()).records.find(record => record.id === scriptId);
+      assert(saved, 'an explicit delivery save reaches isolated D1');
+      assert.equal(saved.payload.body, body);
+      assert.equal(saved.payload.data.recipient, recipient);
+      assert.equal(saved.payload.certainty, 'reported');
+      const restored = await api('private/case/records/' + scriptId, 'PUT', { kind: 'content', revision: saved.revision, payload: { ...saved.payload, body: original } });
+      assert.equal(restored.status(), 200);
+      cases.push('delivery_' + suffix + '_explicit_d1_save');
+    }
+    const afterScripts = await snapshot();
+    for (const record of final.records.filter(record => !scriptIds.includes(record.id))) assert.deepEqual(afterScripts.records.find(candidate => candidate.id === record.id), record, 'delivery saves cannot alter another record');
+    assert.deepEqual(afterScripts.payments, before.payments);
+    assert.deepEqual(afterScripts.deadlines, before.deadlines);
 
     // Restore the fallback body so Chromium and WebKit exercise the same guidance.
     guide = final.records.find(record => record.id === guideId);

@@ -3,6 +3,10 @@ import { todaySeoul, validDate } from '../domain/dates';
 
 export type ReemploymentStage = 'applied' | 'treatment' | 'ended' | 'disability' | 'unemployment' | 'unknown';
 export type ReemploymentIntent = 'planned' | 'working';
+const stageCodes: Record<ReemploymentStage, string> = { applied: 'ap', treatment: 'tr', ended: 'en', disability: 'di', unemployment: 'un', unknown: 'uk' };
+/** Keeps existing guidance/message record IDs within the server's 80-character limit. */
+export const reemploymentStorageKey = (stage: ReemploymentStage, intent: ReemploymentIntent) =>
+  `reemp-${stageCodes[stage]}-${intent === 'planned' ? 'p' : 'w'}`;
 export type ReviewDateStatus = 'complete' | 'open' | 'missing' | 'invalid';
 type Certainty = CaseRecord['payload']['certainty'];
 type Data = CaseRecord['payload']['data'];

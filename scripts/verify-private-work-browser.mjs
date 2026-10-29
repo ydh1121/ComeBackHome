@@ -103,8 +103,8 @@ try {
     );
   }
   sql.push(
-    `INSERT INTO case_profiles VALUES('case-fixture','member-fixture','${stamp}');`,
-    `INSERT INTO case_consents VALUES('case-fixture',0,'','',1,'member-fixture','${stamp}');`,
+    `INSERT INTO case_profiles VALUES('11111111-1111-4111-8111-111111111111','member-fixture','${stamp}');`,
+    `INSERT INTO case_consents VALUES('11111111-1111-4111-8111-111111111111',0,'','',1,'member-fixture','${stamp}');`,
   );
   const seed = join(scratch, "synthetic.sql");
   await writeFile(seed, sql.join("\n"));

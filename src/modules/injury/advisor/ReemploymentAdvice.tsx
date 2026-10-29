@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Icon } from '../../../shared/components/Icon';
 import { EditableGuidance } from '../content/EditableGuidance';
+import { guidanceId } from '../content/model';
 import type { CaseData } from '../ui/types';
 import { AdvisorScript } from './AdvisorScript';
 import { adviceScriptId } from './scenarios';
-import { getReemploymentContext, type ReemploymentIntent, type ReemploymentStage } from './reemployment';
+import { getReemploymentContext, reemploymentStorageKey, type ReemploymentIntent, type ReemploymentStage } from './reemployment';
 
 const STAGES: Array<[ReemploymentStage, string]> = [
   ['applied', '신청·심사 중이에요'], ['treatment', '치료를 받는 중이에요'],
@@ -102,6 +103,7 @@ export function ReemploymentAdvice({ data, reload, onBack }: { data: CaseData; r
     </article>
   </section>;
   const guide = GUIDES[stage], key = `reemployment-${stage}-${intent}`;
+  const storageKey = reemploymentStorageKey(stage, intent);
   const working = intent === 'working', unemployment = stage === 'unemployment';
   const steps = [...guide.steps];
   if (unemployment && !working) {
@@ -118,13 +120,13 @@ export function ReemploymentAdvice({ data, reload, onBack }: { data: CaseData; r
     {back}<header className="advisor-detail"><span className="advisor-eyebrow">{STAGES.find(([value]) => value === stage)?.[1]}</span>
       <h2 ref={heading} tabIndex={-1}>{working ? '취업 후 확인할 일' : '취업 전에 확인할 일'}</h2>
       <button className="secondary advisor-back" onClick={() => { setStage(null); setIntent(null); }}>상황 다시 선택</button>
-      <EditableGuidance key={key + '-reason'} data={data} reload={reload} contentKey={key + '-reason'} title="재취업 안내 이유" fallback={guide.reason}>{paragraphs}</EditableGuidance>
+      <EditableGuidance key={key + '-reason'} data={data} reload={reload} contentKey={key + '-reason'} recordId={guidanceId(data.caseId, storageKey + '-reason')} title="재취업 안내 이유" fallback={guide.reason}>{paragraphs}</EditableGuidance>
     </header>
-    <section className="advisor-steps" aria-label="재취업 후속 행동"><h3>다음에 할 일</h3><EditableGuidance data={data} reload={reload} contentKey={key + '-steps'} title="재취업 확인 순서" fallback={steps.join('\n')}>{text => <ol>{text.split('\n').filter(Boolean).map((line, i) => <li key={i}><span aria-hidden="true">{i + 1}</span><p>{line}</p></li>)}</ol>}</EditableGuidance></section>
-    <EditableGuidance data={data} reload={reload} contentKey={key + '-caution'} title="급여 확인 시 참고할 내용" fallback={guide.caution}>{text => <p className="reemployment-caution">{text}</p>}</EditableGuidance>
-    {!unemployment && <details className="advisor-materials reemployment-script"><summary>의사에게 물어볼 말</summary><AdvisorScript data={data} reload={reload} id={adviceScriptId(data.caseId, key + '-physician')} fallback={physician} title="의사에게 물어볼 말" recipient="의사"/></details>}
-    <details className="advisor-materials reemployment-script"><summary>{unemployment ? '고용센터에 물어볼 말' : '근로복지공단에 물어볼 말'}</summary><AdvisorScript data={data} reload={reload} id={adviceScriptId(data.caseId, key + '-agency')} fallback={agency} title={unemployment ? '고용센터에 물어볼 말' : '근로복지공단에 물어볼 말'} recipient={unemployment ? '고용센터' : '근로복지공단'}/></details>
-    <details className="advisor-materials"><summary>준비할 서류</summary><EditableGuidance data={data} reload={reload} contentKey={key + '-materials'} title="재취업 확인 서류" fallback={guide.materials.join('\n')}>{text => <ul>{text.split('\n').filter(Boolean).map((line, i) => <li key={i}>{line}</li>)}</ul>}</EditableGuidance></details>
+    <section className="advisor-steps" aria-label="재취업 후속 행동"><h3>다음에 할 일</h3><EditableGuidance data={data} reload={reload} contentKey={key + '-steps'} recordId={guidanceId(data.caseId, storageKey + '-steps')} title="재취업 확인 순서" fallback={steps.join('\n')}>{text => <ol>{text.split('\n').filter(Boolean).map((line, i) => <li key={i}><span aria-hidden="true">{i + 1}</span><p>{line}</p></li>)}</ol>}</EditableGuidance></section>
+    <EditableGuidance data={data} reload={reload} contentKey={key + '-caution'} recordId={guidanceId(data.caseId, storageKey + '-caution')} title="급여 확인 시 참고할 내용" fallback={guide.caution}>{text => <p className="reemployment-caution">{text}</p>}</EditableGuidance>
+    {!unemployment && <details className="advisor-materials reemployment-script"><summary>의사에게 물어볼 말</summary><AdvisorScript data={data} reload={reload} id={adviceScriptId(data.caseId, storageKey + '-physician')} fallback={physician} title="의사에게 물어볼 말" recipient="의사"/></details>}
+    <details className="advisor-materials reemployment-script"><summary>{unemployment ? '고용센터에 물어볼 말' : '근로복지공단에 물어볼 말'}</summary><AdvisorScript data={data} reload={reload} id={adviceScriptId(data.caseId, storageKey + '-agency')} fallback={agency} title={unemployment ? '고용센터에 물어볼 말' : '근로복지공단에 물어볼 말'} recipient={unemployment ? '고용센터' : '근로복지공단'}/></details>
+    <details className="advisor-materials"><summary>준비할 서류</summary><EditableGuidance data={data} reload={reload} contentKey={key + '-materials'} recordId={guidanceId(data.caseId, storageKey + '-materials')} title="재취업 확인 서류" fallback={guide.materials.join('\n')}>{text => <ul>{text.split('\n').filter(Boolean).map((line, i) => <li key={i}>{line}</li>)}</ul>}</EditableGuidance></details>
     <EmploymentReviewNotice data={data}/>
     <details className="advisor-materials"><summary>등록한 직장 정보</summary>{context.employments.length ? <ul className="reemployment-jobs">{context.employments.map(job => <li key={job.recordId}><strong>{job.employerName || job.title}</strong><span>{job.kind === 'actual' ? '실제 직장' : job.kind === 'planned' ? '취업 예정' : '실제·예정 구분 확인 필요'}</span><dl>
       <div><dt>입사일</dt><dd>{job.hireDate ?? '확인 필요'}</dd></div><div><dt>업무</dt><dd>{job.jobTitle || '확인 필요'}</dd></div><div><dt>주당 근로시간</dt><dd>{job.weeklyHours === null ? '확인 필요' : job.weeklyHours + '시간'}</dd></div><div><dt>임금</dt><dd>{job.wage === null ? '확인 필요' : job.wage.toLocaleString('ko-KR') + '원'}{job.wageType ? ' · ' + ({ hourly: '시급', daily: '일급', monthly: '월급', annual: '연봉' }[job.wageType] ?? '임금 기준 확인 필요') : ''}</dd></div>
