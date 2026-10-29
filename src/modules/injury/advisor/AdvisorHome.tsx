@@ -5,6 +5,7 @@ import { advisorSummary, profileId, readProfile } from './model';
 import { AdvisorProfileForm, AnswerSummary } from './AdvisorProfile';
 import { AdvisorScript } from './AdvisorScript';
 import { AdvisorResponse } from './AdvisorResponse';
+import { ReemploymentAdvice } from './ReemploymentAdvice';
 import { adviceScriptId, recommend, SCENARIOS, scenario, type Advice } from './scenarios';
 import { EditableGuidance } from '../content/EditableGuidance';
 import { guidanceText } from '../content/model';
@@ -16,7 +17,7 @@ type Route = 'today' | 'progress' | 'library' | 'manage' | 'help';
 type Props = { data: CaseData; reload: () => Promise<void>; navigate: (route: Route) => void };
 function initialAction() {
   const id = new URLSearchParams(location.search).get('action');
-  return id === 'hospital' ? 'A' : id && scenario(id) ? id : null;
+  return id === 'hospital' ? 'A' : id === 'reemployment' || (id && scenario(id)) ? id : null;
 }
 function Evidence({ advice, data }: { advice: Advice; data: CaseData }) {
   if (!advice.sources.length && !advice.due) return null;
@@ -34,6 +35,7 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
     window.scrollTo(0, 0);
   };
   if (questions) return <AdvisorProfileForm data={data} reload={reload} onBack={() => open(null)}/>;
+  if (action === 'reemployment') return <ReemploymentAdvice data={data} reload={reload} onBack={() => open(null)}/>;
   const spec = action ? scenario(action) : null;
   if (spec) return <section className="advisor-stack advisor-action" key={spec.id} aria-label={spec.category}>
     <button className="secondary advisor-back" onClick={() => open(null)}><Icon name="chevron-left"/>오늘로</button>
@@ -56,6 +58,7 @@ export function AdvisorHome({ data, reload, navigate }: Props) {
     <aside className="advisor-side">
       <div className="advisor-section-heading"><h2>바로가기</h2></div>
       <div className="advisor-shortcuts">
+        <button className="secondary" onClick={() => open('reemployment')}><Icon name="calendar"/><span><strong>다른 직장에 취업해도 될까요?</strong></span><Icon name="chevron-right"/></button>
         <button className="secondary" onClick={() => navigate('library')}><Icon name="file"/><span><strong>받은 서류 보관하기</strong></span><Icon name="chevron-right"/></button>
         <button className="secondary" onClick={() => navigate('progress')}><Icon name="calendar"/><span><strong>진행 상황 확인</strong></span><Icon name="chevron-right"/></button>
       </div>
@@ -75,6 +78,7 @@ export function AdvisorProgress({ data, navigate }: { data: CaseData; navigate: 
 }
 export function AdvisorHelp({ onOpen, data, reload }: { onOpen: (id: string) => void; data:CaseData; reload:()=>Promise<void> }) {
   return <section className="advisor-stack"><header className="advisor-section-heading"><div><h2>상황별 도움말</h2></div></header>
+    <button className="secondary reemployment-entry" onClick={() => onOpen('reemployment')}>다른 직장에 취업해도 될까요?<Icon name="chevron-right"/></button>
     <div className="advisor-help-list">{SCENARIOS.map(s => <button className="secondary" key={s.id} onClick={() => onOpen(s.id)}><span><small>{s.category}</small><strong>{s.title}</strong></span><Icon name="chevron-right"/></button>)}</div>
     <article className="private-card advisor-contacts"><h3>기관에 문의하기</h3>{[['contact-work','근로복지공단\n산재 신청·심사\n1588-0075'],['contact-employment','고용노동부\n퇴사·고용보험\n1350']].map(([key,fallback])=><EditableGuidance key={key} data={data} reload={reload} contentKey={key} title="기관 연락처" fallback={fallback}>{text=>{const [name,description,phone]=text.split('\n');return phone&&/^[+\d(). -]{3,20}$/.test(phone)?<a href={'tel:'+phone.replace(/[^+\d]/g,'')}><span><strong>{name}</strong><small>{description} · {phone}</small></span><Icon name="phone"/></a>:<p className="record-body">{text}</p>;}}</EditableGuidance>)}</article>
   </section>;

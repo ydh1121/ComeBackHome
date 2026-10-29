@@ -128,3 +128,34 @@
   @keyframes advisor-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 }
 .advisor-shell .advisor-contact-link { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 12px 2px; margin-top: 10px; color: var(--cbh-muted); font-size: 13px; }
+.reemployment-advice { min-width: 0; }
+.reemployment-advice h2:focus { outline: none; }
+.reemployment-advice .advisor-detail > .advisor-back { margin: 0 0 12px; }
+.advisor-shell .reemployment-caution { margin: 0; padding: 16px 18px; border-inline-start: 3px solid var(--cbh-line); font-size: 14px; }
+.reemployment-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; text-align: start; }
+.reemployment-script > .advisor-script { margin-top: 16px !important; }
+.reemployment-script .advisor-script-body { font-size: 15px; }
+.reemployment-review { min-width: 0; margin: 16px 0; padding: 20px; border: 1px solid var(--cbh-line); border-radius: 16px; background: var(--advisor-soft); overflow-wrap: anywhere; }
+.advisor-shell .reemployment-review h3 { margin: 0 0 10px; font-size: 16px; }
+.advisor-shell .reemployment-review p { margin: 0 0 14px; font-size: 14px; line-height: 1.7; }
+.reemployment-review summary { font-size: 14px; }
+.reemployment-review ul { list-style: none; padding: 0; }
+.reemployment-review li { padding: 12px 0; border-bottom: 1px solid var(--cbh-line); }
+.reemployment-review li > :is(strong,span,small) { display: block; line-height: 1.6; }
+.reemployment-review li strong { font-size: 13px; font-weight: 600; }
+.reemployment-review li span { margin-top: 4px; font-size: 14px; }
+.reemployment-review li small { color: var(--cbh-muted); margin-top: 4px; }
+.reemployment-review > a { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; margin-top: 6px; font-size: 14px; text-decoration: none; }
+.reemployment-review > a svg { width: 16px; height: 16px; }
+.reemployment-links { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 20px; }
+.reemployment-links a { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 52px; padding: 8px 0; border-bottom: 1px solid var(--cbh-line); font-size: 14px; text-decoration: none; }
+.reemployment-links a svg { width: 16px; height: 16px; }
+.advisor-materials .reemployment-jobs { list-style: none; padding: 0; margin-top: 18px; }
+.reemployment-jobs > li { padding: 16px 0; border-bottom: 1px solid var(--cbh-line); }
+.reemployment-jobs > li > :is(strong,span) { display: block; }
+.reemployment-jobs > li > span { margin-top: 4px; color: var(--cbh-muted); font-size: 12px; }
+.reemployment-jobs dl { display: grid; gap: 8px; margin: 16px 0 0; }
+.reemployment-jobs dl > div { display: grid; grid-template-columns: minmax(80px,.8fr) minmax(0,1.2fr); gap: 16px; }
+.reemployment-jobs dt { color: var(--cbh-muted); font-size: 13px; }
+.reemployment-jobs dd { margin: 0; overflow-wrap: anywhere; font-size: 14px; }
+.reemployment-sources a { display: block; padding: 12px 0; font-size: 13px; }

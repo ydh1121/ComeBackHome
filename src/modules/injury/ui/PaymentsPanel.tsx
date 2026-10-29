@@ -4,6 +4,7 @@ import { summarizeLedger } from "../domain/calculations";
 import { todaySeoul } from "../domain/dates";
 import type { CaseData } from "./types";
 import { paymentDayDisplay, tracksPaymentDays } from "../materials/management-ux";
+import { EmploymentReviewNotice } from "../advisor/ReemploymentAdvice";
 import "../materials/management-ux.css";
 export const money = (value: number | null) =>
   value === null ? "아직 확인하지 않았어요" : Math.round(value).toLocaleString("ko-KR") + "원";
@@ -52,6 +53,7 @@ export function PaymentsPanel({
     <section className="payment-workspace" aria-label="받을 돈과 받은 돈">
       <h2>받을 돈과 받은 돈</h2>
       <p className="management-explanation">예상한 금액, 기관에서 정한 금액, 실제 들어온 돈을 나누어 확인해요.</p>
+      <EmploymentReviewNotice data={data}/>
       {claims.map((claim) => {
         const d = claim.payload.data,
           events = data.payments.filter((e) => e.claim_id === claim.id),

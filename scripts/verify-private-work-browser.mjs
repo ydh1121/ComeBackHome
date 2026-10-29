@@ -5,6 +5,7 @@ import { verifyMaterials } from "./private-work/verify-materials-ui.mjs";
 import { verifyContent, verifyContentAdmin } from "./private-work/verify-content-ui.mjs";
 import { verifyManagement } from "./private-work/verify-management-ui.mjs";
 import { verifyAdvisorR2 } from "./private-work/verify-advisor-r2-ui.mjs";
+import { verifyReemployment } from "./private-work/verify-reemployment-ui.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -271,6 +272,7 @@ try {
     // before that reload resets window-scoped instrumentation.
     await verifyAdvisorR1(page,ctx,base,label);
     await verifyAdvisorR2(page,ctx,base,label);
+    await verifyReemployment(page,ctx,base,label);
     const cookies = await ctx.cookies();
     const session = cookies.find((c) => c.name === "__Host-cbh-session");
     assert.ok(
