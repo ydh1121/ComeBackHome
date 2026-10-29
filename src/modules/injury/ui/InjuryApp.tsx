@@ -12,6 +12,7 @@ import { DocumentsPanel } from "./DocumentsPanel";
 import { ManageHome, managementSections } from "../materials/ManageHome";
 import { PlanningPreparation } from "../content/PlanningReview";
 import { PaymentsPanel } from "./PaymentsPanel";
+import { EmploymentReviewNotice } from "../advisor/ReemploymentAdvice";
 import { PolicyPanel } from "./PolicyPanel";
 import { CalculationsPanel } from "./CalculationsPanel";
 import type { CaseData } from "./types";
@@ -240,6 +241,7 @@ export function InjuryApp() {
           {section === "payments" && (
             <PaymentsPanel data={data} reload={reload} />
           )}{" "}
+          {section === "employment" && <EmploymentReviewNotice data={data}/>}
           {["employment", "payments"].includes(section) && (
             <details className="private-card management-calculator"><summary>기간·예상금액 계산 도구</summary><CalculationsPanel data={data} /></details>
           )}

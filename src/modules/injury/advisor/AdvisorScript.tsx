@@ -11,6 +11,7 @@ export function AdvisorScript({ data, reload, id, fallback, title = "말할 내�
 }) {
     const record = data.records.find(r => r.id === id && !r.archivedAt);
     const text = record?.payload.body ?? fallback;
+    const fieldId = 'advisor-delivery-text-' + id;
     const [editing, setEditing] = useState(false), [draft, setDraft] = useState(text), [base, setBase] = useState(record);
     const [message, setMessage] = useState(""), [busy, setBusy] = useState(false), [conflict, setConflict] = useState<CaseRecord | null>(null);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null), point = useRef({ x: 0, y: 0 });
@@ -49,7 +50,7 @@ export function AdvisorScript({ data, reload, id, fallback, title = "말할 내�
     catch {
         setMessage("복사하지 못했어요. 아래 문장을 길게 눌러 직접 선택할 수 있어요.");
     } }}>문장 복사</button>{!editing && <button className="secondary" onClick={edit}>문장 편집</button>}</div>
-    {editing ? <><label htmlFor="advisor-delivery-text">전달할 문장</label><textarea id="advisor-delivery-text" value={draft} maxLength={60000} rows={9} onChange={e => setDraft(e.target.value)}/><div className="private-actions"><button disabled={busy || !!conflict || !draft.trim()} onClick={() => void save()}>문장 저장</button><button className="secondary" disabled={busy} onClick={() => { setEditing(false); setDraft(text); setConflict(null); setMessage("편집을 취소했어요."); }}>취소</button></div></> : <p className="advisor-script-body">{text}</p>}
+    {editing ? <><label htmlFor={fieldId}>전달할 문장</label><textarea id={fieldId} value={draft} maxLength={60000} rows={9} onChange={e => setDraft(e.target.value)}/><div className="private-actions"><button disabled={busy || !!conflict || !draft.trim()} onClick={() => void save()}>문장 저장</button><button className="secondary" disabled={busy} onClick={() => { setEditing(false); setDraft(text); setConflict(null); setMessage("편집을 취소했어요."); }}>취소</button></div></> : <p className="advisor-script-body">{text}</p>}
     {conflict && <div className="conflict-panel"><h4>다른 기기의 최신 문장</h4><p className="advisor-script-body">{conflict.payload.body}</p><button className="secondary" onClick={() => { setBase(conflict); setConflict(null); }}>내 문장 유지</button></div>}
     <p role="status">{message}</p><small>{record ? "수정 이력은 내 관리함에서 볼 수 있어요" : "내 상황에 맞게 고쳐서 쓰세요."}</small>
   </article>;
