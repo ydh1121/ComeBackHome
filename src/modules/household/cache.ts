@@ -23,17 +23,17 @@ export function householdCacheEnabled() {
   try { enabledWithoutStorage = localStorage.getItem(CACHE_SETTING) !== 'false'; } catch { /* A blocked store does not prevent memory caching or server reads. */ }
   return enabledWithoutStorage;
 }
-export function clearHouseholdCache() {
+export function clearHouseholdCache(reason: 'security' | 'user' = 'security') {
   clearCardArtCache();
   memory.clear();
   pendingStoragePurge = !purgeStoredCopies();
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('cbh-household-cache-cleared'));
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cbh-household-cache-cleared', { detail: { reason } }));
 }
 export function setHouseholdCacheEnabled(enabled: boolean) {
   sessionChoice = enabled;
   enabledWithoutStorage = enabled;
   try { localStorage.setItem(CACHE_SETTING, String(enabled)); } catch { /* Keep this session's choice when storage is blocked. */ }
-  if (!enabled) clearHouseholdCache();
+  if (!enabled) clearHouseholdCache('user');
 }
 function audit(value: Record<string, unknown>): boolean {
   if (!validId(value.createdBy) || !validId(value.updatedBy)) return false;

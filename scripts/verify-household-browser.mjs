@@ -20,6 +20,14 @@ const evidence = [];
 let activePage;
 async function visible(locator) { await locator.waitFor({ state: 'visible' }); assertions++; }
 async function noDialog(page) { await page.getByRole('dialog').waitFor({ state: 'hidden' }); }
+async function emptyCardArtStore(page) {
+  await page.waitForFunction(()=>new Promise((resolve,reject)=>{
+    const request=indexedDB.open('cbh-household-card-art',1);
+    request.onerror=()=>reject(request.error);
+    request.onsuccess=()=>{const db=request.result,transaction=db.transaction('images'),count=transaction.objectStore('images').count();transaction.oncomplete=()=>{db.close();resolve(count.result===0);};transaction.onerror=transaction.onabort=()=>{db.close();reject(transaction.error);};};
+  }));assertions++;
+}
+async function browserSettled(page) { await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))); }
 async function loadedCardArt(page) {
   await page.waitForFunction(()=>{const image=document.querySelector('.hh-card-art img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth===24;}); assertions++;
 }
@@ -81,6 +89,7 @@ try {
       const context = await browser.newContext({ viewport:{width:390,height:844}, timezoneId:'Asia/Seoul', locale:'ko-KR', serviceWorkers:'block' }); contexts.push(context);
       const identity = { logged:true, role }, user = () => ({ id:identity.role+'-browser',loginId:identity.role==='admin'?'ydh1121':'yvonne',role:identity.role,mustChangePassword:false });
       const traffic = { documents:0, sessions:0, scheduleWrites:0, artReads:0, artWrites:0 };
+      const imageAccess={status:200};
       await context.addInitScript(fixed => {
         const NativeDate=Date; class SyntheticDate extends NativeDate { constructor(...args) { super(...(args.length?args:[fixed])); } static now(){return new NativeDate(fixed).getTime();} }
         window.Date=SyntheticDate;
@@ -123,7 +132,9 @@ try {
         }
         if(/^\/api\/private\/household\/cards\/[^/]+\/art$/.test(path)){
           if(req.method()==='POST'){traffic.artWrites++;return json({imageFileId:'synthetic-art-'+state.cards[0].id+'-'+traffic.artWrites});}
-          traffic.artReads++;const current=state.cards.find(card=>path.includes('/'+card.id+'/'));
+          traffic.artReads++;
+          if(imageAccess.status!==200)return json({error:imageAccess.status===401?'LOGIN_REQUIRED':'HOUSEHOLD_ACCESS_REQUIRED'},imageAccess.status);
+          const current=state.cards.find(card=>path.includes('/'+card.id+'/'));
           if(url.searchParams.get('image')!==current?.imageFileId)return json({error:'HOUSEHOLD_IMAGE_CHANGED'},409);
           return route.fulfill({status:200,contentType:'image/png',headers:{'Cache-Control':'private, no-store'},body:png});
         }
@@ -134,7 +145,7 @@ try {
         if(path==='/api/notifications/client-key')return json({configured:false,publicKey:null});
         failures.push(req.method()+' '+path);return json({error:'UNEXPECTED_SYNTHETIC_ROUTE'},404);
       });
-      return {context,identity,traffic};
+      return {context,identity,traffic,imageAccess};
     };
     try {
       const member=await makeContext('member'),page=await member.context.newPage(); activePage=page;
@@ -304,12 +315,38 @@ try {
         await page.setViewportSize({width:390,height:844});await screenshot(page,`${name}-${section==='카드'?'cards':section==='가계부'?'ledger':section==='월급'?'income':'notes'}-390.png`);
       }
       await setSection(page,'카드');await loadedCardArt(page);const beforeArtClear=member.traffic.artReads;
+      const beforeClearUrl=await page.locator('.hh-card-art img').getAttribute('src');
       await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');
-      await dialog.getByRole('button',{name:'보관한 내용 비우기',exact:true}).click();
-      check(await page.locator('.hh-card-art img').count(),0,'clearing private cache revokes the mounted card photo');
+      await dialog.getByRole('button',{name:'보관한 내용 비우기',exact:true}).click();await loadedCardArt(page);
+      check(member.traffic.artReads,beforeArtClear+1,'explicit clear reloads a mounted image once through authenticated fetch');
+      check(await page.locator('.hh-card-art img').getAttribute('src')!==beforeClearUrl,true,'explicit clear replaces the previously displayed blob URL');
+      await emptyCardArtStore(page);
+      check(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.'))),false,'viewing the freshly fetched image does not refill cleared household data');
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);await loadedCardArt(page);
+      await setSection(page,'가계부');await setSection(page,'카드');await loadedCardArt(page);
+      check(member.traffic.artReads,beforeArtClear+2,'fresh view after user clear did not silently repopulate image cache');
+      await page.getByRole('button',{name:'가계부 설정',exact:true}).click();dialog=page.getByRole('dialog');
+      await dialog.getByRole('switch',{name:'이 기기에 최근 내용 보관',exact:true}).click();await loadedCardArt(page);
+      check(member.traffic.artReads,beforeArtClear+3,'cache OFF preserves mounted viewing with one authenticated uncached read');
+      await emptyCardArtStore(page);
+      const uncachedUrl=await page.locator('.hh-card-art img').getAttribute('src');
+      await dialog.getByRole('switch',{name:'이 기기에 최근 내용 보관',exact:true}).click();await browserSettled(page);
+      check(await page.locator('.hh-card-art img').getAttribute('src'),uncachedUrl,'turning cache back ON keeps the current image visible');
+      check(member.traffic.artReads,beforeArtClear+3,'turning cache ON does not refetch an already displayed image');
+      // A denied photo clears private bytes and must not recursively retry itself.
+      member.imageAccess.status=403;
+      const deniedPhoto=page.waitForResponse(response=>response.url().includes('/art?image=')&&response.status()===403);
+      await page.evaluate(()=>{window.__qaArtDenied=false;const cleared=event=>{if(event.detail?.reason==='security'){window.__qaArtDenied=true;window.removeEventListener('cbh-household-cache-cleared',cleared);}};window.addEventListener('cbh-household-cache-cleared',cleared);});
+      await dialog.getByRole('button',{name:'보관한 내용 비우기',exact:true}).click();await deniedPhoto;
+      await page.waitForFunction(()=>window.__qaArtDenied===true);await page.locator('.hh-card-art img').waitFor({state:'detached'});
+      check(await page.locator('.hh-card-art img').count(),0,'403 clears the mounted image');
+      check(member.traffic.artReads,beforeArtClear+4,'403 security purge does not refetch or loop');
+      await dialog.getByRole('button',{name:'보관한 내용 비우기',exact:true}).click();await browserSettled(page);
+      check(member.traffic.artReads,beforeArtClear+4,'user clear cannot restart a denied mounted image');
+      member.imageAccess.status=200;
       await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);
       await setSection(page,'가계부');await setSection(page,'카드');await loadedCardArt(page);
-      check(member.traffic.artReads,beforeArtClear+1,'next card visit reloads exactly once after explicit cache clear');
+      check(member.traffic.artReads,beforeArtClear+5,'returning after access is restored loads the image normally');
       await setSection(page,'가계부');await page.setViewportSize({width:1440,height:900});await screenshot(page,`${name}-ledger-1440.png`);
       await page.setViewportSize({width:375,height:812});await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await page.evaluate(()=>document.documentElement.dataset.theme='dark');
       await screenshot(page,`${name}-ledger-dark-375.png`);
@@ -364,6 +401,15 @@ try {
       await page.waitForFunction(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.')));
       await page.goto(base+'/account');await page.getByRole('button',{name:'현재 기기 로그아웃',exact:true}).click();await visible(page.getByText('내 계정으로 로그인',{exact:true}));
       check(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('cbh.household.cache.'))),false,'logout clears cached household data');
+      const expired=await makeContext('member'),expiredPage=await expired.context.newPage();expiredPage.on('pageerror',error=>errors.push(error.message));
+      await expiredPage.goto(base+'/household?section=cards');await loadedCardArt(expiredPage);
+      const beforeExpiredPhoto=expired.traffic.artReads;expired.imageAccess.status=401;
+      await expiredPage.getByRole('button',{name:'가계부 설정',exact:true}).click();
+      await expiredPage.getByRole('dialog').getByRole('button',{name:'보관한 내용 비우기',exact:true}).click();
+      await visible(expiredPage.getByText('내 계정으로 로그인',{exact:true}));await browserSettled(expiredPage);
+      check(expired.traffic.artReads,beforeExpiredPhoto+1,'401 photo response locks the session without a retry loop');
+      check(await expiredPage.locator('.hh-card-art img').count(),0,'401 removes mounted private photos');
+      await emptyCardArtStore(expiredPage);await expiredPage.close();
       check(errors,[],'no uncaught browser runtime errors');check(failures,[],'all private UI requests covered explicitly');
       evidence.push({engine:name,widths:[375,390,768,1024,1440],screenshots:7,commands:commands.length,appliedCommands:applied.length,provider:'synthetic API with actual domain transitions',livePush:0,liveSheets:0,status:'PASS'});
     }catch(error){await activePage?.screenshot({path:resolve(output,`${name}-failure.png`),fullPage:true}).catch(()=>{});console.error('HOUSEHOLD_FAILURE',name,await activePage?.locator('body').innerText().catch(()=>''));throw error;}

@@ -108,5 +108,5 @@
 .household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-utility{position:absolute;top:0;right:18px;width:44px;height:44px;margin:0}
 .household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-title-row{padding-right:48px;min-height:44px}
 .household-page[data-section=cards] .hh-card-rail{padding-bottom:8px}
-@media(min-width:601px){.household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-utility{right:24px}}
+@media(min-width:601px){.household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-utility{right:24px}.household-page[data-section=cards] .hh-card-detail .hh-actions{padding-right:64px}}
 @media(max-width:600px) and (max-height:820px){.household-page[data-section=cards] .hh-card-art.is-portrait{width:68px;height:108px}.household-page[data-section=cards] .hh-card-rail{padding-top:8px}}

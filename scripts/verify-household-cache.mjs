@@ -9,10 +9,11 @@ Object.defineProperties(store, {
   removeItem: { configurable: true, value(key) { delete this[key]; } },
 });
 let blocked = false, events = 0;
+const clearReasons = [];
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { if (blocked) throw new DOMException('Storage blocked', 'SecurityError'); return store; } });
-Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent() { events++; } } });
+Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent(event) { events++; clearReasons.push(event.detail?.reason); } } });
 let checks = 0;
 const equal = (actual, expected, message) => { assert.deepEqual(actual, expected, message); checks++; };
 try {
@@ -85,7 +86,11 @@ try {
     equal(cache.validHouseholdCacheResponse(changed), false);
     seed(changed); equal(cache.readCache('synthetic-a'), null, 'bad structure never reaches view calculation');
   }
-  cache.clearHouseholdCache(); store.setItem(key, '{malformed');
+  cache.clearHouseholdCache();
+  equal(clearReasons.at(-1),'security','unspecified purge cannot cause mounted private data to reload');
+  cache.clearHouseholdCache('user');
+  equal(clearReasons.at(-1),'user','explicit user clear permits a fresh authenticated image view');
+  store.setItem(key, '{malformed');
   equal(cache.readCache('synthetic-a'), null, 'invalid JSON falls back to network');
   equal(store.getItem(key), null, 'bad JSON is removed instead of failing again on every visit');
   store.setItem(key, 'x'.repeat(2 * 1024 * 1024 + 1));
@@ -93,6 +98,7 @@ try {
   store.setItem('unrelated-feature', 'keep');
   cache.writeCache('synthetic-a', response); cache.writeCache('synthetic-b', response);
   cache.setHouseholdCacheEnabled(false);
+  equal(clearReasons.at(-1),'user','cache OFF purges bytes without disabling mounted image viewing');
   equal(cache.householdCacheEnabled(), false);
   equal(cache.readCache('synthetic-a'), null);
   equal(store.getItem(key), null);
