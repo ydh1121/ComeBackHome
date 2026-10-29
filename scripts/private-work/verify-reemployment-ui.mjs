@@ -24,8 +24,8 @@ export async function verifyReemployment(page, ctx, base, label) {
     employment('actual', { actualOrSimulated: 'actual', hireDate: '2025-02-05', firstWorkDate: '2025-02-05', lastWorkDate: '2025-02-08' }),
     employment('planned', { actualOrSimulated: 'planned', hireDate: '2025-02-06', contractEnd: '2025-02-09' }),
     employment('open', { actualOrSimulated: 'actual', hireDate: '2025-02-07' }),
-    { kind: 'treatment', payload: payload('treatment', { status: 'pending', from: '2025-02-01', to: '2025-02-10' }) },
-    { kind: 'treatment', payload: payload('missing dates', { status: 'pending' }) },
+    { kind: 'treatment', payload: payload('treatment', { status: 'pending', extensionStatus: 'none', from: '2025-02-01', to: '2025-02-10' }) },
+    { kind: 'treatment', payload: payload('missing dates', { status: 'pending', extensionStatus: 'none' }) },
     ...['workers_comp_leave', 'unemployment'].map(benefitType => ({ kind: 'benefit_claim', payload: payload(benefitType, {
       benefitType, status: 'estimate', from: '2025-02-01', to: '2025-02-10',
       expectedAmount: 400000, dailyRate: 40000, allocatedDays: 10,
