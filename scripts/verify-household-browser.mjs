@@ -90,6 +90,7 @@ try {
     const response = () => ({ ready, connected:true, snapshot:ready?state:null, revision:state.revision, pending:false, spreadsheetUrl:ready?'https://docs.google.com/spreadsheets/d/synthetic-household-private/edit':null });
     const makeContext = async role => {
       const context = await browser.newContext({ viewport:{width:390,height:844}, timezoneId:'Asia/Seoul', locale:'ko-KR', serviceWorkers:'block' }); contexts.push(context);
+      context.setDefaultTimeout(30_000);
       const identity = { logged:true, role }, user = () => ({ id:identity.role+'-browser',loginId:identity.role==='admin'?'ydh1121':'yvonne',role:identity.role,mustChangePassword:false });
       const traffic = { documents:0, sessions:0, scheduleWrites:0, artReads:0, artWrites:0 };
       const imageAccess={status:200};
@@ -403,7 +404,7 @@ try {
       await page.getByRole('navigation',{name:'공간 선택',exact:true}).getByRole('link',{name:'생활비·할 일',exact:true}).click();await visible(page.getByRole('heading',{name:'가계부',exact:true}));
       await shellPersists('return to household');await persistentHeader.dispose();
       check(await page.getByRole('navigation',{name:'생활비·할 일 메뉴'}).getByRole('link').allTextContents(),['카드','가계부','월급','할 일'],'household bottom navigation is independent');
-      getFailure=true;await page.reload();await visible(page.getByText('최근 저장한 내용',{exact:true}));
+      getFailure=true;await page.reload();await visible(page.locator('.hh-cache-banner').getByText('최신 내용을 확인해야 저장할 수 있어요.',{exact:true}));
       await setSection(page,'할 일');check(await page.getByLabel('새 할 일이나 메모',{exact:true}).isDisabled(),true,'offline cached snapshot is read-only');
       getFailure=false;await page.getByRole('button',{name:'새로고침',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.hh-cache-banner'));
       check(await page.getByLabel('새 할 일이나 메모',{exact:true}).isEnabled(),true,'fresh confirmed snapshot restores editing');
