@@ -22,6 +22,13 @@ export function HouseholdIcon({ name }: { name: 'card' | 'ledger' | 'income' | '
   </svg>;
 }
 
+export function HouseholdPageHeader({ title, actions, secondary, onSettings }: { title: string; actions?: ReactNode; secondary?: ReactNode; onSettings(): void }) {
+  return <header className="hh-page-header">
+    <div className="hh-title-row"><h1 className="page-title">{title}</h1><div className="hh-title-actions">{actions}<button className="icon-btn" type="button" aria-label="가계부 설정" onClick={onSettings}><Icon name="settings" /></button></div></div>
+    {secondary && <div className="hh-header-toolbar">{secondary}</div>}
+  </header>;
+}
+
 export function FormSheet({ title, children, onClose, busy = false }: { title: string; children: ReactNode; onClose(): void; busy?: boolean }) {
   return <PrivateSheet title={title} busy={busy} onClose={onClose} className="household-sheet">{children}</PrivateSheet>;
 }
@@ -31,8 +38,8 @@ export function SaveFeedback({ model }: { model: HouseholdController }) {
   return <div className="hh-alert" role="alert">{model.error && <p>{model.error}</p>}{model.error.includes('Google Sheets API') && <a className="hh-text" href="/guides/household-drive-setup.html" target="_blank" rel="noreferrer">시트 연결 안내 보기</a>}{model.needsRecovery && <button type="button" className="hh-secondary" disabled={model.busy} onClick={() => void model.recover()}>{model.busy ? '확인 중…' : '저장 결과 확인'}</button>}</div>;
 }
 
-export function EmptyState({ icon, title, children, action, onAction }: { icon: 'card' | 'ledger' | 'income' | 'notes'; title: string; children: ReactNode; action?: string; onAction?(): void }) {
-  return <div className="hh-empty"><HouseholdIcon name={icon} /><h2>{title}</h2><p>{children}</p>{action && <button type="button" className="hh-primary" onClick={onAction}>{action}</button>}</div>;
+export function EmptyState({ icon, title, children, action, onAction }: { icon: 'card' | 'ledger' | 'income' | 'notes'; title: string; children?: ReactNode; action?: string; onAction?(): void }) {
+  return <div className="hh-empty"><HouseholdIcon name={icon} /><h2>{title}</h2>{children && <p>{children}</p>}{action && <button type="button" className="hh-primary" onClick={onAction}>{action}</button>}</div>;
 }
 
 export function Meter({ value, maximum, label }: { value: number; maximum: number; label: string }) {

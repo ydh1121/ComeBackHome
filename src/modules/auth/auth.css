@@ -75,3 +75,17 @@
 .auth-card [role="alert"] {
   color: var(--cbh-error);
 }
+.account-page .account-login-id { margin:-10px 0 24px;color:var(--cbh-muted);font-size:16px; }
+.account-page .auth-card { width:100%;margin:0;padding:20px;border-radius:18px; }
+.account-page .auth-card p { font-size:14px;color:var(--cbh-muted);margin:0 0 20px; }
+.account-page .auth-card [role="alert"]:empty { display:none; }
+.account-page .auth-card input { font-size:16px; }
+.account-page .account-devices { list-style:none;margin:0 0 20px;padding:0; }
+.account-devices li { display:grid;gap:6px;padding:14px 0;border-bottom:1px solid var(--cbh-line); }
+.account-devices li:first-child { padding-top:0; }
+.account-devices li:last-child { border:0;padding-bottom:0; }
+.account-devices strong { font-size:15px;font-weight:600; }
+.account-devices span { color:var(--cbh-muted);font-size:13px;line-height:1.5;overflow-wrap:anywhere; }
+.account-logout-actions { display:grid;grid-template-columns:minmax(0,1fr); }
+.account-logout-actions button { width:100%;font-size:14px; }
+@media(max-width:420px) { .account-page .auth-card { padding:16px; } }

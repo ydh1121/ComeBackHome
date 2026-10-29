@@ -37,9 +37,10 @@ async function modalErgonomics(page, label) {
     bodyLocked: document.body.style.position === 'fixed' && document.documentElement.style.overflow === 'hidden',
     horizontalOverflow: dialog.scrollWidth > dialog.clientWidth + 1,
     fields: [...dialog.querySelectorAll('input:not([type=radio]):not([type=checkbox]):not([type=file]),select,textarea')].every(el=>parseFloat(getComputedStyle(el).fontSize)>=16),
+    dateFieldsContained: [...dialog.querySelectorAll('input[type=date],input[type=month],input[type=datetime-local]')].every(input=>{const r=input.getBoundingClientRect(),label=input.closest('label').getBoundingClientRect();return r.width>0&&r.left>=label.left-1&&r.right<=label.right+1;}),
     closeSize: (()=>{const r=dialog.querySelector('.private-sheet__close').getBoundingClientRect();return r.width>=44&&r.height>=44;})(),
   }));
-  check(result,{titleFocus:true,bodyLocked:true,horizontalOverflow:false,fields:true,closeSize:true},`${label}: modal focus, scroll containment, touch size and no-zoom fields`);
+  check(result,{titleFocus:true,bodyLocked:true,horizontalOverflow:false,fields:true,dateFieldsContained:true,closeSize:true},`${label}: modal focus, scroll containment, touch size and no-zoom fields`);
 }
 async function setSection(page, label) { await page.getByRole('navigation', { name: '생활비·할 일 메뉴' }).getByRole('link', { name: label, exact: true }).click(); }
 async function settleNavigation(page) {
@@ -61,11 +62,12 @@ async function layout(page, width, label, height = 844) {
   const bounds = await page.evaluate(() => {
     const elementRect = element => { const r = element?.getBoundingClientRect(); return r ? { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height } : null; };
     const rect = selector => elementRect(document.querySelector(selector));
-    return { overflow: document.documentElement.scrollWidth > innerWidth + 1, top:rect('.portal-top'), bottom:rect('.portal-bottom'), heading:rect('.household-page h1'), actions:rect('.hh-card-detail .hh-actions'), favorite:rect('.portal-favorite-trigger'), cardButtons:[...document.querySelectorAll('.hh-card-detail .hh-actions button')].map(button=>({label:button.textContent.trim(),...elementRect(button)})), pills:[...document.querySelectorAll('.portal-nav')].map(bar=>{const p=bar.querySelector('.portal-pill').getBoundingClientRect(),a=bar.querySelector('[aria-current="page"]').getBoundingClientRect();return ['x','y','width','height'].every(key=>Math.abs(p[key]-a[key])<=1);}) };
+    return { overflow: document.documentElement.scrollWidth > innerWidth + 1, top:rect('.portal-top'), bottom:rect('.portal-bottom'), heading:rect('.household-page h1'), header:rect('.hh-title-row'), settings:rect('.hh-title-actions .icon-btn'), actions:rect('.hh-card-detail .hh-actions'), favorite:rect('.portal-favorite-trigger'), cardButtons:[...document.querySelectorAll('.hh-card-detail .hh-actions button')].map(button=>({label:button.textContent.trim(),...elementRect(button)})), pills:[...document.querySelectorAll('.portal-nav')].map(bar=>{const p=bar.querySelector('.portal-pill').getBoundingClientRect(),a=bar.querySelector('[aria-current="page"]').getBoundingClientRect();return ['x','y','width','height'].every(key=>Math.abs(p[key]-a[key])<=1);}) };
   });
   check(bounds.overflow, false, `${label}: no horizontal overflow at ${width}`);
   assert(bounds.top && bounds.bottom && bounds.top.x >= 0 && bounds.top.right <= width + 1 && bounds.bottom.x >= 0 && bounds.bottom.right <= width + 1, `${label}: fixed navigation stays in viewport`); assertions++;
   assert(bounds.heading && bounds.heading.y >= bounds.top.bottom - 1, `${label}: title stays below top navigation`); assertions++;
+  assert(bounds.settings && bounds.settings.width>=44 && bounds.settings.height>=44 && Math.abs((bounds.settings.y+bounds.settings.height/2)-(bounds.header.y+bounds.header.height/2))<=1, `${label}: settings shares the title row with a 44px target`); assertions++;
   check(bounds.pills,[true,true],`${label}: selected pills align within 1px after motion at ${width}`);
   if(bounds.actions&&width<=390){assert(bounds.actions.bottom<=bounds.bottom.y,`${label}: card actions stay above bottom navigation at ${width}`);assertions++;}
   if(bounds.actions){
@@ -78,6 +80,7 @@ async function layout(page, width, label, height = 844) {
       assert(overlapWidth<=0||overlapHeight<=0,`${label}: favorite must not cover ${button.label} at ${width}x${height}; button=${JSON.stringify(button)}, favorite=${JSON.stringify(bounds.favorite)}`);assertions++;
     }
   }
+  return bounds;
 }
 try {
   for (const [engine, name] of [[chromium,'chromium'],[webkit,'webkit']]) {
@@ -193,6 +196,7 @@ try {
       check(member.traffic.artReads,firstArtReads+1,'replacement image invalidates by image ID exactly once');
       check(state.cards[0].imageFileId.endsWith('-2'),true,'saving card metadata preserves newly uploaded art');
       await page.getByRole('button',{name:'사용 기록',exact:true}).click(); dialog=page.getByRole('dialog');
+      await modalErgonomics(page,'expense creation');
       await dialog.locator('input[name=amount]').fill('12000'); await dialog.locator('select:has(option[value="식비"])').selectOption('식비');
       await dialog.getByText('어디서 썼는지 자세히 적기',{exact:true}).click();
       await dialog.getByLabel('가게·상대방',{exact:true}).fill('합성 식당');await dialog.getByLabel('세부 분류',{exact:true}).fill('한식');
@@ -219,7 +223,7 @@ try {
       check(await page.locator('.hh-total > strong').textContent(),'12,000원','restoring current month restores its total');
       await page.getByRole('slider',{name:'보기 상세 수준'}).focus();await page.keyboard.press('End');
       await visible(page.getByRole('figure',{name:'세부 지출'}));
-      await page.getByRole('button',{name:'기록',exact:true}).click(); dialog=page.getByRole('dialog');await dialog.locator('input[name=amount]').fill('-1');
+      await page.getByRole('button',{name:'지출 기록',exact:true}).click(); dialog=page.getByRole('dialog');await dialog.locator('input[name=amount]').fill('-1');
       const beforeInvalid=commands.length;await dialog.getByRole('button',{name:'기록 저장',exact:true}).click();check(commands.length,beforeInvalid,'negative amount blocked before network write');
       await dialog.locator('input[name=amount]').fill('3000'); nextFailure='lost-response';
       await dialog.getByRole('button',{name:'기록 저장',exact:true}).click();await visible(dialog.getByRole('alert')); const retryId=commands.at(-1).id;
@@ -308,9 +312,15 @@ try {
       const readFinished=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/private/household'&&r.request().method()==='GET');releaseRead();await readFinished;
       await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
       check(await page.locator('.hh-note__body').filter({hasText:'늦은 조회 뒤에도 유지할 합성 메모'}).count(),1,'late old GET cannot roll back a confirmed write');
+      const commonHeaders=new Map();
       for(const [section,title] of [['카드','카드'],['가계부','가계부'],['월급','월급 나누기'],['할 일','할 일·메모']]){
         await setSection(page,section);await visible(page.getByRole('heading',{name:title,exact:true}));
-        for(const width of [375,390,768,1024,1440])await layout(page,width,`${name}-${section}`);
+        for(const width of [375,390,768,1024,1440]){
+          const bounds=await layout(page,width,`${name}-${section}`),position={headingX:bounds.heading.x,headingY:bounds.heading.y,settingsX:bounds.settings.x,settingsY:bounds.settings.y};
+          if(commonHeaders.has(width))check(position,commonHeaders.get(width),`${name}-${section}: titles and settings have the same coordinates as cards at ${width}`);
+          else commonHeaders.set(width,position);
+        }
+        check(await page.locator('.hh-page-header').getByRole('button',{name:'기록',exact:true}).count(),0,'no redundant record action in the page header');
         if(section==='카드')await layout(page,375,`${name}-${section}-compact`,812);
         await page.setViewportSize({width:390,height:844});await screenshot(page,`${name}-${section==='카드'?'cards':section==='가계부'?'ledger':section==='월급'?'income':'notes'}-390.png`);
       }
@@ -350,6 +360,19 @@ try {
       await setSection(page,'가계부');await page.setViewportSize({width:1440,height:900});await screenshot(page,`${name}-ledger-1440.png`);
       await page.setViewportSize({width:375,height:812});await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await page.evaluate(()=>document.documentElement.dataset.theme='dark');
       await screenshot(page,`${name}-ledger-dark-375.png`);
+      for(const [section,file] of [['카드','cards'],['월급','income'],['할 일','notes']]){
+        await setSection(page,section);await layout(page,375,`${name}-${file}-dark`,812);
+        await screenshot(page,`${name}-${file}-dark-375.png`);
+      }
+      await setSection(page,'가계부');
+      // Entry creation remains available in the ledger itself, regardless of the floating shortcut preference.
+      await page.getByRole('button',{name:'지출 기록',exact:true}).click();dialog=page.getByRole('dialog');
+      for(const width of [375,390]){
+        await page.setViewportSize({width,height:812});await modalErgonomics(page,`expense native date ${width}`);
+        await dialog.locator('input[name=when]').scrollIntoViewIfNeeded();
+        await screenshot(page,`${name}-expense-date-dark-${width}.png`);
+      }
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();await noDialog(page);
       check(await page.locator('.portal-pill').first().evaluate(el=>getComputedStyle(el).transitionDuration),'0s','reduced motion removes navigation movement');
       await page.evaluate(()=>delete document.documentElement.dataset.theme);await page.emulateMedia({colorScheme:'light',reducedMotion:'no-preference'});
       // Module navigation must retain the shared shell and authenticated session.

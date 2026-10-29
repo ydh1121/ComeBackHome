@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Link } from "react-router";
+import { Icon } from "../../shared/components/Icon";
 import { ApiError, privateRequest } from "./client";
 import { loginWithPassword, changeWithPassword } from "./password";
 import { invalidateLocalReads } from "../../pwa/localCache";
@@ -299,7 +301,7 @@ export function PasswordChange({ initial = false }: { initial?: boolean }) {
     [busy, setBusy] = useState(false);
   return (
     <section className="auth-card">
-      <h1>{initial ? "임시 비밀번호 변경" : "비밀번호 변경"}</h1>
+      {initial ? <h1>임시 비밀번호 변경</h1> : <h2>비밀번호 변경</h2>}
       <p>
         15~128자로 설정해 주세요. 변경하면 모든 기기에서 다시 로그인해야 합니다.
       </p>
@@ -406,13 +408,12 @@ export function AccountPage() {
     return () => controller.abort();
   }, []);
   return (
-    <main className="private-page">
-      <header className="private-header">
-        <a href="/">ComeBackHome</a>
-        <a href="/injury">산재</a>
+    <main className="private-page portal-settings-page account-page" data-page="AccountPage">
+      <header className="portal-settings-heading">
+        <Link to="/settings" className="portal-settings-back" aria-label="설정으로 돌아가기"><Icon name="chevron-left" /></Link>
+        <h1>내 계정</h1>
       </header>
-      <h1>내 계정</h1>
-      <p>{auth.user?.loginId}</p>
+      <p className="account-login-id">{auth.user?.loginId}</p>
       <section className="private-card">
         <label className="auth-check">
           <input
@@ -431,26 +432,19 @@ export function AccountPage() {
               }
             }}
           />
-          산재 바로가기 표시
+          상단바에 산재 표시
         </label>
-        <p role="alert">{error}</p>
+        {error && <p role="alert">{error}</p>}
       </section>
       <section className="private-card">
         <h2>로그인한 기기</h2>
-        {devices.map((d, i) => (
-          <p key={i}>
-            <b>
-              {d.device_name}
-              {d.current ? " · 현재 기기" : ""}
-            </b>
-            <br />
-            마지막 사용{" "}
-            {new Date(d.last_seen_at).toLocaleString("ko-KR", {
-              timeZone: "Asia/Seoul",
-            })}
-          </p>
-        ))}
-        <div className="private-actions">
+        <ul className="account-devices">{devices.map((d, i) => (
+          <li key={i}>
+            <strong>{d.device_name}{d.current ? " · 현재 기기" : ""}</strong>
+            <span>마지막 사용 {new Date(d.last_seen_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</span>
+          </li>
+        ))}</ul>
+        <div className="private-actions account-logout-actions">
           <button onClick={() => void auth.logout()}>현재 기기 로그아웃</button>
           <button
             className="secondary"

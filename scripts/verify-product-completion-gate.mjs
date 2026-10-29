@@ -185,6 +185,7 @@ const expectedMigrations = [
   '0013_household_workspace.sql',
   '0014_chat_exchanges.sql',
   '0015_household_notifications.sql',
+  '0016_notification_route_cache.sql',
 ];
 expect(
   JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),

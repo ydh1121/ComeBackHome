@@ -33,6 +33,7 @@ export function createD1ScheduledNotificationDependencies(
       people: new D1PersonRepository(env.DB),
       schedules: new D1ScheduleRepository(env.DB),
       etaSource: injections.etaSource,
+      subscriptions: new D1SubscriptionStore(env.DB),
     },
     outbox: {
       jobs,

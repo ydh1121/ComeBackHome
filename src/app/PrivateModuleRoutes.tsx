@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate } from 'react-router';
 import { AccountPage, useAuth } from '../modules/auth/AuthRoot';
 
+const FavoriteSettingsPage = lazy(() => import('../modules/portal/FavoriteSettingsPage').then(module => ({ default: module.FavoriteSettingsPage })));
 const InjuryApp = lazy(() => import('../modules/injury/ui/InjuryApp').then(module => ({ default: module.InjuryApp })));
 const HouseholdApp = lazy(() => import('../modules/household/ui/HouseholdApp').then(module => ({ default: module.HouseholdApp })));
 
@@ -20,5 +21,11 @@ export function HouseholdRoute() {
   return <PrivateRoute><Suspense fallback={<p className="auth-loading" role="status">생활비와 할 일을 여는 중…</p>}><HouseholdApp /></Suspense></PrivateRoute>;
 }
 export function AccountRoute() {
-  return <PrivateRoute><AccountPage /></PrivateRoute>;
+  const { user } = useAuth();
+  return <PrivateRoute><AccountPage key={user?.id} /></PrivateRoute>;
+}
+
+export function FavoriteSettingsRoute() {
+  const { user } = useAuth();
+  return <PrivateRoute><Suspense fallback={<p className="auth-loading" role="status">설정을 여는 중…</p>}><FavoriteSettingsPage key={user?.id} /></Suspense></PrivateRoute>;
 }

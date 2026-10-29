@@ -291,6 +291,12 @@ try {
   }
   console.log('F08_ARRIVAL_POLICY_D1_PASS=' + JSON.stringify(arrivalPolicy));
 
+  const routeCache = await postJson('/route-cache-probe', {});
+  for (const check of ['exclusive', 'dailyBudget', 'recovered', 'fenced', 'persisted', 'validHitNoLease', 'budgetSurvivesChange', 'rollover']) {
+    assert(routeCache.syntheticOnly && routeCache[check] === true, 'Notification route cache real D1: ' + check);
+  }
+  console.log('NOTIFICATION_ROUTE_CACHE_D1_PASS=' + JSON.stringify(routeCache));
+
   const rescheduled = await postJson('/pending-reschedule-probe', {});
   assert(rescheduled.syntheticOnly && rescheduled.originalIdStable,
     'schedule edit must preserve existing notification job identity');

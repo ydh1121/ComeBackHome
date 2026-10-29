@@ -57,7 +57,7 @@
     "verify:ocr-pattern-refinement": "node scripts/verify-schedule-image-pattern-refinement.mjs",
     "verify:push-wiring": "node scripts/verify-live-push-client-wiring.mjs",
     "verify:web-push-gateway": "node scripts/verify-web-push-gateway.mjs",
-    "verify:notification-eta-source": "node scripts/verify-worker-notification-eta-source.mjs",
+    "verify:notification-eta-source": "node scripts/verify-worker-notification-eta-source.mjs && node scripts/verify-notification-route-budget.mjs",
     "verify:notification-retry-policy": "node scripts/verify-notification-retry-policy.mjs",
     "verify:notification-activation-readiness": "node scripts/verify-notification-activation-readiness.mjs",
     "verify:presence-event-ingest": "node scripts/verify-presence-event-ingest.mjs",

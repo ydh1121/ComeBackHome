@@ -6,6 +6,7 @@ import type {
   NotificationPayload,
   NotificationPlannerStateStore,
   NotificationSettingsStore,
+  SubscriptionStore,
 } from './contracts';
 import type {
   PersonRepository,
@@ -20,6 +21,7 @@ export interface NotificationPlannerDependencies {
   people: PersonRepository;
   schedules: ScheduleRepository;
   etaSource: NotificationEtaSource;
+  subscriptions?: Pick<SubscriptionStore, 'listActive'>;
 }
 
 export interface NotificationPlanResult {
@@ -155,6 +157,9 @@ export async function planNotificationJobs(
     return result;
   }
 
+  // Do not spend provider quota when no device can receive these reminders.
+  if (dependencies.subscriptions && !(await dependencies.subscriptions.listActive()).length) return result;
+
   const currentDate = seoulDate(now);
   const people = await dependencies.people.list();
 
@@ -192,7 +197,9 @@ export async function planNotificationJobs(
 
     let eta = null;
     try {
-      eta = await dependencies.etaSource.get(person.id, now);
+      if (settings.shiftEndEnabled || settings.arrivalAdvanceEnabled || settings.etaChangeEnabled) {
+        eta = await dependencies.etaSource.get(person.id, now);
+      }
     } catch {
       eta = null;
     }

@@ -6,6 +6,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { DATABASE, DATABASE_ID, rows, LEDGER_QUERY, SCHEMA_QUERY } from './prepare-login-db.mjs';
+import { TRANSIT_CACHE_MIGRATION, TRANSIT_CACHE_SHA256 } from './reviewed-transit-cache-source.mjs';
 export const CONFIRMATION = 'APPLY_REMOTE_COMEBACKHOME_HOUSEHOLD_0013_0015';
 export const BATCH = 'household-0013-0015';
 export const REVIEWED_SOURCES = Object.freeze({
@@ -33,20 +34,24 @@ const appSchema = schema => schema.filter(o => o.name !== 'd1_migrations').map(o
 export function validateHouseholdSource(config, files, sources) {
     const db = config.d1_databases?.[0];
     requireState(config.name === 'come-back-home' && config.d1_databases?.length === 1 && db.binding === 'DB' && db.database_name === DATABASE && db.database_id === DATABASE_ID && db.migrations_dir === 'db/migrations' && !db.migrations_table && !db.migrations_pattern, 'CANONICAL_DATABASE_MISMATCH');
-    requireState(JSON.stringify(files) === JSON.stringify(Object.keys(REVIEWED_SOURCES)), 'UNEXPECTED_REPOSITORY_MIGRATIONS');
+    const reviewed = { ...REVIEWED_SOURCES, [TRANSIT_CACHE_MIGRATION]: TRANSIT_CACHE_SHA256 };
+    const includesCache = files.length === Object.keys(reviewed).length;
+    requireState(JSON.stringify(files) === JSON.stringify(Object.keys(includesCache ? reviewed : REVIEWED_SOURCES)), 'UNEXPECTED_REPOSITORY_MIGRATIONS');
     for (const name of files)
-        requireState(typeof sources[name] === 'string' && createHash('sha256').update(sources[name]).digest('hex') === REVIEWED_SOURCES[name], 'UNREVIEWED_MIGRATION');
+        requireState(typeof sources[name] === 'string' && createHash('sha256').update(sources[name]).digest('hex') === reviewed[name], 'UNREVIEWED_MIGRATION');
     // Build expected definitions locally from the immutable reviewed SQL. No
     // production rows or credentials enter this rehearsal database.
     const local = new DatabaseSync(':memory:');
-    let baseline;
+    let baseline, complete;
     try {
         for (const [i, name] of files.entries()) {
             local.exec(sources[name]);
             if (i === 11)
                 baseline = local.prepare(SCHEMA_QUERY).all();
+            if (i === 14)
+                complete = local.prepare(SCHEMA_QUERY).all();
         }
-        return { files, baseline, complete: local.prepare(SCHEMA_QUERY).all() };
+        return { files, baseline, complete, cacheComplete: includesCache ? local.prepare(SCHEMA_QUERY).all() : null };
     }
     finally {
         local.close();
@@ -57,8 +62,8 @@ export function assessHouseholdState(ledger, schema, source) {
     requireState(new Set(names).size === names.length && names.every((name, i) => name === source.files[i]), 'UNEXPECTED_REMOTE_MIGRATIONS');
     if (names.length === 13 || names.length === 14)
         throw new Error('PARTIAL_HOUSEHOLD_BATCH_STOP');
-    requireState(names.length === 12 || names.length === 15, 'UNEXPECTED_REMOTE_MIGRATIONS');
-    const expected = names.length === 12 ? source.baseline : source.complete;
+    requireState(names.length === 12 || names.length === 15 || names.length === 16 && source.cacheComplete, 'UNEXPECTED_REMOTE_MIGRATIONS');
+    const expected = names.length === 12 ? source.baseline : names.length === 16 ? source.cacheComplete : source.complete;
     requireState(JSON.stringify(appSchema(schema)) === JSON.stringify(appSchema(expected)), names.length === 12 ? 'BASELINE_OR_PARTIAL_SCHEMA_MISMATCH' : 'HOUSEHOLD_SCHEMA_INCOMPLETE');
     return names.length === 12 ? 'pending' : 'applied';
 }

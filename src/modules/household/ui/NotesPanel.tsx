@@ -3,7 +3,7 @@ import { useAuth } from '../../auth/AuthRoot';
 import { Icon } from '../../../shared/components/Icon';
 import type { HouseholdController } from '../client';
 import type { HouseholdState, HouseholdTodo, ReminderRecipient } from '../domain/model';
-import { FormSheet, fromSeoulInput, HouseholdIcon, localDateTime, shortWhen, Toggle, SaveFeedback } from './shared';
+import { HouseholdPageHeader, FormSheet, fromSeoulInput, HouseholdIcon, localDateTime, shortWhen, Toggle, SaveFeedback } from './shared';
 
 const nextHour = () => localDateTime(new Date(new Date().getTime() + 60 * 60 * 1000).toISOString());
 function recipientLabel(recipient: ReminderRecipient, role: 'admin' | 'member' | undefined) {
@@ -24,7 +24,7 @@ function ReminderFields({ when, setWhen, recipient, setRecipient, required = tru
   </div>;
 }
 
-export function NotesPanel({ state, model }: { state: HouseholdState; model: HouseholdController }) {
+export function NotesPanel({ state, model, onSettings }: { state: HouseholdState; model: HouseholdController; onSettings(): void }) {
   const { user } = useAuth();
   const [text, setText] = useState(''), [remind, setRemind] = useState(false), [when, setWhen] = useState('');
   const [recipient, setRecipient] = useState<ReminderRecipient>('both');
@@ -33,7 +33,7 @@ export function NotesPanel({ state, model }: { state: HouseholdState; model: Hou
   const pending = state.todos.filter(todo => !todo.archivedAt && !todo.completedAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const done = state.todos.filter(todo => !todo.archivedAt && todo.completedAt).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return <>
-    <div className="hh-title-row"><h1 className="page-title">할 일·메모</h1></div>
+    <HouseholdPageHeader title="할 일·메모" onSettings={onSettings} />
     <form className="hh-note-compose hh-note-compose--stacked" onSubmit={async event => {
       event.preventDefault(); if (!text.trim()) return;
       if (await model.mutate({ type: 'todo.save', todo: { id: id.current, text: text.trim(), dueAt: remind && when ? fromSeoulInput(when) : null, remind, reminderRecipient: recipient } })) {

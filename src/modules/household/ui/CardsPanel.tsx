@@ -3,7 +3,7 @@ import { Icon } from '../../../shared/components/Icon';
 import type { HouseholdController } from '../client';
 import { useCardArt } from '../use-card-art';
 import { getCardSummary, getCardsSummary, cardUsesCredit, type CardKind, type HouseholdCard, type HouseholdState } from '../domain/model';
-import { AmountField, EmptyState, FormSheet, HouseholdIcon, Meter, won, SaveFeedback } from './shared';
+import { HouseholdPageHeader, AmountField, EmptyState, FormSheet, HouseholdIcon, Meter, won, SaveFeedback } from './shared';
 
 export const cardKinds: Record<CardKind, string> = { credit: '신용카드', debit: '체크카드', mobile: '모빌카드' };
 function CardArt({ card, selected, onSelect }: { card: HouseholdCard; selected: boolean; onSelect(): void }) {
@@ -21,12 +21,12 @@ function CardArt({ card, selected, onSelect }: { card: HouseholdCard; selected: 
   </button>;
 }
 
-export function CardsPanel({ state, model, onEntry }: { state: HouseholdState; model: HouseholdController; onEntry(cardId: string, kind: 'expense' | 'repayment' | 'transfer'): void }) {
+export function CardsPanel({ state, model, onEntry, onSettings }: { state: HouseholdState; model: HouseholdController; onSettings(): void; onEntry(cardId: string, kind: 'expense' | 'repayment' | 'transfer'): void }) {
   const [selectedId, setSelectedId] = useState(''), [editing, setEditing] = useState<HouseholdCard | 'new' | null>(null);
   const cards = state.cards.filter(card => !card.archived), selected = cards.find(card => card.id === selectedId) ?? cards[0], totals = getCardsSummary(state);
   const summary = selected ? getCardSummary(state, selected.id) : null;
   return <>
-    <div className="hh-title-row"><h1 className="page-title">카드</h1><button type="button" className="hh-text" onClick={() => { model.clearError(); setEditing('new'); }}><Icon name="plus" /> 카드 추가</button></div>
+    <HouseholdPageHeader title="카드" onSettings={onSettings} actions={<button type="button" className="hh-text" onClick={() => { model.clearError(); setEditing('new'); }}><Icon name="plus" /> 카드 추가</button>} />
     {cards.length ? <>
       <section className="hh-total" aria-label="전체 사용 가능 금액"><span>지금 쓸 수 있는 금액</span><strong>{won(totals.available)}</strong><div className="hh-total__detail hh-card-totals"><span>전체 카드 한도 <b>{won(totals.creditLimit)}</b></span><span>사용한 한도 <b>{won(totals.creditUsed)}</b></span><span>카드 잔여 한도 <b>{won(totals.creditRemaining)}</b></span><span>체크카드 잔액 <b>{won(totals.debitBalance)}</b></span></div></section>
       <div className="hh-card-rail" aria-label="카드 선택">{cards.map(card => <CardArt key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setSelectedId(card.id)} />)}</div>
