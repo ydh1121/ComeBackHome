@@ -207,7 +207,7 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
       {!documents.length&&!visibleNotes.length&&<div className="materials-empty"><Icon name="file"/><h3>{query?'찾는 자료가 없어요':hidden?'숨긴 자료가 없어요':'아직 보관한 자료가 없어요'}</h3><p>{query?'다른 검색어로 찾아보세요.':'파일을 추가하거나 메모를 적어 두세요.'}</p></div>}
     </div>
     {!!selectedCount&&status?.analyst&&<section className="private-card materials-batch" aria-label="선택한 자료로 할 일"><div className="materials-batch-heading"><strong>{selectedCount}개 선택</strong><button className="secondary" disabled={busy} onClick={()=>{setSelected(new Set());setHandoff('');}}>선택 해제</button></div><label>궁금한 점 <small>선택사항</small><input disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} placeholder="빠진 서류와 다음에 할 일을 알려줘"/></label><button disabled={busy} onClick={()=>void prepare()}>ChatGPT에 물어보기 준비</button></section>}
-    {!!selectedDocuments.length&&<details className="private-card materials-organize"><summary>선택한 파일을 분야별로 정리</summary><OrganizationReview data={data} proposals={selectedDocuments.map(d=>({documentId:d.id,category:'other' as const}))} reload={reload}/></details>}
+    {!!selectedDocuments.length&&<OrganizationDisclosure data={data} documentIds={selectedDocuments.map(d=>d.id)} reload={reload}/>}
     </section>
     {status?.folderSelected&&connection}
     </>}
@@ -218,4 +218,16 @@ export function DocumentsPanel({data,reload,openRecord,createRecord}:{data:CaseD
       {status?.analyst&&<details className="materials-advanced"><summary>기타 연결 방법</summary><AnalysisReceipts sourceNames={Object.fromEntries(data.documents.map(d=>[d.id,d.filename]))} documentIds={selectedDocuments.map(d=>d.id)} notes={selectedNotes.map(r=>({id:r.id,revision:r.revision}))} onReview={setIncomingAnalysis}/></details>}
     </>}
   </section>;
+}
+
+// A closed native details element still mounts its children. Pending-folder
+// checks are only needed while the user opens this review, not on every upload
+// or selection change. Keep the child mounted so collapsing never cancels an
+// explicitly approved organization operation.
+function OrganizationDisclosure({data,documentIds,reload}:{data:CaseData;documentIds:string[];reload:()=>Promise<void>}) {
+  const [open,setOpen]=useState(false);
+  return <details className="private-card materials-organize" onToggle={event=>setOpen(event.currentTarget.open)}>
+    <summary>선택한 파일을 분야별로 정리</summary>
+    <OrganizationReview active={open} data={data} proposals={documentIds.map(documentId=>({documentId,category:'other' as const}))} reload={reload}/>
+  </details>;
 }

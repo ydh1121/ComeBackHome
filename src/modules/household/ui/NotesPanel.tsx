@@ -5,7 +5,7 @@ import type { HouseholdController } from '../client';
 import type { HouseholdState, HouseholdTodo, ReminderRecipient } from '../domain/model';
 import { FormSheet, fromSeoulInput, HouseholdIcon, localDateTime, shortWhen, Toggle, SaveFeedback } from './shared';
 
-const nextHour = () => localDateTime(new Date(Date.now() + 60 * 60 * 1000).toISOString());
+const nextHour = () => localDateTime(new Date(new Date().getTime() + 60 * 60 * 1000).toISOString());
 function recipientLabel(recipient: ReminderRecipient, role: 'admin' | 'member' | undefined) {
   return recipient === 'both' ? '둘 다' : recipient === role ? '나에게' : '상대방에게';
 }

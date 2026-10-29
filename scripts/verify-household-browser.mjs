@@ -46,19 +46,30 @@ async function settleNavigation(page) {
   });
 }
 async function screenshot(page,file) { await settleNavigation(page);await page.screenshot({path:resolve(output,file),animations:'disabled'}); }
-async function layout(page, width, label) {
-  await page.setViewportSize({ width, height: 844 });
+async function layout(page, width, label, height = 844) {
+  await page.setViewportSize({ width, height });
   await page.evaluate(()=>window.scrollTo(0,0));
   await settleNavigation(page);
   const bounds = await page.evaluate(() => {
-    const rect = selector => { const r = document.querySelector(selector)?.getBoundingClientRect(); return r ? { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height } : null; };
-    return { overflow: document.documentElement.scrollWidth > innerWidth + 1, top:rect('.portal-top'), bottom:rect('.portal-bottom'), heading:rect('.household-page h1'), actions:rect('.hh-card-detail .hh-actions'), pills:[...document.querySelectorAll('.portal-nav')].map(bar=>{const p=bar.querySelector('.portal-pill').getBoundingClientRect(),a=bar.querySelector('[aria-current="page"]').getBoundingClientRect();return ['x','y','width','height'].every(key=>Math.abs(p[key]-a[key])<=1);}) };
+    const elementRect = element => { const r = element?.getBoundingClientRect(); return r ? { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height } : null; };
+    const rect = selector => elementRect(document.querySelector(selector));
+    return { overflow: document.documentElement.scrollWidth > innerWidth + 1, top:rect('.portal-top'), bottom:rect('.portal-bottom'), heading:rect('.household-page h1'), actions:rect('.hh-card-detail .hh-actions'), favorite:rect('.portal-favorite-trigger'), cardButtons:[...document.querySelectorAll('.hh-card-detail .hh-actions button')].map(button=>({label:button.textContent.trim(),...elementRect(button)})), pills:[...document.querySelectorAll('.portal-nav')].map(bar=>{const p=bar.querySelector('.portal-pill').getBoundingClientRect(),a=bar.querySelector('[aria-current="page"]').getBoundingClientRect();return ['x','y','width','height'].every(key=>Math.abs(p[key]-a[key])<=1);}) };
   });
   check(bounds.overflow, false, `${label}: no horizontal overflow at ${width}`);
   assert(bounds.top && bounds.bottom && bounds.top.x >= 0 && bounds.top.right <= width + 1 && bounds.bottom.x >= 0 && bounds.bottom.right <= width + 1, `${label}: fixed navigation stays in viewport`); assertions++;
   assert(bounds.heading && bounds.heading.y >= bounds.top.bottom - 1, `${label}: title stays below top navigation`); assertions++;
   check(bounds.pills,[true,true],`${label}: selected pills align within 1px after motion at ${width}`);
   if(bounds.actions&&width<=390){assert(bounds.actions.bottom<=bounds.bottom.y,`${label}: card actions stay above bottom navigation at ${width}`);assertions++;}
+  if(bounds.actions){
+    assert(bounds.favorite&&bounds.favorite.width>=44&&bounds.favorite.height>=44,`${label}: favorite trigger remains visible and usable`);assertions++;
+    check(bounds.cardButtons.map(button=>button.label),['사용 기록','상환 기록'],`${label}: both primary card actions are present`);
+    for(const button of bounds.cardButtons){
+      assert(button.width>0&&button.height>=44,`${label}: ${button.label} has a usable touch target`);assertions++;
+      const overlapWidth=Math.min(button.right,bounds.favorite.right)-Math.max(button.x,bounds.favorite.x);
+      const overlapHeight=Math.min(button.bottom,bounds.favorite.bottom)-Math.max(button.y,bounds.favorite.y);
+      assert(overlapWidth<=0||overlapHeight<=0,`${label}: favorite must not cover ${button.label} at ${width}x${height}; button=${JSON.stringify(button)}, favorite=${JSON.stringify(bounds.favorite)}`);assertions++;
+    }
+  }
 }
 try {
   for (const [engine, name] of [[chromium,'chromium'],[webkit,'webkit']]) {
@@ -289,6 +300,7 @@ try {
       for(const [section,title] of [['카드','카드'],['가계부','가계부'],['월급','월급 나누기'],['할 일','할 일·메모']]){
         await setSection(page,section);await visible(page.getByRole('heading',{name:title,exact:true}));
         for(const width of [375,390,768,1024,1440])await layout(page,width,`${name}-${section}`);
+        if(section==='카드')await layout(page,375,`${name}-${section}-compact`,812);
         await page.setViewportSize({width:390,height:844});await screenshot(page,`${name}-${section==='카드'?'cards':section==='가계부'?'ledger':section==='월급'?'income':'notes'}-390.png`);
       }
       await setSection(page,'카드');await loadedCardArt(page);const beforeArtClear=member.traffic.artReads;

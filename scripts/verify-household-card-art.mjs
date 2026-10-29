@@ -10,7 +10,7 @@ const noStore = { async read() { return null; }, async write() {}, async clear()
 const bytes = new Uint8Array([137, 80, 78, 71]);
 const png = () => new Response(bytes, { headers: { 'Content-Type': 'image/png' } });
 try {
-  const { CardArtCache } = await vite.ssrLoadModule('/src/modules/household/card-art-cache.ts');
+  const { CardArtCache, IndexedCardArtStore } = await vite.ssrLoadModule('/src/modules/household/card-art-cache.ts');
   let calls = 0, now = Date.now();
   const store = fakeStore(), requests = [];
   const cache = new CardArtCache(store, async (url, init) => { requests.push({ url, init }); calls++; return png(); }, () => now);
@@ -73,5 +73,44 @@ try {
   blocked = false; await retry.load('synthetic-a', 'card-b', 'unblocked', true);
   equal([diskReads, diskWrites], [1, 1], 'successful purge retry restores storage use');
 
+  const originalIndexedDB = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+  try {
+    const opens = []; let closed = 0;
+    Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: { open() { const request = {}; opens.push(request); return request; } } });
+    const stalled = new IndexedCardArtStore(20);
+    await assert.rejects(stalled.read('synthetic-key'), /CARD_IMAGE_STORE_TIMEOUT/); checks++;
+    opens[0].result = { close() { closed++; } }; opens[0].onsuccess();
+    equal(closed, 1, 'a database opening after deadline is immediately closed');
+    await assert.rejects(stalled.clear(), /CARD_IMAGE_STORE_TIMEOUT/); checks++;
+    equal(opens.length, 2, 'a timed-out operation does not block the serial queue');
+
+    const operations = []; let releaseBytes;
+    class DelayedBlob extends Blob { arrayBuffer() { return new Promise(resolve => { releaseBytes = resolve; }); } }
+    Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: { open() {
+      const request = {};
+      request.result = { close() {}, transaction() {
+        const transaction = { abort() {} };
+        transaction.objectStore = () => ({
+          getAll() { const read = { result: [] }; queueMicrotask(() => read.onsuccess()); return read; },
+          clear() { operations.push('clear'); },
+          put(row) { equal(row.bytes instanceof ArrayBuffer, true, 'only plain bytes enter IndexedDB'); equal(Object.hasOwn(row, 'blob'), false, 'Blob backing files are not persisted'); operations.push('put'); },
+        });
+        setTimeout(() => transaction.oncomplete(), 0);
+        return transaction;
+      } };
+      queueMicrotask(() => request.onsuccess());
+      return request;
+    } } });
+    const serial = new IndexedCardArtStore(1000);
+    const writing = serial.write({ key: 'synthetic', userId: 'synthetic-a', cardId: 'card-a', imageFileId: 'image-a', savedAt: Date.now(), blob: new DelayedBlob([bytes], { type: 'image/png' }) });
+    const clearing = serial.clear();
+    while (!releaseBytes) await new Promise(resolve => setImmediate(resolve));
+    equal(operations, [], 'conversion does not open an inactive transaction');
+    releaseBytes(bytes.buffer.slice(0));
+    await Promise.all([writing, clearing]);
+    equal(operations, ['clear', 'put', 'clear'], 'logout purge remains after a slow image-byte conversion');
+  } finally {
+    if (originalIndexedDB) Object.defineProperty(globalThis, 'indexedDB', originalIndexedDB); else delete globalThis.indexedDB;
+  }
   console.log(`HOUSEHOLD_CARD_ART_PASS checks=${checks} identity_persistence_dedupe_version_expiry_limits_toggle_purge_late_response`);
 } finally { await vite.close(); }

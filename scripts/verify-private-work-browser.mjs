@@ -207,8 +207,20 @@ try {
     assert.deepEqual(await readiness.json(), { database: "ready", passwordRuntime: "supported" });
     await verifyPublicAuthUi(page, base);
     await page.setViewportSize({width:390,height:844});
-    const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
+    const errors = [], networkDiagnostics = [];
+    let browserPhase = "member-login";
+    const captureErrors = (target, account) => {
+      target.on("pageerror", e => errors.push({ account, phase: browserPhase, message: e.message, stack: e.stack }));
+      // The runtime contains synthetic fixtures only. Record request type and
+      // failure, never bodies, credentials, or query strings; keep all errors
+      // fatal rather than filtering WebKit access-control/cancellation text.
+      target.on("requestfailed", request => {
+        const path = new URL(request.url()).pathname;
+        if (/^\/api\/private\/case\/documents\/[^/]+\/organization$/.test(path))
+          networkDiagnostics.push({ account, phase: browserPhase, method: request.method(), path: "/api/private/case/documents/:id/organization", error: request.failure()?.errorText });
+      });
+    };
+    captureErrors(page, "member");
     let anonymousLegacyRequests = 0;
     let derivedLoginRequests = 0;
     page.on("request", (req) => {
@@ -544,7 +556,8 @@ try {
       serviceWorkers: "block",
     });
     const adminPage = await adminContext.newPage();
-    adminPage.on("pageerror", (e) => errors.push(e.message));
+    browserPhase = "admin-login";
+    captureErrors(adminPage, "admin");
     await adminPage.goto(base + "/injury");
     await adminPage.getByLabel("아이디", { exact: true }).fill("ydh1121");
     await adminPage
@@ -574,7 +587,9 @@ try {
       .getByRole("heading", { name: "산재 도우미", exact: true })
       .waitFor();
     await adminPage.getByRole("button",{name:"내 관리함",exact:true}).click();
+    browserPhase = "materials";
     await verifyMaterials(adminPage,adminContext,base,label,{memberPage:page,memberContext:ctx});
+    browserPhase = "content-admin";
     await adminPage.goto(base+"/injury?section=manage");
     await verifyContentAdmin(adminPage,adminContext,base,label);
     await adminPage.goto(base+"/injury?section=settings");
@@ -705,7 +720,9 @@ try {
         );
       }
     }
+    browserPhase = "management";
     await verifyManagement(adminPage,adminContext,base,label);
+    browserPhase = "consent-logout";
     await page.getByLabel("관리자의 읽기·수정 허용").uncheck();
     await page.getByRole("button", { name: "동의 설정 저장" }).click();
     await page
@@ -749,6 +766,7 @@ try {
       0,
       "back does not reveal private records",
     );
+    if(errors.length)console.error("PRIVATE_BROWSER_NETWORK_DIAGNOSTICS",JSON.stringify(networkDiagnostics));
     assert.deepEqual(errors, [], "no browser errors");
     await ctx.close();
     await browser.close();

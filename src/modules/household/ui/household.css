@@ -102,3 +102,11 @@
 .hh-completed>.hh-notes-list{margin-top:8px}
 .hh-completed .hh-note{margin-top:0}
 @media(max-width:375px){.hh-period{flex-wrap:wrap}.hh-period input{width:145px}.hh-month input{max-width:150px}}
+/* The card editor affordance shares the title row; leave the fixed shortcut
+   clear of the two primary card actions on a phone-sized viewport. */
+.household-page[data-section=cards]{position:relative}
+.household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-utility{position:absolute;top:0;right:18px;width:44px;height:44px;margin:0}
+.household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-title-row{padding-right:48px;min-height:44px}
+.household-page[data-section=cards] .hh-card-rail{padding-bottom:8px}
+@media(min-width:601px){.household-page[data-section=cards]:not(:has(.hh-cache-banner)) .hh-utility{right:24px}}
+@media(max-width:600px) and (max-height:820px){.household-page[data-section=cards] .hh-card-art.is-portrait{width:68px;height:108px}.household-page[data-section=cards] .hh-card-rail{padding-top:8px}}

@@ -30,6 +30,9 @@ export async function verifyMaterials(page,ctx,base,label,shared){
 }
 async function verifyMaterialsFlow(page,ctx,base,label,shared){
   const snapshot=async()=>await(await ctx.request.get(base+'/api/private/case')).json();
+  let closedOrganizationReads=0;
+  const observeClosedOrganization=request=>{if(request.method()==='GET'&&/^\/api\/private\/case\/documents\/[^/]+\/organization$/.test(new URL(request.url()).pathname))closedOrganizationReads++;};
+  page.on('request',observeClosedOrganization);
   await page.goto(base+'/injury?section=library');
   const input=page.locator('.materials-upload input[type=file]');
   await input.waitFor();
@@ -105,6 +108,9 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await composer.locator('summary').click();
   await page.locator('.materials-batch').getByRole('button',{name:'선택 해제',exact:true}).click();
   for(const name of [fixture('first').name,fixture('last').name,`synthetic-note-${label}-one`])await page.getByRole('checkbox',{name:name+' 선택',exact:true}).check();
+  assert.equal(await page.locator('.materials-organize').evaluate(el=>el.open),false);
+  assert.equal(closedOrganizationReads,0,'collapsed organization review performs no background status requests during uploads or selection changes');
+  page.off('request',observeClosedOrganization);
   let handoffs=0,writes=0;
   const requests=request=>{if(request.url().includes('/handoff'))handoffs++;if(request.url().includes('/api/private/case')&&['POST','PUT','DELETE'].includes(request.method()))writes++;};
   page.on('request',requests);
@@ -300,7 +306,14 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await page.getByRole('button',{name:'자료 올리기',exact:true}).click();
   const beforeOrganization=await snapshot();
   const organize=page.locator('.materials-organize');
+  const selectedOrganizationIds=await page.locator('[data-document-id]').evaluateAll(rows=>rows.filter(row=>row.querySelector('input[type=checkbox]')?.checked).map(row=>row.dataset.documentId));
+  assert.equal(selectedOrganizationIds.length,2,'two synthetic originals are selected for folder review');
+  const pendingOrganizationChecks=Promise.all(selectedOrganizationIds.map(id=>page.waitForResponse(response=>new URL(response.url()).pathname==='/api/private/case/documents/'+id+'/organization'&&response.request().method()==='GET')));
   await organize.locator('summary').click();
+  for(const response of await pendingOrganizationChecks){
+    assert.equal(response.status(),200,'opening folder review successfully checks pending state');
+    assert.equal(typeof(await response.json()).pending,'boolean','status response uses the existing pending-state contract');
+  }
   const organization=organize.getByRole('article',{name:'원본 폴더 정리',exact:true});
   await organization.waitFor();
   assert.equal(await organization.getByLabel('보관할 분야',{exact:true}).count(),2,'category names exclude the option text');
@@ -308,18 +321,28 @@ async function verifyMaterialsFlow(page,ctx,base,label,shared){
   await organization.getByLabel('보관할 분야',{exact:true}).first().selectOption('medical');
   await organization.getByLabel('보관할 분야',{exact:true}).last().selectOption('employment');
   assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'folder preview moves no original');
-  let orgRelease,orgStarted,organizationRequests=0;
+  let orgRelease,orgStarted,organizationRequests=0,busyOrganizationReads=0;
+  const observeBusyOrganization=request=>{if(request.method()==='GET'&&/^\/api\/private\/case\/documents\/[^/]+\/organization$/.test(new URL(request.url()).pathname))busyOrganizationReads++;};
+  page.on('request',observeBusyOrganization);
   const orgHeld=new Promise(resolve=>{orgRelease=resolve;}),orgSeen=new Promise(resolve=>{orgStarted=resolve;});
   await page.route('**/api/private/case/documents/organize',async route=>{
     organizationRequests++;orgStarted();await orgHeld;await route.abort('aborted').catch(()=>{});
   });
   await organization.getByRole('button',{name:'선택한 파일 2개 정리',exact:true}).click();
   await orgSeen;
+  await organize.locator(':scope > summary').click();
+  assert.equal(await organize.evaluate(el=>el.open),false);
+  await organize.locator(':scope > summary').click();
+  await organization.getByRole('button',{name:'정리 중지',exact:true}).waitFor();
+  assert.equal(await organization.getByRole('button',{name:'정리 중지',exact:true}).isEnabled(),true,'collapsing the review preserves the in-progress operation and its explicit stop control');
+  assert.equal(organizationRequests,1,'reopening does not restart the approved operation');
   await organization.getByRole('button',{name:'정리 중지',exact:true}).click();orgRelease();
   await organization.getByRole('status').filter({hasText:'정리를 중지했어요. 이미 이동한 원본'}).waitFor();
   await page.waitForFunction(()=>[...document.querySelectorAll('.materials-organize button')].some(button=>button.textContent==='미완료 2개 다시 확인'&&!button.disabled));
   assert.equal(organizationRequests,1,'stopping organization never starts the next file request');
   assert.deepEqual((await snapshot()).documents,beforeOrganization.documents,'stopping before provider dispatch preserves every original');
+  assert.equal(busyOrganizationReads,0,'reopening during an approved write does not race it with pending-state reads');
+  page.off('request',observeBusyOrganization);
   await page.unroute('**/api/private/case/documents/organize');
   await organization.getByRole('button',{name:'미완료 2개 다시 확인',exact:true}).click();
   await organization.getByRole('status').filter({hasText:'선택한 원본을 비공개 보관 폴더 안에서 정리했어요.'}).waitFor();

@@ -6,6 +6,12 @@ const MAX_AGE = 24 * 60 * 60 * 1000;
 const validId = (value: string) => /^[A-Za-z0-9_-]{1,200}$/.test(value);
 const validBlob = (value: unknown): value is Blob => value instanceof Blob && value.size > 0 && value.size <= MAX_IMAGE_BYTES && ['image/png', 'image/jpeg', 'image/webp'].includes(value.type);
 export interface CardArtRecord { key: string; userId: string; cardId: string; imageFileId: string; savedAt: number; blob: Blob }
+interface StoredCardArt extends Omit<CardArtRecord, 'blob'> { bytes: ArrayBuffer; type: string }
+function decodeStored(value: StoredCardArt | undefined): CardArtRecord | null {
+  if (!value || !(value.bytes instanceof ArrayBuffer) || value.bytes.byteLength > MAX_IMAGE_BYTES || !['image/png', 'image/jpeg', 'image/webp'].includes(value.type)) return null;
+  const { bytes, type, ...metadata } = value;
+  return { ...metadata, blob: new Blob([bytes], { type }) };
+}
 export interface CardArtStore {
   read(key: string): Promise<CardArtRecord | null>;
   write(value: CardArtRecord): Promise<void>;
@@ -30,45 +36,73 @@ function bounded(values: CardArtRecord[], now: number): CardArtRecord[] {
 /** Serialize storage changes so logout/clear cannot race an earlier write. */
 export class IndexedCardArtStore implements CardArtStore {
   private queue: Promise<unknown> = Promise.resolve();
-  private run<T>(action: (db: IDBDatabase) => Promise<T>): Promise<T> {
-    const task = this.queue.catch(() => {}).then(async () => {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+  constructor(private deadlineMs = 5000) {}
+  private run<T>(action: (db: IDBDatabase, watch: (transaction: IDBTransaction) => void) => Promise<T>, prepare: () => Promise<void> = async () => {}): Promise<T> {
+    const task = this.queue.catch(() => {}).then(() => new Promise<T>((resolve, reject) => {
+      let db: IDBDatabase | undefined, transaction: IDBTransaction | undefined, finished = false;
+      const finish = () => { finished = true; clearTimeout(timer); db?.close(); };
+      const fail = (error: unknown) => { if (!finished) { finish(); reject(error); } };
+      const timer = setTimeout(() => {
+        try { transaction?.abort(); } catch { /* An already completed transaction cannot be aborted. */ }
+        fail(new Error('CARD_IMAGE_STORE_TIMEOUT'));
+      }, this.deadlineMs);
+      // Reserve the queue position before preparing bytes; a later purge stays last.
+      void prepare().then(() => {
+       if (finished) return;
+       try {
         const request = indexedDB.open('cbh-household-card-art', 1);
         request.onupgradeneeded = () => request.result.createObjectStore('images', { keyPath: 'key' });
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-        request.onblocked = () => reject(new Error('CARD_IMAGE_STORE_BLOCKED'));
-      });
-      try { return await action(db); } finally { db.close(); }
-    });
+        request.onerror = () => fail(request.error);
+        request.onblocked = () => fail(new Error('CARD_IMAGE_STORE_BLOCKED'));
+        request.onsuccess = () => {
+          // A delayed open must not leave a database connection behind after a timeout.
+          if (finished) { request.result.close(); return; }
+          db = request.result;
+          try {
+            action(db, value => { transaction = value; }).then(value => {
+              if (!finished) { finish(); resolve(value); }
+            }, fail);
+          } catch (error) { fail(error); }
+        };
+       } catch (error) { fail(error); }
+      }, fail);
+    }));
     this.queue = task;
     return task;
   }
   read(key: string) {
-    return this.run(db => new Promise<CardArtRecord | null>((resolve, reject) => {
-      const transaction = db.transaction('images', 'readonly');
+    return this.run((db, watch) => new Promise<CardArtRecord | null>((resolve, reject) => {
+      const transaction = db.transaction('images', 'readonly'); watch(transaction);
       const request = transaction.objectStore('images').get(key);
-      transaction.oncomplete = () => resolve(request.result ?? null);
+      transaction.oncomplete = () => resolve(decodeStored(request.result));
       transaction.onerror = transaction.onabort = () => reject(transaction.error);
     }));
   }
   write(value: CardArtRecord) {
-    return this.run(db => new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('images', 'readwrite');
+    let encoded: StoredCardArt;
+    return this.run((db, watch) => new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('images', 'readwrite'); watch(transaction);
       const store = transaction.objectStore('images');
       const request = store.getAll();
       request.onsuccess = () => {
-        const retained = bounded([value, ...request.result.filter((row: CardArtRecord) => row.key !== value.key)], Date.now());
+        const rows: StoredCardArt[] = request.result.filter((row: StoredCardArt) => row.key !== value.key);
+        const retained = bounded([value, ...rows.map(decodeStored).filter((row): row is CardArtRecord => row !== null)], new Date().getTime());
+        const keys = new Set(retained.map(row => row.key));
         store.clear();
-        for (const row of retained) store.put(row);
+        for (const row of [encoded, ...rows]) if (keys.has(row.key)) store.put(row);
       };
       transaction.oncomplete = () => resolve();
       transaction.onerror = transaction.onabort = () => reject(transaction.error);
-    }));
+    }), async () => {
+      // WebKit can fail or stall persisting Blob backing files. Store plain bytes,
+      // and finish conversion before opening a transaction so it cannot go inactive.
+      const { blob, ...metadata } = value;
+      encoded = { ...metadata, bytes: await blob.arrayBuffer(), type: blob.type };
+    });
   }
   clear() {
-    return this.run(db => new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('images', 'readwrite');
+    return this.run((db, watch) => new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('images', 'readwrite'); watch(transaction);
       transaction.objectStore('images').clear();
       transaction.oncomplete = () => resolve();
       transaction.onerror = transaction.onabort = () => reject(transaction.error);
@@ -81,7 +115,7 @@ export class CardArtCache {
   private requests = new Map<string, { promise: Promise<Blob>; abort: AbortController }>();
   private generation = 0;
   private purgePending = false;
-  constructor(private store: CardArtStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now()) {}
+  constructor(private store: CardArtStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => new Date().getTime()) {}
   clear() {
     this.generation++;
     this.memory.clear();
