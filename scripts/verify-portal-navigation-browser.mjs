@@ -18,6 +18,7 @@ import {FavoriteSettingsPage} from '../../src/modules/portal/FavoriteSettingsPag
 import {SettingsPage} from '../../src/pages/SettingsPage';
 import '../../src/shared/styles/base.css';
 import '../../src/shared/styles/private-module.css';
+import '../../src/shared/layout/app-shell.css';
 function App(){const auth=useAuth(),location=useLocation(),navigate=useNavigate();useEffect(()=>{window.qaRefresh=auth.refresh;},[auth.refresh]);return <><PortalHeader active={currentPortalModule(location.pathname)} path={location.pathname} onNavigate={navigate}/><div className="portal-content" data-test-owner={auth.user?.id}><Routes><Route path="/account" element={<AccountPage key={auth.user?.id}/>}/><Route path="/settings/favorites" element={<FavoriteSettingsPage key={auth.user?.id}/>}/><Route path="/settings" element={<SettingsPage/>}/><Route path="*" element={<main>합성 목적지</main>}/></Routes></div><FavoriteActions path={location.pathname} onNavigate={navigate}/></>}
 createRoot(document.getElementById('root')).render(<StrictMode><BrowserRouter><AuthRoot><App/></AuthRoot></BrowserRouter></StrictMode>);
 `);

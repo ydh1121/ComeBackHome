@@ -42,7 +42,14 @@ async function modalErgonomics(page, label) {
   }));
   check(result,{titleFocus:true,bodyLocked:true,horizontalOverflow:false,fields:true,dateFieldsContained:true,closeSize:true},`${label}: modal focus, scroll containment, touch size and no-zoom fields`);
 }
-async function setSection(page, label) { await page.getByRole('navigation', { name: '생활비·할 일 메뉴' }).getByRole('link', { name: label, exact: true }).click(); }
+async function setSection(page, label) {
+  const [section, title] = { 카드:['cards','카드'], 가계부:['ledger','가계부'], 월급:['income','월급 나누기'], '할 일':['notes','할 일·메모'] }[label];
+  await page.getByRole('navigation', { name: '생활비·할 일 메뉴' }).getByRole('link', { name: label, exact: true }).click();
+  // The previous tab's navigation pill can already be settled while React is
+  // committing the next panel. Prove the requested panel before capturing it.
+  await page.waitForURL(url => url.searchParams.get('section') === section);
+  await page.getByRole('heading', { name: title, exact: true }).waitFor({ state: 'visible' });
+}
 async function settleNavigation(page) {
   await page.waitForFunction(()=>{
     const bars=[...document.querySelectorAll('.portal-nav')];
